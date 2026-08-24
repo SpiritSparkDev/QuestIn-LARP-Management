@@ -41,6 +41,17 @@ test('a handler that throws produces a generic 500 without leaking internals', a
   server.close();
 });
 
+test('a handler returning a non-serializable body produces a generic 500 instead of crashing', async () => {
+  router.get('/__unserializable', async () => ({ status: 200, body: { bad: 10n } }));
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const res = await fetch(`http://localhost:${port}/__unserializable`);
+  assert.equal(res.status, 500);
+  const body = await res.json();
+  assert.equal(body.error, 'internal server error');
+  server.close();
+});
+
 test.after(async () => {
   await closePool();
 });

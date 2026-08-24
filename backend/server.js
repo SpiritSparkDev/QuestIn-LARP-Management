@@ -2,16 +2,12 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Router } from './router.js';
 import { logger } from './logger.js';
-import { query } from './db.js';
+import { router } from './routes.js';
 
-export const router = new Router();
-
-router.get('/health', async () => {
-  await query('SELECT 1');
-  return { status: 200, body: { status: 'ok' } };
-});
+// Route modules import `router` from ./routes.js directly (importing it from
+// here would create an ESM cycle); this re-export is for the app entry point only.
+export { router };
 
 async function handleRequest(req, res) {
   const requestId = crypto.randomUUID();
@@ -30,13 +26,16 @@ async function handleRequest(req, res) {
   try {
     const result = await match.handler({ req, params: match.params, requestId });
     const status = result?.status ?? 200;
+    const payload = JSON.stringify(result?.body ?? {});
     res.writeHead(status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result?.body ?? {}));
+    res.end(payload);
     logger.info('request', { requestId, method: req.method, path: pathname, status, durationMs: Date.now() - start });
   } catch (err) {
     logger.error('request failed', { requestId, method: req.method, path: pathname, status: 500, durationMs: Date.now() - start, error: err.message, stack: err.stack });
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'internal server error', requestId }));
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'internal server error', requestId }));
+    }
   }
 }
 

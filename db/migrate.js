@@ -18,9 +18,12 @@ async function ensureMigrationsTable() {
 export async function runMigrations({ migrationsDir = DEFAULT_DIR } = {}) {
   await ensureMigrationsTable();
 
-  const files = (await readdir(migrationsDir))
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
+  const files = await readdir(migrationsDir)
+    .then((entries) => entries.filter((f) => f.endsWith('.sql')).sort())
+    .catch((err) => {
+      if (err.code === 'ENOENT') return [];
+      throw err;
+    });
 
   const { rows } = await query('SELECT filename FROM schema_migrations');
   const applied = new Set(rows.map((r) => r.filename));

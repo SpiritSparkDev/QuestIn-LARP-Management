@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { logger } from './logger.js';
 
 const { Pool } = pg;
 
@@ -6,7 +7,10 @@ let pool;
 
 function getPool() {
   if (!pool) {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000 });
+    pool.on('error', (err) => {
+      logger.error('idle client error', { error: err.message });
+    });
   }
   return pool;
 }
@@ -23,7 +27,11 @@ export async function withTransaction(fn) {
     await client.query('COMMIT');
     return result;
   } catch (err) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // connection is already gone; nothing more we can do, surface the original error
+    }
     throw err;
   } finally {
     client.release();
