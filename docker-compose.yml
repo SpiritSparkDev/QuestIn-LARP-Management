@@ -24,6 +24,8 @@ services:
   app:
     build: .
     env_file: .env
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/pakyrion
     depends_on:
       - db
     ports:
