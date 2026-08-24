@@ -34,7 +34,7 @@ async function handleRequest(req, res) {
     res.end(JSON.stringify(result?.body ?? {}));
     logger.info('request', { requestId, method: req.method, path: pathname, status, durationMs: Date.now() - start });
   } catch (err) {
-    logger.error('request failed', { requestId, method: req.method, path: pathname, error: err.message, stack: err.stack });
+    logger.error('request failed', { requestId, method: req.method, path: pathname, status: 500, durationMs: Date.now() - start, error: err.message, stack: err.stack });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'internal server error', requestId }));
   }
