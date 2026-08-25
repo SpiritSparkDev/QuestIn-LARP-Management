@@ -1,10 +1,12 @@
 import { query } from '../db.js';
 
+const SELECT_COLUMNS = 'id, name, event_date, character_form_schema, is_active, created_at';
+
 export async function createEvent({ name, eventDate, characterFormSchema }) {
   const { rows } = await query(
     `INSERT INTO events (name, event_date, character_form_schema)
      VALUES ($1, $2, $3)
-     RETURNING id, name, event_date, character_form_schema, created_at`,
+     RETURNING ${SELECT_COLUMNS}`,
     [name, eventDate, JSON.stringify(characterFormSchema ?? [])]
   );
   return rows[0];
@@ -12,7 +14,7 @@ export async function createEvent({ name, eventDate, characterFormSchema }) {
 
 export async function getEvent(id) {
   const { rows } = await query(
-    'SELECT id, name, event_date, character_form_schema, created_at FROM events WHERE id = $1',
+    `SELECT ${SELECT_COLUMNS} FROM events WHERE id = $1`,
     [id]
   );
   return rows[0] ?? null;
@@ -20,7 +22,7 @@ export async function getEvent(id) {
 
 export async function listEvents() {
   const { rows } = await query(
-    'SELECT id, name, event_date, character_form_schema, created_at FROM events ORDER BY event_date'
+    `SELECT ${SELECT_COLUMNS} FROM events ORDER BY event_date`
   );
   return rows;
 }
@@ -32,7 +34,7 @@ export async function updateEvent(id, { name, eventDate, characterFormSchema }) 
        event_date = COALESCE($3, event_date),
        character_form_schema = COALESCE($4, character_form_schema)
      WHERE id = $1
-     RETURNING id, name, event_date, character_form_schema, created_at`,
+     RETURNING ${SELECT_COLUMNS}`,
     [
       id,
       name ?? null,
@@ -41,4 +43,15 @@ export async function updateEvent(id, { name, eventDate, characterFormSchema }) 
     ]
   );
   return rows[0] ?? null;
+}
+
+// At most one event is ever active: this unconditionally sets every row's
+// is_active based on whether it matches id, in one statement, so the
+// invariant holds after every call with no separate "deactivate the rest"
+// step to keep in sync.
+export async function activateEvent(id) {
+  const existing = await getEvent(id);
+  if (!existing) return null;
+  await query('UPDATE events SET is_active = (id = $1)', [id]);
+  return getEvent(id);
 }

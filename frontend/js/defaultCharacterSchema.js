@@ -13,5 +13,5 @@ export const DEFAULT_CHARACTER_SCHEMA = [
     required: false,
     options: ['Arkan', 'Bardisch', 'Klerikal', 'Natur', 'Dämonisch', 'Anderes'],
   },
-  { key: 'conTag', label: 'Con-Tag des Charakters', type: 'text', required: false },
+  { key: 'conTage', label: 'Con-Tage des Charakters', type: 'text', required: false },
 ];

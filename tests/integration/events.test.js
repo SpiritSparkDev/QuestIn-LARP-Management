@@ -142,6 +142,52 @@ test('GET /events/:id with a malformed UUID returns 400, not 500', async () => {
   server.close();
 });
 
+test('admin can activate an event; activating one deactivates all others; participant cannot activate', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const admin = await makeUserAndSession('admin');
+  const participant = await makeUserAndSession('participant');
+
+  async function createEvent(name) {
+    const res = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name, eventDate: '2027-10-01', characterFormSchema: [] }),
+    });
+    return res.json();
+  }
+
+  const eventA = await createEvent('Herbstcon A');
+  const eventB = await createEvent('Herbstcon B');
+
+  const activateA = await fetch(`http://localhost:${port}/events/${eventA.id}/activate`, {
+    method: 'POST', headers: { Cookie: admin.cookie },
+  });
+  assert.equal(activateA.status, 200);
+  assert.equal((await activateA.json()).is_active, true);
+
+  const activateB = await fetch(`http://localhost:${port}/events/${eventB.id}/activate`, {
+    method: 'POST', headers: { Cookie: admin.cookie },
+  });
+  assert.equal(activateB.status, 200);
+  assert.equal((await activateB.json()).is_active, true);
+
+  const getA = await fetch(`http://localhost:${port}/events/${eventA.id}`, { headers: { Cookie: admin.cookie } });
+  assert.equal((await getA.json()).is_active, false);
+
+  const asParticipant = await fetch(`http://localhost:${port}/events/${eventA.id}/activate`, {
+    method: 'POST', headers: { Cookie: participant.cookie },
+  });
+  assert.equal(asParticipant.status, 403);
+
+  const unknownEvent = await fetch(`http://localhost:${port}/events/${crypto.randomUUID()}/activate`, {
+    method: 'POST', headers: { Cookie: admin.cookie },
+  });
+  assert.equal(unknownEvent.status, 404);
+
+  server.close();
+});
+
 test.after(async () => {
   await closePool();
 });

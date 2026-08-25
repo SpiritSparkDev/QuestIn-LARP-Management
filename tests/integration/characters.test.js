@@ -23,11 +23,11 @@ async function makeUserAndSession(role = 'participant') {
   return { userId: rows[0].id, cookie: `session=${session.token}` };
 }
 
-async function makeEvent(schema = [{ key: 'fraction', label: 'Fraktion', type: 'text', required: true }]) {
+async function makeEvent(schema = [{ key: 'fraction', label: 'Fraktion', type: 'text', required: true }], isActive = true) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, character_form_schema)
-     VALUES ('Char Test Con', '2027-05-01', $1) RETURNING id`,
-    [JSON.stringify(schema)]
+    `INSERT INTO events (name, event_date, character_form_schema, is_active)
+     VALUES ('Char Test Con', '2027-05-01', $1, $2) RETURNING id`,
+    [JSON.stringify(schema), isActive]
   );
   return rows[0].id;
 }
@@ -154,6 +154,30 @@ test('PUT /characters/:id validates data against the event schema', async () => 
   assert.equal(validPut.status, 200);
   const updated = await validPut.json();
   assert.deepEqual(updated.data, { fraction: 'Valid Value' });
+
+  server.close();
+});
+
+test('a participant cannot create a character for an inactive event; an admin can', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const participant = await makeUserAndSession();
+  const admin = await makeUserAndSession('admin');
+  const inactiveEventId = await makeEvent([], false);
+
+  const asParticipant = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+    body: JSON.stringify({ eventId: inactiveEventId, name: 'Blocked', data: {} }),
+  });
+  assert.equal(asParticipant.status, 403);
+
+  const asAdmin = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+    body: JSON.stringify({ eventId: inactiveEventId, name: 'AdminOverride', data: {} }),
+  });
+  assert.equal(asAdmin.status, 201);
 
   server.close();
 });

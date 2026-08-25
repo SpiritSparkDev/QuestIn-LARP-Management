@@ -34,6 +34,8 @@
   <select id="event-select" name="eventId" required></select>
   <label for="character-name">Charaktername</label>
   <input id="character-name" name="name" type="text" required>
+  <label for="copy-from-select">Von bestehendem Charakter übernehmen (optional)</label>
+  <select id="copy-from-select"><option value="">– keinen übernehmen –</option></select>
   <div id="dynamic-fields"></div>
   <button type="submit">Speichern</button>
 </form>
@@ -49,9 +51,12 @@ const form = document.getElementById('character-form');
 const message = document.getElementById('message');
 const listBody = document.querySelector('#character-list tbody');
 const formTitle = document.getElementById('form-title');
+const copyFromSelect = document.getElementById('copy-from-select');
 
 let events = [];
+let characters = [];
 let editingCharacterId = null;
+let userRole = 'participant';
 
 const registrationListBody = document.querySelector('#registration-list tbody');
 const registrationMessage = document.getElementById('registration-message');
@@ -106,16 +111,40 @@ eventSelect.addEventListener('change', () => {
   renderSchemaFields(event ? event.character_form_schema : []);
 });
 
-async function loadEvents() {
-  events = await api.get('/events');
-  eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
-  if (events.length > 0) {
-    renderSchemaFields(events[0].character_form_schema);
+// Participants may only create characters for the currently active event;
+// admins/checkin_helpers keep the full list (e.g. to fix up past data).
+function populateEventOptions() {
+  const visibleEvents = userRole === 'participant' ? events.filter((e) => e.is_active) : events;
+  eventSelect.innerHTML = visibleEvents.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
+  if (visibleEvents.length > 0) {
+    renderSchemaFields(visibleEvents[0].character_form_schema);
+  } else {
+    dynamicFields.innerHTML = '';
   }
 }
 
+async function loadEvents() {
+  events = await api.get('/events');
+  populateEventOptions();
+}
+
+function populateCopyFromOptions() {
+  copyFromSelect.innerHTML = '<option value="">– keinen übernehmen –</option>' + characters.map((c) => {
+    const event = events.find((e) => e.id === c.event_id);
+    return `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(event ? event.name : c.event_id)})</option>`;
+  }).join('');
+}
+
+copyFromSelect.addEventListener('change', () => {
+  const source = characters.find((c) => c.id === copyFromSelect.value);
+  if (!source) return;
+  form.elements.name.value = source.name;
+  const targetEvent = events.find((e) => e.id === eventSelect.value);
+  renderSchemaFields(targetEvent ? targetEvent.character_form_schema : [], source.data);
+});
+
 async function loadCharacters() {
-  const characters = await api.get('/characters');
+  characters = await api.get('/characters');
   listBody.innerHTML = characters.map((c) => {
     const event = events.find((e) => e.id === c.event_id);
     return `<tr>
@@ -126,19 +155,32 @@ async function loadCharacters() {
   }).join('');
 
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
-    button.addEventListener('click', () => startEdit(button.dataset.edit, characters));
+    button.addEventListener('click', () => startEdit(button.dataset.edit));
   });
+
+  populateCopyFromOptions();
 }
 
-function startEdit(characterId, characters) {
+function startEdit(characterId) {
   const character = characters.find((c) => c.id === characterId);
   if (!character) return;
   editingCharacterId = characterId;
   formTitle.textContent = `Charakter bearbeiten: ${character.name}`;
+  const event = events.find((e) => e.id === character.event_id);
+  // The character's own event may not be in the (possibly filtered) dropdown
+  // — e.g. a past/inactive event for a participant — so add it if missing,
+  // purely so the disabled select displays the right name.
+  if (event && !eventSelect.querySelector(`option[value="${event.id}"]`)) {
+    const opt = document.createElement('option');
+    opt.value = event.id;
+    opt.textContent = `${event.name} (${event.event_date})`;
+    eventSelect.appendChild(opt);
+  }
   eventSelect.value = character.event_id;
   eventSelect.disabled = true;
+  copyFromSelect.value = '';
+  copyFromSelect.disabled = true;
   form.elements.name.value = character.name;
-  const event = events.find((e) => e.id === character.event_id);
   renderSchemaFields(event ? event.character_form_schema : [], character.data);
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
 }
@@ -147,10 +189,11 @@ function resetForm() {
   editingCharacterId = null;
   formTitle.textContent = 'Neuen Charakter anlegen';
   eventSelect.disabled = false;
+  copyFromSelect.disabled = false;
+  copyFromSelect.value = '';
   form.reset();
   form.querySelector('button[type="submit"]').textContent = 'Speichern';
-  const event = events.find((e) => e.id === eventSelect.value);
-  renderSchemaFields(event ? event.character_form_schema : []);
+  populateEventOptions();
 }
 
 form.addEventListener('submit', async (event) => {
@@ -184,6 +227,8 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 });
 
 try {
+  const account = await api.get('/account');
+  userRole = account.role;
   await loadEvents();
   await loadCharacters();
   await loadRegistrations();

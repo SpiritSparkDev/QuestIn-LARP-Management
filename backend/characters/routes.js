@@ -1,6 +1,7 @@
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
+import { getEvent } from '../events/repository.js';
 import { createCharacter, getCharacter, listCharactersForUser, updateCharacter } from './repository.js';
 
 router.post('/characters', requireAuth(async ({ req, user }) => {
@@ -9,6 +10,13 @@ router.post('/characters', requireAuth(async ({ req, user }) => {
   const { eventId, name, data } = body;
   if (!eventId || !name) {
     return { status: 400, body: { error: 'eventId and name are required' } };
+  }
+  if (user.role === 'participant') {
+    const event = await getEvent(eventId);
+    if (!event) return { status: 404, body: { error: 'event not found' } };
+    if (!event.is_active) {
+      return { status: 403, body: { error: 'characters can only be created for the currently active event' } };
+    }
   }
   try {
     const character = await createCharacter(user.id, { eventId, name, data });
