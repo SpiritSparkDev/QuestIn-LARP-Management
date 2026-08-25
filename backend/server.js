@@ -7,6 +7,7 @@ import { router } from './routes.js';
 import './auth/register.js';
 import './auth/login.js';
 import './auth/passwordReset.js';
+import './auth/oauth.js';
 import './accounts/routes.js';
 
 // Route modules import `router` from ./routes.js directly (importing it from

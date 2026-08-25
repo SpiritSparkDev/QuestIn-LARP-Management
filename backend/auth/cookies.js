@@ -13,7 +13,7 @@ export function parseCookies(header) {
   return cookies;
 }
 
-function secureFlag() {
+export function secureFlag() {
   return process.env.NODE_ENV === 'production' ? '; Secure' : '';
 }
 
