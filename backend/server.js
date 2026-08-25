@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { logger } from './logger.js';
 import { router } from './routes.js';
 import './auth/register.js';
+import './auth/login.js';
 
 // Route modules import `router` from ./routes.js directly (importing it from
 // here would create an ESM cycle); this re-export is for the app entry point only.
@@ -28,7 +29,7 @@ async function handleRequest(req, res) {
     const result = await match.handler({ req, params: match.params, requestId });
     const status = result?.status ?? 200;
     const payload = JSON.stringify(result?.body ?? {});
-    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.writeHead(status, { 'Content-Type': 'application/json', ...result?.headers });
     res.end(payload);
     logger.info('request', { requestId, method: req.method, path: pathname, status, durationMs: Date.now() - start });
   } catch (err) {
