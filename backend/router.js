@@ -26,6 +26,7 @@ export class Router {
   get(pattern, handler) { this.add('GET', pattern, handler); }
   post(pattern, handler) { this.add('POST', pattern, handler); }
   put(pattern, handler) { this.add('PUT', pattern, handler); }
+  patch(pattern, handler) { this.add('PATCH', pattern, handler); }
   delete(pattern, handler) { this.add('DELETE', pattern, handler); }
 
   match(method, pathname) {
