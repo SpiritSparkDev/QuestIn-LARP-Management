@@ -30,7 +30,7 @@
 
 <script type="module">
 import { api } from '/js/api.js';
-import { renderField } from '/js/formFields.js';
+import { escapeHtml, renderField } from '/js/formFields.js';
 
 const eventSelect = document.getElementById('event-select');
 const dynamicFields = document.getElementById('dynamic-fields');
@@ -53,7 +53,7 @@ eventSelect.addEventListener('change', () => {
 
 async function loadEvents() {
   events = await api.get('/events');
-  eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${e.name} (${e.event_date})</option>`).join('');
+  eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
   if (events.length > 0) {
     renderSchemaFields(events[0].character_form_schema);
   }
@@ -64,8 +64,8 @@ async function loadCharacters() {
   listBody.innerHTML = characters.map((c) => {
     const event = events.find((e) => e.id === c.event_id);
     return `<tr>
-      <td>${c.name}</td>
-      <td>${event ? event.name : c.event_id}</td>
+      <td>${escapeHtml(c.name)}</td>
+      <td>${escapeHtml(event ? event.name : c.event_id)}</td>
       <td><button type="button" data-edit="${c.id}">Bearbeiten</button></td>
     </tr>`;
   }).join('');
