@@ -71,7 +71,11 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 try {
   const events = await api.get('/events');
   eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
-  if (events.length > 0) await loadParticipants(events[0].id);
+  if (events.length > 0) {
+    await loadParticipants(events[0].id);
+  } else {
+    message.textContent = 'Keine Events vorhanden.';
+  }
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
   else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins/Check-In-Helfer.'; message.className = 'error'; }

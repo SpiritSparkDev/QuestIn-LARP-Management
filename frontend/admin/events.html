@@ -50,7 +50,6 @@ function addSchemaRow(field = { key: '', label: '', type: 'text', required: fals
     <select class="schema-type">
       <option value="text" ${field.type === 'text' ? 'selected' : ''}>Text</option>
       <option value="textarea" ${field.type === 'textarea' ? 'selected' : ''}>Textarea</option>
-      <option value="select" ${field.type === 'select' ? 'selected' : ''}>Auswahl</option>
     </select>
     <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
     <button type="button" class="remove-row">Entfernen</button>

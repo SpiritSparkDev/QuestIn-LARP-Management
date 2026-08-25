@@ -24,7 +24,7 @@ function baseUrl() {
 }
 
 export async function sendVerificationEmail(to, token) {
-  const url = `${baseUrl()}/verify?token=${token}`;
+  const url = `${baseUrl()}/verify.html?token=${token}`;
   return getTransporter().sendMail({
     to,
     from: fromAddress(),
@@ -34,7 +34,7 @@ export async function sendVerificationEmail(to, token) {
 }
 
 export async function sendPasswordResetEmail(to, token) {
-  const url = `${baseUrl()}/reset-password?token=${token}`;
+  const url = `${baseUrl()}/reset-password.html?token=${token}`;
   return getTransporter().sendMail({
     to,
     from: fromAddress(),

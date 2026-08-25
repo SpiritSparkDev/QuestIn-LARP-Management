@@ -33,6 +33,11 @@ import { api } from '/js/api.js';
 const form = document.getElementById('login-form');
 const message = document.getElementById('message');
 
+if (new URLSearchParams(window.location.search).get('oauth_error') === 'denied') {
+  message.textContent = 'Anmeldung abgebrochen.';
+  message.className = 'error';
+}
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   message.textContent = '';

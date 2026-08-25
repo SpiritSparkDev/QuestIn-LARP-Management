@@ -9,9 +9,20 @@
 <nav>
   <a href="/account.html">Konto</a>
   <a href="/characters.html">Charaktere</a>
+  <a href="/admin/events.html">Events (Admin)</a>
+  <a href="/admin/checkin.html">Check-In (Admin)</a>
   <a href="#" id="logout-link">Logout</a>
 </nav>
 <h1>Meine Charaktere</h1>
+<h2>Meine Anmeldungen</h2>
+<table id="registration-list">
+  <thead><tr><th>Event</th><th>Status</th><th></th></tr></thead>
+  <tbody></tbody>
+</table>
+<p>
+  <button type="button" id="register-button">Für ausgewähltes Event anmelden</button>
+</p>
+<p id="registration-message"></p>
 <table id="character-list">
   <thead><tr><th>Name</th><th>Event</th><th></th></tr></thead>
   <tbody></tbody>
@@ -41,6 +52,50 @@ const formTitle = document.getElementById('form-title');
 
 let events = [];
 let editingCharacterId = null;
+
+const registrationListBody = document.querySelector('#registration-list tbody');
+const registrationMessage = document.getElementById('registration-message');
+
+async function loadRegistrations() {
+  const registrations = await api.get('/registrations');
+  registrationListBody.innerHTML = registrations.map((r) => `<tr>
+    <td>${escapeHtml(r.eventName)}</td>
+    <td>${escapeHtml(r.status)}</td>
+    <td>${r.status === 'registered' ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ''}</td>
+  </tr>`).join('');
+
+  registrationListBody.querySelectorAll('[data-unregister]').forEach((button) => {
+    button.addEventListener('click', () => unregister(button.dataset.unregister));
+  });
+}
+
+async function unregister(eventId) {
+  registrationMessage.textContent = '';
+  registrationMessage.className = '';
+  try {
+    await api.delete(`/events/${eventId}/register`);
+    await loadRegistrations();
+  } catch (err) {
+    registrationMessage.textContent = err.message;
+    registrationMessage.className = 'error';
+  }
+}
+
+document.getElementById('register-button').addEventListener('click', async () => {
+  registrationMessage.textContent = '';
+  registrationMessage.className = '';
+  const eventId = eventSelect.value;
+  if (!eventId) return;
+  try {
+    await api.post(`/events/${eventId}/register`);
+    registrationMessage.textContent = 'Angemeldet.';
+    registrationMessage.className = 'success';
+    await loadRegistrations();
+  } catch (err) {
+    registrationMessage.textContent = err.message;
+    registrationMessage.className = 'error';
+  }
+});
 
 function renderSchemaFields(schema, data = {}) {
   dynamicFields.innerHTML = schema.map((field) => renderField(field, data[field.key])).join('');
@@ -131,6 +186,7 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 try {
   await loadEvents();
   await loadCharacters();
+  await loadRegistrations();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
 }
