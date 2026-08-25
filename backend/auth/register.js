@@ -23,12 +23,20 @@ router.post('/auth/register', async ({ req }) => {
   }
 
   const passwordHash = await hashPassword(password);
-  const { rows } = await query(
-    `INSERT INTO users (email, password_hash, role, name)
-     VALUES ($1, $2, 'participant', $3) RETURNING id`,
-    [email, passwordHash, name]
-  );
-  const userId = rows[0].id;
+  let userId;
+  try {
+    const { rows } = await query(
+      `INSERT INTO users (email, password_hash, role, name)
+       VALUES ($1, $2, 'participant', $3) RETURNING id`,
+      [email, passwordHash, name]
+    );
+    userId = rows[0].id;
+  } catch (err) {
+    if (err.code === '23505') {
+      return { status: 409, body: { error: 'email already registered' } };
+    }
+    throw err;
+  }
 
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);

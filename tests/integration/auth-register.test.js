@@ -69,6 +69,26 @@ test('registering the same email twice is rejected with 409', async () => {
   server.close();
 });
 
+test('concurrent registrations for the same email: one 201, one 409, no 500', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const email = `race-${crypto.randomUUID()}@example.com`;
+  const payload = { email, password: 'correct horse battery staple', name: 'Race User' };
+
+  const [firstRes, secondRes] = await Promise.all([
+    fetch(`http://localhost:${port}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    }),
+    fetch(`http://localhost:${port}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    }),
+  ]);
+  const statuses = [firstRes.status, secondRes.status].sort();
+  assert.deepEqual(statuses, [201, 409]);
+
+  server.close();
+});
+
 test('verify with an unknown token returns 400', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
