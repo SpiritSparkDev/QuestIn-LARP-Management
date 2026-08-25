@@ -28,3 +28,9 @@ test('renderField handles a missing value as empty', () => {
   const html = renderField({ key: 'notes', label: 'Notizen', type: 'text' }, undefined);
   assert.ok(html.includes('value=""'));
 });
+
+test('renderField escapes a field key containing a double-quote', () => {
+  const html = renderField({ key: 'weird"key', label: 'Weird', type: 'text' }, 'x');
+  assert.ok(!html.includes('weird"key'));
+  assert.ok(html.includes('weird&quot;key'));
+});

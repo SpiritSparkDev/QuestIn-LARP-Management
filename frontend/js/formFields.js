@@ -7,11 +7,12 @@ export function escapeHtml(value) {
 export function renderField(field, value) {
   const val = escapeHtml(value);
   const label = escapeHtml(field.label ?? field.key);
+  const key = escapeHtml(field.key);
   const required = field.required ? 'required' : '';
-  const id = `field-${field.key}`;
+  const id = `field-${key}`;
 
   if (field.type === 'textarea') {
-    return `<label for="${id}">${label}</label><textarea id="${id}" name="${field.key}" ${required}>${val}</textarea>`;
+    return `<label for="${id}">${label}</label><textarea id="${id}" name="${key}" ${required}>${val}</textarea>`;
   }
-  return `<label for="${id}">${label}</label><input id="${id}" name="${field.key}" type="text" value="${val}" ${required}>`;
+  return `<label for="${id}">${label}</label><input id="${id}" name="${key}" type="text" value="${val}" ${required}>`;
 }
