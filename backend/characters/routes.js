@@ -45,9 +45,10 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const updated = await updateCharacter(params.id, body);
+    const updated = await updateCharacter(params.id, user.id, body);
     return { status: 200, body: updated };
   } catch (err) {
+    if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
     if (err.code === 'INVALID_CHARACTER_DATA') {
       return { status: 400, body: { error: 'invalid character data', details: err.details } };
     }

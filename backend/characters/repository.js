@@ -43,12 +43,17 @@ export async function listCharactersForUser(userId) {
   return rows;
 }
 
-export async function updateCharacter(id, { name, data }) {
+export async function updateCharacter(id, userId, { name, data }) {
   const character = await getCharacter(id);
-  if (!character) return null;
+  if (!character || character.user_id !== userId) return null;
 
   if (data !== undefined) {
     const event = await getEvent(character.event_id);
+    if (!event) {
+      const err = new Error('event not found');
+      err.code = 'EVENT_NOT_FOUND';
+      throw err;
+    }
     const errors = validateCharacterData(event.character_form_schema, data);
     if (errors.length > 0) {
       const err = new Error('invalid character data');
@@ -60,11 +65,11 @@ export async function updateCharacter(id, { name, data }) {
 
   const { rows } = await query(
     `UPDATE characters SET
-       name = COALESCE($2, name),
-       data = COALESCE($3, data)
-     WHERE id = $1
+       name = COALESCE($3, name),
+       data = COALESCE($4, data)
+     WHERE id = $1 AND user_id = $2
      RETURNING id, user_id, event_id, name, data, created_at`,
-    [id, name ?? null, data !== undefined ? JSON.stringify(data) : null]
+    [id, userId, name ?? null, data !== undefined ? JSON.stringify(data) : null]
   );
-  return rows[0];
+  return rows[0] ?? null;
 }

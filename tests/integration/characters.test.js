@@ -129,6 +129,35 @@ test('a participant cannot view or edit another participant\'s character; an adm
   server.close();
 });
 
+test('PUT /characters/:id validates data against the event schema', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const owner = await makeUserAndSession();
+  const eventId = await makeEvent();
+
+  const createRes = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+    body: JSON.stringify({ eventId, name: 'Aldric', data: { fraction: 'Nordmark' } }),
+  });
+  const { id } = await createRes.json();
+
+  const invalidPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+    body: JSON.stringify({ data: {} }),
+  });
+  assert.equal(invalidPut.status, 400);
+
+  const validPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+    body: JSON.stringify({ data: { fraction: 'Valid Value' } }),
+  });
+  assert.equal(validPut.status, 200);
+  const updated = await validPut.json();
+  assert.deepEqual(updated.data, { fraction: 'Valid Value' });
+
+  server.close();
+});
+
 test.after(async () => {
   await closePool();
 });

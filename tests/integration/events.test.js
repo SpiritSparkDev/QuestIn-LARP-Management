@@ -107,6 +107,41 @@ test('admin can update an event\'s character form schema', async () => {
   server.close();
 });
 
+test('admin creating an event with a malformed characterFormSchema gets 400', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const admin = await makeUserAndSession('admin');
+
+  const notAnArray = await fetch(`http://localhost:${port}/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+    body: JSON.stringify({ name: 'Bad Schema Con', eventDate: '2027-08-01', characterFormSchema: { not: 'an array' } }),
+  });
+  assert.equal(notAnArray.status, 400);
+
+  const missingKey = await fetch(`http://localhost:${port}/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+    body: JSON.stringify({ name: 'Bad Schema Con 2', eventDate: '2027-08-01', characterFormSchema: [{ label: 'no key' }] }),
+  });
+  assert.equal(missingKey.status, 400);
+
+  server.close();
+});
+
+test('GET /events/:id with a malformed UUID returns 400, not 500', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const participant = await makeUserAndSession();
+
+  const res = await fetch(`http://localhost:${port}/events/not-a-valid-uuid`, {
+    headers: { Cookie: participant.cookie },
+  });
+  assert.equal(res.status, 400);
+
+  server.close();
+});
+
 test.after(async () => {
   await closePool();
 });

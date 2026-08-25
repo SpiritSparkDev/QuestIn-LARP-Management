@@ -38,10 +38,15 @@ async function handleRequest(req, res) {
     res.end(payload);
     logger.info('request', { requestId, method: req.method, path: pathname, status, durationMs: Date.now() - start });
   } catch (err) {
-    logger.error('request failed', { requestId, method: req.method, path: pathname, status: 500, durationMs: Date.now() - start, error: err.message, stack: err.stack });
+    const CLIENT_ERROR_CODES = new Set(['22P02', '22P05', '22007', '22008']);
+    const status = CLIENT_ERROR_CODES.has(err.code) ? 400 : 500;
+    logger.error('request failed', { requestId, method: req.method, path: pathname, status, durationMs: Date.now() - start, error: err.message, stack: err.stack });
     if (!res.headersSent) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'internal server error', requestId }));
+      const body = status === 400
+        ? { error: 'invalid request', requestId }
+        : { error: 'internal server error', requestId };
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(body));
     }
   }
 }

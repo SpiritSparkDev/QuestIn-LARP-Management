@@ -1,3 +1,6 @@
+const MAX_VALUE_LENGTH = 5000;
+const MAX_TOTAL_LENGTH = 20000;
+
 export function validateCharacterData(schema, data) {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) {
     return ['data must be an object'];
@@ -7,9 +10,19 @@ export function validateCharacterData(schema, data) {
   const allowedKeys = new Set(schema.map((field) => field.key));
 
   for (const field of schema) {
-    const value = data[field.key];
-    if (field.required && (value === undefined || value === null || value === '')) {
+    const value = Object.hasOwn(data, field.key) ? data[field.key] : undefined;
+    const isEmpty = value === undefined || value === null
+      || (typeof value === 'string' && value.trim() === '');
+
+    if (field.required && isEmpty) {
       errors.push(`${field.key} is required`);
+      continue;
+    }
+    if (!isEmpty && (field.type === 'text' || field.type === 'textarea') && typeof value !== 'string') {
+      errors.push(`${field.key} must be a string`);
+    }
+    if (!isEmpty && typeof value === 'string' && value.length > MAX_VALUE_LENGTH) {
+      errors.push(`${field.key} must be at most ${MAX_VALUE_LENGTH} characters`);
     }
   }
 
@@ -17,6 +30,10 @@ export function validateCharacterData(schema, data) {
     if (!allowedKeys.has(key)) {
       errors.push(`unknown field: ${key}`);
     }
+  }
+
+  if (JSON.stringify(data).length > MAX_TOTAL_LENGTH) {
+    errors.push(`data must be at most ${MAX_TOTAL_LENGTH} characters when serialized`);
   }
 
   return errors;
