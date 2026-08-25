@@ -168,9 +168,19 @@ Ersatz.
 - Konto-Zuordnung: Existiert bereits ein `oauth_accounts`-Eintrag für
   `(provider, provider_user_id)` → einloggen. Sonst: existiert ein `users`-
   Eintrag mit derselben E-Mail (z.B. aus Passwort-Registrierung) → OAuth-
-  Konto wird daran verknüpft (neue `oauth_accounts`-Zeile). Sonst → neuer
-  `users`-Eintrag, `password_hash = null`, `email_verified = true` (E-Mail
-  gilt als vom Provider bestätigt).
+  Konto wird **nur dann** daran verknüpft, wenn der Provider die E-Mail
+  selbst als verifiziert kennzeichnet (siehe unten) — sonst wird der Login
+  abgelehnt (Konto-Übernahme-Schutz: eine fremde, nicht bestätigte E-Mail
+  darf niemals ein bestehendes, bereits verifiziertes Konto kapern). Gibt
+  es keinen bestehenden `users`-Eintrag mit dieser E-Mail → neuer
+  `users`-Eintrag, `password_hash = null`, `email_verified` = der vom
+  Provider gemeldete Verifizierungsstatus (nicht pauschal `true`).
+- **E-Mail-Verifizierung pro Provider**: Google (`email_verified` im
+  Userinfo-Response) und Discord (`verified`) liefern einen echten
+  Verifizierungsstatus mit, der ausgewertet wird. **Facebooks Graph-API
+  liefert kein solches Feld** — Facebook-E-Mails gelten für diese Zwecke
+  daher grundsätzlich als nicht verifiziert und können sich nie an ein
+  bestehendes Konto verknüpfen (nur Neuanlage, kein Linking).
 - Zugangsdaten pro Provider (Client-ID/-Secret) und die Redirect-Basis-URL
   kommen aus ENV-Variablen (`GOOGLE_CLIENT_ID`/`_SECRET`,
   `FACEBOOK_CLIENT_ID`/`_SECRET`, `DISCORD_CLIENT_ID`/`_SECRET`,

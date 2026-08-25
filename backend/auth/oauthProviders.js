@@ -6,7 +6,12 @@ export const PROVIDERS = {
     scope: 'openid email profile',
     clientId: () => process.env.GOOGLE_CLIENT_ID,
     clientSecret: () => process.env.GOOGLE_CLIENT_SECRET,
-    extractUser: (info) => ({ providerUserId: info.sub, email: info.email, name: info.name }),
+    extractUser: (info) => ({
+      providerUserId: info.sub,
+      email: info.email,
+      name: info.name,
+      emailVerified: info.email_verified === true || info.email_verified === 'true',
+    }),
   },
   facebook: {
     authUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
@@ -15,7 +20,7 @@ export const PROVIDERS = {
     scope: 'email',
     clientId: () => process.env.FACEBOOK_CLIENT_ID,
     clientSecret: () => process.env.FACEBOOK_CLIENT_SECRET,
-    extractUser: (info) => ({ providerUserId: info.id, email: info.email, name: info.name }),
+    extractUser: (info) => ({ providerUserId: info.id, email: info.email, name: info.name, emailVerified: false }),
   },
   discord: {
     authUrl: 'https://discord.com/api/oauth2/authorize',
@@ -24,6 +29,11 @@ export const PROVIDERS = {
     scope: 'identify email',
     clientId: () => process.env.DISCORD_CLIENT_ID,
     clientSecret: () => process.env.DISCORD_CLIENT_SECRET,
-    extractUser: (info) => ({ providerUserId: info.id, email: info.email, name: info.global_name || info.username }),
+    extractUser: (info) => ({
+      providerUserId: info.id,
+      email: info.email,
+      name: info.global_name || info.username,
+      emailVerified: info.verified === true,
+    }),
   },
 };

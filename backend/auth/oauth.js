@@ -6,8 +6,11 @@ import { parseCookies, serializeSessionCookie, secureFlag } from './cookies.js';
 import { PROVIDERS } from './oauthProviders.js';
 import { logger } from '../logger.js';
 
-const STATE_COOKIE = 'oauth_state';
 const STATE_MAX_AGE_SECONDS = 600;
+
+function stateCookieName(providerName) {
+  return `oauth_state_${providerName}`;
+}
 
 function redirectUri(providerName) {
   const base = process.env.OAUTH_REDIRECT_BASE_URL || 'http://localhost:3000';
@@ -15,8 +18,13 @@ function redirectUri(providerName) {
 }
 
 router.get('/auth/oauth/:provider/start', async ({ params }) => {
-  const provider = PROVIDERS[params.provider];
+  const provider = Object.hasOwn(PROVIDERS, params.provider) ? PROVIDERS[params.provider] : undefined;
   if (!provider) return { status: 404, body: { error: 'unknown provider' } };
+
+  if (!provider.clientId() || !provider.clientSecret()) {
+    logger.error('oauth provider not configured', { provider: params.provider });
+    return { status: 503, body: { error: 'provider not configured' } };
+  }
 
   const state = crypto.randomBytes(24).toString('hex');
   const authUrl = new URL(provider.authUrl);
@@ -31,22 +39,43 @@ router.get('/auth/oauth/:provider/start', async ({ params }) => {
     body: {},
     headers: {
       Location: authUrl.toString(),
-      'Set-Cookie': `${STATE_COOKIE}=${state}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${STATE_MAX_AGE_SECONDS}${secureFlag()}`,
+      'Set-Cookie': `${stateCookieName(params.provider)}=${state}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${STATE_MAX_AGE_SECONDS}${secureFlag()}`,
     },
   };
 });
 
 router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
-  const provider = PROVIDERS[params.provider];
+  const provider = Object.hasOwn(PROVIDERS, params.provider) ? PROVIDERS[params.provider] : undefined;
   if (!provider) return { status: 404, body: { error: 'unknown provider' } };
+
+  const cookies = parseCookies(req.headers.cookie);
+  const clearStateCookie = `${stateCookieName(params.provider)}=; HttpOnly; Path=/; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT${secureFlag()}`;
+
+  if (!provider.clientId() || !provider.clientSecret()) {
+    logger.error('oauth provider not configured', { provider: params.provider });
+    return { status: 503, body: { error: 'provider not configured' }, headers: { 'Set-Cookie': clearStateCookie } };
+  }
 
   const { searchParams } = new URL(req.url, 'http://localhost');
   const code = searchParams.get('code');
   const state = searchParams.get('state');
-  const cookies = parseCookies(req.headers.cookie);
 
-  if (!code || !state || !cookies[STATE_COOKIE] || cookies[STATE_COOKIE] !== state) {
-    return { status: 400, body: { error: 'invalid oauth state' } };
+  if (!state || !cookies[stateCookieName(params.provider)] || cookies[stateCookieName(params.provider)] !== state) {
+    return { status: 400, body: { error: 'invalid oauth state' }, headers: { 'Set-Cookie': clearStateCookie } };
+  }
+
+  const providerError = searchParams.get('error');
+  if (providerError) {
+    logger.info('oauth consent denied or provider error', { provider: params.provider, providerError });
+    return {
+      status: 302,
+      body: {},
+      headers: { Location: '/login.html?oauth_error=denied', 'Set-Cookie': clearStateCookie },
+    };
+  }
+
+  if (!code) {
+    return { status: 400, body: { error: 'missing authorization code' }, headers: { 'Set-Cookie': clearStateCookie } };
   }
 
   const tokenRes = await fetch(provider.tokenUrl, {
@@ -62,7 +91,7 @@ router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
   });
   if (!tokenRes.ok) {
     logger.error('oauth token exchange failed', { provider: params.provider, status: tokenRes.status });
-    return { status: 502, body: { error: 'oauth provider error' } };
+    return { status: 502, body: { error: 'oauth provider error' }, headers: { 'Set-Cookie': clearStateCookie } };
   }
   const tokenBody = await tokenRes.json();
 
@@ -71,15 +100,32 @@ router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
   });
   if (!userInfoRes.ok) {
     logger.error('oauth userinfo fetch failed', { provider: params.provider, status: userInfoRes.status });
-    return { status: 502, body: { error: 'oauth provider error' } };
+    return { status: 502, body: { error: 'oauth provider error' }, headers: { 'Set-Cookie': clearStateCookie } };
   }
   const info = await userInfoRes.json();
-  const { providerUserId, email, name } = provider.extractUser(info);
+  const { providerUserId, email, name, emailVerified } = provider.extractUser(info);
   if (!email || !providerUserId) {
-    return { status: 502, body: { error: 'oauth provider did not return required data' } };
+    return {
+      status: 502,
+      body: { error: 'oauth provider did not return required data' },
+      headers: { 'Set-Cookie': clearStateCookie },
+    };
   }
 
-  const userId = await findOrCreateOAuthUser(params.provider, providerUserId, email, name);
+  let userId;
+  try {
+    userId = await findOrCreateOAuthUser(params.provider, providerUserId, email, name, emailVerified);
+  } catch (err) {
+    if (err.code === 'OAUTH_EMAIL_NOT_VERIFIED') {
+      logger.info('oauth link rejected: unverified email', { provider: params.provider });
+      return {
+        status: 409,
+        body: { error: 'this email is not verified by the provider and cannot be linked to an existing account' },
+        headers: { 'Set-Cookie': clearStateCookie },
+      };
+    }
+    throw err;
+  }
   const session = await createSession(userId);
 
   return {
@@ -87,15 +133,12 @@ router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
     body: {},
     headers: {
       Location: '/account.html',
-      'Set-Cookie': [
-        serializeSessionCookie(session.token, session.expiresAt),
-        `${STATE_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT`,
-      ],
+      'Set-Cookie': [serializeSessionCookie(session.token, session.expiresAt), clearStateCookie],
     },
   };
 });
 
-export async function findOrCreateOAuthUser(providerName, providerUserId, email, name) {
+export async function findOrCreateOAuthUser(providerName, providerUserId, email, name, emailVerifiedByProvider) {
   const normalizedEmail = email.toLowerCase();
 
   const existingOAuth = await query(
@@ -109,12 +152,17 @@ export async function findOrCreateOAuthUser(providerName, providerUserId, email,
   const existingUser = await query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
   let userId;
   if (existingUser.rows.length > 0) {
+    if (!emailVerifiedByProvider) {
+      const err = new Error('oauth email not verified by provider, cannot link to an existing account');
+      err.code = 'OAUTH_EMAIL_NOT_VERIFIED';
+      throw err;
+    }
     userId = existingUser.rows[0].id;
   } else {
     const { rows } = await query(
       `INSERT INTO users (email, password_hash, role, name, email_verified)
-       VALUES ($1, NULL, 'participant', $2, true) RETURNING id`,
-      [normalizedEmail, name || normalizedEmail]
+       VALUES ($1, NULL, 'participant', $2, $3) RETURNING id`,
+      [normalizedEmail, name || normalizedEmail, !!emailVerifiedByProvider]
     );
     userId = rows[0].id;
   }
