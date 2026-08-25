@@ -87,14 +87,20 @@ async function transitionStatus(eventId, userId, action) {
     throw err;
   }
 
-  const nextStatus = applyTransition(rows[0].status, action);
+  const currentStatus = rows[0].status;
+  const nextStatus = applyTransition(currentStatus, action);
   const timestampColumn = action === 'checkin' ? 'checked_in_at' : 'checked_out_at';
   const { rows: updated } = await query(
-    `UPDATE registrations SET status = $3, ${timestampColumn} = now()
-     WHERE event_id = $1 AND user_id = $2
+    `UPDATE registrations SET status = $4, ${timestampColumn} = now()
+     WHERE event_id = $1 AND user_id = $2 AND status = $3
      RETURNING user_id, event_id, status, checked_in_at, checked_out_at`,
-    [eventId, userId, nextStatus]
+    [eventId, userId, currentStatus, nextStatus]
   );
+  if (updated.length === 0) {
+    const err = new Error('invalid transition: registration status changed concurrently');
+    err.code = 'INVALID_TRANSITION';
+    throw err;
+  }
   return updated[0];
 }
 

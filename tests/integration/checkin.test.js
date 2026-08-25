@@ -110,6 +110,30 @@ test('checking in a user with no registration for the event returns 404', async 
   server.close();
 });
 
+test('two concurrent check-ins for the same attendee: exactly one succeeds', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const helper = await makeUserAndSession('checkin_helper');
+  const attendee = await makeUserAndSession('participant');
+  const eventId = await makeEvent();
+
+  await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+
+  const doCheckin = () => fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
+    body: JSON.stringify({ userId: attendee.userId }),
+  });
+
+  const [resA, resB] = await Promise.all([doCheckin(), doCheckin()]);
+  const statuses = [resA.status, resB.status].sort();
+  assert.deepEqual(statuses, [200, 409]);
+
+  const okRes = resA.status === 200 ? resA : resB;
+  assert.equal((await okRes.json()).status, 'checked_in');
+
+  server.close();
+});
+
 test.after(async () => {
   await closePool();
 });
