@@ -45,6 +45,12 @@ test('a participant cannot list participants or check anyone in', async () => {
   });
   assert.equal(checkinRes.status, 403);
 
+  const checkoutRes = await fetch(`http://localhost:${port}/events/${eventId}/checkout`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ userId: crypto.randomUUID() }),
+  });
+  assert.equal(checkoutRes.status, 403);
+
   server.close();
 });
 
@@ -71,6 +77,10 @@ test('checkin_helper sees the participant list with characters and no encrypted 
   assert.equal(JSON.stringify(entry).includes('_enc'), false);
   assert.equal('address' in entry, false);
 
+  const admin = await makeUserAndSession('admin');
+  const adminListRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: admin.cookie } });
+  assert.equal(adminListRes.status, 200);
+
   const checkinRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
     body: JSON.stringify({ userId: attendee.userId }),
@@ -90,6 +100,19 @@ test('checkin_helper sees the participant list with characters and no encrypted 
   });
   assert.equal(checkoutRes.status, 200);
   assert.equal((await checkoutRes.json()).status, 'checked_out');
+
+  server.close();
+});
+
+test('GET /events/:id/participants for an unknown event returns 404', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const helper = await makeUserAndSession('checkin_helper');
+
+  const res = await fetch(`http://localhost:${port}/events/${crypto.randomUUID()}/participants`, {
+    headers: { Cookie: helper.cookie },
+  });
+  assert.equal(res.status, 404);
 
   server.close();
 });

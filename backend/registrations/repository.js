@@ -29,21 +29,24 @@ export async function registerForEvent(userId, eventId) {
 }
 
 export async function unregisterFromEvent(userId, eventId) {
-  const { rows } = await query(
-    'SELECT status FROM registrations WHERE user_id = $1 AND event_id = $2',
+  const { rowCount } = await query(
+    "DELETE FROM registrations WHERE user_id = $1 AND event_id = $2 AND status = 'registered'",
     [userId, eventId]
   );
-  if (rows.length === 0) {
-    const err = new Error('registration not found');
-    err.code = 'REGISTRATION_NOT_FOUND';
-    throw err;
-  }
-  if (rows[0].status !== 'registered') {
+  if (rowCount === 0) {
+    const { rows } = await query(
+      'SELECT status FROM registrations WHERE user_id = $1 AND event_id = $2',
+      [userId, eventId]
+    );
+    if (rows.length === 0) {
+      const err = new Error('registration not found');
+      err.code = 'REGISTRATION_NOT_FOUND';
+      throw err;
+    }
     const err = new Error('cannot unregister after check-in');
     err.code = 'CANNOT_UNREGISTER';
     throw err;
   }
-  await query('DELETE FROM registrations WHERE user_id = $1 AND event_id = $2', [userId, eventId]);
 }
 
 export async function listParticipantsForEvent(eventId) {
@@ -73,6 +76,25 @@ export async function listParticipantsForEvent(eventId) {
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,
     characters: charactersByUser.get(r.user_id) ?? [],
+  }));
+}
+
+export async function listRegistrationsForUser(userId) {
+  const { rows } = await query(
+    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.checked_in_at, r.checked_out_at
+     FROM registrations r
+     JOIN events e ON e.id = r.event_id
+     WHERE r.user_id = $1
+     ORDER BY e.event_date`,
+    [userId]
+  );
+  return rows.map((r) => ({
+    eventId: r.event_id,
+    eventName: r.event_name,
+    eventDate: r.event_date,
+    status: r.status,
+    checkedInAt: r.checked_in_at,
+    checkedOutAt: r.checked_out_at,
   }));
 }
 

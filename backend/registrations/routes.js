@@ -2,7 +2,15 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireRole } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { registerForEvent, unregisterFromEvent, listParticipantsForEvent, checkIn, checkOut } from './repository.js';
+import { getEvent } from '../events/repository.js';
+import {
+  registerForEvent,
+  unregisterFromEvent,
+  listParticipantsForEvent,
+  listRegistrationsForUser,
+  checkIn,
+  checkOut,
+} from './repository.js';
 
 router.post('/events/:id/register', requireAuth(async ({ params, user }) => {
   try {
@@ -26,7 +34,14 @@ router.delete('/events/:id/register', requireAuth(async ({ params, user }) => {
   }
 }));
 
+router.get('/registrations', requireAuth(async ({ user }) => {
+  const registrations = await listRegistrationsForUser(user.id);
+  return { status: 200, body: registrations };
+}));
+
 router.get('/events/:id/participants', requireAuth(requireRole('admin', 'checkin_helper')(async ({ params }) => {
+  const event = await getEvent(params.id);
+  if (!event) return { status: 404, body: { error: 'event not found' } };
   const participants = await listParticipantsForEvent(params.id);
   return { status: 200, body: participants };
 })));
