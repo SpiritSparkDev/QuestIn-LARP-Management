@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Meine Charaktere – Pakyrion</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav>
+  <a href="/account.html">Konto</a>
+  <a href="/characters.html">Charaktere</a>
+  <a href="#" id="logout-link">Logout</a>
+</nav>
+<h1>Meine Charaktere</h1>
+<table id="character-list">
+  <thead><tr><th>Name</th><th>Event</th><th></th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2 id="form-title">Neuen Charakter anlegen</h2>
+<form id="character-form">
+  <label for="event-select">Event</label>
+  <select id="event-select" name="eventId" required></select>
+  <label for="character-name">Charaktername</label>
+  <input id="character-name" name="name" type="text" required>
+  <div id="dynamic-fields"></div>
+  <button type="submit">Speichern</button>
+</form>
+<p id="message"></p>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { renderField } from '/js/formFields.js';
+
+const eventSelect = document.getElementById('event-select');
+const dynamicFields = document.getElementById('dynamic-fields');
+const form = document.getElementById('character-form');
+const message = document.getElementById('message');
+const listBody = document.querySelector('#character-list tbody');
+const formTitle = document.getElementById('form-title');
+
+let events = [];
+let editingCharacterId = null;
+
+function renderSchemaFields(schema, data = {}) {
+  dynamicFields.innerHTML = schema.map((field) => renderField(field, data[field.key])).join('');
+}
+
+eventSelect.addEventListener('change', () => {
+  const event = events.find((e) => e.id === eventSelect.value);
+  renderSchemaFields(event ? event.character_form_schema : []);
+});
+
+async function loadEvents() {
+  events = await api.get('/events');
+  eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${e.name} (${e.event_date})</option>`).join('');
+  if (events.length > 0) {
+    renderSchemaFields(events[0].character_form_schema);
+  }
+}
+
+async function loadCharacters() {
+  const characters = await api.get('/characters');
+  listBody.innerHTML = characters.map((c) => {
+    const event = events.find((e) => e.id === c.event_id);
+    return `<tr>
+      <td>${c.name}</td>
+      <td>${event ? event.name : c.event_id}</td>
+      <td><button type="button" data-edit="${c.id}">Bearbeiten</button></td>
+    </tr>`;
+  }).join('');
+
+  listBody.querySelectorAll('[data-edit]').forEach((button) => {
+    button.addEventListener('click', () => startEdit(button.dataset.edit, characters));
+  });
+}
+
+function startEdit(characterId, characters) {
+  const character = characters.find((c) => c.id === characterId);
+  if (!character) return;
+  editingCharacterId = characterId;
+  formTitle.textContent = `Charakter bearbeiten: ${character.name}`;
+  eventSelect.value = character.event_id;
+  eventSelect.disabled = true;
+  form.elements.name.value = character.name;
+  const event = events.find((e) => e.id === character.event_id);
+  renderSchemaFields(event ? event.character_form_schema : [], character.data);
+  form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
+}
+
+function resetForm() {
+  editingCharacterId = null;
+  formTitle.textContent = 'Neuen Charakter anlegen';
+  eventSelect.disabled = false;
+  form.reset();
+  form.querySelector('button[type="submit"]').textContent = 'Speichern';
+  const event = events.find((e) => e.id === eventSelect.value);
+  renderSchemaFields(event ? event.character_form_schema : []);
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  message.textContent = '';
+  message.className = '';
+  const formData = new FormData(form);
+  const { eventId, name, ...rest } = Object.fromEntries(formData);
+  try {
+    if (editingCharacterId) {
+      await api.put(`/characters/${editingCharacterId}`, { name, data: rest });
+    } else {
+      await api.post('/characters', { eventId, name, data: rest });
+    }
+    message.textContent = 'Gespeichert.';
+    message.className = 'success';
+    resetForm();
+    await loadCharacters();
+  } catch (err) {
+    message.textContent = err.status === 400 && err.body?.details
+      ? err.body.details.join(', ')
+      : err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  await loadEvents();
+  await loadCharacters();
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+}
+</script>
+</body>
+</html>
