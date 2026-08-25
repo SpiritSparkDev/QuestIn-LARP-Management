@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Registrieren – Pakyrion</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav>
+  <a href="/login.html">Login</a>
+  <a href="/register.html">Registrieren</a>
+</nav>
+<h1>Registrieren</h1>
+<form id="register-form">
+  <label for="name">Name</label>
+  <input id="name" name="name" type="text" required>
+  <label for="email">E-Mail</label>
+  <input id="email" name="email" type="email" required>
+  <label for="password">Passwort</label>
+  <input id="password" name="password" type="password" minlength="8" required>
+  <button type="submit">Registrieren</button>
+</form>
+<p id="message"></p>
+<script type="module">
+import { api } from '/js/api.js';
+
+const form = document.getElementById('register-form');
+const message = document.getElementById('message');
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  message.textContent = '';
+  message.className = '';
+  const data = Object.fromEntries(new FormData(form));
+  try {
+    await api.post('/auth/register', data);
+    message.textContent = 'Konto erstellt. Bitte prüfe dein E-Mail-Postfach und bestätige deine Adresse, bevor du dich einloggst.';
+    message.className = 'success';
+    form.reset();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+</script>
+</body>
+</html>

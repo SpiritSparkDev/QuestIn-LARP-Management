@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Login – Pakyrion</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav>
+  <a href="/login.html">Login</a>
+  <a href="/register.html">Registrieren</a>
+</nav>
+<h1>Login</h1>
+<form id="login-form">
+  <label for="email">E-Mail</label>
+  <input id="email" name="email" type="email" required>
+  <label for="password">Passwort</label>
+  <input id="password" name="password" type="password" required>
+  <button type="submit">Einloggen</button>
+</form>
+<p id="message"></p>
+<p>Passwort vergessen? <a href="#" id="forgot-link">Zurücksetzen anfordern</a></p>
+<hr>
+<p>Oder anmelden mit:</p>
+<p>
+  <a href="/auth/oauth/google/start">Google</a> ·
+  <a href="/auth/oauth/facebook/start">Facebook</a> ·
+  <a href="/auth/oauth/discord/start">Discord</a>
+</p>
+<script type="module">
+import { api } from '/js/api.js';
+
+const form = document.getElementById('login-form');
+const message = document.getElementById('message');
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  message.textContent = '';
+  message.className = '';
+  const data = Object.fromEntries(new FormData(form));
+  try {
+    await api.post('/auth/login', data);
+    window.location.href = '/account.html';
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('forgot-link').addEventListener('click', async (event) => {
+  event.preventDefault();
+  const email = document.getElementById('email').value;
+  if (!email) {
+    message.textContent = 'Bitte zuerst die E-Mail-Adresse eingeben.';
+    message.className = 'error';
+    return;
+  }
+  try {
+    await api.post('/auth/password-reset/request', { email });
+    message.textContent = 'Falls diese E-Mail registriert ist, wurde eine Mail mit einem Reset-Link verschickt.';
+    message.className = 'success';
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+</script>
+</body>
+</html>
