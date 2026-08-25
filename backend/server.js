@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from './logger.js';
 import { router } from './routes.js';
+import './auth/register.js';
 
 // Route modules import `router` from ./routes.js directly (importing it from
 // here would create an ESM cycle); this re-export is for the app entry point only.
