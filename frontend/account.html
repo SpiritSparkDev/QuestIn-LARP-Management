@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Mein Konto – Pakyrion</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav>
+  <a href="/account.html">Konto</a>
+  <a href="/characters.html">Charaktere</a>
+  <a href="#" id="logout-link">Logout</a>
+</nav>
+<h1>Mein Konto</h1>
+<form id="account-form">
+  <label for="name">Name</label>
+  <input id="name" name="name" type="text">
+  <label for="address">Adresse</label>
+  <input id="address" name="address" type="text">
+  <label for="birthdate">Geburtsdatum</label>
+  <input id="birthdate" name="birthdate" type="text" placeholder="TT.MM.JJJJ">
+  <label for="phone">Telefon</label>
+  <input id="phone" name="phone" type="text">
+  <label for="emergencyContact">Notfallkontakt</label>
+  <input id="emergencyContact" name="emergencyContact" type="text">
+  <label for="medicalNotes">Gesundheitshinweise / Allergien</label>
+  <textarea id="medicalNotes" name="medicalNotes"></textarea>
+  <button type="submit">Speichern</button>
+</form>
+<p id="message"></p>
+<script type="module">
+import { api } from '/js/api.js';
+
+const form = document.getElementById('account-form');
+const message = document.getElementById('message');
+
+async function loadAccount() {
+  try {
+    const account = await api.get('/account');
+    for (const field of ['name', 'address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes']) {
+      form.elements[field].value = account[field] ?? '';
+    }
+  } catch (err) {
+    if (err.status === 401) {
+      window.location.href = '/login.html';
+      return;
+    }
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  message.textContent = '';
+  message.className = '';
+  const data = Object.fromEntries(new FormData(form));
+  try {
+    await api.patch('/account', data);
+    message.textContent = 'Gespeichert.';
+    message.className = 'success';
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('logout-link').addEventListener('click', async (event) => {
+  event.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+loadAccount();
+</script>
+</body>
+</html>
