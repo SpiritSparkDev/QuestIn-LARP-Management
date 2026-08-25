@@ -26,6 +26,7 @@
   <h3>Charakterformular</h3>
   <div id="schema-rows"></div>
   <button type="button" id="add-field">Feld hinzufügen</button>
+  <button type="button" id="load-template">Standard-Vorlage laden</button>
   <button type="submit">Speichern</button>
 </form>
 <p id="message"></p>
@@ -33,6 +34,7 @@
 <script type="module">
 import { api } from '/js/api.js';
 import { escapeHtml } from '/js/formFields.js';
+import { DEFAULT_CHARACTER_SCHEMA } from '/js/defaultCharacterSchema.js';
 
 const listBody = document.querySelector('#event-list tbody');
 const form = document.getElementById('event-form');
@@ -42,15 +44,18 @@ const formTitle = document.getElementById('form-title');
 
 let editingEventId = null;
 
-function addSchemaRow(field = { key: '', label: '', type: 'text', required: false }) {
+function addSchemaRow(field = { key: '', label: '', type: 'text', required: false, options: [] }) {
   const row = document.createElement('div');
+  const optionsValue = Array.isArray(field.options) ? field.options.join(', ') : '';
   row.innerHTML = `
     <input type="text" placeholder="key" class="schema-key" value="${escapeHtml(field.key)}">
     <input type="text" placeholder="Label" class="schema-label" value="${escapeHtml(field.label)}">
     <select class="schema-type">
       <option value="text" ${field.type === 'text' ? 'selected' : ''}>Text</option>
       <option value="textarea" ${field.type === 'textarea' ? 'selected' : ''}>Textarea</option>
+      <option value="select" ${field.type === 'select' ? 'selected' : ''}>Auswahl</option>
     </select>
+    <input type="text" placeholder="Optionen (kommagetrennt, nur bei Auswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
     <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
     <button type="button" class="remove-row">Entfernen</button>
   `;
@@ -60,13 +65,28 @@ function addSchemaRow(field = { key: '', label: '', type: 'text', required: fals
 
 document.getElementById('add-field').addEventListener('click', () => addSchemaRow());
 
+document.getElementById('load-template').addEventListener('click', () => {
+  schemaRows.innerHTML = '';
+  DEFAULT_CHARACTER_SCHEMA.forEach((field) => addSchemaRow(field));
+});
+
 function collectSchema() {
-  return [...schemaRows.children].map((row) => ({
-    key: row.querySelector('.schema-key').value.trim(),
-    label: row.querySelector('.schema-label').value.trim(),
-    type: row.querySelector('.schema-type').value,
-    required: row.querySelector('.schema-required').checked,
-  })).filter((field) => field.key.length > 0);
+  return [...schemaRows.children].map((row) => {
+    const type = row.querySelector('.schema-type').value;
+    const field = {
+      key: row.querySelector('.schema-key').value.trim(),
+      label: row.querySelector('.schema-label').value.trim(),
+      type,
+      required: row.querySelector('.schema-required').checked,
+    };
+    if (type === 'select') {
+      field.options = row.querySelector('.schema-options').value
+        .split(',')
+        .map((opt) => opt.trim())
+        .filter((opt) => opt.length > 0);
+    }
+    return field;
+  }).filter((field) => field.key.length > 0);
 }
 
 async function loadEvents() {

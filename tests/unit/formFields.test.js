@@ -34,3 +34,30 @@ test('renderField escapes a field key containing a double-quote', () => {
   assert.ok(!html.includes('weird"key'));
   assert.ok(html.includes('weird&quot;key'));
 });
+
+test('renderField renders a select with an option per entry and marks the current value selected', () => {
+  const field = { key: 'magischBegabt', label: 'Magisch begabt', type: 'select', options: ['Arkan', 'Bardisch'] };
+  const html = renderField(field, 'Bardisch');
+  assert.ok(html.includes('<select'));
+  assert.ok(html.includes('<option value="Arkan">Arkan</option>'));
+  assert.ok(html.includes('<option value="Bardisch" selected>Bardisch</option>'));
+});
+
+test('renderField adds a blank option to an optional select with no value chosen', () => {
+  const field = { key: 'magischBegabt', label: 'Magisch begabt', type: 'select', options: ['Arkan'], required: false };
+  const html = renderField(field, undefined);
+  assert.ok(html.includes('<option value=""></option>'));
+});
+
+test('renderField required select has no blank option', () => {
+  const field = { key: 'magischBegabt', label: 'Magisch begabt', type: 'select', options: ['Arkan'], required: true };
+  const html = renderField(field, undefined);
+  assert.ok(!html.includes('<option value=""></option>'));
+});
+
+test('renderField escapes select option labels', () => {
+  const field = { key: 'x', label: 'X', type: 'select', options: ['<b>evil</b>'] };
+  const html = renderField(field, undefined);
+  assert.ok(!html.includes('<b>evil</b>'));
+  assert.ok(html.includes('&lt;b&gt;evil&lt;/b&gt;'));
+});

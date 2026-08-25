@@ -10,7 +10,8 @@
     "start": "node backend/server.js",
     "dev": "node --watch backend/server.js",
     "test": "node --test --experimental-test-coverage",
-    "migrate": "node db/migrate.js"
+    "migrate": "node db/migrate.js",
+    "seed-admin": "node db/seedAdmin.js"
   },
   "dependencies": {
     "nodemailer": "^6.9.0",

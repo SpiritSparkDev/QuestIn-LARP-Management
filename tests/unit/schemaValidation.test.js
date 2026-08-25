@@ -54,3 +54,22 @@ test('a whitespace-only string for a required field is still reported as missing
   const errors = validateCharacterData(SCHEMA, { fraction: '   ' });
   assert.ok(errors.some((e) => e.includes('fraction')));
 });
+
+const SELECT_SCHEMA = [
+  { key: 'magischBegabt', label: 'Magisch begabt', type: 'select', required: false, options: ['Arkan', 'Bardisch', 'Klerikal'] },
+];
+
+test('a select value matching one of the allowed options is valid', () => {
+  const errors = validateCharacterData(SELECT_SCHEMA, { magischBegabt: 'Bardisch' });
+  assert.deepEqual(errors, []);
+});
+
+test('a select value not in the allowed options is an error', () => {
+  const errors = validateCharacterData(SELECT_SCHEMA, { magischBegabt: 'Nicht-Erlaubt' });
+  assert.ok(errors.some((e) => e.includes('magischBegabt')));
+});
+
+test('an empty select value is valid when the field is not required', () => {
+  const errors = validateCharacterData(SELECT_SCHEMA, {});
+  assert.deepEqual(errors, []);
+});
