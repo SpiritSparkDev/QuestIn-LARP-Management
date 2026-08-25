@@ -8,13 +8,20 @@ import { logger } from '../logger.js';
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
-router.post('/auth/register', async ({ req }) => {
+router.post('/auth/register', async ({ req, requestId }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
 
-  const { email, password, name } = body;
+  const { password, name } = body;
+  const email = body.email?.toLowerCase();
   if (!email || !password || !name) {
     return { status: 400, body: { error: 'email, password, and name are required' } };
+  }
+  if (password.length < 8) {
+    return { status: 400, body: { error: 'password must be at least 8 characters' } };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { status: 400, body: { error: 'invalid email format' } };
   }
 
   const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
@@ -48,10 +55,36 @@ router.post('/auth/register', async ({ req }) => {
   try {
     await sendVerificationEmail(email, token);
   } catch (err) {
-    logger.error('failed to send verification email', { error: err.message });
+    logger.error('failed to send verification email', { requestId, userId, email, error: err.message });
   }
 
   return { status: 201, body: { id: userId, email } };
+});
+
+router.post('/auth/verify/resend', async ({ req, requestId }) => {
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const email = body.email?.toLowerCase();
+  if (!email) return { status: 400, body: { error: 'email is required' } };
+
+  const { rows } = await query('SELECT id FROM users WHERE email = $1 AND email_verified = false', [email]);
+  if (rows.length > 0) {
+    await query('DELETE FROM email_verification_tokens WHERE user_id = $1', [rows[0].id]);
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
+    await query(
+      'INSERT INTO email_verification_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)',
+      [token, rows[0].id, expiresAt]
+    );
+    try {
+      await sendVerificationEmail(email, token);
+    } catch (err) {
+      logger.error('failed to resend verification email', { requestId, userId: rows[0].id, email, error: err.message });
+    }
+  }
+
+  // Always 200 regardless of whether the email is registered/already verified — avoids leaking account existence.
+  return { status: 200, body: { requested: true } };
 });
 
 router.get('/auth/verify', async ({ req }) => {

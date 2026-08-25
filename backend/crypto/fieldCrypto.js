@@ -31,3 +31,5 @@ export function decryptField(buffer) {
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   return plaintext.toString('utf8');
 }
+
+getKey(); // fail fast at import time if ENCRYPTION_KEY is missing/invalid, rather than on first use

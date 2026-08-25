@@ -11,7 +11,7 @@ const RESET_TTL_MS = 60 * 60 * 1000;
 router.post('/auth/password-reset/request', async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { email } = body;
+  const email = body.email?.toLowerCase();
   if (!email) return { status: 400, body: { error: 'email is required' } };
 
   const { rows } = await query('SELECT id FROM users WHERE email = $1', [email]);
@@ -40,6 +40,9 @@ router.post('/auth/password-reset/confirm', async ({ req }) => {
   if (!token || !password) {
     return { status: 400, body: { error: 'token and password are required' } };
   }
+  if (password.length < 8) {
+    return { status: 400, body: { error: 'password must be at least 8 characters' } };
+  }
 
   const { rows } = await query(
     'SELECT user_id, expires_at FROM password_reset_tokens WHERE token = $1',
@@ -51,6 +54,7 @@ router.post('/auth/password-reset/confirm', async ({ req }) => {
 
   const passwordHash = await hashPassword(password);
   await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, rows[0].user_id]);
-  await query('DELETE FROM password_reset_tokens WHERE token = $1', [token]);
+  await query('DELETE FROM password_reset_tokens WHERE user_id = $1', [rows[0].user_id]);
+  await query('DELETE FROM sessions WHERE user_id = $1', [rows[0].user_id]);
   return { status: 200, body: { reset: true } };
 });

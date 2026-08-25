@@ -52,6 +52,35 @@ test('register creates an unverified user with a verification token; verify acti
   server.close();
 });
 
+test('registering with a password shorter than 8 characters is rejected with 400', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const email = `shortpw-${crypto.randomUUID()}@example.com`;
+
+  const res = await fetch(`http://localhost:${port}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: 'abc', name: 'Short Password' }),
+  });
+  assert.equal(res.status, 400);
+
+  server.close();
+});
+
+test('registering with a malformed email is rejected with 400', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+
+  const res = await fetch(`http://localhost:${port}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'not-an-email', password: 'correct horse battery staple', name: 'Bad Email' }),
+  });
+  assert.equal(res.status, 400);
+
+  server.close();
+});
+
 test('registering the same email twice is rejected with 409', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
@@ -85,6 +114,78 @@ test('concurrent registrations for the same email: one 201, one 409, no 500', as
   ]);
   const statuses = [firstRes.status, secondRes.status].sort();
   assert.deepEqual(statuses, [201, 409]);
+
+  server.close();
+});
+
+test('resending verification issues a new token and invalidates the old one', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const email = `resend-${crypto.randomUUID()}@example.com`;
+
+  const registerRes = await fetch(`http://localhost:${port}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: 'correct horse battery staple', name: 'Resend User' }),
+  });
+  const { id } = await registerRes.json();
+  const { rows: oldTokenRows } = await query(
+    'SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]
+  );
+  const oldToken = oldTokenRows[0].token;
+
+  const resendRes = await fetch(`http://localhost:${port}/auth/verify/resend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  assert.equal(resendRes.status, 200);
+
+  const { rows: newTokenRows } = await query(
+    'SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]
+  );
+  assert.equal(newTokenRows.length, 1);
+  const newToken = newTokenRows[0].token;
+  assert.notEqual(newToken, oldToken);
+
+  const { rows: oldTokenAfter } = await query(
+    'SELECT token FROM email_verification_tokens WHERE token = $1', [oldToken]
+  );
+  assert.equal(oldTokenAfter.length, 0);
+
+  const verifyRes = await fetch(`http://localhost:${port}/auth/verify?token=${newToken}`);
+  assert.equal(verifyRes.status, 200);
+
+  server.close();
+});
+
+test('resending verification for an unknown or already-verified email still returns 200', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+
+  const unknownRes = await fetch(`http://localhost:${port}/auth/verify/resend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: `nobody-${crypto.randomUUID()}@example.com` }),
+  });
+  assert.equal(unknownRes.status, 200);
+
+  const email = `already-verified-${crypto.randomUUID()}@example.com`;
+  const registerRes = await fetch(`http://localhost:${port}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: 'correct horse battery staple', name: 'Verified User' }),
+  });
+  const { id } = await registerRes.json();
+  const { rows: tokenRows } = await query('SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]);
+  await fetch(`http://localhost:${port}/auth/verify?token=${tokenRows[0].token}`);
+
+  const verifiedRes = await fetch(`http://localhost:${port}/auth/verify/resend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  assert.equal(verifiedRes.status, 200);
 
   server.close();
 });

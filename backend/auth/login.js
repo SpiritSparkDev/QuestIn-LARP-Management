@@ -9,7 +9,8 @@ router.post('/auth/login', async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
 
-  const { email, password } = body;
+  const { password } = body;
+  const email = body.email?.toLowerCase();
   if (!email || !password) {
     return { status: 400, body: { error: 'email and password are required' } };
   }

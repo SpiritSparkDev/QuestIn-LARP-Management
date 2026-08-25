@@ -47,6 +47,24 @@ test('login with correct credentials sets a session cookie', async () => {
   server.close();
 });
 
+test('login succeeds with a different email casing than used at registration', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const localPart = `case-${crypto.randomUUID()}`;
+  const registerEmail = `${localPart}@Example.com`;
+  const password = 'correct horse battery staple';
+  await registerAndVerify(port, registerEmail, password);
+
+  const res = await fetch(`http://localhost:${port}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: `${localPart}@EXAMPLE.COM`, password }),
+  });
+  assert.equal(res.status, 200);
+
+  server.close();
+});
+
 test('login with wrong password is rejected with 401', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();

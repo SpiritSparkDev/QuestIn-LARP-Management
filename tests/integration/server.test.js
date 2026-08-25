@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   || 'postgres://app:app@localhost:5433/pakyrion_test';
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64);
 
 const { createServer, router } = await import('../../backend/server.js');
 const { closePool } = await import('../../backend/db.js');

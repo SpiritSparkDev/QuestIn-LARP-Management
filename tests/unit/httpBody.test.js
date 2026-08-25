@@ -17,3 +17,8 @@ test('invalid JSON resolves to null', async () => {
   const req = Readable.from([Buffer.from('not json')]);
   assert.equal(await readJsonBody(req), null);
 });
+
+test('a body over the size cap resolves to null', async () => {
+  const req = Readable.from([Buffer.alloc(1_000_001, 'a')]);
+  assert.equal(await readJsonBody(req), null);
+});

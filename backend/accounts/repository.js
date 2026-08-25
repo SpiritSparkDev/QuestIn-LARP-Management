@@ -48,5 +48,6 @@ export async function updateAccount(userId, fields) {
       fields.medicalNotes !== undefined ? encryptField(fields.medicalNotes) : null,
     ]
   );
+  if (rows.length === 0) return null;
   return decryptAccount(rows[0]);
 }

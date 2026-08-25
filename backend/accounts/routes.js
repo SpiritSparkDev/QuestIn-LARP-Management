@@ -12,5 +12,6 @@ router.patch('/account', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const account = await updateAccount(user.id, body);
+  if (!account) return { status: 404, body: { error: 'account not found' } };
   return { status: 200, body: account };
 }));
