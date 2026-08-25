@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from './logger.js';
 import { router } from './routes.js';
+import { serveStaticFile } from './staticFiles.js';
 import './auth/register.js';
 import './auth/login.js';
 import './auth/passwordReset.js';
@@ -25,6 +26,15 @@ async function handleRequest(req, res) {
 
   const match = router.match(req.method, pathname);
   if (!match) {
+    if (req.method === 'GET') {
+      const file = await serveStaticFile(pathname);
+      if (file) {
+        res.writeHead(200, { 'Content-Type': file.contentType });
+        res.end(file.data);
+        logger.info('request', { requestId, method: req.method, path: pathname, status: 200, durationMs: Date.now() - start });
+        return;
+      }
+    }
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'not found', requestId }));
     logger.info('request', { requestId, method: req.method, path: pathname, status: 404, durationMs: Date.now() - start });
