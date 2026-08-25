@@ -1,6 +1,10 @@
 import pg from 'pg';
 import { logger } from './logger.js';
 
+// Keep DATE columns as plain 'YYYY-MM-DD' strings — pg's default Date-object
+// parsing shifts the value by a day depending on the server's local timezone.
+pg.types.setTypeParser(1082, (value) => value);
+
 const { Pool } = pg;
 
 let pool;
