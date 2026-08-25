@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Check-In – Pakyrion Admin</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav>
+  <a href="/admin/events.html">Events</a>
+  <a href="/admin/checkin.html">Check-In</a>
+  <a href="#" id="logout-link">Logout</a>
+</nav>
+<h1>Check-In</h1>
+<label for="event-select">Event</label>
+<select id="event-select"></select>
+<table id="participant-list">
+  <thead><tr><th>Name</th><th>Charaktere</th><th>Status</th><th></th></tr></thead>
+  <tbody></tbody>
+</table>
+<p id="message"></p>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { escapeHtml } from '/js/formFields.js';
+
+const eventSelect = document.getElementById('event-select');
+const listBody = document.querySelector('#participant-list tbody');
+const message = document.getElementById('message');
+
+async function loadParticipants(eventId) {
+  const participants = await api.get(`/events/${eventId}/participants`);
+  listBody.innerHTML = participants.map((p) => `<tr>
+    <td>${escapeHtml(p.name)}</td>
+    <td>${escapeHtml(p.characters.map((c) => c.name).join(', '))}</td>
+    <td>${escapeHtml(p.status)}</td>
+    <td>
+      <button type="button" data-checkin="${p.userId}" ${p.status !== 'registered' ? 'disabled' : ''}>Check-In</button>
+      <button type="button" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>
+    </td>
+  </tr>`).join('');
+
+  listBody.querySelectorAll('[data-checkin]').forEach((button) => {
+    button.addEventListener('click', () => transition(eventId, button.dataset.checkin, 'checkin'));
+  });
+  listBody.querySelectorAll('[data-checkout]').forEach((button) => {
+    button.addEventListener('click', () => transition(eventId, button.dataset.checkout, 'checkout'));
+  });
+}
+
+async function transition(eventId, userId, action) {
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.post(`/events/${eventId}/${action}`, { userId });
+    await loadParticipants(eventId);
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+}
+
+eventSelect.addEventListener('change', () => loadParticipants(eventSelect.value));
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const events = await api.get('/events');
+  eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
+  if (events.length > 0) await loadParticipants(events[0].id);
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins/Check-In-Helfer.'; message.className = 'error'; }
+}
+</script>
+</body>
+</html>
