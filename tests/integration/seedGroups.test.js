@@ -11,6 +11,41 @@ await runMigrations();
 const { seedGroups } = await import('../../db/seedGroups.js');
 const { query, closePool } = await import('../../backend/db.js');
 
+// The shared test DB is not reset between runs (tmpfs, only cleared on
+// container restart), so a prior run's seedGroups() call may have already
+// dropped `role`. Restore it (matching its definition in
+// 001_users_and_sessions.sql) so the backfill test below always has a
+// role-bearing column to exercise, regardless of what earlier runs did.
+const { rows: roleColumn } = await query(
+  `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role'`
+);
+if (roleColumn.length === 0) {
+  await query(
+    `ALTER TABLE users ADD COLUMN role text not null default 'participant' check (role in ('participant', 'admin', 'checkin_helper'))`
+  );
+  // A prior finalization also set group_id NOT NULL; relax it back so a
+  // role-only insert (no group_id yet) is legal again, matching the
+  // pre-finalization schema seedGroups() expects to backfill.
+  await query('ALTER TABLE users ALTER COLUMN group_id DROP NOT NULL');
+}
+
+// This test must run first (before any other test's seedGroups() call) —
+// only at this point does the `role` column still exist, so it's the only
+// place the real backfill path is exercised rather than the "already
+// finalized" no-op path.
+test('backfills group_id for a user with an existing role value, then drops the role column', async () => {
+  const { rows } = await query(
+    "INSERT INTO users (email, name, role) VALUES ($1, 'Backfill Test', 'checkin_helper') RETURNING id",
+    [`backfill-${crypto.randomUUID()}@example.com`]
+  );
+  await seedGroups();
+  const { rows: after } = await query(
+    `SELECT groups.key FROM users JOIN groups ON groups.id = users.group_id WHERE users.id = $1`,
+    [rows[0].id]
+  );
+  assert.equal(after[0].key, 'sl');
+});
+
 test('seeds all 8 default groups', async () => {
   await seedGroups();
   const { rows } = await query('SELECT key FROM groups ORDER BY key');
@@ -30,38 +65,6 @@ test('admin group has every menu and can edit characters', async () => {
   const { rows } = await query('SELECT visible_menus, can_edit_characters FROM groups WHERE key = $1', ['admin']);
   assert.deepEqual(rows[0].visible_menus.sort(), ['charaktere', 'checkin', 'events', 'konto', 'mitglieder']);
   assert.equal(rows[0].can_edit_characters, true);
-});
-
-test('backfills group_id for a user with an existing role value, then drops the role column', async () => {
-  await seedGroups();
-  // At this point role may already be dropped by an earlier test in this
-  // file (seedGroups is idempotent and re-entrant across the whole file's
-  // shared DB) — this test only makes sense to run standalone against a
-  // fresh DB, so it re-checks preconditions rather than assuming them.
-  const { rows: roleColumn } = await query(
-    `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role'`
-  );
-  if (roleColumn.length === 0) {
-    // role already dropped by a prior seedGroups() call in this shared test
-    // DB — assert the end state directly instead (group_id is NOT NULL and
-    // usable) rather than re-testing the backfill path itself.
-    const { rows } = await query(
-      "INSERT INTO users (email, name, group_id) VALUES ($1, 'Backfill Check', (SELECT id FROM groups WHERE key = 'sc')) RETURNING group_id",
-      [`backfill-check-${crypto.randomUUID()}@example.com`]
-    );
-    assert.ok(rows[0].group_id);
-    return;
-  }
-  const { rows } = await query(
-    "INSERT INTO users (email, name, role) VALUES ($1, 'Backfill Test', 'checkin_helper') RETURNING id",
-    [`backfill-${crypto.randomUUID()}@example.com`]
-  );
-  await seedGroups();
-  const { rows: after } = await query(
-    `SELECT groups.key FROM users JOIN groups ON groups.id = users.group_id WHERE users.id = $1`,
-    [rows[0].id]
-  );
-  assert.equal(after[0].key, 'sl');
 });
 
 test.after(async () => {
