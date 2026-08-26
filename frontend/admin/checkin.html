@@ -3,22 +3,39 @@
 <head>
 <meta charset="UTF-8">
 <title>Check-In – Pakyrion Admin</title>
-<link rel="stylesheet" href="/css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/everest-registry.css">
 </head>
 <body>
-<nav>
-  <a href="/admin/events.html">Events</a>
-  <a href="/admin/checkin.html">Check-In</a>
-  <a href="#" id="logout-link">Logout</a>
-</nav>
-<h1>Check-In</h1>
-<label for="event-select">Event</label>
-<select id="event-select"></select>
-<table id="participant-list">
-  <thead><tr><th>Name</th><th>Charaktere</th><th>Status</th><th></th></tr></thead>
-  <tbody></tbody>
-</table>
-<p id="message"></p>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+    <nav>
+      <a href="/admin/events.html">Events</a>
+      <a href="/admin/checkin.html" class="current">Check-In</a>
+    </nav>
+    <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
+  </aside>
+  <div class="main"><div class="content">
+    <h1>Check-In</h1>
+    <p class="sub">Teilnehmerliste für das ausgewählte Event.</p>
+    <select id="event-select"></select>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Gesamt</div></div>
+      <div class="stat"><div class="stat-num forest" id="stat-checked-in">0</div><div class="stat-label">Eingecheckt</div></div>
+    </div>
+    <div class="card">
+      <div class="toolbar"><input class="search" id="participant-search" placeholder="Suche nach Name oder Charakter …"></div>
+      <table id="participant-list">
+        <thead><tr><th>Name</th><th>Charaktere</th><th>Status</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p id="message"></p>
+  </div></div>
+</div>
 
 <script type="module">
 import { api } from '/js/api.js';
@@ -27,18 +44,41 @@ import { escapeHtml } from '/js/formFields.js';
 const eventSelect = document.getElementById('event-select');
 const listBody = document.querySelector('#participant-list tbody');
 const message = document.getElementById('message');
+const searchInput = document.getElementById('participant-search');
+const statTotal = document.getElementById('stat-total');
+const statCheckedIn = document.getElementById('stat-checked-in');
+
+const STATUS_LABELS = { registered: 'Angemeldet', checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt' };
+
+let currentSearch = '';
+
+function applySearchFilter() {
+  const term = currentSearch.trim().toLowerCase();
+  listBody.querySelectorAll('tr').forEach((row) => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = !term || text.includes(term) ? '' : 'none';
+  });
+}
+
+searchInput.addEventListener('input', () => {
+  currentSearch = searchInput.value;
+  applySearchFilter();
+});
 
 async function loadParticipants(eventId) {
   const participants = await api.get(`/events/${eventId}/participants`);
   listBody.innerHTML = participants.map((p) => `<tr>
     <td>${escapeHtml(p.name)}</td>
     <td>${escapeHtml(p.characters.map((c) => c.name).join(', '))}</td>
-    <td>${escapeHtml(p.status)}</td>
+    <td><span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span></td>
     <td>
-      <button type="button" data-checkin="${p.userId}" ${p.status !== 'registered' ? 'disabled' : ''}>Check-In</button>
-      <button type="button" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>
+      <button type="button" class="btn" data-checkin="${p.userId}" ${p.status !== 'registered' ? 'disabled' : ''}>Check-In</button>
+      <button type="button" class="btn btn-ghost" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>
     </td>
   </tr>`).join('');
+
+  statTotal.textContent = participants.length;
+  statCheckedIn.textContent = participants.filter((p) => p.status === 'checked_in').length;
 
   listBody.querySelectorAll('[data-checkin]').forEach((button) => {
     button.addEventListener('click', () => transition(eventId, button.dataset.checkin, 'checkin'));
@@ -46,6 +86,8 @@ async function loadParticipants(eventId) {
   listBody.querySelectorAll('[data-checkout]').forEach((button) => {
     button.addEventListener('click', () => transition(eventId, button.dataset.checkout, 'checkout'));
   });
+
+  applySearchFilter();
 }
 
 async function transition(eventId, userId, action) {
