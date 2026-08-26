@@ -11,9 +11,32 @@ export function requireAuth(handler) {
     const session = await getSession(token);
     if (!session) return { status: 401, body: { error: 'not authenticated' } };
 
-    const { rows } = await query('SELECT id, email, role, name FROM users WHERE id = $1', [session.userId]);
+    const { rows } = await query(
+      `SELECT users.id, users.email, users.name,
+              groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
+              groups.visible_menus, groups.account_fields, groups.can_edit_characters
+       FROM users
+       JOIN groups ON groups.id = users.group_id
+       WHERE users.id = $1`,
+      [session.userId]
+    );
     if (rows.length === 0) return { status: 401, body: { error: 'not authenticated' } };
 
-    return handler({ ...ctx, user: rows[0] });
+    const row = rows[0];
+    const user = {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      group: {
+        id: row.group_id,
+        key: row.group_key,
+        name: row.group_name,
+        visibleMenus: row.visible_menus,
+        accountFields: row.account_fields,
+        canEditCharacters: row.can_edit_characters,
+      },
+    };
+
+    return handler({ ...ctx, user });
   };
 }

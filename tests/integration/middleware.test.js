@@ -7,15 +7,18 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 const { requireAuth } = await import('../../backend/middleware/authenticate.js');
-const { requireRole } = await import('../../backend/middleware/authorize.js');
+const { requireMenu } = await import('../../backend/middleware/authorize.js');
 
-async function makeUser(role = 'participant') {
+async function makeUser(groupKey = 'sc') {
   const { rows } = await query(
-    "INSERT INTO users (email, name, role, email_verified) VALUES ($1, 'Mid Test', $2, true) RETURNING id",
-    [`mid-${Date.now()}-${Math.random()}@example.com`, role]
+    "INSERT INTO users (email, name, group_id) VALUES ($1, 'Mid Test', (SELECT id FROM groups WHERE key = $2)) RETURNING id",
+    [`mid-${Date.now()}-${Math.random()}@example.com`, groupKey]
   );
   return rows[0].id;
 }
@@ -32,27 +35,28 @@ test('requireAuth rejects an invalid session token', async () => {
   assert.equal(result.status, 401);
 });
 
-test('requireAuth attaches the user and calls the handler for a valid session', async () => {
+test('requireAuth attaches the user (with group) and calls the handler for a valid session', async () => {
   const userId = await makeUser();
   const session = await createSession(userId);
-  const handler = requireAuth(async ({ user }) => ({ status: 200, body: { userId: user.id } }));
+  const handler = requireAuth(async ({ user }) => ({ status: 200, body: { userId: user.id, groupKey: user.group.key } }));
   const result = await handler({ req: { headers: { cookie: `session=${session.token}` } } });
   assert.equal(result.status, 200);
   assert.equal(result.body.userId, userId);
+  assert.equal(result.body.groupKey, 'sc');
 });
 
-test('requireRole rejects a user with the wrong role', async () => {
-  const userId = await makeUser('participant');
+test('requireMenu rejects a user whose group cannot see the menu', async () => {
+  const userId = await makeUser('sc');
   const session = await createSession(userId);
-  const handler = requireAuth(requireRole('admin')(async () => ({ status: 200, body: {} })));
+  const handler = requireAuth(requireMenu('mitglieder')(async () => ({ status: 200, body: {} })));
   const result = await handler({ req: { headers: { cookie: `session=${session.token}` } } });
   assert.equal(result.status, 403);
 });
 
-test('requireRole allows a user with a matching role', async () => {
+test('requireMenu allows a user whose group can see the menu', async () => {
   const userId = await makeUser('admin');
   const session = await createSession(userId);
-  const handler = requireAuth(requireRole('admin', 'checkin_helper')(async () => ({ status: 200, body: { ok: true } })));
+  const handler = requireAuth(requireMenu('checkin')(async () => ({ status: 200, body: { ok: true } })));
   const result = await handler({ req: { headers: { cookie: `session=${session.token}` } } });
   assert.equal(result.status, 200);
   assert.equal(result.body.ok, true);
