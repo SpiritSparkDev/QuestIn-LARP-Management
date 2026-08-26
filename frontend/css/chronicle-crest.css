@@ -45,6 +45,7 @@ h1,h2,h3{ font-family:"EB Garamond",Georgia,serif; text-wrap:balance; margin:0; 
 .folio::before{ top:14px; left:14px; border-top:2px solid; border-left:2px solid; }
 .folio::after{ bottom:14px; right:14px; border-bottom:2px solid; border-right:2px solid; }
 .folio--narrow{ max-width:460px; margin:0 auto; }
+.folio--wide{ max-width:880px; margin:0 auto; }
 
 .app-nav{
   display:flex; gap:24px; padding-bottom:16px; margin-bottom:28px;

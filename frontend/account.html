@@ -3,33 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <title>Mein Konto – Pakyrion</title>
-<link rel="stylesheet" href="/css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/chronicle-crest.css">
 </head>
 <body>
-<nav>
-  <a href="/account.html">Konto</a>
-  <a href="/characters.html">Charaktere</a>
-  <a href="/admin/events.html">Events (Admin)</a>
-  <a href="/admin/checkin.html">Check-In (Admin)</a>
-  <a href="#" id="logout-link">Logout</a>
-</nav>
-<h1>Mein Konto</h1>
-<form id="account-form">
-  <label for="name">Name</label>
-  <input id="name" name="name" type="text">
-  <label for="address">Adresse</label>
-  <input id="address" name="address" type="text">
-  <label for="birthdate">Geburtsdatum</label>
-  <input id="birthdate" name="birthdate" type="text" placeholder="TT.MM.JJJJ">
-  <label for="phone">Telefon</label>
-  <input id="phone" name="phone" type="text">
-  <label for="emergencyContact">Notfallkontakt</label>
-  <input id="emergencyContact" name="emergencyContact" type="text">
-  <label for="medicalNotes">Gesundheitshinweise / Allergien</label>
-  <textarea id="medicalNotes" name="medicalNotes"></textarea>
-  <button type="submit">Speichern</button>
-</form>
-<p id="message"></p>
+<div class="shell">
+  <div class="brand"><div class="brand-seal">P</div><div class="brand-name">Pakyrion</div></div>
+  <p class="brand-sub">Chronicle Registry</p>
+  <div class="folio folio--wide">
+    <nav class="app-nav">
+      <a href="/account.html" class="current">Konto</a>
+      <a href="/characters.html">Charaktere</a>
+      <span id="admin-nav-links"></span>
+      <a href="#" id="logout-link">Logout</a>
+    </nav>
+    <h1>Mein Konto</h1>
+    <form id="account-form">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text">
+      <label for="address">Adresse</label>
+      <input id="address" name="address" type="text">
+      <label for="birthdate">Geburtsdatum</label>
+      <input id="birthdate" name="birthdate" type="text" placeholder="TT.MM.JJJJ">
+      <label for="phone">Telefon</label>
+      <input id="phone" name="phone" type="text">
+      <label for="emergencyContact">Notfallkontakt</label>
+      <input id="emergencyContact" name="emergencyContact" type="text">
+      <label for="medicalNotes">Gesundheitshinweise / Allergien <span class="sealed">Verschlüsselt</span></label>
+      <textarea id="medicalNotes" name="medicalNotes"></textarea>
+      <button type="submit">Speichern</button>
+    </form>
+    <p id="message"></p>
+  </div>
+</div>
 <script type="module">
 import { api } from '/js/api.js';
 
@@ -38,9 +46,14 @@ const message = document.getElementById('message');
 const formControls = form.querySelectorAll('input, textarea, button');
 formControls.forEach((el) => { el.disabled = true; });
 
+const ADMIN_NAV_LINKS = '<a href="/admin/events.html">Events (Admin)</a><a href="/admin/checkin.html">Check-In (Admin)</a>';
+
 async function loadAccount() {
   try {
     const account = await api.get('/account');
+    if (account.role === 'admin') {
+      document.getElementById('admin-nav-links').innerHTML = ADMIN_NAV_LINKS;
+    }
     for (const field of ['name', 'address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes']) {
       form.elements[field].value = account[field] ?? '';
     }

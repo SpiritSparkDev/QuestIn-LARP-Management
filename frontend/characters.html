@@ -3,43 +3,49 @@
 <head>
 <meta charset="UTF-8">
 <title>Meine Charaktere – Pakyrion</title>
-<link rel="stylesheet" href="/css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/chronicle-crest.css">
 </head>
 <body>
-<nav>
-  <a href="/account.html">Konto</a>
-  <a href="/characters.html">Charaktere</a>
-  <a href="/admin/events.html">Events (Admin)</a>
-  <a href="/admin/checkin.html">Check-In (Admin)</a>
-  <a href="#" id="logout-link">Logout</a>
-</nav>
-<h1>Meine Charaktere</h1>
-<h2>Meine Anmeldungen</h2>
-<table id="registration-list">
-  <thead><tr><th>Event</th><th>Status</th><th></th></tr></thead>
-  <tbody></tbody>
-</table>
-<p>
-  <button type="button" id="register-button">Für ausgewähltes Event anmelden</button>
-</p>
-<p id="registration-message"></p>
-<table id="character-list">
-  <thead><tr><th>Name</th><th>Event</th><th></th></tr></thead>
-  <tbody></tbody>
-</table>
+<div class="shell">
+  <div class="brand"><div class="brand-seal">P</div><div class="brand-name">Pakyrion</div></div>
+  <p class="brand-sub">Chronicle Registry</p>
+  <div class="folio folio--wide">
+    <nav class="app-nav">
+      <a href="/account.html">Konto</a>
+      <a href="/characters.html" class="current">Charaktere</a>
+      <span id="admin-nav-links"></span>
+      <a href="#" id="logout-link">Logout</a>
+    </nav>
+    <h1>Meine Charaktere</h1>
+    <h2>Meine Anmeldungen</h2>
+    <table id="registration-list">
+      <thead><tr><th>Event</th><th>Status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p>
+      <button type="button" id="register-button">Für ausgewähltes Event anmelden</button>
+    </p>
+    <p id="registration-message"></p>
+    <h2>Meine Charaktere</h2>
+    <div id="character-list" class="char-grid"></div>
 
-<h2 id="form-title">Neuen Charakter anlegen</h2>
-<form id="character-form">
-  <label for="event-select">Event</label>
-  <select id="event-select" name="eventId" required></select>
-  <label for="character-name">Charaktername</label>
-  <input id="character-name" name="name" type="text" required>
-  <label for="copy-from-select">Von bestehendem Charakter übernehmen (optional)</label>
-  <select id="copy-from-select"><option value="">– keinen übernehmen –</option></select>
-  <div id="dynamic-fields"></div>
-  <button type="submit">Speichern</button>
-</form>
-<p id="message"></p>
+    <h2 id="form-title">Neuen Charakter anlegen</h2>
+    <form id="character-form">
+      <label for="event-select">Event</label>
+      <select id="event-select" name="eventId" required></select>
+      <label for="character-name">Charaktername</label>
+      <input id="character-name" name="name" type="text" required>
+      <label for="copy-from-select">Von bestehendem Charakter übernehmen (optional)</label>
+      <select id="copy-from-select"><option value="">– keinen übernehmen –</option></select>
+      <div id="dynamic-fields"></div>
+      <button type="submit">Speichern</button>
+    </form>
+    <p id="message"></p>
+  </div>
+</div>
 
 <script type="module">
 import { api } from '/js/api.js';
@@ -49,9 +55,11 @@ const eventSelect = document.getElementById('event-select');
 const dynamicFields = document.getElementById('dynamic-fields');
 const form = document.getElementById('character-form');
 const message = document.getElementById('message');
-const listBody = document.querySelector('#character-list tbody');
+const listBody = document.getElementById('character-list');
 const formTitle = document.getElementById('form-title');
 const copyFromSelect = document.getElementById('copy-from-select');
+
+const ADMIN_NAV_LINKS = '<a href="/admin/events.html">Events (Admin)</a><a href="/admin/checkin.html">Check-In (Admin)</a>';
 
 let events = [];
 let characters = [];
@@ -61,13 +69,18 @@ let userRole = 'participant';
 const registrationListBody = document.querySelector('#registration-list tbody');
 const registrationMessage = document.getElementById('registration-message');
 
+const STATUS_LABELS = { registered: 'Angemeldet', checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt' };
+
 async function loadRegistrations() {
   const registrations = await api.get('/registrations');
-  registrationListBody.innerHTML = registrations.map((r) => `<tr>
+  registrationListBody.innerHTML = registrations.map((r) => {
+    const label = STATUS_LABELS[r.status] ?? r.status;
+    return `<tr>
     <td>${escapeHtml(r.eventName)}</td>
-    <td>${escapeHtml(r.status)}</td>
+    <td><span class="ribbon status-${escapeHtml(r.status)}">${escapeHtml(label)}</span></td>
     <td>${r.status === 'registered' ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ''}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
 
   registrationListBody.querySelectorAll('[data-unregister]').forEach((button) => {
     button.addEventListener('click', () => unregister(button.dataset.unregister));
@@ -143,15 +156,26 @@ copyFromSelect.addEventListener('change', () => {
   renderSchemaFields(targetEvent ? targetEvent.character_form_schema : [], source.data);
 });
 
+function tagsForCharacter(c) {
+  const event = events.find((e) => e.id === c.event_id);
+  const schema = event ? event.character_form_schema : [];
+  return schema
+    .filter((field) => c.data[field.key] !== undefined && c.data[field.key] !== null && c.data[field.key] !== '')
+    .map((field) => `<span class="tag">${escapeHtml(field.label)}: ${escapeHtml(c.data[field.key])}</span>`)
+    .join('');
+}
+
 async function loadCharacters() {
   characters = await api.get('/characters');
   listBody.innerHTML = characters.map((c) => {
     const event = events.find((e) => e.id === c.event_id);
-    return `<tr>
-      <td>${escapeHtml(c.name)}</td>
-      <td>${escapeHtml(event ? event.name : c.event_id)}</td>
-      <td><button type="button" data-edit="${c.id}">Bearbeiten</button></td>
-    </tr>`;
+    const tagsHtml = tagsForCharacter(c);
+    return `<div class="char-card">
+      <h3>${escapeHtml(c.name)}</h3>
+      <div class="char-meta">${escapeHtml(event ? event.name : c.event_id)}</div>
+      <div class="char-tags">${tagsHtml}</div>
+      <button type="button" data-edit="${c.id}" class="btn-ghost" style="margin-top:14px;">Bearbeiten</button>
+    </div>`;
   }).join('');
 
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
@@ -229,6 +253,9 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 try {
   const account = await api.get('/account');
   userRole = account.role;
+  if (account.role === 'admin') {
+    document.getElementById('admin-nav-links').innerHTML = ADMIN_NAV_LINKS;
+  }
   await loadEvents();
   await loadCharacters();
   await loadRegistrations();
