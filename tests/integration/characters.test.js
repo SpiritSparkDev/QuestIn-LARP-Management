@@ -185,6 +185,22 @@ test('a participant cannot create a character for an inactive event; an admin ca
   server.close();
 });
 
+test('an sl-group user cannot create a character for an inactive event', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const sl = await makeUserAndSession('sl');
+  const inactiveEventId = await makeEvent([], false);
+
+  const asSl = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: sl.cookie },
+    body: JSON.stringify({ eventId: inactiveEventId, name: 'Blocked', data: {} }),
+  });
+  assert.equal(asSl.status, 403);
+
+  server.close();
+});
+
 test.after(async () => {
   await closePool();
 });

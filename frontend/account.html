@@ -51,6 +51,10 @@ const ADMIN_NAV_LINKS = '<a href="/admin/events.html">Events (Admin)</a><a href=
 async function loadAccount() {
   try {
     const account = await api.get('/account');
+    // Known limitation of this compat patch: gates on 'mitglieder' rather than
+    // on events/checkin access directly, so a future group like plot_orga
+    // (events+checkin but no mitglieder) would be backend-authorized but
+    // wouldn't see these links. Fix belongs to the future menu-driven nav rework.
     if (account.menus.includes('mitglieder')) {
       document.getElementById('admin-nav-links').innerHTML = ADMIN_NAV_LINKS;
     }

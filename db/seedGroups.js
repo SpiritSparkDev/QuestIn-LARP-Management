@@ -8,6 +8,11 @@ const ROLE_TO_GROUP_KEY = { admin: 'admin', checkin_helper: 'sl', participant: '
 
 // Idempotent: safe to run on every deploy/restart, and safe to call multiple
 // times within the same process (e.g. once per test file sharing a DB).
+//
+// Note: the ALTER TABLE statements below run as raw DDL outside db/migrate.js
+// (which wraps every change in a transaction + advisory lock). This is a
+// known tradeoff, not an oversight — moving this into a real migration is
+// tracked as a separate follow-up task, out of scope here.
 export async function seedGroups() {
   for (const group of GROUP_DEFAULTS) {
     await query(

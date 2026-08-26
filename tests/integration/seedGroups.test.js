@@ -11,6 +11,13 @@ await runMigrations();
 const { seedGroups } = await import('../../db/seedGroups.js');
 const { query, closePool } = await import('../../backend/db.js');
 
+// This file's schema-mutating setup (re-adding/dropping the `role` column,
+// toggling group_id NOT NULL) is only safe because package.json's `test`
+// script runs with --test-concurrency=1 (sequential file execution). Without
+// that flag this races with other test files' seedGroups() calls, causing
+// the intermittent "column role does not exist" failures an earlier fix
+// round in this codebase had to chase down.
+
 // The shared test DB is not reset between runs (tmpfs, only cleared on
 // container restart), so a prior run's seedGroups() call may have already
 // dropped `role`. Restore it (matching its definition in

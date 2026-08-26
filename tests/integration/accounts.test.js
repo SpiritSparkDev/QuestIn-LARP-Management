@@ -56,6 +56,9 @@ test('GET /account returns the logged-in user\'s account with null sensitive fie
   const body = await res.json();
   assert.equal(body.name, 'Account Test');
   assert.equal(body.address, null);
+  assert.deepEqual(body.group, { key: 'sc', name: 'SC' });
+  assert.ok(Array.isArray(body.menus));
+  assert.equal(body.canEditCharacters, false);
 
   server.close();
 });

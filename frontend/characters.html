@@ -124,8 +124,8 @@ eventSelect.addEventListener('change', () => {
   renderSchemaFields(event ? event.character_form_schema : []);
 });
 
-// Participants may only create characters for the currently active event;
-// admins/checkin_helpers keep the full list (e.g. to fix up past data).
+// Only groups with can_edit_characters (currently admin/orga) keep the full
+// event list (e.g. to fix up past data); everyone else only sees active events.
 function populateEventOptions() {
   const visibleEvents = canEditCharacters ? events : events.filter((e) => e.is_active);
   eventSelect.innerHTML = visibleEvents.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
@@ -253,6 +253,10 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 try {
   const account = await api.get('/account');
   canEditCharacters = account.canEditCharacters;
+  // Known limitation of this compat patch: gates on 'mitglieder' rather than
+  // on events/checkin access directly, so a future group like plot_orga
+  // (events+checkin but no mitglieder) would be backend-authorized but
+  // wouldn't see these links. Fix belongs to the future menu-driven nav rework.
   if (account.menus.includes('mitglieder')) {
     document.getElementById('admin-nav-links').innerHTML = ADMIN_NAV_LINKS;
   }
