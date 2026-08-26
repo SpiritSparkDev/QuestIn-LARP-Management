@@ -1,6 +1,6 @@
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
-import { requireRole } from '../middleware/authorize.js';
+import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import {
@@ -39,14 +39,14 @@ router.get('/registrations', requireAuth(async ({ user }) => {
   return { status: 200, body: registrations };
 }));
 
-router.get('/events/:id/participants', requireAuth(requireRole('admin', 'checkin_helper')(async ({ params }) => {
+router.get('/events/:id/participants', requireAuth(requireMenu('checkin')(async ({ params }) => {
   const event = await getEvent(params.id);
   if (!event) return { status: 404, body: { error: 'event not found' } };
   const participants = await listParticipantsForEvent(params.id);
   return { status: 200, body: participants };
 })));
 
-router.post('/events/:id/checkin', requireAuth(requireRole('admin', 'checkin_helper')(async ({ req, params }) => {
+router.post('/events/:id/checkin', requireAuth(requireMenu('checkin')(async ({ req, params }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (!body.userId) return { status: 400, body: { error: 'userId is required' } };
@@ -60,7 +60,7 @@ router.post('/events/:id/checkin', requireAuth(requireRole('admin', 'checkin_hel
   }
 })));
 
-router.post('/events/:id/checkout', requireAuth(requireRole('admin', 'checkin_helper')(async ({ req, params }) => {
+router.post('/events/:id/checkout', requireAuth(requireMenu('checkin')(async ({ req, params }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (!body.userId) return { status: 400, body: { error: 'userId is required' } };

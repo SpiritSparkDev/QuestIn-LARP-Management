@@ -33,8 +33,8 @@ router.post('/auth/register', async ({ req, requestId }) => {
   let userId;
   try {
     const { rows } = await query(
-      `INSERT INTO users (email, password_hash, role, name)
-       VALUES ($1, $2, 'participant', $3) RETURNING id`,
+      `INSERT INTO users (email, password_hash, group_id, name)
+       VALUES ($1, $2, (SELECT id FROM groups WHERE key = 'sc'), $3) RETURNING id`,
       [email, passwordHash, name]
     );
     userId = rows[0].id;

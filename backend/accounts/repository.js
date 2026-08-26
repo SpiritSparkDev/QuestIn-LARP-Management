@@ -6,7 +6,9 @@ function decryptAccount(row) {
     id: row.id,
     email: row.email,
     name: row.name,
-    role: row.role,
+    group: { key: row.group_key, name: row.group_name },
+    menus: row.visible_menus,
+    canEditCharacters: row.can_edit_characters,
     emailVerified: row.email_verified,
     address: decryptField(row.address_enc),
     birthdate: decryptField(row.birthdate_enc),
@@ -17,12 +19,15 @@ function decryptAccount(row) {
 }
 
 const SELECT_COLUMNS = `
-  id, email, name, role, email_verified,
-  address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc
+  users.id, users.email, users.name, users.email_verified,
+  users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_enc, users.medical_notes_enc,
+  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters
 `;
 
+const FROM_JOIN = `FROM users JOIN groups ON groups.id = users.group_id`;
+
 export async function getAccount(userId) {
-  const { rows } = await query(`SELECT ${SELECT_COLUMNS} FROM users WHERE id = $1`, [userId]);
+  const { rows } = await query(`SELECT ${SELECT_COLUMNS} ${FROM_JOIN} WHERE users.id = $1`, [userId]);
   if (rows.length === 0) return null;
   return decryptAccount(rows[0]);
 }
@@ -37,7 +42,7 @@ export async function updateAccount(userId, fields) {
        emergency_contact_enc = COALESCE($6, emergency_contact_enc),
        medical_notes_enc = COALESCE($7, medical_notes_enc)
      WHERE id = $1
-     RETURNING ${SELECT_COLUMNS}`,
+     RETURNING id`,
     [
       userId,
       fields.name ?? null,
@@ -49,5 +54,5 @@ export async function updateAccount(userId, fields) {
     ]
   );
   if (rows.length === 0) return null;
-  return decryptAccount(rows[0]);
+  return getAccount(userId);
 }

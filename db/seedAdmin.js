@@ -28,8 +28,8 @@ export async function seedAdmin() {
 
   const passwordHash = await hashPassword(password);
   const { rows } = await query(
-    `INSERT INTO users (email, password_hash, role, name, email_verified)
-     VALUES ($1, $2, 'admin', 'Admin', true)
+    `INSERT INTO users (email, password_hash, group_id, name, email_verified)
+     VALUES ($1, $2, (SELECT id FROM groups WHERE key = 'admin'), 'Admin', true)
      RETURNING id`,
     [normalizedEmail, passwordHash]
   );

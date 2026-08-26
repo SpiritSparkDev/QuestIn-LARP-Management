@@ -11,7 +11,7 @@ router.post('/characters', requireAuth(async ({ req, user }) => {
   if (!eventId || !name) {
     return { status: 400, body: { error: 'eventId and name are required' } };
   }
-  if (user.role === 'participant') {
+  if (!user.group.canEditCharacters) {
     const event = await getEvent(eventId);
     if (!event) return { status: 404, body: { error: 'event not found' } };
     if (!event.is_active) {
@@ -38,7 +38,7 @@ router.get('/characters', requireAuth(async ({ user }) => {
 router.get('/characters/:id', requireAuth(async ({ params, user }) => {
   const character = await getCharacter(params.id);
   if (!character) return { status: 404, body: { error: 'character not found' } };
-  if (character.user_id !== user.id && user.role !== 'admin') {
+  if (character.user_id !== user.id && !user.group.canEditCharacters) {
     return { status: 403, body: { error: 'forbidden' } };
   }
   return { status: 200, body: character };
