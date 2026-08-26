@@ -3,12 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <title>E-Mail bestätigen – Pakyrion</title>
-<link rel="stylesheet" href="/css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/chronicle-crest.css">
 </head>
 <body>
-<h1>E-Mail-Bestätigung</h1>
-<p id="message">Wird geprüft…</p>
-<p><a href="/login.html">Zum Login</a></p>
+<div class="shell">
+  <div class="brand"><div class="brand-seal">P</div><div class="brand-name">Pakyrion</div></div>
+  <p class="brand-sub">Chronicle Registry</p>
+  <div class="folio folio--narrow">
+    <h1 class="text-center">E-Mail-Bestätigung</h1>
+    <p id="message" class="text-center">Wird geprüft…</p>
+    <p class="text-center"><a href="/login.html">Zum Login</a></p>
+  </div>
+</div>
 <script type="module">
 import { api } from '/js/api.js';
 

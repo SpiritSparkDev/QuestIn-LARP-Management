@@ -3,24 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <title>Registrieren – Pakyrion</title>
-<link rel="stylesheet" href="/css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/chronicle-crest.css">
 </head>
 <body>
-<nav>
-  <a href="/login.html">Login</a>
-  <a href="/register.html">Registrieren</a>
-</nav>
-<h1>Registrieren</h1>
-<form id="register-form">
-  <label for="name">Name</label>
-  <input id="name" name="name" type="text" required>
-  <label for="email">E-Mail</label>
-  <input id="email" name="email" type="email" required>
-  <label for="password">Passwort</label>
-  <input id="password" name="password" type="password" minlength="8" required>
-  <button type="submit">Registrieren</button>
-</form>
-<p id="message"></p>
+<div class="shell">
+  <div class="brand"><div class="brand-seal">P</div><div class="brand-name">Pakyrion</div></div>
+  <p class="brand-sub">Chronicle Registry</p>
+  <div class="folio folio--narrow">
+    <h1 class="text-center">Registrieren</h1>
+    <form id="register-form">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" required>
+      <label for="email">E-Mail</label>
+      <input id="email" name="email" type="email" required>
+      <label for="password">Passwort</label>
+      <input id="password" name="password" type="password" minlength="8" required>
+      <button type="submit">Registrieren</button>
+    </form>
+    <p id="message"></p>
+    <p class="text-center" style="margin-top:28px;"><a href="/login.html" class="btn-ghost">Bereits registriert? Login</a></p>
+  </div>
+</div>
 <script type="module">
 import { api } from '/js/api.js';
 
