@@ -11,6 +11,7 @@
     "dev": "node --watch backend/server.js",
     "test": "node --test --experimental-test-coverage",
     "migrate": "node db/migrate.js",
+    "seed-groups": "node db/seedGroups.js",
     "seed-admin": "node db/seedAdmin.js"
   },
   "dependencies": {
