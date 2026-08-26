@@ -10,13 +10,16 @@ delete process.env.SMTP_HOST;
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { createServer } = await import('../../backend/server.js');
 const { query, closePool } = await import('../../backend/db.js');
 
-async function makeUserAndSession(role = 'participant') {
+async function makeUserAndSession(groupKey = 'sc') {
   const { rows } = await query(
-    "INSERT INTO users (email, name, role, email_verified) VALUES ($1, 'Events Test', $2, true) RETURNING id",
-    [`events-${role}-${crypto.randomUUID()}@example.com`, role]
+    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Events Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    [`events-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
   );
   const { createSession } = await import('../../backend/auth/sessions.js');
   const session = await createSession(rows[0].id);
@@ -27,7 +30,7 @@ test('admin can create an event; participant cannot', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
   const admin = await makeUserAndSession('admin');
-  const participant = await makeUserAndSession('participant');
+  const participant = await makeUserAndSession('sc');
   const payload = {
     name: 'Sommercon 2027',
     eventDate: '2027-07-15',
@@ -58,7 +61,7 @@ test('any authenticated user can list and get events; unknown id is 404', async 
   const server = createServer().listen(0);
   const { port } = server.address();
   const admin = await makeUserAndSession('admin');
-  const participant = await makeUserAndSession('participant');
+  const participant = await makeUserAndSession('sc');
 
   const createRes = await fetch(`http://localhost:${port}/events`, {
     method: 'POST',
@@ -146,7 +149,7 @@ test('admin can activate an event; activating one deactivates all others; partic
   const server = createServer().listen(0);
   const { port } = server.address();
   const admin = await makeUserAndSession('admin');
-  const participant = await makeUserAndSession('participant');
+  const participant = await makeUserAndSession('sc');
 
   async function createEvent(name) {
     const res = await fetch(`http://localhost:${port}/events`, {

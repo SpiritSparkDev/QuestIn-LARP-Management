@@ -64,7 +64,7 @@ const ADMIN_NAV_LINKS = '<a href="/admin/events.html">Events (Admin)</a><a href=
 let events = [];
 let characters = [];
 let editingCharacterId = null;
-let userRole = 'participant';
+let canEditCharacters = false;
 
 const registrationListBody = document.querySelector('#registration-list tbody');
 const registrationMessage = document.getElementById('registration-message');
@@ -127,7 +127,7 @@ eventSelect.addEventListener('change', () => {
 // Participants may only create characters for the currently active event;
 // admins/checkin_helpers keep the full list (e.g. to fix up past data).
 function populateEventOptions() {
-  const visibleEvents = userRole === 'participant' ? events.filter((e) => e.is_active) : events;
+  const visibleEvents = canEditCharacters ? events : events.filter((e) => e.is_active);
   eventSelect.innerHTML = visibleEvents.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
   if (visibleEvents.length > 0) {
     renderSchemaFields(visibleEvents[0].character_form_schema);
@@ -252,8 +252,8 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 
 try {
   const account = await api.get('/account');
-  userRole = account.role;
-  if (account.role === 'admin') {
+  canEditCharacters = account.canEditCharacters;
+  if (account.menus.includes('mitglieder')) {
     document.getElementById('admin-nav-links').innerHTML = ADMIN_NAV_LINKS;
   }
   await loadEvents();

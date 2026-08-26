@@ -10,13 +10,16 @@ delete process.env.SMTP_HOST;
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { createServer } = await import('../../backend/server.js');
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
 async function makeUserAndSession() {
   const { rows } = await query(
-    "INSERT INTO users (email, name, role, email_verified) VALUES ($1, 'Reg Test', 'participant', true) RETURNING id",
+    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Reg Test', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
     [`reg-${crypto.randomUUID()}@example.com`]
   );
   const session = await createSession(rows[0].id);
@@ -121,7 +124,7 @@ test('concurrent check-in and unregister never leave an inconsistent row', async
   const { port } = server.address();
   const { userId, cookie } = await makeUserAndSession();
   const { rows: helperRows } = await query(
-    "INSERT INTO users (email, name, role, email_verified) VALUES ($1, 'Race Helper', 'checkin_helper', true) RETURNING id",
+    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Race Helper', (SELECT id FROM groups WHERE key = 'sl'), true) RETURNING id",
     [`reg-helper-${crypto.randomUUID()}@example.com`]
   );
   const helperSession = await createSession(helperRows[0].id);

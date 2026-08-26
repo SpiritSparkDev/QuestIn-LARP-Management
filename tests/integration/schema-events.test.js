@@ -8,6 +8,9 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { query, closePool } = await import('../../backend/db.js');
 
 test('events and characters tables exist after migration', async () => {
@@ -33,7 +36,7 @@ test('characters.user_id foreign key is enforced', async () => {
 
 test('characters.event_id foreign key is enforced', async () => {
   const { rows } = await query(
-    "INSERT INTO users (email, name, role) VALUES ($1, 'FK Test', 'participant') RETURNING id",
+    "INSERT INTO users (email, name, group_id) VALUES ($1, 'FK Test', (SELECT id FROM groups WHERE key = 'sc')) RETURNING id",
     [`fk-test-${Date.now()}@example.com`]
   );
   await assert.rejects(

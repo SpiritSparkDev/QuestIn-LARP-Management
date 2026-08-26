@@ -10,14 +10,17 @@ delete process.env.SMTP_HOST;
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { createServer } = await import('../../backend/server.js');
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
-async function makeUserAndSession(role = 'participant') {
+async function makeUserAndSession(groupKey = 'sc') {
   const { rows } = await query(
-    "INSERT INTO users (email, name, role, email_verified) VALUES ($1, 'Char Test', $2, true) RETURNING id",
-    [`chars-${role}-${crypto.randomUUID()}@example.com`, role]
+    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Char Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    [`chars-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
   );
   const session = await createSession(rows[0].id);
   return { userId: rows[0].id, cookie: `session=${session.token}` };

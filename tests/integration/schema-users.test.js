@@ -7,6 +7,9 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { query, closePool } = await import('../../backend/db.js');
 
 test('users/sessions/tokens tables exist after migration', async () => {
@@ -19,11 +22,11 @@ test('users/sessions/tokens tables exist after migration', async () => {
 test('users.email is unique', async () => {
   const email = `unique-${Date.now()}@example.com`;
   await query(
-    "INSERT INTO users (email, name, role) VALUES ($1, 'A', 'participant')",
+    "INSERT INTO users (email, name, group_id) VALUES ($1, 'A', (SELECT id FROM groups WHERE key = 'sc'))",
     [email]
   );
   await assert.rejects(
-    query("INSERT INTO users (email, name, role) VALUES ($1, 'B', 'participant')", [email]),
+    query("INSERT INTO users (email, name, group_id) VALUES ($1, 'B', (SELECT id FROM groups WHERE key = 'sc'))", [email]),
     /duplicate key value violates unique constraint/
   );
   await query('DELETE FROM users WHERE email = $1', [email]);

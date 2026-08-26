@@ -51,7 +51,7 @@ const ADMIN_NAV_LINKS = '<a href="/admin/events.html">Events (Admin)</a><a href=
 async function loadAccount() {
   try {
     const account = await api.get('/account');
-    if (account.role === 'admin') {
+    if (account.menus.includes('mitglieder')) {
       document.getElementById('admin-nav-links').innerHTML = ADMIN_NAV_LINKS;
     }
     for (const field of ['name', 'address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes']) {

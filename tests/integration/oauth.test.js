@@ -13,6 +13,9 @@ delete process.env.SMTP_HOST;
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { createServer } = await import('../../backend/server.js');
 const { findOrCreateOAuthUser } = await import('../../backend/auth/oauth.js');
 const { PROVIDERS } = await import('../../backend/auth/oauthProviders.js');
@@ -93,7 +96,7 @@ test('findOrCreateOAuthUser returns the same user for a repeat login (no duplica
 test('findOrCreateOAuthUser links to an existing password-registered account by email', async () => {
   const email = `oauth-link-${crypto.randomUUID()}@example.com`;
   const { rows: existing } = await query(
-    "INSERT INTO users (email, password_hash, role, name, email_verified) VALUES ($1, 'irrelevant-hash', 'participant', 'Existing User', true) RETURNING id",
+    "INSERT INTO users (email, password_hash, group_id, name, email_verified) VALUES ($1, 'irrelevant-hash', (SELECT id FROM groups WHERE key = 'sc'), 'Existing User', true) RETURNING id",
     [email]
   );
   const userId = await findOrCreateOAuthUser('discord', `discord-${crypto.randomUUID()}`, email, 'Discord Name', true);
@@ -103,7 +106,7 @@ test('findOrCreateOAuthUser links to an existing password-registered account by 
 test('findOrCreateOAuthUser rejects linking when provider does not verify the email', async () => {
   const email = `oauth-unverified-${crypto.randomUUID()}@example.com`;
   const { rows: existing } = await query(
-    "INSERT INTO users (email, password_hash, role, name, email_verified) VALUES ($1, 'irrelevant-hash', 'participant', 'Existing User', true) RETURNING id",
+    "INSERT INTO users (email, password_hash, group_id, name, email_verified) VALUES ($1, 'irrelevant-hash', (SELECT id FROM groups WHERE key = 'sc'), 'Existing User', true) RETURNING id",
     [email]
   );
   await assert.rejects(

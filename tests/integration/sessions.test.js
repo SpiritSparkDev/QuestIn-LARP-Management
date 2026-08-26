@@ -7,12 +7,15 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession, getSession, destroySession } = await import('../../backend/auth/sessions.js');
 
 async function makeUser() {
   const { rows } = await query(
-    "INSERT INTO users (email, name, role) VALUES ($1, 'Test', 'participant') RETURNING id",
+    "INSERT INTO users (email, name, group_id) VALUES ($1, 'Test', (SELECT id FROM groups WHERE key = 'sc')) RETURNING id",
     [`session-test-${Date.now()}-${Math.random()}@example.com`]
   );
   return rows[0].id;

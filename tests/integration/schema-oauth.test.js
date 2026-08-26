@@ -7,6 +7,9 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { query, closePool } = await import('../../backend/db.js');
 
 test('oauth_accounts table exists after migration', async () => {
@@ -16,7 +19,7 @@ test('oauth_accounts table exists after migration', async () => {
 
 test('(provider, provider_user_id) is unique', async () => {
   const { rows: userRows } = await query(
-    "INSERT INTO users (email, name, role, email_verified) VALUES ($1, 'OAuth Uniq', 'participant', true) RETURNING id",
+    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'OAuth Uniq', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
     [`oauth-uniq-${Date.now()}@example.com`]
   );
   const userId = userRows[0].id;

@@ -10,14 +10,17 @@ delete process.env.SMTP_HOST;
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
 const { createServer } = await import('../../backend/server.js');
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
-async function makeUserAndSession(role = 'participant') {
+async function makeUserAndSession(groupKey = 'sc') {
   const { rows } = await query(
-    "INSERT INTO users (email, name, role, email_verified) VALUES ($1, 'Checkin Test', $2, true) RETURNING id",
-    [`checkin-${role}-${crypto.randomUUID()}@example.com`, role]
+    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Checkin Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    [`checkin-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
   );
   const session = await createSession(rows[0].id);
   return { userId: rows[0].id, cookie: `session=${session.token}` };
@@ -33,7 +36,7 @@ async function makeEvent() {
 test('a participant cannot list participants or check anyone in', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
-  const { cookie } = await makeUserAndSession('participant');
+  const { cookie } = await makeUserAndSession('sc');
   const eventId = await makeEvent();
 
   const listRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: cookie } });
@@ -57,8 +60,8 @@ test('a participant cannot list participants or check anyone in', async () => {
 test('checkin_helper sees the participant list with characters and no encrypted fields, then checks someone in and out', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
-  const helper = await makeUserAndSession('checkin_helper');
-  const attendee = await makeUserAndSession('participant');
+  const helper = await makeUserAndSession('sl');
+  const attendee = await makeUserAndSession('sc');
   const eventId = await makeEvent();
 
   await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
@@ -107,7 +110,7 @@ test('checkin_helper sees the participant list with characters and no encrypted 
 test('GET /events/:id/participants for an unknown event returns 404', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
-  const helper = await makeUserAndSession('checkin_helper');
+  const helper = await makeUserAndSession('sl');
 
   const res = await fetch(`http://localhost:${port}/events/${crypto.randomUUID()}/participants`, {
     headers: { Cookie: helper.cookie },
@@ -120,8 +123,8 @@ test('GET /events/:id/participants for an unknown event returns 404', async () =
 test('checking in a user with no registration for the event returns 404', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
-  const helper = await makeUserAndSession('checkin_helper');
-  const stranger = await makeUserAndSession('participant');
+  const helper = await makeUserAndSession('sl');
+  const stranger = await makeUserAndSession('sc');
   const eventId = await makeEvent();
 
   const res = await fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
@@ -136,8 +139,8 @@ test('checking in a user with no registration for the event returns 404', async 
 test('two concurrent check-ins for the same attendee: exactly one succeeds', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
-  const helper = await makeUserAndSession('checkin_helper');
-  const attendee = await makeUserAndSession('participant');
+  const helper = await makeUserAndSession('sl');
+  const attendee = await makeUserAndSession('sc');
   const eventId = await makeEvent();
 
   await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
