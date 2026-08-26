@@ -49,6 +49,7 @@ button, .btn{ font-family:inherit; font-size:13px; font-weight:600; border-radiu
 .form-pad{ padding:24px; }
 label{ display:block; font-size:12px; font-weight:600; color:var(--on-surface-variant); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.03em; }
 input, select{ width:100%; border:1px solid var(--outline); border-radius:4px; padding:9px 12px; font:14px "Inter",sans-serif; color:var(--on-surface); background:var(--surface); margin-bottom:18px; }
+input[type="checkbox"]{ width:auto; margin-bottom:0; }
 input:focus, select:focus{ outline:none; border-color:var(--forest); border-width:1.5px; padding:8.5px 11.5px; }
 
 .hr{ border:none; border-top:1px solid var(--outline); margin:24px 0; }

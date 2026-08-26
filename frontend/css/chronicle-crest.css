@@ -54,6 +54,7 @@ h1,h2,h3{ font-family:"EB Garamond",Georgia,serif; text-wrap:balance; margin:0; 
 .app-nav a{ color:var(--on-surface-variant); text-decoration:none; padding-bottom:14px; margin-bottom:-1px; }
 .app-nav a.current{ color:var(--primary); border-bottom:2px solid var(--primary); }
 .app-nav a:not(.current):hover{ color:var(--primary-deep); }
+#admin-nav-links{ display:contents; }
 
 .eyebrow{ font-family:"Work Sans",sans-serif; font-size:12px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--outline); margin:0 0 6px; }
 h1{ font-size:34px; font-weight:600; color:var(--primary-deep); margin:0 0 6px; }
