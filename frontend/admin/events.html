@@ -3,33 +3,49 @@
 <head>
 <meta charset="UTF-8">
 <title>Events verwalten – Pakyrion Admin</title>
-<link rel="stylesheet" href="/css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/everest-registry.css">
 </head>
 <body>
-<nav>
-  <a href="/admin/events.html">Events</a>
-  <a href="/admin/checkin.html">Check-In</a>
-  <a href="#" id="logout-link">Logout</a>
-</nav>
-<h1>Events verwalten</h1>
-<table id="event-list">
-  <thead><tr><th>Name</th><th>Datum</th><th>Status</th><th></th><th></th></tr></thead>
-  <tbody></tbody>
-</table>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+    <nav>
+      <a href="/admin/events.html" class="current">Events</a>
+      <a href="/admin/checkin.html">Check-In</a>
+    </nav>
+    <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
+  </aside>
+  <div class="main"><div class="content">
+    <h1>Events verwalten</h1>
+    <p class="sub">Lege Events an und bestimme, für welches Event sich Teilnehmende aktuell anmelden können.</p>
+    <div class="card">
+      <table id="event-list">
+        <thead><tr><th>Name</th><th>Datum</th><th>Status</th><th></th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
 
-<h2 id="form-title">Neues Event anlegen</h2>
-<form id="event-form">
-  <label for="event-name">Name</label>
-  <input id="event-name" name="name" type="text" required>
-  <label for="event-date">Datum</label>
-  <input id="event-date" name="eventDate" type="date" required>
-  <h3>Charakterformular</h3>
-  <div id="schema-rows"></div>
-  <button type="button" id="add-field">Feld hinzufügen</button>
-  <button type="button" id="load-template">Standard-Vorlage laden</button>
-  <button type="submit">Speichern</button>
-</form>
-<p id="message"></p>
+    <div class="card form-pad">
+      <h2 id="form-title">Neues Event anlegen</h2>
+      <form id="event-form">
+        <label for="event-name">Name</label>
+        <input id="event-name" name="name" type="text" required>
+        <label for="event-date">Datum</label>
+        <input id="event-date" name="eventDate" type="date" required>
+        <hr class="hr">
+        <h3>Charakterformular</h3>
+        <div id="schema-rows"></div>
+        <button type="button" id="add-field">Feld hinzufügen</button>
+        <button type="button" id="load-template">Standard-Vorlage laden</button>
+        <button type="submit">Speichern</button>
+      </form>
+    </div>
+    <p id="message"></p>
+  </div></div>
+</div>
 
 <script type="module">
 import { api } from '/js/api.js';
@@ -46,6 +62,7 @@ let editingEventId = null;
 
 function addSchemaRow(field = { key: '', label: '', type: 'text', required: false, options: [] }) {
   const row = document.createElement('div');
+  row.className = 'schema-row';
   const optionsValue = Array.isArray(field.options) ? field.options.join(', ') : '';
   row.innerHTML = `
     <input type="text" placeholder="key" class="schema-key" value="${escapeHtml(field.key)}">
@@ -94,9 +111,9 @@ async function loadEvents() {
   listBody.innerHTML = events.map((e) => `<tr>
     <td>${escapeHtml(e.name)}</td>
     <td>${escapeHtml(e.event_date)}</td>
-    <td>${e.is_active ? 'Aktiv (Anmeldung offen)' : ''}</td>
-    <td>${e.is_active ? '' : `<button type="button" data-activate="${e.id}">Aktivieren</button>`}</td>
-    <td><button type="button" data-edit="${e.id}">Bearbeiten</button></td>
+    <td>${e.is_active ? '<span class="badge badge-active">Aktiv – Anmeldung offen</span>' : '<span class="badge badge-inactive">Inaktiv</span>'}</td>
+    <td>${e.is_active ? '' : `<button type="button" class="btn-sm" data-activate="${e.id}">Aktivieren</button>`}</td>
+    <td><button type="button" class="btn-sm btn-ghost" data-edit="${e.id}">Bearbeiten</button></td>
   </tr>`).join('');
 
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
