@@ -54,6 +54,9 @@ input:focus, select:focus{ outline:none; border-color:var(--forest); border-widt
 
 .hr{ border:none; border-top:1px solid var(--outline); margin:24px 0; }
 
+.checkbox-group{ display:flex; flex-wrap:wrap; gap:6px 18px; margin-bottom:18px; }
+.checkbox-group label{ display:inline-flex; align-items:center; gap:6px; text-transform:none; font-weight:500; font-size:13px; margin-bottom:0; }
+
 .error{ color:var(--error); font-size:13px; font-weight:600; }
 .success{ color:var(--forest-dark); font-size:13px; font-weight:600; }
 
