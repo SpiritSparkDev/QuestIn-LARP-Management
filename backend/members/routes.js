@@ -64,6 +64,9 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
   if (!email || !name) {
     return { status: 400, body: { error: 'email and name are required' } };
   }
+  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { status: 400, body: { error: 'invalid email format' } };
+  }
 
   // 'group' is gated exactly like every other account field, NOT treated
   // as always-allowed — a group without 'group' in its own account_fields
@@ -114,6 +117,9 @@ router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglied
   if (invitation.redeemedAt) return { status: 409, body: { error: 'invitation already redeemed' } };
 
   const updated = await regenerateToken(params.id);
+  if (!updated) {
+    return { status: 409, body: { error: 'invitation already redeemed' } };
+  }
   try {
     await sendInvitationEmail(updated.email, updated.token);
   } catch (err) {

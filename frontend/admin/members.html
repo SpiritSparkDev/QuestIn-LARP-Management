@@ -202,7 +202,13 @@ try {
   if (myAccountFields.includes('group')) {
     inviteGroupWrap.style.display = '';
     inviteGroupSelect.disabled = false;
-    await loadGroupOptions();
+    try {
+      await loadGroupOptions();
+    } catch (err) {
+      // Non-admin groups with 'group' access can't list groups (admin-only
+      // endpoint) — the invite form's group selector just stays empty in
+      // that case; this must not block the rest of the page.
+    }
   }
   // Left disabled (its default state in the markup above) when the viewer
   // lacks 'group' permission — a disabled <select> is excluded from

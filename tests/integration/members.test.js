@@ -43,10 +43,19 @@ test('GET /members includes both active members and open invitations', async () 
   try {
     const { port } = server.address();
     const { cookie } = await makeUserAndSession('admin');
+    const invitedEmail = `invite-list-${crypto.randomUUID()}@example.com`;
+    const inviteRes = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email: invitedEmail, name: 'Invited Member', group: 'sc' }),
+    });
+    assert.equal(inviteRes.status, 201);
+
     const res = await fetch(`http://localhost:${port}/members`, { headers: { Cookie: cookie } });
     assert.equal(res.status, 200);
     const members = await res.json();
     assert.ok(members.some((m) => m.status === 'active'));
+    assert.ok(members.some((m) => m.status === 'invited' && m.email === invitedEmail));
   } finally {
     server.close();
   }
@@ -93,7 +102,7 @@ test('PATCH /members/:id updates an allowed field for an admin caller', async ()
   }
 });
 
-test('POST /members/invite creates an invitation and rejects an existing email', async () => {
+test('POST /members/invite allows multiple pending invitations to the same unregistered email', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
@@ -115,6 +124,28 @@ test('POST /members/invite creates an invitation and rejects an existing email',
     // invite to the same still-pending address is allowed (no uniqueness
     // constraint on invitations.email) — only an existing users row 409s.
     assert.equal(dupeRes.status, 201);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/invite rejects an email that already belongs to a registered user', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const email = `members-invite-existing-${crypto.randomUUID()}@example.com`;
+    await query(
+      "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Existing Member', (SELECT id FROM groups WHERE key = $2), true)",
+      [email, 'sc']
+    );
+
+    const res = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email, name: 'Duplicate', group: 'sc' }),
+    });
+    assert.equal(res.status, 409);
   } finally {
     server.close();
   }
