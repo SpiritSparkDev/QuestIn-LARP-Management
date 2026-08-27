@@ -13,12 +13,7 @@
   <div class="brand"><div class="brand-seal">P</div><div class="brand-name">Pakyrion</div></div>
   <p class="brand-sub">Chronicle Registry</p>
   <div class="folio folio--wide">
-    <nav class="app-nav">
-      <a href="/account.html">Konto</a>
-      <a href="/characters.html" class="current">Charaktere</a>
-      <span id="admin-nav-links"></span>
-      <a href="#" id="logout-link">Logout</a>
-    </nav>
+    <nav class="app-nav" id="nav-links"></nav>
     <h1>Meine Charaktere</h1>
     <h2>Meine Anmeldungen</h2>
     <table id="registration-list">
@@ -50,6 +45,7 @@
 <script type="module">
 import { api } from '/js/api.js';
 import { escapeHtml, renderField } from '/js/formFields.js';
+import { renderNavLinks } from '/js/nav.js';
 
 const eventSelect = document.getElementById('event-select');
 const dynamicFields = document.getElementById('dynamic-fields');
@@ -58,8 +54,6 @@ const message = document.getElementById('message');
 const listBody = document.getElementById('character-list');
 const formTitle = document.getElementById('form-title');
 const copyFromSelect = document.getElementById('copy-from-select');
-
-const ADMIN_NAV_LINKS = '<a href="/admin/events.html">Events (Admin)</a><a href="/admin/checkin.html">Check-In (Admin)</a>';
 
 let events = [];
 let characters = [];
@@ -244,22 +238,16 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-document.getElementById('logout-link').addEventListener('click', async (evt) => {
-  evt.preventDefault();
-  await api.post('/auth/logout', {});
-  window.location.href = '/login.html';
-});
-
 try {
   const account = await api.get('/account');
   canEditCharacters = account.canEditCharacters;
-  // Known limitation of this compat patch: gates on 'mitglieder' rather than
-  // on events/checkin access directly, so a future group like plot_orga
-  // (events+checkin but no mitglieder) would be backend-authorized but
-  // wouldn't see these links. Fix belongs to the future menu-driven nav rework.
-  if (account.menus.includes('mitglieder')) {
-    document.getElementById('admin-nav-links').innerHTML = ADMIN_NAV_LINKS;
-  }
+  document.getElementById('nav-links').innerHTML =
+    renderNavLinks(account, window.location.pathname) + '<a href="#" id="logout-link">Logout</a>';
+  document.getElementById('logout-link').addEventListener('click', async (evt) => {
+    evt.preventDefault();
+    await api.post('/auth/logout', {});
+    window.location.href = '/login.html';
+  });
   await loadEvents();
   await loadCharacters();
   await loadRegistrations();

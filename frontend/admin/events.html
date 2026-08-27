@@ -12,10 +12,7 @@
 <div class="app">
   <aside class="sidebar">
     <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
-    <nav>
-      <a href="/admin/events.html" class="current">Events</a>
-      <a href="/admin/checkin.html">Check-In</a>
-    </nav>
+    <nav id="nav-links"></nav>
     <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
   </aside>
   <div class="main"><div class="content">
@@ -51,6 +48,7 @@
 import { api } from '/js/api.js';
 import { escapeHtml } from '/js/formFields.js';
 import { DEFAULT_CHARACTER_SCHEMA } from '/js/defaultCharacterSchema.js';
+import { renderNavLinks } from '/js/nav.js';
 
 const listBody = document.querySelector('#event-list tbody');
 const form = document.getElementById('event-form');
@@ -190,6 +188,8 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 });
 
 try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   await loadEvents();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

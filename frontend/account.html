@@ -13,12 +13,7 @@
   <div class="brand"><div class="brand-seal">P</div><div class="brand-name">Pakyrion</div></div>
   <p class="brand-sub">Chronicle Registry</p>
   <div class="folio folio--wide">
-    <nav class="app-nav">
-      <a href="/account.html" class="current">Konto</a>
-      <a href="/characters.html">Charaktere</a>
-      <span id="admin-nav-links"></span>
-      <a href="#" id="logout-link">Logout</a>
-    </nav>
+    <nav class="app-nav" id="nav-links"></nav>
     <h1>Mein Konto</h1>
     <form id="account-form">
       <label for="name">Name</label>
@@ -40,24 +35,23 @@
 </div>
 <script type="module">
 import { api } from '/js/api.js';
+import { renderNavLinks } from '/js/nav.js';
 
 const form = document.getElementById('account-form');
 const message = document.getElementById('message');
 const formControls = form.querySelectorAll('input, textarea, button');
 formControls.forEach((el) => { el.disabled = true; });
 
-const ADMIN_NAV_LINKS = '<a href="/admin/events.html">Events (Admin)</a><a href="/admin/checkin.html">Check-In (Admin)</a>';
-
 async function loadAccount() {
   try {
     const account = await api.get('/account');
-    // Known limitation of this compat patch: gates on 'mitglieder' rather than
-    // on events/checkin access directly, so a future group like plot_orga
-    // (events+checkin but no mitglieder) would be backend-authorized but
-    // wouldn't see these links. Fix belongs to the future menu-driven nav rework.
-    if (account.menus.includes('mitglieder')) {
-      document.getElementById('admin-nav-links').innerHTML = ADMIN_NAV_LINKS;
-    }
+    document.getElementById('nav-links').innerHTML =
+      renderNavLinks(account, window.location.pathname) + '<a href="#" id="logout-link">Logout</a>';
+    document.getElementById('logout-link').addEventListener('click', async (evt) => {
+      evt.preventDefault();
+      await api.post('/auth/logout', {});
+      window.location.href = '/login.html';
+    });
     for (const field of ['name', 'address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes']) {
       form.elements[field].value = account[field] ?? '';
     }
@@ -85,12 +79,6 @@ form.addEventListener('submit', async (event) => {
     message.textContent = err.message;
     message.className = 'error';
   }
-});
-
-document.getElementById('logout-link').addEventListener('click', async (event) => {
-  event.preventDefault();
-  await api.post('/auth/logout', {});
-  window.location.href = '/login.html';
 });
 
 loadAccount();

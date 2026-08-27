@@ -12,10 +12,7 @@
 <div class="app">
   <aside class="sidebar">
     <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
-    <nav>
-      <a href="/admin/events.html">Events</a>
-      <a href="/admin/checkin.html" class="current">Check-In</a>
-    </nav>
+    <nav id="nav-links"></nav>
     <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
   </aside>
   <div class="main"><div class="content">
@@ -40,6 +37,7 @@
 <script type="module">
 import { api } from '/js/api.js';
 import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks } from '/js/nav.js';
 
 const eventSelect = document.getElementById('event-select');
 const listBody = document.querySelector('#participant-list tbody');
@@ -111,6 +109,8 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 });
 
 try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   const events = await api.get('/events');
   eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
   if (events.length > 0) {
