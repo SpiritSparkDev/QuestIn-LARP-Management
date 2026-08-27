@@ -42,3 +42,13 @@ export async function sendPasswordResetEmail(to, token) {
     text: `Setze dein Passwort zurück: ${url}`,
   });
 }
+
+export async function sendInvitationEmail(to, token) {
+  const url = `${baseUrl()}/set-password.html?token=${token}`;
+  return getTransporter().sendMail({
+    to,
+    from: fromAddress(),
+    subject: 'Du wurdest zu Pakyrion eingeladen',
+    text: `Du wurdest eingeladen. Setze dein Passwort, um loszulegen: ${url}`,
+  });
+}

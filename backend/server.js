@@ -9,6 +9,7 @@ import './auth/register.js';
 import './auth/login.js';
 import './auth/passwordReset.js';
 import './auth/oauth.js';
+import './auth/invite.js';
 import './accounts/routes.js';
 import './events/routes.js';
 import './characters/routes.js';
