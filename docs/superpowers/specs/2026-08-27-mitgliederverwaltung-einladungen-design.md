@@ -124,12 +124,18 @@ für `/members` festgelegt):
   soll sehen, dass hier noch eine Aktion (erneut senden) offen ist.
 - `GET /members/:id` – wie Basis-Spec (nur für echte `users`-Einträge).
 - `PATCH /members/:id` – wie Basis-Spec.
-- `POST /members/invite` – Payload: `{ email, name, groupId, ...
-  Account-Felder }`. Server filtert die Account-Felder-Payload exakt wie
-  bei `PATCH /members/:id` gegen die `account_fields` der aufrufenden
-  Gruppe (400 bei nicht erlaubtem Feld). `name`/`email`/`groupId` sind
-  immer erlaubt (kein `account_fields`-Check nötig, siehe Abschnitt oben).
-  409 falls bereits ein `users`-Eintrag mit dieser E-Mail existiert.
+- `POST /members/invite` – Payload: `{ email, name, group?, ...
+  Account-Felder }`. Server filtert die Payload exakt wie bei
+  `PATCH /members/:id` gegen die `account_fields` der aufrufenden Gruppe
+  (400 bei nicht erlaubtem Feld) – **`group` eingeschlossen**: eine Gruppe
+  ohne `"group"` in ihren eigenen `account_fields` (z. B. Orga per Default)
+  darf einer brandneuen Einladung keine höhere Gruppe zuweisen, nur weil
+  der Account noch nicht existiert – dieselbe Regel wie beim nachträglichen
+  Ändern über `PATCH`. Wird `group` weggelassen, landet die Einladung ohne
+  Fehler in der Default-Gruppe `sc`. Nur `name`/`email` sind unconditional
+  Pflichtfelder ohne `account_fields`-Check (siehe Abschnitt oben zu
+  `name`). 409 falls bereits ein `users`-Eintrag mit dieser E-Mail
+  existiert.
 - `POST /members/invitations/:id/resend` – nur für nicht eingelöste
   Einladungen (404/409 sonst), neuer Token + TTL, erneuter Mailversand.
 - `POST /auth/invite/redeem` – öffentlich (kein Login nötig, wie
