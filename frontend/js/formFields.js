@@ -11,6 +11,22 @@ export function renderField(field, value) {
   const required = field.required ? 'required' : '';
   const id = `field-${key}`;
 
+  if (field.type === 'boolean') {
+    const checked = value ? ' checked' : '';
+    return `<label for="${id}"><input id="${id}" name="${key}" type="checkbox"${checked}> ${label}</label>`;
+  }
+  if (field.type === 'multiselect' && Array.isArray(field.options)) {
+    const selected = Array.isArray(value) ? value : [];
+    const checkboxes = field.options.map((opt, i) => {
+      const escapedOpt = escapeHtml(opt);
+      const checked = selected.includes(opt) ? ' checked' : '';
+      return `<label for="${id}-${i}"><input id="${id}-${i}" name="${key}" type="checkbox" value="${escapedOpt}"${checked}> ${escapedOpt}</label>`;
+    }).join('');
+    return `<span>${label}</span>${checkboxes}`;
+  }
+  if (field.type === 'number') {
+    return `<label for="${id}">${label}</label><input id="${id}" name="${key}" type="number" value="${val}" ${required}>`;
+  }
   if (field.type === 'textarea') {
     return `<label for="${id}">${label}</label><textarea id="${id}" name="${key}" ${required}>${val}</textarea>`;
   }
@@ -24,4 +40,29 @@ export function renderField(field, value) {
     return `<label for="${id}">${label}</label><select id="${id}" name="${key}" ${required}>${blankOption}${options}</select>`;
   }
   return `<label for="${id}">${label}</label><input id="${id}" name="${key}" type="text" value="${val}" ${required}>`;
+}
+
+// Reads a schema-driven form's current values back into a plain object.
+// Object.fromEntries(new FormData(form)) is NOT enough for schema-driven
+// forms: it silently keeps only the LAST of several same-named entries
+// (breaking multiselect, which renders one checkbox per option under the
+// same name) and it can't distinguish "field absent from schema" from
+// "checkbox unchecked" for booleans. This walks the schema explicitly
+// instead of the form's raw entries.
+export function collectFieldValues(form, schema) {
+  const formData = new FormData(form);
+  const result = {};
+  for (const field of schema) {
+    if (field.type === 'boolean') {
+      result[field.key] = form.elements[field.key]?.checked ?? false;
+    } else if (field.type === 'multiselect') {
+      result[field.key] = formData.getAll(field.key);
+    } else if (field.type === 'number') {
+      const raw = formData.get(field.key);
+      result[field.key] = raw === '' || raw === null ? undefined : Number(raw);
+    } else {
+      result[field.key] = formData.get(field.key) ?? '';
+    }
+  }
+  return result;
 }

@@ -73,3 +73,66 @@ test('an empty select value is valid when the field is not required', () => {
   const errors = validateCharacterData(SELECT_SCHEMA, {});
   assert.deepEqual(errors, []);
 });
+
+const BOOLEAN_SCHEMA = [
+  { key: 'offen', label: 'Offen?', type: 'boolean', required: false },
+];
+
+test('a boolean value of true or false is valid', () => {
+  assert.deepEqual(validateCharacterData(BOOLEAN_SCHEMA, { offen: true }), []);
+  assert.deepEqual(validateCharacterData(BOOLEAN_SCHEMA, { offen: false }), []);
+});
+
+test('a non-boolean value for a boolean field is an error', () => {
+  const errors = validateCharacterData(BOOLEAN_SCHEMA, { offen: 'ja' });
+  assert.ok(errors.some((e) => e.includes('offen')));
+});
+
+test('a missing boolean value is valid when the field is not required', () => {
+  assert.deepEqual(validateCharacterData(BOOLEAN_SCHEMA, {}), []);
+});
+
+const MULTISELECT_SCHEMA = [
+  { key: 'rollen', label: 'Rollen', type: 'multiselect', required: false, options: ['Adel', 'Bauer', 'Magier'] },
+];
+
+test('a multiselect array of allowed values is valid', () => {
+  assert.deepEqual(validateCharacterData(MULTISELECT_SCHEMA, { rollen: ['Adel', 'Magier'] }), []);
+});
+
+test('a multiselect value containing something outside the options is an error', () => {
+  const errors = validateCharacterData(MULTISELECT_SCHEMA, { rollen: ['Adel', 'NichtErlaubt'] });
+  assert.ok(errors.some((e) => e.includes('rollen')));
+});
+
+test('a non-array multiselect value is an error', () => {
+  const errors = validateCharacterData(MULTISELECT_SCHEMA, { rollen: 'Adel' });
+  assert.ok(errors.some((e) => e.includes('rollen')));
+});
+
+test('an empty array for a required multiselect field is reported as missing', () => {
+  const required = [{ key: 'rollen', label: 'Rollen', type: 'multiselect', required: true, options: ['Adel'] }];
+  const errors = validateCharacterData(required, { rollen: [] });
+  assert.ok(errors.some((e) => e.includes('rollen')));
+});
+
+const NUMBER_SCHEMA = [
+  { key: 'punkte', label: 'Punkte', type: 'number', required: false },
+];
+
+test('a finite number is valid', () => {
+  assert.deepEqual(validateCharacterData(NUMBER_SCHEMA, { punkte: 42 }), []);
+  assert.deepEqual(validateCharacterData(NUMBER_SCHEMA, { punkte: 0 }), []);
+});
+
+test('a non-number value for a number field is an error', () => {
+  const errors = validateCharacterData(NUMBER_SCHEMA, { punkte: '42' });
+  assert.ok(errors.some((e) => e.includes('punkte')));
+});
+
+test('NaN or Infinity for a number field is an error', () => {
+  const errorsNaN = validateCharacterData(NUMBER_SCHEMA, { punkte: NaN });
+  assert.ok(errorsNaN.some((e) => e.includes('punkte')));
+  const errorsInf = validateCharacterData(NUMBER_SCHEMA, { punkte: Infinity });
+  assert.ok(errorsInf.some((e) => e.includes('punkte')));
+});

@@ -12,7 +12,8 @@ export function validateCharacterData(schema, data) {
   for (const field of schema) {
     const value = Object.hasOwn(data, field.key) ? data[field.key] : undefined;
     const isEmpty = value === undefined || value === null
-      || (typeof value === 'string' && value.trim() === '');
+      || (typeof value === 'string' && value.trim() === '')
+      || (Array.isArray(value) && value.length === 0);
 
     if (field.required && isEmpty) {
       errors.push(`${field.key} is required`);
@@ -23,6 +24,18 @@ export function validateCharacterData(schema, data) {
     }
     if (!isEmpty && field.type === 'select' && Array.isArray(field.options) && !field.options.includes(value)) {
       errors.push(`${field.key} must be one of: ${field.options.join(', ')}`);
+    }
+    if (!isEmpty && field.type === 'boolean' && typeof value !== 'boolean') {
+      errors.push(`${field.key} must be a boolean`);
+    }
+    if (!isEmpty && field.type === 'multiselect') {
+      const optionsOk = Array.isArray(field.options);
+      if (!Array.isArray(value) || !optionsOk || !value.every((v) => field.options.includes(v))) {
+        errors.push(`${field.key} must be an array of: ${optionsOk ? field.options.join(', ') : ''}`);
+      }
+    }
+    if (!isEmpty && field.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) {
+      errors.push(`${field.key} must be a number`);
     }
     if (!isEmpty && typeof value === 'string' && value.length > MAX_VALUE_LENGTH) {
       errors.push(`${field.key} must be at most ${MAX_VALUE_LENGTH} characters`);

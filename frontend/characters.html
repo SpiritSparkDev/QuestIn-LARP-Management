@@ -45,7 +45,7 @@
 
 <script type="module">
 import { api } from '/js/api.js';
-import { escapeHtml, renderField } from '/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const eventSelect = document.getElementById('event-select');
@@ -219,8 +219,10 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   message.textContent = '';
   message.className = '';
-  const formData = new FormData(form);
-  const { eventId, name, ...rest } = Object.fromEntries(formData);
+  const eventId = eventSelect.value;
+  const name = form.elements.name.value;
+  const schema = events.find((e) => e.id === eventId)?.character_form_schema ?? [];
+  const rest = collectFieldValues(form, schema);
   try {
     if (editingCharacterId) {
       await api.put(`/characters/${editingCharacterId}`, { name, data: rest });
