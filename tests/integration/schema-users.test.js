@@ -13,7 +13,7 @@ await seedGroups();
 const { query, closePool } = await import('../../backend/db.js');
 
 test('users/sessions/tokens tables exist after migration', async () => {
-  for (const table of ['users', 'sessions', 'email_verification_tokens', 'password_reset_tokens', 'groups']) {
+  for (const table of ['users', 'sessions', 'email_verification_tokens', 'password_reset_tokens', 'groups', 'nsc_profile_schema']) {
     const { rows } = await query('SELECT to_regclass($1) AS exists', [table]);
     assert.ok(rows[0].exists, `expected table "${table}" to exist`);
   }

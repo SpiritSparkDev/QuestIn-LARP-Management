@@ -12,6 +12,7 @@
     "test": "node --test --test-concurrency=1 --experimental-test-coverage",
     "migrate": "node db/migrate.js",
     "seed-groups": "node db/seedGroups.js",
+    "seed-nsc-schema": "node db/seedNscProfileSchema.js",
     "seed-admin": "node db/seedAdmin.js"
   },
   "dependencies": {

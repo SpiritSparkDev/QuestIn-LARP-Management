@@ -40,7 +40,7 @@ services:
       - ./backend:/app/backend
       - ./db:/app/db
       - ./frontend:/app/frontend
-    command: sh -c "npm run migrate && npm run seed-groups && npm run seed-admin && npm run dev"
+    command: sh -c "npm run migrate && npm run seed-groups && npm run seed-nsc-schema && npm run seed-admin && npm run dev"
 
 volumes:
   db-data:

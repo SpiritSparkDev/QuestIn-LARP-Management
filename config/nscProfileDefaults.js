@@ -1,0 +1,25 @@
+export const NSC_PROFILE_SCHEMA_DEFAULTS = [
+  { key: 'fuerOrgaanfragenOffen', label: 'Für Orgaanfragen offen?', type: 'boolean', required: false },
+  { key: 'alsHilfsSlVerfuegbar', label: 'Als Hilfs-SL verfügbar?', type: 'boolean', required: false },
+  { key: 'erfahrung', label: 'Erfahrung', type: 'select', required: false, options: ['Anfänger', 'Fortgeschritten', 'Erfahren'] },
+  { key: 'rollenbindung', label: 'Rollenbindung', type: 'select', required: false, options: ['Springer', 'Mittel', 'Festrolle'] },
+  { key: 'anfuehrerfaehigkeiten', label: 'Anführerfähigkeiten', type: 'select', required: false, options: ['Untergebener', 'Mitläufer', 'Anführer'] },
+  { key: 'sprechrollen', label: 'Sprechrollen', type: 'select', required: false, options: ['Still', 'Wenige Sätze', 'Redner'] },
+  { key: 'schauspieltalent', label: 'Schauspieltalent', type: 'select', required: false, options: ['Statist', 'Mittel', 'Schauspieler'] },
+  { key: 'kampferfahrung', label: 'Kampferfahrung', type: 'select', required: false, options: ['Pazifist', 'Mittel', 'Veteran'] },
+  { key: 'equipment', label: 'Equipment', type: 'select', required: false, options: ['Wenig', 'Mittel', 'Viel'] },
+  { key: 'improvisationsfaehigkeit', label: 'Improvisationsfähigkeit', type: 'select', required: false, options: ['Weisungsgebunden', 'Mittel', 'Improvisationstalent'] },
+  { key: 'sozialverhalten', label: 'Sozialverhalten', type: 'select', required: false, options: ['Schüchtern', 'Mittel', 'Offenherzig'] },
+  { key: 'belastbarkeit', label: 'Belastbarkeit', type: 'select', required: false, options: ['Wenig', 'Mittel', 'Viel'] },
+  {
+    key: 'rollenAusruestung', label: 'Ausrüstung/Vorliebe für Darstellung als', type: 'multiselect', required: false,
+    options: [
+      'Adel', 'Alchemist', 'Bauer', 'Handwerker', 'Dämon', 'Fay', 'Druide', 'Elf', 'Geist',
+      'Gelehrter', 'Herold', 'Hexe', 'Kämpfer (leicht)', 'Kämpfer (Kettenhemd/Mittel)',
+      'Kämpfer (Platte)', 'Magier', 'Priester', 'Räuber/Bandit', 'Schamane', 'Fahrendes Volk',
+      'Kaufmann', 'Untoter (Höherer)', 'Untoter (Niederer)', 'Waldläufer',
+    ],
+  },
+  { key: 'darstellungsstaerken', label: 'Was kann ich gut darstellen?', type: 'textarea', required: false },
+  { key: 'einsatzwuensche', label: 'Womit kann man mich beauftragen?', type: 'textarea', required: false },
+];

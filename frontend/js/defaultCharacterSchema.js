@@ -14,4 +14,11 @@ export const DEFAULT_CHARACTER_SCHEMA = [
     options: ['Arkan', 'Bardisch', 'Klerikal', 'Natur', 'Dämonisch', 'Anderes'],
   },
   { key: 'conTage', label: 'Con-Tage des Charakters', type: 'text', required: false },
+  { key: 'titel', label: 'Titel', type: 'text', required: false },
+  { key: 'gesinnung', label: 'Gesinnung', type: 'text', required: false },
+  { key: 'heimatland', label: 'Heimatland', type: 'text', required: false },
+  { key: 'erfahrungspunkte', label: 'Erfahrung (Punkte)', type: 'number', required: false },
+  { key: 'charakterVorlieben', label: 'Charakter-Gerne', type: 'textarea', required: false },
+  { key: 'charaktergeschichte', label: 'Charaktergeschichte/Wissenswertes', type: 'textarea', required: false },
+  { key: 'konfliktpotenzial', label: 'Konfliktpotenzial', type: 'textarea', required: false },
 ];
