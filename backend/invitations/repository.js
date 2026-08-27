@@ -75,7 +75,11 @@ export async function regenerateToken(id) {
 // invitation redeemed in the same atomic transaction as user creation.
 export async function markRedeemed(id, client) {
   const runner = client ?? { query };
-  await runner.query('UPDATE invitations SET redeemed_at = now() WHERE id = $1', [id]);
+  const { rows } = await runner.query(
+    'UPDATE invitations SET redeemed_at = now() WHERE id = $1 AND redeemed_at IS NULL RETURNING id',
+    [id]
+  );
+  return rows.length > 0;
 }
 
 export async function listOpenInvitations() {

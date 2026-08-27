@@ -15,7 +15,7 @@ await seedGroups();
 
 const { query, closePool } = await import('../../backend/db.js');
 const { createServer } = await import('../../backend/server.js');
-const { createInvitation, getInvitationByToken, regenerateToken } = await import('../../backend/invitations/repository.js');
+const { createInvitation, getInvitationByToken, regenerateToken, markRedeemed } = await import('../../backend/invitations/repository.js');
 
 async function makeAdmin() {
   const { rows } = await query(
@@ -120,6 +120,21 @@ test('POST /auth/invite/redeem rejects an unknown token', async () => {
   } finally {
     server.close();
   }
+});
+
+test('markRedeemed is a compare-and-swap: the second call on an already-redeemed invitation returns false', async () => {
+  const invitedBy = await makeAdmin();
+  const groupId = await scGroupId();
+  const invitation = await createInvitation({
+    email: `invitee-${crypto.randomUUID()}@example.com`,
+    name: 'CAS Check',
+    groupId,
+    invitedBy,
+  });
+  const first = await markRedeemed(invitation.id);
+  const second = await markRedeemed(invitation.id);
+  assert.equal(first, true);
+  assert.equal(second, false);
 });
 
 test('regenerateToken changes the token and invalidates the old one', async () => {
