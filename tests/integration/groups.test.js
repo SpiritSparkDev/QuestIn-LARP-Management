@@ -45,8 +45,11 @@ test('GET /groups returns all 8 seeded groups for an admin', async () => {
     const res = await fetch(`http://localhost:${port}/groups`, { headers: { Cookie: cookie } });
     assert.equal(res.status, 200);
     const groups = await res.json();
-    assert.ok(groups.length >= 8);
-    assert.ok(groups.some((g) => g.key === 'sc'));
+    const keys = groups.map((g) => g.key);
+    const defaultKeys = ['admin', 'orga', 'plot_orga', 'sl', 'hilfs_sl', 'nsc', 'gsc', 'sc'];
+    for (const key of defaultKeys) {
+      assert.ok(keys.includes(key), `missing default group: ${key}`);
+    }
   } finally {
     server.close();
   }
@@ -154,5 +157,6 @@ test('PUT /groups/:id rejects editing the protected admin group', async () => {
 });
 
 test.after(async () => {
+  await query("DELETE FROM groups WHERE key ~ '^(custom|dup|editable)_[0-9]+$'");
   await closePool();
 });

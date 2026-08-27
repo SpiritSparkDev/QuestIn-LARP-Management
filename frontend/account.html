@@ -14,6 +14,7 @@
   <p class="brand-sub">Chronicle Registry</p>
   <div class="folio folio--wide">
     <nav class="app-nav" id="nav-links"></nav>
+    <a href="#" id="logout-link">Logout</a>
     <h1>Mein Konto</h1>
     <form id="account-form">
       <label for="name">Name</label>
@@ -42,16 +43,16 @@ const message = document.getElementById('message');
 const formControls = form.querySelectorAll('input, textarea, button');
 formControls.forEach((el) => { el.disabled = true; });
 
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
 async function loadAccount() {
   try {
     const account = await api.get('/account');
-    document.getElementById('nav-links').innerHTML =
-      renderNavLinks(account, window.location.pathname) + '<a href="#" id="logout-link">Logout</a>';
-    document.getElementById('logout-link').addEventListener('click', async (evt) => {
-      evt.preventDefault();
-      await api.post('/auth/logout', {});
-      window.location.href = '/login.html';
-    });
+    document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
     for (const field of ['name', 'address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes']) {
       form.elements[field].value = account[field] ?? '';
     }
