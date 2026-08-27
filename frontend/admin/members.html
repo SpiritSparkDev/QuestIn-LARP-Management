@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Mitglieder verwalten – Pakyrion Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/everest-registry.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
+  </aside>
+  <div class="main"><div class="content">
+    <h1>Mitglieder verwalten</h1>
+    <p class="sub">Bearbeite bestehende Mitglieder oder lade neue per E-Mail ein.</p>
+    <div class="card">
+      <table id="member-list">
+        <thead><tr><th>Name</th><th>E-Mail</th><th>Status</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card form-pad" id="detail-card" style="display:none;">
+      <h2 id="detail-title">Mitglied bearbeiten</h2>
+      <div id="detail-fields"></div>
+      <button type="button" id="detail-save">Speichern</button>
+      <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
+    </div>
+
+    <div class="card form-pad">
+      <h2>Neues Mitglied einladen</h2>
+      <form id="invite-form">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label for="invite-name">Name</label>
+            <input id="invite-name" name="name" type="text" required>
+          </div>
+          <div>
+            <label for="invite-email">E-Mail</label>
+            <input id="invite-email" name="email" type="email" required>
+          </div>
+        </div>
+        <div id="invite-group-wrap" style="display:none;">
+          <label for="invite-group">Gruppe</label>
+          <select id="invite-group" name="group" disabled></select>
+        </div>
+        <div id="invite-fields"></div>
+        <button type="submit">Einladung senden</button>
+      </form>
+    </div>
+    <p id="message"></p>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks } from '/js/nav.js';
+
+const ACCOUNT_FIELD_LABELS = {
+  address: 'Adresse', birthdate: 'Geburtsdatum', phone: 'Telefon',
+  emergencyContact: 'Notfallkontakt', medicalNotes: 'Gesundheitshinweise',
+};
+
+const listBody = document.querySelector('#member-list tbody');
+const detailCard = document.getElementById('detail-card');
+const detailFields = document.getElementById('detail-fields');
+const detailTitle = document.getElementById('detail-title');
+const inviteFields = document.getElementById('invite-fields');
+const inviteGroupWrap = document.getElementById('invite-group-wrap');
+const inviteGroupSelect = document.getElementById('invite-group');
+const message = document.getElementById('message');
+
+let myAccountFields = [];
+let editingMemberId = null;
+
+function buildFieldInputs(container, values = {}) {
+  container.innerHTML = myAccountFields
+    .filter((key) => key !== 'group')
+    .map((key) => `
+      <label for="field-${key}">${escapeHtml(ACCOUNT_FIELD_LABELS[key] ?? key)}</label>
+      <input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">
+    `).join('');
+}
+
+async function loadGroupOptions() {
+  const groups = await api.get('/groups');
+  inviteGroupSelect.innerHTML = groups.map((g) => `<option value="${escapeHtml(g.key)}">${escapeHtml(g.name)}</option>`).join('');
+}
+
+async function loadMembers() {
+  const members = await api.get('/members');
+  listBody.innerHTML = members.map((m) => `<tr>
+    <td>${escapeHtml(m.name)}</td>
+    <td>${escapeHtml(m.email)}</td>
+    <td>${m.status === 'active'
+      ? `<span class="badge badge-active">Aktiv</span>`
+      : `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`}</td>
+    <td>${m.status === 'active'
+      ? `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button>`
+      : `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>`}</td>
+  </tr>`).join('');
+
+  listBody.querySelectorAll('[data-edit]').forEach((button) => {
+    button.addEventListener('click', () => openDetail(button.dataset.edit));
+  });
+  listBody.querySelectorAll('[data-resend]').forEach((button) => {
+    button.addEventListener('click', () => resendInvitation(button.dataset.resend));
+  });
+}
+
+async function openDetail(memberId) {
+  const member = await api.get(`/members/${memberId}`);
+  editingMemberId = memberId;
+  detailTitle.textContent = `Mitglied bearbeiten: ${member.name}`;
+  buildFieldInputs(detailFields, member);
+  detailCard.style.display = '';
+}
+
+document.getElementById('detail-cancel').addEventListener('click', () => {
+  editingMemberId = null;
+  detailCard.style.display = 'none';
+});
+
+document.getElementById('detail-save').addEventListener('click', async () => {
+  message.textContent = '';
+  message.className = '';
+  const payload = {};
+  detailFields.querySelectorAll('[data-field]').forEach((input) => {
+    payload[input.dataset.field] = input.value;
+  });
+  try {
+    await api.patch(`/members/${editingMemberId}`, payload);
+    message.textContent = 'Gespeichert.';
+    message.className = 'success';
+    detailCard.style.display = 'none';
+    await loadMembers();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+async function resendInvitation(invitationId) {
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.post(`/members/invitations/${invitationId}/resend`, {});
+    message.textContent = 'Einladung erneut verschickt.';
+    message.className = 'success';
+    await loadMembers();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+}
+
+document.getElementById('invite-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  message.textContent = '';
+  message.className = '';
+  const formData = new FormData(event.target);
+  const payload = Object.fromEntries(formData);
+  inviteFields.querySelectorAll('[data-field]').forEach((input) => {
+    payload[input.dataset.field] = input.value;
+  });
+  try {
+    await api.post('/members/invite', payload);
+    message.textContent = 'Einladung verschickt.';
+    message.className = 'success';
+    event.target.reset();
+    buildFieldInputs(inviteFields);
+    await loadMembers();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  myAccountFields = account.accountFields ?? [];
+  buildFieldInputs(inviteFields);
+  // The group select is only shown (and thus only ever sent) if the
+  // viewer's own group is actually permitted to set it — matching the
+  // backend's exact rule for POST /members/invite (a group without
+  // 'group' in its account_fields must not hand out a higher group to a
+  // brand-new invitee; omitting the field there defaults new invitees to
+  // 'sc' server-side).
+  if (myAccountFields.includes('group')) {
+    inviteGroupWrap.style.display = '';
+    inviteGroupSelect.disabled = false;
+    await loadGroupOptions();
+  }
+  // Left disabled (its default state in the markup above) when the viewer
+  // lacks 'group' permission — a disabled <select> is excluded from
+  // FormData entirely, so the field is genuinely omitted from the submit
+  // payload rather than sent as an empty string, letting the backend's
+  // default-to-'sc' path apply cleanly.
+  await loadMembers();
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Orga.'; message.className = 'error'; }
+}
+</script>
+</body>
+</html>
