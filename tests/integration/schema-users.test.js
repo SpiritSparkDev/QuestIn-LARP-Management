@@ -32,6 +32,13 @@ test('users.email is unique', async () => {
   await query('DELETE FROM users WHERE email = $1', [email]);
 });
 
+test('admin and orga groups have pronomen in their account_fields after migration', async () => {
+  const { rows } = await query("SELECT key, account_fields FROM groups WHERE key IN ('admin', 'orga')");
+  for (const row of rows) {
+    assert.ok(row.account_fields.includes('pronomen'), `${row.key} should include pronomen`);
+  }
+});
+
 test.after(async () => {
   await closePool();
 });

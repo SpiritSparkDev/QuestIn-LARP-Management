@@ -3,9 +3,9 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { listGroups, getGroup, createGroup, updateGroup } from './repository.js';
+import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
 
 const MENU_KEYS = ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'];
-const ACCOUNT_FIELD_KEYS = ['address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes', 'group'];
 const KEY_PATTERN = /^[a-z0-9_]+$/;
 
 function isValidMenuList(value) {

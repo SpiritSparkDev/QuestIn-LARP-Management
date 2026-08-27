@@ -2,13 +2,13 @@ export const GROUP_DEFAULTS = [
   {
     key: 'admin', name: 'Admin',
     visibleMenus: ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'],
-    accountFields: ['address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes', 'group'],
+    accountFields: ['address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes', 'pronomen', 'group'],
     canEditCharacters: true, isProtected: true,
   },
   {
     key: 'orga', name: 'Orga',
     visibleMenus: ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'],
-    accountFields: ['address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes'],
+    accountFields: ['address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes', 'pronomen'],
     canEditCharacters: true, isProtected: false,
   },
   {

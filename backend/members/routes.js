@@ -7,8 +7,7 @@ import { createInvitation, regenerateToken, getInvitationById, listOpenInvitatio
 import { sendInvitationEmail } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 import { query } from '../db.js';
-
-const ACCOUNT_FIELD_KEYS = ['address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes', 'group'];
+import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
 
 function filterToAllowedFields(body, allowedFields) {
   const disallowed = Object.keys(body).filter((key) => ACCOUNT_FIELD_KEYS.includes(key) && !allowedFields.includes(key));
@@ -100,6 +99,7 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     phone: rest.phone,
     emergencyContact: rest.emergencyContact,
     medicalNotes: rest.medicalNotes,
+    pronomen: rest.pronomen,
   });
 
   try {

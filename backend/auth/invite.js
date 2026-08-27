@@ -28,13 +28,14 @@ router.post('/auth/invite/redeem', async ({ req }) => {
   try {
     userId = await withTransaction(async (client) => {
       const { rows } = await client.query(
-        `INSERT INTO users (email, password_hash, group_id, name, email_verified, address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc)
+        `INSERT INTO users (email, password_hash, group_id, name, email_verified, address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc, pronomen_enc)
          VALUES ($1, $2, $3, $4, true,
            (SELECT address_enc FROM invitations WHERE id = $5),
            (SELECT birthdate_enc FROM invitations WHERE id = $5),
            (SELECT phone_enc FROM invitations WHERE id = $5),
            (SELECT emergency_contact_enc FROM invitations WHERE id = $5),
-           (SELECT medical_notes_enc FROM invitations WHERE id = $5))
+           (SELECT medical_notes_enc FROM invitations WHERE id = $5),
+           (SELECT pronomen_enc FROM invitations WHERE id = $5))
          RETURNING id`,
         [invitation.email, passwordHash, invitation.groupId, invitation.name, invitation.id]
       );

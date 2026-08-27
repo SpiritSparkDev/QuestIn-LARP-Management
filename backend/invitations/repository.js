@@ -6,7 +6,7 @@ const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const SELECT_COLUMNS = `
   id, token, email, name, group_id,
-  address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc,
+  address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc, pronomen_enc,
   invited_by, expires_at, created_at, redeemed_at
 `;
 
@@ -22,6 +22,7 @@ function decryptInvitation(row) {
     phone: decryptField(row.phone_enc),
     emergencyContact: decryptField(row.emergency_contact_enc),
     medicalNotes: decryptField(row.medical_notes_enc),
+    pronomen: decryptField(row.pronomen_enc),
     invitedBy: row.invited_by,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
@@ -29,12 +30,12 @@ function decryptInvitation(row) {
   };
 }
 
-export async function createInvitation({ email, name, groupId, invitedBy, address, birthdate, phone, emergencyContact, medicalNotes }) {
+export async function createInvitation({ email, name, groupId, invitedBy, address, birthdate, phone, emergencyContact, medicalNotes, pronomen }) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
   const { rows } = await query(
-    `INSERT INTO invitations (token, email, name, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc, invited_by, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO invitations (token, email, name, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc, pronomen_enc, invited_by, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING ${SELECT_COLUMNS}`,
     [
       token, email, name, groupId,
@@ -43,6 +44,7 @@ export async function createInvitation({ email, name, groupId, invitedBy, addres
       phone !== undefined ? encryptField(phone) : null,
       emergencyContact !== undefined ? encryptField(emergencyContact) : null,
       medicalNotes !== undefined ? encryptField(medicalNotes) : null,
+      pronomen !== undefined ? encryptField(pronomen) : null,
       invitedBy, expiresAt,
     ]
   );

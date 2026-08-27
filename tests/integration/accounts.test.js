@@ -71,16 +71,18 @@ test('PATCH /account encrypts and returns sensitive fields; unspecified fields s
   const patchRes = await fetch(`http://localhost:${port}/account`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({ address: 'Musterstraße 1, 12345 Musterstadt', phone: '+49 123 456789' }),
+    body: JSON.stringify({ address: 'Musterstraße 1, 12345 Musterstadt', phone: '+49 123 456789', pronomen: 'sie/ihr' }),
   });
   assert.equal(patchRes.status, 200);
   const patched = await patchRes.json();
   assert.equal(patched.address, 'Musterstraße 1, 12345 Musterstadt');
   assert.equal(patched.phone, '+49 123 456789');
+  assert.equal(patched.pronomen, 'sie/ihr');
   assert.equal(patched.name, 'Account Test');
 
-  const { rows } = await query('SELECT address_enc FROM users WHERE id = $1', [userId]);
+  const { rows } = await query('SELECT address_enc, pronomen_enc FROM users WHERE id = $1', [userId]);
   assert.notEqual(rows[0].address_enc.toString('utf8'), 'Musterstraße 1, 12345 Musterstadt');
+  assert.notEqual(rows[0].pronomen_enc.toString('utf8'), 'sie/ihr');
 
   const secondPatchRes = await fetch(`http://localhost:${port}/account`, {
     method: 'PATCH',
