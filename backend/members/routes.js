@@ -88,11 +88,11 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
   if (groupRows.length === 0) return { status: 400, body: { error: 'unknown group' } };
 
   const invitation = await createInvitation({
+    ...rest,
     email: email.toLowerCase(),
     name,
     groupId: groupRows[0].id,
     invitedBy: user.id,
-    ...rest,
   });
 
   try {

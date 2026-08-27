@@ -182,6 +182,37 @@ test('POST /members/invitations/:id/resend issues a new token', async () => {
   }
 });
 
+test('POST /members/invite ignores an attacker-supplied groupId that bypasses the group field check', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    // orga lacks 'group' in its account_fields, so filterToAllowedFields
+    // blocks the 'group' key — but createInvitation is built from
+    // { ...rest, groupId, invitedBy }, and 'groupId' (a different key
+    // name) isn't in ACCOUNT_FIELD_KEYS at all, so before the fix a caller
+    // could sneak a real, valid group uuid through under the wrong key
+    // and have it silently override the server-computed groupId via
+    // object-spread order. Using the real admin group id (not a bogus
+    // one) proves this is a valid-but-unauthorized override being
+    // ignored, not just invalid-input rejection.
+    const { cookie } = await makeUserAndSession('orga');
+    const { rows: adminGroup } = await query("SELECT id FROM groups WHERE key = 'admin'");
+    const email = `invite-groupid-bypass-${crypto.randomUUID()}@example.com`;
+    const res = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email, name: 'GroupId Bypass', groupId: adminGroup[0].id }),
+    });
+    assert.equal(res.status, 201);
+    const { rows } = await query('SELECT group_id FROM invitations WHERE email = $1', [email]);
+    const { rows: scGroup } = await query("SELECT id FROM groups WHERE key = 'sc'");
+    assert.equal(rows[0].group_id, scGroup[0].id);
+    assert.notEqual(rows[0].group_id, adminGroup[0].id);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM invitations");
   await query("DELETE FROM users WHERE email LIKE 'members-%'");
