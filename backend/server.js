@@ -15,6 +15,7 @@ import './events/routes.js';
 import './characters/routes.js';
 import './registrations/routes.js';
 import './groups/routes.js';
+import './members/routes.js';
 
 // Route modules import `router` from ./routes.js directly (importing it from
 // here would create an ESM cycle); this re-export is for the app entry point only.
