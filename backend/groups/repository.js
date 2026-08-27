@@ -1,0 +1,43 @@
+import { query } from '../db.js';
+
+const SELECT_COLUMNS = 'id, key, name, visible_menus, account_fields, can_edit_characters, is_protected';
+
+export async function listGroups() {
+  const { rows } = await query(`SELECT ${SELECT_COLUMNS} FROM groups ORDER BY name`);
+  return rows;
+}
+
+export async function getGroup(id) {
+  const { rows } = await query(`SELECT ${SELECT_COLUMNS} FROM groups WHERE id = $1`, [id]);
+  return rows[0] ?? null;
+}
+
+export async function createGroup({ key, name, visibleMenus, accountFields, canEditCharacters }) {
+  const { rows } = await query(
+    `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING ${SELECT_COLUMNS}`,
+    [key, name, JSON.stringify(visibleMenus ?? []), JSON.stringify(accountFields ?? []), !!canEditCharacters]
+  );
+  return rows[0];
+}
+
+export async function updateGroup(id, { name, visibleMenus, accountFields, canEditCharacters }) {
+  const { rows } = await query(
+    `UPDATE groups SET
+       name = COALESCE($2, name),
+       visible_menus = COALESCE($3, visible_menus),
+       account_fields = COALESCE($4, account_fields),
+       can_edit_characters = COALESCE($5, can_edit_characters)
+     WHERE id = $1
+     RETURNING ${SELECT_COLUMNS}`,
+    [
+      id,
+      name ?? null,
+      visibleMenus !== undefined ? JSON.stringify(visibleMenus) : null,
+      accountFields !== undefined ? JSON.stringify(accountFields) : null,
+      canEditCharacters !== undefined ? canEditCharacters : null,
+    ]
+  );
+  return rows[0] ?? null;
+}
