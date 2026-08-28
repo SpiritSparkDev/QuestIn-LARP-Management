@@ -3,12 +3,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { createEvent, getEvent, listEvents, updateEvent, activateEvent } from './repository.js';
-
-function isValidCharacterFormSchema(schema) {
-  return Array.isArray(schema) && schema.every(
-    (field) => field && typeof field === 'object' && typeof field.key === 'string' && field.key.length > 0
-  );
-}
+import { validateSchemaShape } from './schemaValidation.js';
 
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
@@ -17,8 +12,8 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
-  if (characterFormSchema !== undefined && !isValidCharacterFormSchema(characterFormSchema)) {
-    return { status: 400, body: { error: 'characterFormSchema must be an array of objects each with a string "key"' } };
+  if (characterFormSchema !== undefined && !validateSchemaShape(characterFormSchema)) {
+    return { status: 400, body: { error: 'characterFormSchema must be an array of objects, each with a unique, non-reserved string "key" (not "id" or "name")' } };
   }
   const event = await createEvent({ name, eventDate, characterFormSchema });
   return { status: 201, body: event };
@@ -39,8 +34,8 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { characterFormSchema } = body;
-  if (characterFormSchema !== undefined && !isValidCharacterFormSchema(characterFormSchema)) {
-    return { status: 400, body: { error: 'characterFormSchema must be an array of objects each with a string "key"' } };
+  if (characterFormSchema !== undefined && !validateSchemaShape(characterFormSchema)) {
+    return { status: 400, body: { error: 'characterFormSchema must be an array of objects, each with a unique, non-reserved string "key" (not "id" or "name")' } };
   }
   const event = await updateEvent(params.id, body);
   if (!event) return { status: 404, body: { error: 'event not found' } };

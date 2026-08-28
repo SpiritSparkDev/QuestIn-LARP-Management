@@ -191,6 +191,37 @@ test('admin can activate an event; activating one deactivates all others; partic
   server.close();
 });
 
+test('PUT /events/:id rejects a characterFormSchema using the reserved key "id" or "name"', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const admin = await makeUserAndSession('admin');
+  const createRes = await fetch(`http://localhost:${port}/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+    body: JSON.stringify({ name: 'Schema Test Con', eventDate: '2027-08-01' }),
+  });
+  const { id } = await createRes.json();
+
+  const withId = await fetch(`http://localhost:${port}/events/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+    body: JSON.stringify({ characterFormSchema: [{ key: 'id', label: 'Id', type: 'text' }] }),
+  });
+  assert.equal(withId.status, 400);
+
+  const withDuplicate = await fetch(`http://localhost:${port}/events/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+    body: JSON.stringify({ characterFormSchema: [
+      { key: 'klasse', label: 'Klasse', type: 'text' },
+      { key: 'klasse', label: 'Klasse (2)', type: 'text' },
+    ] }),
+  });
+  assert.equal(withDuplicate.status, 400);
+
+  server.close();
+});
+
 test.after(async () => {
   await closePool();
 });

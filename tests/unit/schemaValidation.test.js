@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateCharacterData } from '../../backend/events/schemaValidation.js';
+import { validateCharacterData, validateSchemaShape } from '../../backend/events/schemaValidation.js';
 
 const SCHEMA = [
   { key: 'fraction', label: 'Fraktion', type: 'text', required: true },
@@ -135,4 +135,39 @@ test('NaN or Infinity for a number field is an error', () => {
   assert.ok(errorsNaN.some((e) => e.includes('punkte')));
   const errorsInf = validateCharacterData(NUMBER_SCHEMA, { punkte: Infinity });
   assert.ok(errorsInf.some((e) => e.includes('punkte')));
+});
+
+test('validateSchemaShape accepts a well-formed schema', () => {
+  assert.equal(validateSchemaShape([
+    { key: 'klasse', label: 'Klasse', type: 'text' },
+    { key: 'volk', label: 'Volk', type: 'text' },
+  ]), true);
+});
+
+test('validateSchemaShape accepts an empty schema', () => {
+  assert.equal(validateSchemaShape([]), true);
+});
+
+test('validateSchemaShape rejects a non-array', () => {
+  assert.equal(validateSchemaShape({ key: 'x' }), false);
+  assert.equal(validateSchemaShape(null), false);
+  assert.equal(validateSchemaShape('x'), false);
+});
+
+test('validateSchemaShape rejects a field with a missing or empty key', () => {
+  assert.equal(validateSchemaShape([{ label: 'No key', type: 'text' }]), false);
+  assert.equal(validateSchemaShape([{ key: '', label: 'Empty key', type: 'text' }]), false);
+});
+
+test('validateSchemaShape rejects the reserved keys "id" and "name"', () => {
+  assert.equal(validateSchemaShape([{ key: 'id', label: 'Id', type: 'text' }]), false);
+  assert.equal(validateSchemaShape([{ key: 'name', label: 'Name', type: 'text' }]), false);
+  assert.equal(validateSchemaShape([{ key: 'klasse', label: 'Klasse', type: 'text' }, { key: 'id', label: 'Id', type: 'text' }]), false);
+});
+
+test('validateSchemaShape rejects duplicate keys within one schema', () => {
+  assert.equal(validateSchemaShape([
+    { key: 'klasse', label: 'Klasse', type: 'text' },
+    { key: 'klasse', label: 'Klasse (2)', type: 'text' },
+  ]), false);
 });

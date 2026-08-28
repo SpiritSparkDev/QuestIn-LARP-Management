@@ -105,6 +105,33 @@ test('PUT /nsc-schema updates the schema for an admin caller', async () => {
   }
 });
 
+test('PUT /nsc-schema rejects a schema using the reserved key "id" or duplicate keys', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+
+    const withName = await fetch(`http://localhost:${port}/nsc-schema`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ schema: [{ key: 'name', label: 'Name', type: 'text' }] }),
+    });
+    assert.equal(withName.status, 400);
+
+    const withDuplicate = await fetch(`http://localhost:${port}/nsc-schema`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ schema: [
+        { key: 'x', label: 'X', type: 'text' },
+        { key: 'x', label: 'X (2)', type: 'text' },
+      ] }),
+    });
+    assert.equal(withDuplicate.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM users WHERE email LIKE 'nsc-schema-%'");
   await closePool();

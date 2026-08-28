@@ -2,13 +2,8 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
+import { validateSchemaShape } from '../events/schemaValidation.js';
 import { query } from '../db.js';
-
-function isValidSchemaShape(schema) {
-  return Array.isArray(schema) && schema.every(
-    (field) => field && typeof field === 'object' && typeof field.key === 'string' && field.key.length > 0
-  );
-}
 
 router.get('/nsc-schema', requireAuth(async ({ user }) => {
   if (user.group.key !== 'admin' && user.group.key !== 'nsc') {
@@ -22,8 +17,8 @@ router.put('/nsc-schema', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { schema } = body;
-  if (!isValidSchemaShape(schema)) {
-    return { status: 400, body: { error: 'schema must be an array of objects each with a string "key"' } };
+  if (!validateSchemaShape(schema)) {
+    return { status: 400, body: { error: 'schema must be an array of objects, each with a unique, non-reserved string "key" (not "id" or "name")' } };
   }
   const { rows } = await query('SELECT id FROM nsc_profile_schema LIMIT 1');
   if (rows.length === 0) {

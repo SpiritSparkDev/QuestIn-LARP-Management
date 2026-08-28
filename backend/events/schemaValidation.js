@@ -1,6 +1,22 @@
 const MAX_VALUE_LENGTH = 5000;
 const MAX_TOTAL_LENGTH = 20000;
 
+const RESERVED_SCHEMA_KEYS = ['id', 'name'];
+
+export function validateSchemaShape(schema) {
+  if (!Array.isArray(schema)) return false;
+  const seenKeys = new Set();
+  for (const field of schema) {
+    if (!field || typeof field !== 'object' || typeof field.key !== 'string' || field.key.length === 0) {
+      return false;
+    }
+    if (RESERVED_SCHEMA_KEYS.includes(field.key)) return false;
+    if (seenKeys.has(field.key)) return false;
+    seenKeys.add(field.key);
+  }
+  return true;
+}
+
 export function validateCharacterData(schema, data) {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) {
     return ['data must be an object'];
