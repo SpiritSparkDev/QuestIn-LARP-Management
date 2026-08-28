@@ -1,7 +1,7 @@
 const MAX_VALUE_LENGTH = 5000;
 const MAX_TOTAL_LENGTH = 20000;
 
-const RESERVED_SCHEMA_KEYS = ['id', 'name'];
+const RESERVED_SCHEMA_KEYS = ['id', 'name', 'eventId'];
 
 export function validateSchemaShape(schema) {
   if (!Array.isArray(schema)) return false;

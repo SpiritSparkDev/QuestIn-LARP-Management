@@ -165,6 +165,10 @@ test('validateSchemaShape rejects the reserved keys "id" and "name"', () => {
   assert.equal(validateSchemaShape([{ key: 'klasse', label: 'Klasse', type: 'text' }, { key: 'id', label: 'Id', type: 'text' }]), false);
 });
 
+test('validateSchemaShape rejects the reserved key "eventId"', () => {
+  assert.equal(validateSchemaShape([{ key: 'eventId', label: 'Event Id', type: 'text' }]), false);
+});
+
 test('validateSchemaShape rejects duplicate keys within one schema', () => {
   assert.equal(validateSchemaShape([
     { key: 'klasse', label: 'Klasse', type: 'text' },
