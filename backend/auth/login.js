@@ -4,8 +4,13 @@ import { verifyPassword } from '../crypto/password.js';
 import { createSession, destroySession } from './sessions.js';
 import { readJsonBody } from '../httpBody.js';
 import { parseCookies, serializeSessionCookie, clearSessionCookie, SESSION_COOKIE_NAME } from './cookies.js';
+import { rateLimit, isRateLimited } from '../middleware/rateLimit.js';
 
-router.post('/auth/login', async ({ req }) => {
+const LOGIN_IP_RATE_LIMIT = { keyPrefix: 'login-ip', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
+const LOGIN_EMAIL_MAX_ATTEMPTS = 5;
+const LOGIN_EMAIL_WINDOW_MS = 15 * 60 * 1000;
+
+router.post('/auth/login', rateLimit(LOGIN_IP_RATE_LIMIT)(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
 
@@ -13,6 +18,10 @@ router.post('/auth/login', async ({ req }) => {
   const email = body.email?.toLowerCase();
   if (!email || !password) {
     return { status: 400, body: { error: 'email and password are required' } };
+  }
+
+  if (isRateLimited(`login-email:${email}`, LOGIN_EMAIL_MAX_ATTEMPTS, LOGIN_EMAIL_WINDOW_MS)) {
+    return { status: 429, body: { error: 'too many login attempts, please try again later' } };
   }
 
   const { rows } = await query(
@@ -38,7 +47,7 @@ router.post('/auth/login', async ({ req }) => {
     body: { id: user.id },
     headers: { 'Set-Cookie': serializeSessionCookie(session.token, session.expiresAt) },
   };
-});
+}));
 
 router.post('/auth/logout', async ({ req }) => {
   const cookies = parseCookies(req.headers.cookie);

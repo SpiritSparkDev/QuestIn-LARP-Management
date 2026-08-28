@@ -133,6 +133,45 @@ test('logout clears the session so it can no longer be used', async () => {
   server.close();
 });
 
+test('POST /auth/login is rate-limited per IP after 10 attempts in the window, even across different emails', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    let lastStatus;
+    for (let i = 0; i < 11; i++) {
+      const res = await fetch(`http://localhost:${port}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: `nobody-${i}@example.com`, password: 'wrong password' }),
+      });
+      lastStatus = res.status;
+    }
+    assert.equal(lastStatus, 429);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /auth/login is rate-limited per email after 5 attempts in the window, even from conceptually different requests', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const email = `ratelimit-email-${crypto.randomUUID()}@example.com`;
+    let lastStatus;
+    for (let i = 0; i < 6; i++) {
+      const res = await fetch(`http://localhost:${port}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: 'wrong password' }),
+      });
+      lastStatus = res.status;
+    }
+    assert.equal(lastStatus, 429);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await closePool();
 });
