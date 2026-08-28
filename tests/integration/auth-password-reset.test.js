@@ -134,6 +134,25 @@ test('confirming with an invalid token returns 400', async () => {
   server.close();
 });
 
+test('POST /auth/password-reset/request is rate-limited per IP after 10 attempts in the window', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    let lastStatus;
+    for (let i = 0; i < 11; i++) {
+      const res = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'nobody@example.com' }),
+      });
+      lastStatus = res.status;
+    }
+    assert.equal(lastStatus, 429);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await closePool();
 });

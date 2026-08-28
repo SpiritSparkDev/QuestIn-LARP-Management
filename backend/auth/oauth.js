@@ -5,6 +5,9 @@ import { createSession } from './sessions.js';
 import { parseCookies, serializeSessionCookie, secureFlag } from './cookies.js';
 import { PROVIDERS } from './oauthProviders.js';
 import { logger } from '../logger.js';
+import { rateLimit } from '../middleware/rateLimit.js';
+
+const OAUTH_START_RATE_LIMIT = { keyPrefix: 'oauth-start', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
 const STATE_MAX_AGE_SECONDS = 600;
 
@@ -17,7 +20,7 @@ function redirectUri(providerName) {
   return `${base}/auth/oauth/${providerName}/callback`;
 }
 
-router.get('/auth/oauth/:provider/start', async ({ params }) => {
+router.get('/auth/oauth/:provider/start', rateLimit(OAUTH_START_RATE_LIMIT)(async ({ params }) => {
   const provider = Object.hasOwn(PROVIDERS, params.provider) ? PROVIDERS[params.provider] : undefined;
   if (!provider) return { status: 404, body: { error: 'unknown provider' } };
 
@@ -42,7 +45,7 @@ router.get('/auth/oauth/:provider/start', async ({ params }) => {
       'Set-Cookie': `${stateCookieName(params.provider)}=${state}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${STATE_MAX_AGE_SECONDS}${secureFlag()}`,
     },
   };
-});
+}));
 
 router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
   const provider = Object.hasOwn(PROVIDERS, params.provider) ? PROVIDERS[params.provider] : undefined;

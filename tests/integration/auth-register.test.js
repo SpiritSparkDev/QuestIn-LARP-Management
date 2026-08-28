@@ -201,6 +201,25 @@ test('verify with an unknown token returns 400', async () => {
   server.close();
 });
 
+test('POST /auth/register is rate-limited per IP after 10 attempts in the window', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    let lastStatus;
+    for (let i = 0; i < 11; i++) {
+      const res = await fetch(`http://localhost:${port}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: `ratelimit-${i}-${crypto.randomUUID()}@example.com`, password: 'correct horse battery staple', name: 'Rate Limit Test' }),
+      });
+      lastStatus = res.status;
+    }
+    assert.equal(lastStatus, 429);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await closePool();
 });

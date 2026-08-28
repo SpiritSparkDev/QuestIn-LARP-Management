@@ -5,10 +5,12 @@ import { hashPassword } from '../crypto/password.js';
 import { sendPasswordResetEmail } from './mailer.js';
 import { readJsonBody } from '../httpBody.js';
 import { logger } from '../logger.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 
 const RESET_TTL_MS = 60 * 60 * 1000;
+const RESET_RATE_LIMIT = { keyPrefix: 'password-reset', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
-router.post('/auth/password-reset/request', async ({ req }) => {
+router.post('/auth/password-reset/request', rateLimit(RESET_RATE_LIMIT)(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const email = body.email?.toLowerCase();
@@ -31,9 +33,9 @@ router.post('/auth/password-reset/request', async ({ req }) => {
 
   // Always 200 regardless of whether the email is registered — avoids leaking which emails exist.
   return { status: 200, body: { requested: true } };
-});
+}));
 
-router.post('/auth/password-reset/confirm', async ({ req }) => {
+router.post('/auth/password-reset/confirm', rateLimit(RESET_RATE_LIMIT)(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { token, password } = body;
@@ -57,4 +59,4 @@ router.post('/auth/password-reset/confirm', async ({ req }) => {
   await query('DELETE FROM password_reset_tokens WHERE user_id = $1', [rows[0].user_id]);
   await query('DELETE FROM sessions WHERE user_id = $1', [rows[0].user_id]);
   return { status: 200, body: { reset: true } };
-});
+}));

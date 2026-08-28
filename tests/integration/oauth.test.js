@@ -208,6 +208,21 @@ test('PROVIDERS.discord.extractUser falls back to username and reports emailVeri
   assert.equal(withoutGlobalName.emailVerified, false);
 });
 
+test('GET /auth/oauth/:provider/start is rate-limited per IP after 10 attempts in the window', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    let lastStatus;
+    for (let i = 0; i < 11; i++) {
+      const res = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
+      lastStatus = res.status;
+    }
+    assert.equal(lastStatus, 429);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await closePool();
 });
