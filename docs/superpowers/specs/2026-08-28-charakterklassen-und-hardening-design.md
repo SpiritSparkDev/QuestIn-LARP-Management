@@ -55,10 +55,16 @@ WHERE key = 'nsc' AND NOT (character_classes @> '["nsc"]'::jsonb);
 (Gleiches Muster wie die `pronomen`-Migration aus Plan 4: ein `db/groupDefaults.js`-Edit
 allein würde nur eine neue Datenbank betreffen, nicht die bereits geseedeten Zeilen.)
 
-`db/groupDefaults.js` bekommt `characterClasses: ['sc']` bei `sc`/`gsc`,
-`characterClasses: ['nsc']` bei `nsc`, `characterClasses: []` bei den übrigen
-5 Gruppen (Admin/Orga/Plot-Orga/SL/Hilfs-SL — administrieren, spielen nicht per
-Default, aber jederzeit über die Gruppen-Verwaltung erweiterbar).
+`db/groupDefaults.js` bekommt `characterClasses: ['nsc']` bei `nsc`,
+`characterClasses: ['sc']` bei allen 7 übrigen Gruppen (`sc`, `gsc`, Admin,
+Orga, Plot-Orga, SL, Hilfs-SL). **Korrektur gegenüber einem ersten Entwurf:**
+nicht `[]` bei den 5 Nicht-Spieler-Gruppen — heute darf jeder authentifizierte
+Nutzer SC-Charaktere anlegen (bestätigt u. a. durch den bestehenden Test
+"ein Admin kann für ein inaktives Event einen Charakter anlegen" in
+`tests/integration/characters.test.js`), diese neue Berechtigungsprüfung soll
+das nicht rückwirkend einschränken. Nur der NSC-Zugriff ist eine echte neue
+Einschränkung (heute existiert dafür noch kein Konzept). Jederzeit über die
+Gruppen-Verwaltung erweiterbar.
 
 **`characters`-Tabelle erweitert:**
 
