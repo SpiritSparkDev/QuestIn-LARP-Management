@@ -26,7 +26,7 @@
     <div class="card">
       <div class="toolbar"><input class="search" id="participant-search" placeholder="Suche nach Name oder Charakter …"></div>
       <table id="participant-list">
-        <thead><tr><th>Name</th><th>Charaktere</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Charaktere</th><th>Status</th><th></th><th>Override</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -49,6 +49,8 @@ const statCheckedIn = document.getElementById('stat-checked-in');
 const STATUS_LABELS = { registered: 'Angemeldet', checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt' };
 
 let currentSearch = '';
+let canOverride = false;
+const STATUS_ORDER = ['registered', 'checked_in', 'checked_out'];
 
 function applySearchFilter() {
   const term = currentSearch.trim().toLowerCase();
@@ -56,6 +58,12 @@ function applySearchFilter() {
     const text = row.textContent.toLowerCase();
     row.style.display = !term || text.includes(term) ? '' : 'none';
   });
+}
+
+function renderOverrideCell(p) {
+  if (!canOverride) return '';
+  const options = STATUS_ORDER.map((s) => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[s])}</option>`).join('');
+  return `<select data-override="${p.userId}" data-prev-status="${p.status}">${options}</select>`;
 }
 
 searchInput.addEventListener('input', () => {
@@ -73,6 +81,7 @@ async function loadParticipants(eventId) {
       <button type="button" class="btn" data-checkin="${p.userId}" ${p.status !== 'registered' ? 'disabled' : ''}>Check-In</button>
       <button type="button" class="btn btn-ghost" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>
     </td>
+    <td>${renderOverrideCell(p)}</td>
   </tr>`).join('');
 
   statTotal.textContent = participants.length;
@@ -83,6 +92,9 @@ async function loadParticipants(eventId) {
   });
   listBody.querySelectorAll('[data-checkout]').forEach((button) => {
     button.addEventListener('click', () => transition(eventId, button.dataset.checkout, 'checkout'));
+  });
+  listBody.querySelectorAll('[data-override]').forEach((select) => {
+    select.addEventListener('change', () => overrideStatus(eventId, select.dataset.override, select.value, select.dataset.prevStatus));
   });
 
   applySearchFilter();
@@ -100,6 +112,25 @@ async function transition(eventId, userId, action) {
   }
 }
 
+async function overrideStatus(eventId, userId, newStatus, previousStatus) {
+  const newIndex = STATUS_ORDER.indexOf(newStatus);
+  const previousIndex = STATUS_ORDER.indexOf(previousStatus);
+  if (newIndex < previousIndex && !confirm('Bist du sicher? Dies setzt den Status zurück.')) {
+    await loadParticipants(eventId);
+    return;
+  }
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.put(`/events/${eventId}/checkin/${userId}`, { status: newStatus });
+    await loadParticipants(eventId);
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+    await loadParticipants(eventId);
+  }
+}
+
 eventSelect.addEventListener('change', () => loadParticipants(eventSelect.value));
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
@@ -111,6 +142,7 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  canOverride = !!account.canOverrideCheckinStatus;
   const events = await api.get('/events');
   eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
   if (events.length > 0) {
