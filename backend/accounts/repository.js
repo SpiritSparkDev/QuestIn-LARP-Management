@@ -17,12 +17,13 @@ function decryptAccount(row) {
     emergencyContact: decryptField(row.emergency_contact_enc),
     medicalNotes: decryptField(row.medical_notes_enc),
     pronomen: decryptField(row.pronomen_enc),
+    nscData: row.nsc_data,
   };
 }
 
 const SELECT_COLUMNS = `
   users.id, users.email, users.name, users.email_verified,
-  users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_enc, users.medical_notes_enc, users.pronomen_enc,
+  users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_enc, users.medical_notes_enc, users.pronomen_enc, users.nsc_data,
   groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields
 `;
 
@@ -43,7 +44,8 @@ export async function updateAccount(userId, fields) {
        phone_enc = COALESCE($5, phone_enc),
        emergency_contact_enc = COALESCE($6, emergency_contact_enc),
        medical_notes_enc = COALESCE($7, medical_notes_enc),
-       pronomen_enc = COALESCE($8, pronomen_enc)
+       pronomen_enc = COALESCE($8, pronomen_enc),
+       nsc_data = COALESCE($9, nsc_data)
      WHERE id = $1
      RETURNING id`,
     [
@@ -55,6 +57,7 @@ export async function updateAccount(userId, fields) {
       fields.emergencyContact !== undefined ? encryptField(fields.emergencyContact) : null,
       fields.medicalNotes !== undefined ? encryptField(fields.medicalNotes) : null,
       fields.pronomen !== undefined ? encryptField(fields.pronomen) : null,
+      fields.nscData !== undefined ? JSON.stringify(fields.nscData) : null,
     ]
   );
   if (rows.length === 0) return null;

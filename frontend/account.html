@@ -33,12 +33,20 @@
       <input id="pronomen" name="pronomen" type="text">
       <button type="submit">Speichern</button>
     </form>
+    <div id="nsc-section" style="display:none;">
+      <h2>NSC-Profil</h2>
+      <form id="nsc-form">
+        <div id="nsc-fields"></div>
+        <button type="submit">NSC-Profil speichern</button>
+      </form>
+    </div>
     <p id="message"></p>
   </div>
 </div>
 <script type="module">
 import { api } from '/js/api.js';
 import { renderNavLinks } from '/js/nav.js';
+import { renderField, collectFieldValues } from '/js/formFields.js';
 
 const form = document.getElementById('account-form');
 const message = document.getElementById('message');
@@ -59,6 +67,28 @@ async function loadAccount() {
       form.elements[field].value = account[field] ?? '';
     }
     formControls.forEach((el) => { el.disabled = false; });
+
+    if (account.group.key === 'nsc') {
+      const schemaRes = await api.get('/nsc-schema');
+      document.getElementById('nsc-fields').innerHTML = schemaRes
+        .map((field) => renderField(field, account.nscData?.[field.key]))
+        .join('');
+      document.getElementById('nsc-section').style.display = '';
+      document.getElementById('nsc-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        message.textContent = '';
+        message.className = '';
+        const nscData = collectFieldValues(document.getElementById('nsc-form'), schemaRes);
+        try {
+          await api.patch('/account', { nscData });
+          message.textContent = 'Gespeichert.';
+          message.className = 'success';
+        } catch (err) {
+          message.textContent = err.status === 400 && err.body?.details ? err.body.details.join(', ') : err.message;
+          message.className = 'error';
+        }
+      });
+    }
   } catch (err) {
     if (err.status === 401) {
       window.location.href = '/login.html';

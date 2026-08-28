@@ -27,7 +27,12 @@
 
     <div class="card form-pad" id="detail-card" style="display:none;">
       <h2 id="detail-title">Mitglied bearbeiten</h2>
+      <div id="detail-group-wrap" style="display:none;">
+        <label for="detail-group">Gruppe</label>
+        <select id="detail-group" name="group"></select>
+      </div>
       <div id="detail-fields"></div>
+      <div id="detail-characters"></div>
       <button type="button" id="detail-save">Speichern</button>
       <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
     </div>
@@ -68,10 +73,15 @@ const ACCOUNT_FIELD_LABELS = {
   pronomen: 'Pronomen',
 };
 
+const ALL_FIELD_KEYS = Object.keys(ACCOUNT_FIELD_LABELS);
+
 const listBody = document.querySelector('#member-list tbody');
 const detailCard = document.getElementById('detail-card');
 const detailFields = document.getElementById('detail-fields');
 const detailTitle = document.getElementById('detail-title');
+const detailGroupWrap = document.getElementById('detail-group-wrap');
+const detailGroupSelect = document.getElementById('detail-group');
+const detailCharacters = document.getElementById('detail-characters');
 const inviteFields = document.getElementById('invite-fields');
 const inviteGroupWrap = document.getElementById('invite-group-wrap');
 const inviteGroupSelect = document.getElementById('invite-group');
@@ -80,6 +90,8 @@ const message = document.getElementById('message');
 let myAccountFields = [];
 let editingMemberId = null;
 
+// Invite form: only ever shows/submits fields the caller is permitted to
+// set on a brand-new member.
 function buildFieldInputs(container, values = {}) {
   container.innerHTML = myAccountFields
     .filter((key) => key !== 'group')
@@ -89,9 +101,23 @@ function buildFieldInputs(container, values = {}) {
     `).join('');
 }
 
-async function loadGroupOptions() {
+// Member-detail view: GET /members/:id already returns every field's value
+// regardless of the viewer's own permissions (only PATCH enforces the
+// allowlist), so show every known field — editable when the caller may
+// change it, read-only text otherwise — instead of silently omitting it.
+function buildDetailFieldInputs(container, values = {}) {
+  container.innerHTML = ALL_FIELD_KEYS.map((key) => {
+    const label = ACCOUNT_FIELD_LABELS[key] ?? key;
+    if (myAccountFields.includes(key)) {
+      return `<label for="field-${key}">${escapeHtml(label)}</label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">`;
+    }
+    return `<label>${escapeHtml(label)}</label><p>${escapeHtml(values[key] ?? '–')}</p>`;
+  }).join('');
+}
+
+async function loadGroupOptions(selectEl) {
   const groups = await api.get('/groups');
-  inviteGroupSelect.innerHTML = groups.map((g) => `<option value="${escapeHtml(g.key)}">${escapeHtml(g.name)}</option>`).join('');
+  selectEl.innerHTML = groups.map((g) => `<option value="${escapeHtml(g.key)}">${escapeHtml(g.name)}</option>`).join('');
 }
 
 async function loadMembers() {
@@ -119,7 +145,27 @@ async function openDetail(memberId) {
   const member = await api.get(`/members/${memberId}`);
   editingMemberId = memberId;
   detailTitle.textContent = `Mitglied bearbeiten: ${member.name}`;
-  buildFieldInputs(detailFields, member);
+  buildDetailFieldInputs(detailFields, member);
+
+  const charList = (member.characters ?? []).map((c) => `<li>${escapeHtml(c.name)} (${escapeHtml(c.eventName)})</li>`).join('');
+  detailCharacters.innerHTML = member.characters?.length
+    ? `<h3>Charaktere</h3><ul>${charList}</ul>`
+    : '';
+
+  if (myAccountFields.includes('group')) {
+    detailGroupWrap.style.display = '';
+    try {
+      await loadGroupOptions(detailGroupSelect);
+      detailGroupSelect.value = member.group.key;
+    } catch (err) {
+      // Same reasoning as the invite form's group selector: a non-admin
+      // group with 'group' access can't reach the admin-only /groups
+      // endpoint, so the select just stays empty in that case.
+    }
+  } else {
+    detailGroupWrap.style.display = 'none';
+  }
+
   detailCard.style.display = '';
 }
 
@@ -135,6 +181,9 @@ document.getElementById('detail-save').addEventListener('click', async () => {
   detailFields.querySelectorAll('[data-field]').forEach((input) => {
     payload[input.dataset.field] = input.value;
   });
+  if (myAccountFields.includes('group') && detailGroupSelect.value) {
+    payload.group = detailGroupSelect.value;
+  }
   try {
     await api.patch(`/members/${editingMemberId}`, payload);
     message.textContent = 'Gespeichert.';
@@ -204,7 +253,7 @@ try {
     inviteGroupWrap.style.display = '';
     inviteGroupSelect.disabled = false;
     try {
-      await loadGroupOptions();
+      await loadGroupOptions(inviteGroupSelect);
     } catch (err) {
       // Non-admin groups with 'group' access can't list groups (admin-only
       // endpoint) — the invite form's group selector just stays empty in

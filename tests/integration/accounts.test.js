@@ -13,6 +13,9 @@ await runMigrations();
 const { seedGroups } = await import('../../db/seedGroups.js');
 await seedGroups();
 
+const { seedNscProfileSchema } = await import('../../db/seedNscProfileSchema.js');
+await seedNscProfileSchema();
+
 const { createServer } = await import('../../backend/server.js');
 await import('../../backend/auth/register.js');
 await import('../../backend/auth/login.js');
@@ -94,6 +97,41 @@ test('PATCH /account encrypts and returns sensitive fields; unspecified fields s
   assert.equal(secondPatched.medicalNotes, 'keine');
 
   server.close();
+});
+
+test('PATCH /account validates nscData against the current nsc_profile_schema', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await registerLoginAndGetCookie(port);
+    const res = await fetch(`http://localhost:${port}/account`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ nscData: { notARealField: 'x' } }),
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test('PATCH /account accepts and round-trips valid nscData', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await registerLoginAndGetCookie(port);
+    const res = await fetch(`http://localhost:${port}/account`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ nscData: { fuerOrgaanfragenOffen: true, darstellungsstaerken: 'Wachen, Händler' } }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.nscData.fuerOrgaanfragenOffen, true);
+    assert.equal(body.nscData.darstellungsstaerken, 'Wachen, Händler');
+  } finally {
+    server.close();
+  }
 });
 
 test.after(async () => {

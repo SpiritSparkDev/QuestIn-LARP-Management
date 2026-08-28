@@ -61,6 +61,46 @@ test('GET /members includes both active members and open invitations', async () 
   }
 });
 
+test('GET /members/:id returns every field regardless of the viewer\'s own permissions, plus the member\'s characters', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId } = await makeUserAndSession('sc');
+
+    await fetch(`http://localhost:${port}/members/${targetId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ medicalNotes: 'Testnotizen' }),
+    });
+
+    const { rows: eventRows } = await query(
+      "INSERT INTO events (name, event_date) VALUES ('Detail Test Event', '2026-01-01') RETURNING id"
+    );
+    await query(
+      "INSERT INTO characters (user_id, event_id, name) VALUES ($1, $2, 'Detail Test Char')",
+      [targetId, eventRows[0].id]
+    );
+
+    // orga has the 'mitglieder' menu (so it passes requireMenu and can
+    // reach GET /members/:id) but, per defaults, lacks 'group' in its
+    // account_fields — proving the response isn't filtered down to what
+    // the VIEWER may edit, only what PATCH would let them change.
+    const { cookie: orgaCookie } = await makeUserAndSession('orga');
+    const res = await fetch(`http://localhost:${port}/members/${targetId}`, { headers: { Cookie: orgaCookie } });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.medicalNotes, 'Testnotizen');
+    assert.equal(body.group.key, 'sc');
+    assert.equal(body.group.name, 'SC');
+    assert.ok(body.characters.some((c) => c.name === 'Detail Test Char' && c.eventName === 'Detail Test Event'));
+
+    await query('DELETE FROM events WHERE id = $1', [eventRows[0].id]);
+  } finally {
+    server.close();
+  }
+});
+
 test('PATCH /members/:id rejects a field the caller group is not permitted to edit', async () => {
   const server = createServer().listen(0);
   try {
