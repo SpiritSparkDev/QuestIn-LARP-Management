@@ -11,6 +11,8 @@ const { seedGroups } = await import('../../db/seedGroups.js');
 await seedGroups();
 
 const { query, closePool } = await import('../../backend/db.js');
+const { GROUP_DEFAULTS } = await import('../../db/groupDefaults.js');
+const SEEDED_GROUP_KEYS = GROUP_DEFAULTS.map((g) => g.key);
 
 test('users/sessions/tokens tables exist after migration', async () => {
   for (const table of ['users', 'sessions', 'email_verification_tokens', 'password_reset_tokens', 'groups', 'nsc_profile_schema']) {
@@ -40,7 +42,7 @@ test('admin and orga groups have pronomen in their account_fields after migratio
 });
 
 test('every group except nsc has "sc" in character_classes; nsc has "nsc" after migration', async () => {
-  const { rows } = await query('SELECT key, character_classes FROM groups');
+  const { rows } = await query('SELECT key, character_classes FROM groups WHERE key = ANY($1)', [SEEDED_GROUP_KEYS]);
   for (const row of rows) {
     if (row.key === 'nsc') {
       assert.ok(row.character_classes.includes('nsc'), 'nsc group should include nsc');
@@ -58,7 +60,7 @@ test('users.nsc_data column no longer exists after migration', async () => {
 });
 
 test('admin, orga, and sl groups have can_override_checkin_status=true after migration; others false', async () => {
-  const { rows } = await query('SELECT key, can_override_checkin_status FROM groups');
+  const { rows } = await query('SELECT key, can_override_checkin_status FROM groups WHERE key = ANY($1)', [SEEDED_GROUP_KEYS]);
   for (const row of rows) {
     const expected = ['admin', 'orga', 'sl'].includes(row.key);
     assert.equal(row.can_override_checkin_status, expected, `${row.key} should have can_override_checkin_status=${expected}`);

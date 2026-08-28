@@ -83,14 +83,15 @@ router.put('/events/:id/checkin/:userId', requireAuth(requireMenu('checkin')(asy
   }
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  if (!VALID_STATUSES.includes(body.status)) {
+  if (!VALID_STATUSES.includes(body.status) || !VALID_STATUSES.includes(body.previousStatus)) {
     return { status: 400, body: { error: `status must be one of: ${VALID_STATUSES.join(', ')}` } };
   }
   try {
-    const registration = await setStatus(params.id, params.userId, body.status);
+    const registration = await setStatus(params.id, params.userId, body.status, body.previousStatus);
     return { status: 200, body: registration };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
+    if (err.code === 'STATUS_CONFLICT') return { status: 409, body: { error: err.message } };
     throw err;
   }
 })));

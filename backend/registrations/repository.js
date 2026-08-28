@@ -134,27 +134,36 @@ export async function checkOut(eventId, userId) {
   return transitionStatus(eventId, userId, 'checkout');
 }
 
-export async function setStatus(eventId, userId, status) {
+export async function setStatus(eventId, userId, status, expectedStatus) {
   const { rows } = await query(
     `UPDATE registrations SET
-       status = $3,
+       status = $4,
        checked_in_at = CASE
-         WHEN $3 = 'registered' THEN NULL
+         WHEN $4 = 'registered' THEN NULL
          WHEN checked_in_at IS NULL THEN now()
          ELSE checked_in_at
        END,
        checked_out_at = CASE
-         WHEN $3 IN ('registered', 'checked_in') THEN NULL
+         WHEN $4 IN ('registered', 'checked_in') THEN NULL
          WHEN checked_out_at IS NULL THEN now()
          ELSE checked_out_at
        END
-     WHERE event_id = $1 AND user_id = $2
+     WHERE event_id = $1 AND user_id = $2 AND status = $3
      RETURNING user_id, event_id, status, checked_in_at, checked_out_at`,
-    [eventId, userId, status]
+    [eventId, userId, expectedStatus, status]
   );
   if (rows.length === 0) {
-    const err = new Error('registration not found');
-    err.code = 'REGISTRATION_NOT_FOUND';
+    const { rows: existing } = await query(
+      'SELECT status FROM registrations WHERE event_id = $1 AND user_id = $2',
+      [eventId, userId]
+    );
+    if (existing.length === 0) {
+      const err = new Error('registration not found');
+      err.code = 'REGISTRATION_NOT_FOUND';
+      throw err;
+    }
+    const err = new Error('status changed concurrently');
+    err.code = 'STATUS_CONFLICT';
     throw err;
   }
   return rows[0];

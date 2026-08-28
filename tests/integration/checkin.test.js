@@ -189,7 +189,7 @@ test('a user with canOverrideCheckinStatus can set a status directly, including 
 
   const toCheckedOut = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-    body: JSON.stringify({ status: 'checked_out' }),
+    body: JSON.stringify({ status: 'checked_out', previousStatus: 'registered' }),
   });
   assert.equal(toCheckedOut.status, 200);
   const checkedOutBody = await toCheckedOut.json();
@@ -199,7 +199,7 @@ test('a user with canOverrideCheckinStatus can set a status directly, including 
 
   const backToRegistered = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-    body: JSON.stringify({ status: 'registered' }),
+    body: JSON.stringify({ status: 'registered', previousStatus: 'checked_out' }),
   });
   assert.equal(backToRegistered.status, 200);
   const registeredBody = await backToRegistered.json();
@@ -231,7 +231,7 @@ test('overriding to checked_out preserves an already-set checked_in_at instead o
 
   const overrideRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-    body: JSON.stringify({ status: 'checked_out' }),
+    body: JSON.stringify({ status: 'checked_out', previousStatus: 'checked_in' }),
   });
   assert.equal(overrideRes.status, 200);
   const overrideBody = await overrideRes.json();
@@ -267,9 +267,29 @@ test('the override endpoint returns 404 for a user with no registration for the 
 
   const res = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${stranger.userId}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-    body: JSON.stringify({ status: 'checked_in' }),
+    body: JSON.stringify({ status: 'checked_in', previousStatus: 'registered' }),
   });
   assert.equal(res.status, 404);
+
+  server.close();
+});
+
+test('two concurrent overrides on the same registration with the same previousStatus: exactly one succeeds', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const admin = await makeUserAndSession('admin');
+  const attendee = await makeUserAndSession('sc');
+  const eventId = await makeEvent();
+  await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+
+  const doOverride = (status) => fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+    body: JSON.stringify({ status, previousStatus: 'registered' }),
+  });
+
+  const [resA, resB] = await Promise.all([doOverride('checked_in'), doOverride('checked_out')]);
+  const statuses = [resA.status, resB.status].sort();
+  assert.deepEqual(statuses, [200, 409]);
 
   server.close();
 });

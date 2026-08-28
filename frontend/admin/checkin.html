@@ -55,7 +55,7 @@ const STATUS_ORDER = ['registered', 'checked_in', 'checked_out'];
 function applySearchFilter() {
   const term = currentSearch.trim().toLowerCase();
   listBody.querySelectorAll('tr').forEach((row) => {
-    const text = row.textContent.toLowerCase();
+    const text = `${row.cells[0].textContent} ${row.cells[1].textContent}`.toLowerCase();
     row.style.display = !term || text.includes(term) ? '' : 'none';
   });
 }
@@ -63,7 +63,7 @@ function applySearchFilter() {
 function renderOverrideCell(p) {
   if (!canOverride) return '';
   const options = STATUS_ORDER.map((s) => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[s])}</option>`).join('');
-  return `<select data-override="${p.userId}" data-prev-status="${p.status}">${options}</select>`;
+  return `<select data-override="${escapeHtml(p.userId)}" data-prev-status="${escapeHtml(p.status)}" aria-label="Status-Override">${options}</select>`;
 }
 
 searchInput.addEventListener('input', () => {
@@ -122,7 +122,7 @@ async function overrideStatus(eventId, userId, newStatus, previousStatus) {
   message.textContent = '';
   message.className = '';
   try {
-    await api.put(`/events/${eventId}/checkin/${userId}`, { status: newStatus });
+    await api.put(`/events/${eventId}/checkin/${userId}`, { status: newStatus, previousStatus });
     await loadParticipants(eventId);
   } catch (err) {
     message.textContent = err.message;
