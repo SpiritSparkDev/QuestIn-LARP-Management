@@ -50,6 +50,13 @@ test('every group except nsc has "sc" in character_classes; nsc has "nsc" after 
   }
 });
 
+test('users.nsc_data column no longer exists after migration', async () => {
+  const { rows } = await query(
+    "SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'nsc_data'"
+  );
+  assert.equal(rows.length, 0);
+});
+
 test.after(async () => {
   await closePool();
 });
