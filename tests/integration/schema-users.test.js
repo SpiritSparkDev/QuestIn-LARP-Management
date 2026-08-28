@@ -39,6 +39,17 @@ test('admin and orga groups have pronomen in their account_fields after migratio
   }
 });
 
+test('every group except nsc has "sc" in character_classes; nsc has "nsc" after migration', async () => {
+  const { rows } = await query('SELECT key, character_classes FROM groups');
+  for (const row of rows) {
+    if (row.key === 'nsc') {
+      assert.ok(row.character_classes.includes('nsc'), 'nsc group should include nsc');
+    } else {
+      assert.ok(row.character_classes.includes('sc'), `${row.key} should include sc`);
+    }
+  }
+});
+
 test.after(async () => {
   await closePool();
 });

@@ -14,7 +14,7 @@ export function requireAuth(handler) {
     const { rows } = await query(
       `SELECT users.id, users.email, users.name,
               groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
-              groups.visible_menus, groups.account_fields, groups.can_edit_characters
+              groups.visible_menus, groups.account_fields, groups.can_edit_characters, groups.character_classes
        FROM users
        JOIN groups ON groups.id = users.group_id
        WHERE users.id = $1`,
@@ -34,6 +34,7 @@ export function requireAuth(handler) {
         visibleMenus: row.visible_menus,
         accountFields: row.account_fields,
         canEditCharacters: row.can_edit_characters,
+        characterClasses: row.character_classes,
       },
     };
 

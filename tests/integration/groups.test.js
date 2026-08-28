@@ -156,6 +156,52 @@ test('PUT /groups/:id rejects editing the protected admin group', async () => {
   }
 });
 
+test('POST /groups accepts and returns characterClasses; PUT /groups/:id updates them', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const admin = await makeUserAndSession('admin');
+
+    const createRes = await fetch(`http://localhost:${port}/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ key: `test_class_${crypto.randomUUID().slice(0, 8)}`, name: 'Class Test', characterClasses: ['sc'] }),
+    });
+    assert.equal(createRes.status, 201);
+    const created = await createRes.json();
+    assert.deepEqual(created.character_classes, ['sc']);
+
+    const updateRes = await fetch(`http://localhost:${port}/groups/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ characterClasses: ['sc', 'nsc'] }),
+    });
+    assert.equal(updateRes.status, 200);
+    const updated = await updateRes.json();
+    assert.deepEqual(updated.character_classes, ['sc', 'nsc']);
+
+    await query('DELETE FROM groups WHERE id = $1', [created.id]);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /groups rejects an invalid characterClasses value', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const admin = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ key: `test_bad_class_${crypto.randomUUID().slice(0, 8)}`, name: 'Bad Class Test', characterClasses: ['wizard'] }),
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM groups WHERE key ~ '^(custom|dup|editable)_[0-9]+$'");
   await closePool();

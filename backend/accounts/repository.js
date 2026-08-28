@@ -10,6 +10,7 @@ function decryptAccount(row) {
     menus: row.visible_menus,
     canEditCharacters: row.can_edit_characters,
     accountFields: row.account_fields,
+    characterClasses: row.character_classes,
     emailVerified: row.email_verified,
     address: decryptField(row.address_enc),
     birthdate: decryptField(row.birthdate_enc),
@@ -24,7 +25,7 @@ function decryptAccount(row) {
 const SELECT_COLUMNS = `
   users.id, users.email, users.name, users.email_verified,
   users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_enc, users.medical_notes_enc, users.pronomen_enc, users.nsc_data,
-  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields
+  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.character_classes
 `;
 
 const FROM_JOIN = `FROM users JOIN groups ON groups.id = users.group_id`;

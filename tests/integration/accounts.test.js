@@ -162,6 +162,19 @@ test('PATCH /account rejects nscData from a non-nsc group user', async () => {
   }
 });
 
+test('GET /account includes characterClasses from the caller\'s group', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await registerLoginAndGetCookie(port);
+    const res = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: cookie } });
+    const body = await res.json();
+    assert.deepEqual(body.characterClasses, ['sc']);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await closePool();
 });

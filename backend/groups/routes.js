@@ -6,6 +6,7 @@ import { listGroups, getGroup, createGroup, updateGroup } from './repository.js'
 import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
 
 const MENU_KEYS = ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'];
+const CHARACTER_CLASS_KEYS = ['sc', 'nsc'];
 const KEY_PATTERN = /^[a-z0-9_]+$/;
 
 function isValidMenuList(value) {
@@ -16,6 +17,10 @@ function isValidFieldList(value) {
   return Array.isArray(value) && value.every((v) => ACCOUNT_FIELD_KEYS.includes(v));
 }
 
+function isValidCharacterClassList(value) {
+  return Array.isArray(value) && value.every((v) => CHARACTER_CLASS_KEYS.includes(v));
+}
+
 router.get('/groups', requireAuth(requireAdminGroup(async () => {
   const groups = await listGroups();
   return { status: 200, body: groups };
@@ -24,7 +29,7 @@ router.get('/groups', requireAuth(requireAdminGroup(async () => {
 router.post('/groups', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { key, name, visibleMenus, accountFields, canEditCharacters } = body;
+  const { key, name, visibleMenus, accountFields, canEditCharacters, characterClasses } = body;
   if (!key || !KEY_PATTERN.test(key)) {
     return { status: 400, body: { error: 'key is required and must contain only lowercase letters, digits, and underscores' } };
   }
@@ -37,8 +42,11 @@ router.post('/groups', requireAuth(requireAdminGroup(async ({ req }) => {
   if (accountFields !== undefined && !isValidFieldList(accountFields)) {
     return { status: 400, body: { error: `accountFields must be an array containing only: ${ACCOUNT_FIELD_KEYS.join(', ')}` } };
   }
+  if (characterClasses !== undefined && !isValidCharacterClassList(characterClasses)) {
+    return { status: 400, body: { error: `characterClasses must be an array containing only: ${CHARACTER_CLASS_KEYS.join(', ')}` } };
+  }
   try {
-    const group = await createGroup({ key, name, visibleMenus, accountFields, canEditCharacters });
+    const group = await createGroup({ key, name, visibleMenus, accountFields, canEditCharacters, characterClasses });
     return { status: 201, body: group };
   } catch (err) {
     if (err.code === '23505') return { status: 409, body: { error: 'a group with this key already exists' } };
@@ -54,13 +62,16 @@ router.put('/groups/:id', requireAuth(requireAdminGroup(async ({ req, params }) 
   }
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { visibleMenus, accountFields } = body;
+  const { visibleMenus, accountFields, canEditCharacters, characterClasses } = body;
   if (visibleMenus !== undefined && !isValidMenuList(visibleMenus)) {
     return { status: 400, body: { error: `visibleMenus must be an array containing only: ${MENU_KEYS.join(', ')}` } };
   }
   if (accountFields !== undefined && !isValidFieldList(accountFields)) {
     return { status: 400, body: { error: `accountFields must be an array containing only: ${ACCOUNT_FIELD_KEYS.join(', ')}` } };
   }
-  const group = await updateGroup(params.id, body);
+  if (characterClasses !== undefined && !isValidCharacterClassList(characterClasses)) {
+    return { status: 400, body: { error: `characterClasses must be an array containing only: ${CHARACTER_CLASS_KEYS.join(', ')}` } };
+  }
+  const group = await updateGroup(params.id, { name: undefined, visibleMenus, accountFields, canEditCharacters, characterClasses });
   return { status: 200, body: group };
 })));
