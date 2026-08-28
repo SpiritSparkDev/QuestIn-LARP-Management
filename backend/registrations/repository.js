@@ -133,3 +133,29 @@ export async function checkIn(eventId, userId) {
 export async function checkOut(eventId, userId) {
   return transitionStatus(eventId, userId, 'checkout');
 }
+
+export async function setStatus(eventId, userId, status) {
+  const { rows } = await query(
+    `UPDATE registrations SET
+       status = $3,
+       checked_in_at = CASE
+         WHEN $3 = 'registered' THEN NULL
+         WHEN checked_in_at IS NULL THEN now()
+         ELSE checked_in_at
+       END,
+       checked_out_at = CASE
+         WHEN $3 IN ('registered', 'checked_in') THEN NULL
+         WHEN checked_out_at IS NULL THEN now()
+         ELSE checked_out_at
+       END
+     WHERE event_id = $1 AND user_id = $2
+     RETURNING user_id, event_id, status, checked_in_at, checked_out_at`,
+    [eventId, userId, status]
+  );
+  if (rows.length === 0) {
+    const err = new Error('registration not found');
+    err.code = 'REGISTRATION_NOT_FOUND';
+    throw err;
+  }
+  return rows[0];
+}

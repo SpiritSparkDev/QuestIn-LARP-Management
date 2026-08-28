@@ -10,6 +10,7 @@ import {
   listRegistrationsForUser,
   checkIn,
   checkOut,
+  setStatus,
 } from './repository.js';
 
 router.post('/events/:id/register', requireAuth(async ({ params, user }) => {
@@ -70,6 +71,26 @@ router.post('/events/:id/checkout', requireAuth(requireMenu('checkin')(async ({ 
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
     if (err.code === 'INVALID_TRANSITION') return { status: 409, body: { error: err.message } };
+    throw err;
+  }
+})));
+
+const VALID_STATUSES = ['registered', 'checked_in', 'checked_out'];
+
+router.put('/events/:id/checkin/:userId', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
+  if (!user.group.canOverrideCheckinStatus) {
+    return { status: 403, body: { error: 'forbidden' } };
+  }
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (!VALID_STATUSES.includes(body.status)) {
+    return { status: 400, body: { error: `status must be one of: ${VALID_STATUSES.join(', ')}` } };
+  }
+  try {
+    const registration = await setStatus(params.id, params.userId, body.status);
+    return { status: 200, body: registration };
+  } catch (err) {
+    if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
     throw err;
   }
 })));
