@@ -231,6 +231,35 @@ test('POST /groups rejects an invalid characterClasses value', async () => {
   }
 });
 
+test('POST /groups accepts and returns canOverrideCheckinStatus; PUT /groups/:id updates it', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const admin = await makeUserAndSession('admin');
+
+    const createRes = await fetch(`http://localhost:${port}/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ key: `test_override_${crypto.randomUUID().slice(0, 8)}`, name: 'Override Test', canOverrideCheckinStatus: true }),
+    });
+    assert.equal(createRes.status, 201);
+    const created = await createRes.json();
+    assert.equal(created.can_override_checkin_status, true);
+
+    const updateRes = await fetch(`http://localhost:${port}/groups/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ canOverrideCheckinStatus: false }),
+    });
+    assert.equal(updateRes.status, 200);
+    assert.equal((await updateRes.json()).can_override_checkin_status, false);
+
+    await query('DELETE FROM groups WHERE id = $1', [created.id]);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM groups WHERE key ~ '^(custom|dup|editable|renamed)_[0-9]+$'");
   await closePool();

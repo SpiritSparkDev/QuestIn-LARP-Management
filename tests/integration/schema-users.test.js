@@ -57,6 +57,14 @@ test('users.nsc_data column no longer exists after migration', async () => {
   assert.equal(rows.length, 0);
 });
 
+test('admin, orga, and sl groups have can_override_checkin_status=true after migration; others false', async () => {
+  const { rows } = await query('SELECT key, can_override_checkin_status FROM groups');
+  for (const row of rows) {
+    const expected = ['admin', 'orga', 'sl'].includes(row.key);
+    assert.equal(row.can_override_checkin_status, expected, `${row.key} should have can_override_checkin_status=${expected}`);
+  }
+});
+
 test.after(async () => {
   await closePool();
 });

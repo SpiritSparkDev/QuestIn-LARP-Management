@@ -29,7 +29,7 @@ router.get('/groups', requireAuth(requireAdminGroup(async () => {
 router.post('/groups', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { key, name, visibleMenus, accountFields, canEditCharacters, characterClasses } = body;
+  const { key, name, visibleMenus, accountFields, canEditCharacters, characterClasses, canOverrideCheckinStatus } = body;
   if (!key || !KEY_PATTERN.test(key)) {
     return { status: 400, body: { error: 'key is required and must contain only lowercase letters, digits, and underscores' } };
   }
@@ -46,7 +46,7 @@ router.post('/groups', requireAuth(requireAdminGroup(async ({ req }) => {
     return { status: 400, body: { error: `characterClasses must be an array containing only: ${CHARACTER_CLASS_KEYS.join(', ')}` } };
   }
   try {
-    const group = await createGroup({ key, name, visibleMenus, accountFields, canEditCharacters, characterClasses });
+    const group = await createGroup({ key, name, visibleMenus, accountFields, canEditCharacters, characterClasses, canOverrideCheckinStatus });
     return { status: 201, body: group };
   } catch (err) {
     if (err.code === '23505') return { status: 409, body: { error: 'a group with this key already exists' } };
@@ -62,7 +62,7 @@ router.put('/groups/:id', requireAuth(requireAdminGroup(async ({ req, params }) 
   }
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, visibleMenus, accountFields, canEditCharacters, characterClasses } = body;
+  const { name, visibleMenus, accountFields, canEditCharacters, characterClasses, canOverrideCheckinStatus } = body;
   if (visibleMenus !== undefined && !isValidMenuList(visibleMenus)) {
     return { status: 400, body: { error: `visibleMenus must be an array containing only: ${MENU_KEYS.join(', ')}` } };
   }
@@ -72,6 +72,6 @@ router.put('/groups/:id', requireAuth(requireAdminGroup(async ({ req, params }) 
   if (characterClasses !== undefined && !isValidCharacterClassList(characterClasses)) {
     return { status: 400, body: { error: `characterClasses must be an array containing only: ${CHARACTER_CLASS_KEYS.join(', ')}` } };
   }
-  const group = await updateGroup(params.id, { name, visibleMenus, accountFields, canEditCharacters, characterClasses });
+  const group = await updateGroup(params.id, { name, visibleMenus, accountFields, canEditCharacters, characterClasses, canOverrideCheckinStatus });
   return { status: 200, body: group };
 })));

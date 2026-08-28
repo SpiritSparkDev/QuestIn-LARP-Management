@@ -67,6 +67,10 @@
         </div>
 
         <div class="checkbox-group">
+          <label><input type="checkbox" id="can-override-checkin-status"> Darf Check-In-Status frei setzen (Admin/Orga/SL-Funktion)</label>
+        </div>
+
+        <div class="checkbox-group">
           <label><input type="checkbox" id="can-edit-characters"> Darf Charaktere anderer Mitglieder bearbeiten</label>
         </div>
 
@@ -133,6 +137,7 @@ function startEdit(group) {
   setCheckedValues('field-checkboxes', group.account_fields);
   setCheckedValues('class-checkboxes', group.character_classes);
   document.getElementById('can-edit-characters').checked = group.can_edit_characters;
+  document.getElementById('can-override-checkin-status').checked = group.can_override_checkin_status;
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
   cancelButton.style.display = '';
 }
@@ -158,6 +163,7 @@ form.addEventListener('submit', async (event) => {
     accountFields: getCheckedValues('field-checkboxes'),
     characterClasses: getCheckedValues('class-checkboxes'),
     canEditCharacters: document.getElementById('can-edit-characters').checked,
+    canOverrideCheckinStatus: document.getElementById('can-override-checkin-status').checked,
   };
   try {
     if (editingGroupId) {

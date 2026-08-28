@@ -131,6 +131,19 @@ test('GET /account includes characterClasses from the caller\'s group', async ()
   }
 });
 
+test('GET /account includes canOverrideCheckinStatus from the caller\'s group', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await registerLoginAndGetCookie(port);
+    const res = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: cookie } });
+    const body = await res.json();
+    assert.equal(body.canOverrideCheckinStatus, false);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await closePool();
 });
