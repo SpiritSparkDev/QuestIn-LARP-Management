@@ -62,7 +62,7 @@ router.put('/groups/:id', requireAuth(requireAdminGroup(async ({ req, params }) 
   }
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { visibleMenus, accountFields, canEditCharacters, characterClasses } = body;
+  const { name, visibleMenus, accountFields, canEditCharacters, characterClasses } = body;
   if (visibleMenus !== undefined && !isValidMenuList(visibleMenus)) {
     return { status: 400, body: { error: `visibleMenus must be an array containing only: ${MENU_KEYS.join(', ')}` } };
   }
@@ -72,6 +72,6 @@ router.put('/groups/:id', requireAuth(requireAdminGroup(async ({ req, params }) 
   if (characterClasses !== undefined && !isValidCharacterClassList(characterClasses)) {
     return { status: 400, body: { error: `characterClasses must be an array containing only: ${CHARACTER_CLASS_KEYS.join(', ')}` } };
   }
-  const group = await updateGroup(params.id, { name: undefined, visibleMenus, accountFields, canEditCharacters, characterClasses });
+  const group = await updateGroup(params.id, { name, visibleMenus, accountFields, canEditCharacters, characterClasses });
   return { status: 200, body: group };
 })));

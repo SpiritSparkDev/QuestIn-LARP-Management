@@ -139,6 +139,35 @@ test('PUT /groups/:id updates a non-protected group', async () => {
   }
 });
 
+test('PUT /groups/:id updates the group name', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const createRes = await fetch(`http://localhost:${port}/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ key: `renamed_${Date.now()}`, name: 'Before Rename' }),
+    });
+    const created = await createRes.json();
+    const putRes = await fetch(`http://localhost:${port}/groups/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ name: 'After Rename' }),
+    });
+    assert.equal(putRes.status, 200);
+    const updated = await putRes.json();
+    assert.equal(updated.name, 'After Rename');
+
+    const listRes = await fetch(`http://localhost:${port}/groups`, { headers: { Cookie: cookie } });
+    const groups = await listRes.json();
+    const found = groups.find((g) => g.id === created.id);
+    assert.equal(found.name, 'After Rename');
+  } finally {
+    server.close();
+  }
+});
+
 test('PUT /groups/:id rejects editing the protected admin group', async () => {
   const server = createServer().listen(0);
   try {
@@ -203,6 +232,6 @@ test('POST /groups rejects an invalid characterClasses value', async () => {
 });
 
 test.after(async () => {
-  await query("DELETE FROM groups WHERE key ~ '^(custom|dup|editable)_[0-9]+$'");
+  await query("DELETE FROM groups WHERE key ~ '^(custom|dup|editable|renamed)_[0-9]+$'");
   await closePool();
 });

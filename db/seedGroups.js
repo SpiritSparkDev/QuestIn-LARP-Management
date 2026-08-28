@@ -16,8 +16,8 @@ const ROLE_TO_GROUP_KEY = { admin: 'admin', checkin_helper: 'sl', participant: '
 export async function seedGroups() {
   for (const group of GROUP_DEFAULTS) {
     await query(
-      `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, is_protected)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, character_classes, is_protected)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (key) DO NOTHING`,
       [
         group.key,
@@ -25,6 +25,7 @@ export async function seedGroups() {
         JSON.stringify(group.visibleMenus),
         JSON.stringify(group.accountFields),
         group.canEditCharacters,
+        JSON.stringify(group.characterClasses),
         group.isProtected,
       ]
     );
