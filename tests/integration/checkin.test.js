@@ -163,8 +163,10 @@ test('two concurrent check-ins for the same attendee: exactly one succeeds', asy
 test('a user without canOverrideCheckinStatus cannot use the override endpoint', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
-  const helper = await makeUserAndSession('sl');
-  const stranger = await makeUserAndSession('sc');
+  // hilfs_sl has 'checkin' in visibleMenus (so the request reaches the handler)
+  // but canOverrideCheckinStatus: false (so this test proves the override check
+  // itself rejects it, not the pre-existing requireMenu('checkin') gate).
+  const stranger = await makeUserAndSession('hilfs_sl');
   const eventId = await makeEvent();
   await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [stranger.userId, eventId]);
 
@@ -204,6 +206,37 @@ test('a user with canOverrideCheckinStatus can set a status directly, including 
   assert.equal(registeredBody.status, 'registered');
   assert.equal(registeredBody.checked_in_at, null);
   assert.equal(registeredBody.checked_out_at, null);
+
+  server.close();
+});
+
+test('overriding to checked_out preserves an already-set checked_in_at instead of overwriting it', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const helper = await makeUserAndSession('sl');
+  const admin = await makeUserAndSession('admin');
+  const attendee = await makeUserAndSession('sc');
+  const eventId = await makeEvent();
+  await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+
+  const checkinRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
+    body: JSON.stringify({ userId: attendee.userId }),
+  });
+  assert.equal(checkinRes.status, 200);
+  const { checked_in_at: originalCheckedInAt } = await checkinRes.json();
+  assert.ok(originalCheckedInAt);
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const overrideRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+    body: JSON.stringify({ status: 'checked_out' }),
+  });
+  assert.equal(overrideRes.status, 200);
+  const overrideBody = await overrideRes.json();
+  assert.equal(overrideBody.status, 'checked_out');
+  assert.equal(overrideBody.checked_in_at, originalCheckedInAt, 'checked_in_at set by the normal flow must survive the override');
 
   server.close();
 });
