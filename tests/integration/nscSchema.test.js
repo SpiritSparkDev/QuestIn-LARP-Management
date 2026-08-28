@@ -78,25 +78,28 @@ test('PUT /nsc-schema updates the schema for an admin caller', async () => {
     const { port } = server.address();
     const { cookie } = await makeUserAndSession('admin');
     const newSchema = [{ key: 'test', label: 'Test', type: 'text' }];
-    const putRes = await fetch(`http://localhost:${port}/nsc-schema`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ schema: newSchema }),
-    });
-    assert.equal(putRes.status, 200);
+    try {
+      const putRes = await fetch(`http://localhost:${port}/nsc-schema`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ schema: newSchema }),
+      });
+      assert.equal(putRes.status, 200);
 
-    const getRes = await fetch(`http://localhost:${port}/nsc-schema`, { headers: { Cookie: cookie } });
-    const schema = await getRes.json();
-    assert.deepEqual(schema, newSchema);
-
-    // Restore the real defaults so later tests/manual verification in this
-    // shared DB aren't left with a one-field test schema.
-    const { NSC_PROFILE_SCHEMA_DEFAULTS } = await import('../../config/nscProfileDefaults.js');
-    await fetch(`http://localhost:${port}/nsc-schema`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ schema: NSC_PROFILE_SCHEMA_DEFAULTS }),
-    });
+      const getRes = await fetch(`http://localhost:${port}/nsc-schema`, { headers: { Cookie: cookie } });
+      const schema = await getRes.json();
+      assert.deepEqual(schema, newSchema);
+    } finally {
+      // Restore the real defaults so later tests/manual verification in this
+      // shared DB aren't left with a one-field test schema, even if an
+      // assertion above threw.
+      const { NSC_PROFILE_SCHEMA_DEFAULTS } = await import('../../config/nscProfileDefaults.js');
+      await fetch(`http://localhost:${port}/nsc-schema`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ schema: NSC_PROFILE_SCHEMA_DEFAULTS }),
+      });
+    }
   } finally {
     server.close();
   }

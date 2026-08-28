@@ -69,6 +69,9 @@ function addSchemaRow(field = { key: '', label: '', type: 'text', required: fals
       <option value="text" ${field.type === 'text' ? 'selected' : ''}>Text</option>
       <option value="textarea" ${field.type === 'textarea' ? 'selected' : ''}>Textarea</option>
       <option value="select" ${field.type === 'select' ? 'selected' : ''}>Auswahl</option>
+      <option value="number" ${field.type === 'number' ? 'selected' : ''}>Zahl</option>
+      <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>Ja/Nein</option>
+      <option value="multiselect" ${field.type === 'multiselect' ? 'selected' : ''}>Mehrfachauswahl</option>
     </select>
     <input type="text" placeholder="Optionen (kommagetrennt, nur bei Auswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
     <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
@@ -94,7 +97,7 @@ function collectSchema() {
       type,
       required: row.querySelector('.schema-required').checked,
     };
-    if (type === 'select') {
+    if (type === 'select' || type === 'multiselect') {
       field.options = row.querySelector('.schema-options').value
         .split(',')
         .map((opt) => opt.trim())

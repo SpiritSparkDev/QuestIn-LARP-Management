@@ -15,6 +15,9 @@ router.patch('/account', requireAuth(async ({ req, user }) => {
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
 
   if (body.nscData !== undefined) {
+    if (user.group.key !== 'nsc') {
+      return { status: 403, body: { error: 'forbidden' } };
+    }
     const { rows } = await query('SELECT schema FROM nsc_profile_schema LIMIT 1');
     const schema = rows[0]?.schema ?? [];
     const errors = validateCharacterData(schema, body.nscData);

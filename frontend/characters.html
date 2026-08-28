@@ -151,12 +151,26 @@ copyFromSelect.addEventListener('change', () => {
   renderSchemaFields(targetEvent ? targetEvent.character_form_schema : [], source.data);
 });
 
+function tagValueForField(field, rawValue) {
+  if (field.type === 'multiselect') {
+    return Array.isArray(rawValue) && rawValue.length > 0 ? rawValue.join(', ') : undefined;
+  }
+  if (field.type === 'boolean') {
+    return rawValue ? 'Ja' : undefined;
+  }
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return undefined;
+  }
+  return rawValue;
+}
+
 function tagsForCharacter(c) {
   const event = events.find((e) => e.id === c.event_id);
   const schema = event ? event.character_form_schema : [];
   return schema
-    .filter((field) => c.data[field.key] !== undefined && c.data[field.key] !== null && c.data[field.key] !== '')
-    .map((field) => `<span class="tag">${escapeHtml(field.label)}: ${escapeHtml(c.data[field.key])}</span>`)
+    .map((field) => ({ field, value: tagValueForField(field, c.data[field.key]) }))
+    .filter(({ value }) => value !== undefined)
+    .map(({ field, value }) => `<span class="tag">${escapeHtml(field.label)}: ${escapeHtml(value)}</span>`)
     .join('');
 }
 

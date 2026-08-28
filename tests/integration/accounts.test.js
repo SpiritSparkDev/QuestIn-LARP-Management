@@ -41,6 +41,16 @@ async function registerLoginAndGetCookie(port) {
   return { userId: id, cookie: loginRes.headers.get('set-cookie').split(';')[0] };
 }
 
+async function makeUserAndSession(groupKey) {
+  const { createSession } = await import('../../backend/auth/sessions.js');
+  const { rows } = await query(
+    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Account Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    [`account-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
+  );
+  const session = await createSession(rows[0].id);
+  return { userId: rows[0].id, cookie: `session=${session.token}` };
+}
+
 test('GET /account requires authentication', async () => {
   const server = createServer().listen(0);
   const { port } = server.address();
@@ -103,7 +113,7 @@ test('PATCH /account validates nscData against the current nsc_profile_schema', 
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    const { cookie } = await registerLoginAndGetCookie(port);
+    const { cookie } = await makeUserAndSession('nsc');
     const res = await fetch(`http://localhost:${port}/account`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -119,7 +129,7 @@ test('PATCH /account accepts and round-trips valid nscData', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    const { cookie } = await registerLoginAndGetCookie(port);
+    const { cookie } = await makeUserAndSession('nsc');
     const res = await fetch(`http://localhost:${port}/account`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -129,6 +139,24 @@ test('PATCH /account accepts and round-trips valid nscData', async () => {
     const body = await res.json();
     assert.equal(body.nscData.fuerOrgaanfragenOffen, true);
     assert.equal(body.nscData.darstellungsstaerken, 'Wachen, Händler');
+  } finally {
+    server.close();
+  }
+});
+
+test('PATCH /account rejects nscData from a non-nsc group user', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await registerLoginAndGetCookie(port); // default group: sc
+    const res = await fetch(`http://localhost:${port}/account`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ nscData: { fuerOrgaanfragenOffen: true } }),
+    });
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert.equal(body.error, 'forbidden');
   } finally {
     server.close();
   }

@@ -1,5 +1,6 @@
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
+import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { query } from '../db.js';
 
@@ -17,10 +18,7 @@ router.get('/nsc-schema', requireAuth(async ({ user }) => {
   return { status: 200, body: rows[0]?.schema ?? [] };
 }));
 
-router.put('/nsc-schema', requireAuth(async ({ req, user }) => {
-  if (user.group.key !== 'admin') {
-    return { status: 403, body: { error: 'forbidden' } };
-  }
+router.put('/nsc-schema', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { schema } = body;
@@ -34,4 +32,4 @@ router.put('/nsc-schema', requireAuth(async ({ req, user }) => {
     await query('UPDATE nsc_profile_schema SET schema = $1 WHERE id = $2', [JSON.stringify(schema), rows[0].id]);
   }
   return { status: 200, body: schema };
-}));
+})));
