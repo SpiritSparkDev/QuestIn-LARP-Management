@@ -13,6 +13,9 @@ await runMigrations();
 const { seedGroups } = await import('../../db/seedGroups.js');
 await seedGroups();
 
+const { seedNscProfileSchema } = await import('../../db/seedNscProfileSchema.js');
+await seedNscProfileSchema();
+
 const { createServer } = await import('../../backend/server.js');
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
@@ -197,6 +200,113 @@ test('an sl-group user cannot create a character for an inactive event', async (
     body: JSON.stringify({ eventId: inactiveEventId, name: 'Blocked', data: {} }),
   });
   assert.equal(asSl.status, 403);
+
+  server.close();
+});
+
+test('creating an nsc-class character validates against the current nsc_profile_schema, not an event', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const nscUser = await makeUserAndSession('nsc');
+
+  const missingRequired = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+    body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: { rollenAusruestung: ['NichtErlaubt'] } }),
+  });
+  assert.equal(missingRequired.status, 400);
+
+  const ok = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+    body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: {} }),
+  });
+  assert.equal(ok.status, 201);
+  const created = await ok.json();
+  assert.equal(created.class, 'nsc');
+  assert.equal(created.event_id, null);
+
+  server.close();
+});
+
+test('an nsc-class character request with an eventId is rejected', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const nscUser = await makeUserAndSession('nsc');
+  const eventId = await makeEvent([]);
+
+  const res = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+    body: JSON.stringify({ class: 'nsc', eventId, name: 'Invalid', data: {} }),
+  });
+  assert.equal(res.status, 400);
+
+  server.close();
+});
+
+test('a group without nsc character-class access cannot create an nsc-class character', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const scUser = await makeUserAndSession('sc');
+
+  const res = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: scUser.cookie },
+    body: JSON.stringify({ class: 'nsc', name: 'Not Allowed', data: {} }),
+  });
+  assert.equal(res.status, 403);
+
+  server.close();
+});
+
+test('a user can create multiple sc-class characters for the same event (Ersatzcharaktere)', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const participant = await makeUserAndSession();
+  const eventId = await makeEvent([]);
+
+  const first = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+    body: JSON.stringify({ eventId, name: 'Hauptcharakter', data: {} }),
+  });
+  assert.equal(first.status, 201);
+
+  const second = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+    body: JSON.stringify({ eventId, name: 'Ersatzcharakter', data: {} }),
+  });
+  assert.equal(second.status, 201);
+
+  const list = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: participant.cookie } })).json();
+  assert.equal(list.filter((c) => c.event_id === eventId).length, 2);
+
+  server.close();
+});
+
+test('PUT on an nsc-class character validates against the current nsc_profile_schema', async () => {
+  const server = createServer().listen(0);
+  const { port } = server.address();
+  const nscUser = await makeUserAndSession('nsc');
+
+  const createRes = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+    body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: {} }),
+  });
+  const { id } = await createRes.json();
+
+  const invalidPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+    body: JSON.stringify({ data: { rollenAusruestung: ['NichtErlaubt'] } }),
+  });
+  assert.equal(invalidPut.status, 400);
+
+  const validPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+    body: JSON.stringify({ name: 'Wache Zwei' }),
+  });
+  assert.equal(validPut.status, 200);
+  assert.equal((await validPut.json()).name, 'Wache Zwei');
 
   server.close();
 });

@@ -7,19 +7,32 @@ import { createCharacter, getCharacter, listCharactersForUser, updateCharacter }
 router.post('/characters', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { eventId, name, data } = body;
-  if (!eventId || !name) {
-    return { status: 400, body: { error: 'eventId and name are required' } };
+  const { class: characterClass = 'sc', eventId, name, data } = body;
+  if (characterClass !== 'sc' && characterClass !== 'nsc') {
+    return { status: 400, body: { error: 'class must be "sc" or "nsc"' } };
   }
-  if (!user.group.canEditCharacters) {
-    const event = await getEvent(eventId);
-    if (!event) return { status: 404, body: { error: 'event not found' } };
-    if (!event.is_active) {
-      return { status: 403, body: { error: 'characters can only be created for the currently active event' } };
+  if (!name) {
+    return { status: 400, body: { error: 'name is required' } };
+  }
+  if (!user.group.characterClasses.includes(characterClass)) {
+    return { status: 403, body: { error: 'forbidden' } };
+  }
+
+  if (characterClass === 'sc') {
+    if (!eventId) return { status: 400, body: { error: 'eventId is required' } };
+    if (!user.group.canEditCharacters) {
+      const event = await getEvent(eventId);
+      if (!event) return { status: 404, body: { error: 'event not found' } };
+      if (!event.is_active) {
+        return { status: 403, body: { error: 'characters can only be created for the currently active event' } };
+      }
     }
+  } else if (eventId) {
+    return { status: 400, body: { error: 'eventId must not be set for nsc-class characters' } };
   }
+
   try {
-    const character = await createCharacter(user.id, { eventId, name, data });
+    const character = await createCharacter(user.id, { characterClass, eventId, name, data });
     return { status: 201, body: character };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
