@@ -18,6 +18,9 @@ await import('../../backend/auth/register.js');
 await import('../../backend/auth/login.js');
 const { query, closePool } = await import('../../backend/db.js');
 const { SESSION_COOKIE_NAME } = await import('../../backend/auth/cookies.js');
+const { resetRateLimits } = await import('../../backend/middleware/rateLimit.js');
+
+test.beforeEach(resetRateLimits);
 
 async function registerAndVerify(port, email, password) {
   const registerRes = await fetch(`http://localhost:${port}/auth/register`, {

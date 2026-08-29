@@ -19,6 +19,9 @@ await import('../../backend/auth/login.js');
 await import('../../backend/auth/passwordReset.js');
 await import('../../backend/accounts/routes.js');
 const { query, closePool } = await import('../../backend/db.js');
+const { resetRateLimits } = await import('../../backend/middleware/rateLimit.js');
+
+test.beforeEach(resetRateLimits);
 
 async function registerAndVerify(port, email, password) {
   const registerRes = await fetch(`http://localhost:${port}/auth/register`, {
@@ -138,16 +141,20 @@ test('POST /auth/password-reset/request is rate-limited per IP after 10 attempts
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    let lastStatus;
+    let lastRes;
     for (let i = 0; i < 11; i++) {
-      const res = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
+      lastRes = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: 'nobody@example.com' }),
       });
-      lastStatus = res.status;
+      if (i < 10) {
+        assert.notEqual(lastRes.status, 429, `attempt ${i + 1} should not be rate-limited`);
+      }
     }
-    assert.equal(lastStatus, 429);
+    assert.equal(lastRes.status, 429);
+    const body = await lastRes.json();
+    assert.equal(body.error, 'too many requests, please try again later');
   } finally {
     server.close();
   }

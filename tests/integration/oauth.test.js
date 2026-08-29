@@ -20,6 +20,9 @@ const { createServer } = await import('../../backend/server.js');
 const { findOrCreateOAuthUser } = await import('../../backend/auth/oauth.js');
 const { PROVIDERS } = await import('../../backend/auth/oauthProviders.js');
 const { query, closePool } = await import('../../backend/db.js');
+const { resetRateLimits } = await import('../../backend/middleware/rateLimit.js');
+
+test.beforeEach(resetRateLimits);
 
 test('GET /auth/oauth/google/start redirects to Google with a state cookie', async () => {
   const server = createServer().listen(0);
@@ -212,12 +215,16 @@ test('GET /auth/oauth/:provider/start is rate-limited per IP after 10 attempts i
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    let lastStatus;
+    let lastRes;
     for (let i = 0; i < 11; i++) {
-      const res = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
-      lastStatus = res.status;
+      lastRes = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
+      if (i < 10) {
+        assert.notEqual(lastRes.status, 429, `attempt ${i + 1} should not be rate-limited`);
+      }
     }
-    assert.equal(lastStatus, 429);
+    assert.equal(lastRes.status, 429);
+    const body = await lastRes.json();
+    assert.equal(body.error, 'too many requests, please try again later');
   } finally {
     server.close();
   }
