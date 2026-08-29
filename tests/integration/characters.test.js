@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { withTestServer } from '../testServer.js';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   || 'postgres://app:app@localhost:5433/pakyrion_test';
@@ -16,7 +17,6 @@ await seedGroups();
 const { seedNscProfileSchema } = await import('../../db/seedNscProfileSchema.js');
 await seedNscProfileSchema();
 
-const { createServer } = await import('../../backend/server.js');
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
@@ -39,276 +39,254 @@ async function makeEvent(schema = [{ key: 'fraction', label: 'Fraktion', type: '
 }
 
 test('creating a character validates against the event schema', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const participant = await makeUserAndSession();
-  const eventId = await makeEvent();
+  await withTestServer(async (port) => {
+    const participant = await makeUserAndSession();
+    const eventId = await makeEvent();
 
-  const missingRequired = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-    body: JSON.stringify({ eventId, name: 'Aldric', data: {} }),
+    const missingRequired = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ eventId, name: 'Aldric', data: {} }),
+    });
+    assert.equal(missingRequired.status, 400);
+
+    const ok = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ eventId, name: 'Aldric', data: { fraction: 'Nordmark' } }),
+    });
+    assert.equal(ok.status, 201);
+    const created = await ok.json();
+    assert.equal(created.name, 'Aldric');
+
+    const unknownEvent = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ eventId: crypto.randomUUID(), name: 'Ghost', data: {} }),
+    });
+    assert.equal(unknownEvent.status, 404);
   });
-  assert.equal(missingRequired.status, 400);
-
-  const ok = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-    body: JSON.stringify({ eventId, name: 'Aldric', data: { fraction: 'Nordmark' } }),
-  });
-  assert.equal(ok.status, 201);
-  const created = await ok.json();
-  assert.equal(created.name, 'Aldric');
-
-  const unknownEvent = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-    body: JSON.stringify({ eventId: crypto.randomUUID(), name: 'Ghost', data: {} }),
-  });
-  assert.equal(unknownEvent.status, 404);
-
-  server.close();
 });
 
 test('a participant only sees their own characters in the list', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const alice = await makeUserAndSession();
-  const bob = await makeUserAndSession();
-  const eventId = await makeEvent([]);
+  await withTestServer(async (port) => {
+    const alice = await makeUserAndSession();
+    const bob = await makeUserAndSession();
+    const eventId = await makeEvent([]);
 
-  await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: alice.cookie },
-    body: JSON.stringify({ eventId, name: 'Alice Char', data: {} }),
+    await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: alice.cookie },
+      body: JSON.stringify({ eventId, name: 'Alice Char', data: {} }),
+    });
+    await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: bob.cookie },
+      body: JSON.stringify({ eventId, name: 'Bob Char', data: {} }),
+    });
+
+    const aliceList = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: alice.cookie } })).json();
+    assert.ok(aliceList.every((c) => c.name !== 'Bob Char'));
+    assert.ok(aliceList.some((c) => c.name === 'Alice Char'));
   });
-  await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: bob.cookie },
-    body: JSON.stringify({ eventId, name: 'Bob Char', data: {} }),
-  });
-
-  const aliceList = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: alice.cookie } })).json();
-  assert.ok(aliceList.every((c) => c.name !== 'Bob Char'));
-  assert.ok(aliceList.some((c) => c.name === 'Alice Char'));
-
-  server.close();
 });
 
 test('a participant cannot view or edit another participant\'s character; an admin can view but not edit it', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const owner = await makeUserAndSession();
-  const stranger = await makeUserAndSession();
-  const admin = await makeUserAndSession('admin');
-  const eventId = await makeEvent([]);
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    const stranger = await makeUserAndSession();
+    const admin = await makeUserAndSession('admin');
+    const eventId = await makeEvent([]);
 
-  const createRes = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-    body: JSON.stringify({ eventId, name: 'Owned', data: {} }),
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ eventId, name: 'Owned', data: {} }),
+    });
+    const { id } = await createRes.json();
+
+    const strangerGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: stranger.cookie } });
+    assert.equal(strangerGet.status, 403);
+
+    const adminGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: admin.cookie } });
+    assert.equal(adminGet.status, 200);
+
+    const strangerPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: stranger.cookie },
+      body: JSON.stringify({ name: 'Hijacked' }),
+    });
+    assert.equal(strangerPut.status, 403);
+
+    const adminPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Hijacked' }),
+    });
+    assert.equal(adminPut.status, 403);
+
+    const ownerPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ name: 'Renamed' }),
+    });
+    assert.equal(ownerPut.status, 200);
+    assert.equal((await ownerPut.json()).name, 'Renamed');
   });
-  const { id } = await createRes.json();
-
-  const strangerGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: stranger.cookie } });
-  assert.equal(strangerGet.status, 403);
-
-  const adminGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: admin.cookie } });
-  assert.equal(adminGet.status, 200);
-
-  const strangerPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: stranger.cookie },
-    body: JSON.stringify({ name: 'Hijacked' }),
-  });
-  assert.equal(strangerPut.status, 403);
-
-  const adminPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-    body: JSON.stringify({ name: 'Hijacked' }),
-  });
-  assert.equal(adminPut.status, 403);
-
-  const ownerPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-    body: JSON.stringify({ name: 'Renamed' }),
-  });
-  assert.equal(ownerPut.status, 200);
-  assert.equal((await ownerPut.json()).name, 'Renamed');
-
-  server.close();
 });
 
 test('PUT /characters/:id validates data against the event schema', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const owner = await makeUserAndSession();
-  const eventId = await makeEvent();
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    const eventId = await makeEvent();
 
-  const createRes = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-    body: JSON.stringify({ eventId, name: 'Aldric', data: { fraction: 'Nordmark' } }),
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ eventId, name: 'Aldric', data: { fraction: 'Nordmark' } }),
+    });
+    const { id } = await createRes.json();
+
+    const invalidPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ data: {} }),
+    });
+    assert.equal(invalidPut.status, 400);
+
+    const validPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ data: { fraction: 'Valid Value' } }),
+    });
+    assert.equal(validPut.status, 200);
+    const updated = await validPut.json();
+    assert.deepEqual(updated.data, { fraction: 'Valid Value' });
   });
-  const { id } = await createRes.json();
-
-  const invalidPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-    body: JSON.stringify({ data: {} }),
-  });
-  assert.equal(invalidPut.status, 400);
-
-  const validPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-    body: JSON.stringify({ data: { fraction: 'Valid Value' } }),
-  });
-  assert.equal(validPut.status, 200);
-  const updated = await validPut.json();
-  assert.deepEqual(updated.data, { fraction: 'Valid Value' });
-
-  server.close();
 });
 
 test('a participant cannot create a character for an inactive event; an admin can', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const participant = await makeUserAndSession();
-  const admin = await makeUserAndSession('admin');
-  const inactiveEventId = await makeEvent([], false);
+  await withTestServer(async (port) => {
+    const participant = await makeUserAndSession();
+    const admin = await makeUserAndSession('admin');
+    const inactiveEventId = await makeEvent([], false);
 
-  const asParticipant = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-    body: JSON.stringify({ eventId: inactiveEventId, name: 'Blocked', data: {} }),
+    const asParticipant = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ eventId: inactiveEventId, name: 'Blocked', data: {} }),
+    });
+    assert.equal(asParticipant.status, 403);
+
+    const asAdmin = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ eventId: inactiveEventId, name: 'AdminOverride', data: {} }),
+    });
+    assert.equal(asAdmin.status, 201);
   });
-  assert.equal(asParticipant.status, 403);
-
-  const asAdmin = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-    body: JSON.stringify({ eventId: inactiveEventId, name: 'AdminOverride', data: {} }),
-  });
-  assert.equal(asAdmin.status, 201);
-
-  server.close();
 });
 
 test('an sl-group user cannot create a character for an inactive event', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const sl = await makeUserAndSession('sl');
-  const inactiveEventId = await makeEvent([], false);
+  await withTestServer(async (port) => {
+    const sl = await makeUserAndSession('sl');
+    const inactiveEventId = await makeEvent([], false);
 
-  const asSl = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: sl.cookie },
-    body: JSON.stringify({ eventId: inactiveEventId, name: 'Blocked', data: {} }),
+    const asSl = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: sl.cookie },
+      body: JSON.stringify({ eventId: inactiveEventId, name: 'Blocked', data: {} }),
+    });
+    assert.equal(asSl.status, 403);
   });
-  assert.equal(asSl.status, 403);
-
-  server.close();
 });
 
 test('creating an nsc-class character validates against the current nsc_profile_schema, not an event', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const nscUser = await makeUserAndSession('nsc');
+  await withTestServer(async (port) => {
+    const nscUser = await makeUserAndSession('nsc');
 
-  const missingRequired = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-    body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: { rollenAusruestung: ['NichtErlaubt'] } }),
+    const missingRequired = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+      body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: { rollenAusruestung: ['NichtErlaubt'] } }),
+    });
+    assert.equal(missingRequired.status, 400);
+
+    const ok = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+      body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: {} }),
+    });
+    assert.equal(ok.status, 201);
+    const created = await ok.json();
+    assert.equal(created.class, 'nsc');
+    assert.equal(created.event_id, null);
   });
-  assert.equal(missingRequired.status, 400);
-
-  const ok = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-    body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: {} }),
-  });
-  assert.equal(ok.status, 201);
-  const created = await ok.json();
-  assert.equal(created.class, 'nsc');
-  assert.equal(created.event_id, null);
-
-  server.close();
 });
 
 test('an nsc-class character request with an eventId is rejected', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const nscUser = await makeUserAndSession('nsc');
-  const eventId = await makeEvent([]);
+  await withTestServer(async (port) => {
+    const nscUser = await makeUserAndSession('nsc');
+    const eventId = await makeEvent([]);
 
-  const res = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-    body: JSON.stringify({ class: 'nsc', eventId, name: 'Invalid', data: {} }),
+    const res = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+      body: JSON.stringify({ class: 'nsc', eventId, name: 'Invalid', data: {} }),
+    });
+    assert.equal(res.status, 400);
   });
-  assert.equal(res.status, 400);
-
-  server.close();
 });
 
 test('a group without nsc character-class access cannot create an nsc-class character', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const scUser = await makeUserAndSession('sc');
+  await withTestServer(async (port) => {
+    const scUser = await makeUserAndSession('sc');
 
-  const res = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: scUser.cookie },
-    body: JSON.stringify({ class: 'nsc', name: 'Not Allowed', data: {} }),
+    const res = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: scUser.cookie },
+      body: JSON.stringify({ class: 'nsc', name: 'Not Allowed', data: {} }),
+    });
+    assert.equal(res.status, 403);
   });
-  assert.equal(res.status, 403);
-
-  server.close();
 });
 
 test('a user can create multiple sc-class characters for the same event (Ersatzcharaktere)', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const participant = await makeUserAndSession();
-  const eventId = await makeEvent([]);
+  await withTestServer(async (port) => {
+    const participant = await makeUserAndSession();
+    const eventId = await makeEvent([]);
 
-  const first = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-    body: JSON.stringify({ eventId, name: 'Hauptcharakter', data: {} }),
+    const first = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ eventId, name: 'Hauptcharakter', data: {} }),
+    });
+    assert.equal(first.status, 201);
+
+    const second = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ eventId, name: 'Ersatzcharakter', data: {} }),
+    });
+    assert.equal(second.status, 201);
+
+    const list = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: participant.cookie } })).json();
+    assert.equal(list.filter((c) => c.event_id === eventId).length, 2);
   });
-  assert.equal(first.status, 201);
-
-  const second = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-    body: JSON.stringify({ eventId, name: 'Ersatzcharakter', data: {} }),
-  });
-  assert.equal(second.status, 201);
-
-  const list = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: participant.cookie } })).json();
-  assert.equal(list.filter((c) => c.event_id === eventId).length, 2);
-
-  server.close();
 });
 
 test('PUT on an nsc-class character validates against the current nsc_profile_schema', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const nscUser = await makeUserAndSession('nsc');
+  await withTestServer(async (port) => {
+    const nscUser = await makeUserAndSession('nsc');
 
-  const createRes = await fetch(`http://localhost:${port}/characters`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-    body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: {} }),
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+      body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: {} }),
+    });
+    const { id } = await createRes.json();
+
+    const invalidPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+      body: JSON.stringify({ data: { rollenAusruestung: ['NichtErlaubt'] } }),
+    });
+    assert.equal(invalidPut.status, 400);
+
+    const validPut = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+      body: JSON.stringify({ name: 'Wache Zwei' }),
+    });
+    assert.equal(validPut.status, 200);
+    assert.equal((await validPut.json()).name, 'Wache Zwei');
   });
-  const { id } = await createRes.json();
-
-  const invalidPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-    body: JSON.stringify({ data: { rollenAusruestung: ['NichtErlaubt'] } }),
-  });
-  assert.equal(invalidPut.status, 400);
-
-  const validPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-    body: JSON.stringify({ name: 'Wache Zwei' }),
-  });
-  assert.equal(validPut.status, 200);
-  assert.equal((await validPut.json()).name, 'Wache Zwei');
-
-  server.close();
 });
 
 test.after(async () => {
