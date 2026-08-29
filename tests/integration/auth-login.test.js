@@ -133,40 +133,58 @@ test('logout clears the session so it can no longer be used', async () => {
   server.close();
 });
 
-test('POST /auth/login is rate-limited per IP after 10 attempts in the window, even across different emails', async () => {
-  const server = createServer().listen(0);
-  try {
-    const { port } = server.address();
-    let lastStatus;
-    for (let i = 0; i < 11; i++) {
-      const res = await fetch(`http://localhost:${port}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: `nobody-${i}@example.com`, password: 'wrong password' }),
-      });
-      lastStatus = res.status;
-    }
-    assert.equal(lastStatus, 429);
-  } finally {
-    server.close();
-  }
-});
-
+// The rate limiter's `buckets` Map is module-level state shared across every
+// test in this file, and every login attempt counts toward BOTH the IP bucket
+// and the email bucket. The other 6 login-calling tests in this file all hit
+// `http://localhost:...`, which resolves to `::1` here — sharing one IP bucket
+// (`login-ip:::1`) among themselves regardless of ordering: 5 pre-existing
+// calls + this test's own 5 pre-trip calls already equal the IP limit (10), so
+// its trip call would be swallowed by the IP check first no matter where in
+// the file it runs. Hitting `127.0.0.1` explicitly instead (a distinct
+// `remoteAddress` string, `::ffff:127.0.0.1`) puts this test in its own IP
+// bucket, fully isolated from the other tests' shared budget — so its 429 is
+// unambiguously the email-dimension check tripping, not IP interference.
 test('POST /auth/login is rate-limited per email after 5 attempts in the window, even from conceptually different requests', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
     const email = `ratelimit-email-${crypto.randomUUID()}@example.com`;
-    let lastStatus;
+    let lastRes;
     for (let i = 0; i < 6; i++) {
-      const res = await fetch(`http://localhost:${port}/auth/login`, {
+      lastRes = await fetch(`http://127.0.0.1:${port}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password: 'wrong password' }),
       });
-      lastStatus = res.status;
     }
-    assert.equal(lastStatus, 429);
+    assert.equal(lastRes.status, 429);
+    const body = await lastRes.json();
+    assert.equal(body.error, 'too many login attempts, please try again later');
+  } finally {
+    server.close();
+  }
+});
+
+// Uses `localhost` (-> `::1` here), the same address as the file's other
+// login-calling tests, so this test's shared IP bucket already carries their
+// attempts too — don't assume a clean bucket or an exact trip count, just loop
+// enough (11) to guarantee it trips regardless of how many prior calls landed
+// in this bucket, and check the last response.
+test('POST /auth/login is rate-limited per IP after 10 attempts in the window, even across different emails', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    let lastRes;
+    for (let i = 0; i < 11; i++) {
+      lastRes = await fetch(`http://localhost:${port}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: `nobody-${i}@example.com`, password: 'wrong password' }),
+      });
+    }
+    assert.equal(lastRes.status, 429);
+    const body = await lastRes.json();
+    assert.equal(body.error, 'too many requests, please try again later');
   } finally {
     server.close();
   }
