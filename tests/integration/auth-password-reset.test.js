@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { withTestServer } from '../testServer.js';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   || 'postgres://app:app@localhost:5433/pakyrion_test';
@@ -36,105 +37,99 @@ async function registerAndVerify(port, email, password) {
 }
 
 test('requesting a reset for an existing email creates a token; confirming changes the password', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const email = `reset-${crypto.randomUUID()}@example.com`;
-  const oldPassword = 'correct horse battery staple';
-  const newPassword = 'a totally different passphrase';
-  const userId = await registerAndVerify(port, email, oldPassword);
+  await withTestServer(async (port) => {
+    const email = `reset-${crypto.randomUUID()}@example.com`;
+    const oldPassword = 'correct horse battery staple';
+    const newPassword = 'a totally different passphrase';
+    const userId = await registerAndVerify(port, email, oldPassword);
 
-  const requestRes = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    const requestRes = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    assert.equal(requestRes.status, 200);
+
+    const { rows } = await query('SELECT token FROM password_reset_tokens WHERE user_id = $1', [userId]);
+    assert.equal(rows.length, 1);
+
+    const confirmRes = await fetch(`http://localhost:${port}/auth/password-reset/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: rows[0].token, password: newPassword }),
+    });
+    assert.equal(confirmRes.status, 200);
+
+    const oldLoginRes = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: oldPassword }),
+    });
+    assert.equal(oldLoginRes.status, 401);
+
+    const newLoginRes = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: newPassword }),
+    });
+    assert.equal(newLoginRes.status, 200);
   });
-  assert.equal(requestRes.status, 200);
-
-  const { rows } = await query('SELECT token FROM password_reset_tokens WHERE user_id = $1', [userId]);
-  assert.equal(rows.length, 1);
-
-  const confirmRes = await fetch(`http://localhost:${port}/auth/password-reset/confirm`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: rows[0].token, password: newPassword }),
-  });
-  assert.equal(confirmRes.status, 200);
-
-  const oldLoginRes = await fetch(`http://localhost:${port}/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: oldPassword }),
-  });
-  assert.equal(oldLoginRes.status, 401);
-
-  const newLoginRes = await fetch(`http://localhost:${port}/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: newPassword }),
-  });
-  assert.equal(newLoginRes.status, 200);
-
-  server.close();
 });
 
 test('confirming a reset invalidates existing sessions', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const email = `reset-session-${crypto.randomUUID()}@example.com`;
-  const oldPassword = 'correct horse battery staple';
-  const newPassword = 'a totally different passphrase';
-  await registerAndVerify(port, email, oldPassword);
+  await withTestServer(async (port) => {
+    const email = `reset-session-${crypto.randomUUID()}@example.com`;
+    const oldPassword = 'correct horse battery staple';
+    const newPassword = 'a totally different passphrase';
+    await registerAndVerify(port, email, oldPassword);
 
-  const loginRes = await fetch(`http://localhost:${port}/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: oldPassword }),
+    const loginRes = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: oldPassword }),
+    });
+    const oldCookie = loginRes.headers.get('set-cookie').split(';')[0];
+
+    const preResetAccountRes = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: oldCookie } });
+    assert.equal(preResetAccountRes.status, 200);
+
+    const requestRes = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    assert.equal(requestRes.status, 200);
+    const { rows } = await query('SELECT token FROM password_reset_tokens WHERE user_id = (SELECT id FROM users WHERE email = $1)', [email]);
+
+    const confirmRes = await fetch(`http://localhost:${port}/auth/password-reset/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: rows[0].token, password: newPassword }),
+    });
+    assert.equal(confirmRes.status, 200);
+
+    const postResetAccountRes = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: oldCookie } });
+    assert.equal(postResetAccountRes.status, 401);
   });
-  const oldCookie = loginRes.headers.get('set-cookie').split(';')[0];
-
-  const preResetAccountRes = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: oldCookie } });
-  assert.equal(preResetAccountRes.status, 200);
-
-  const requestRes = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-  assert.equal(requestRes.status, 200);
-  const { rows } = await query('SELECT token FROM password_reset_tokens WHERE user_id = (SELECT id FROM users WHERE email = $1)', [email]);
-
-  const confirmRes = await fetch(`http://localhost:${port}/auth/password-reset/confirm`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: rows[0].token, password: newPassword }),
-  });
-  assert.equal(confirmRes.status, 200);
-
-  const postResetAccountRes = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: oldCookie } });
-  assert.equal(postResetAccountRes.status, 401);
-
-  server.close();
 });
 
 test('requesting a reset for an unknown email still returns 200 (no email enumeration)', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const res = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: `nobody-${crypto.randomUUID()}@example.com` }),
+  await withTestServer(async (port) => {
+    const res = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `nobody-${crypto.randomUUID()}@example.com` }),
+    });
+    assert.equal(res.status, 200);
   });
-  assert.equal(res.status, 200);
-  server.close();
 });
 
 test('confirming with an invalid token returns 400', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const res = await fetch(`http://localhost:${port}/auth/password-reset/confirm`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: 'does-not-exist', password: 'whatever' }),
+  await withTestServer(async (port) => {
+    const res = await fetch(`http://localhost:${port}/auth/password-reset/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'does-not-exist', password: 'whatever' }),
+    });
+    assert.equal(res.status, 400);
   });
-  assert.equal(res.status, 400);
-  server.close();
 });
 
 test('POST /auth/password-reset/request is rate-limited per IP after 10 attempts in the window', async () => {

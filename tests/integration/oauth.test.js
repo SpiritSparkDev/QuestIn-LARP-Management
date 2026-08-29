@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { withTestServer } from '../testServer.js';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   || 'postgres://app:app@localhost:5433/pakyrion_test';
@@ -25,53 +26,48 @@ const { resetRateLimits } = await import('../../backend/middleware/rateLimit.js'
 test.beforeEach(resetRateLimits);
 
 test('GET /auth/oauth/google/start redirects to Google with a state cookie', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const res = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
-  assert.equal(res.status, 302);
-  const location = new URL(res.headers.get('location'));
-  assert.equal(location.origin + location.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
-  assert.equal(location.searchParams.get('client_id'), 'test-google-client-id');
-  assert.ok(location.searchParams.get('state'));
-  const setCookie = res.headers.get('set-cookie');
-  assert.ok(setCookie.includes('oauth_state_google='));
-  server.close();
+  await withTestServer(async (port) => {
+    const res = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
+    assert.equal(res.status, 302);
+    const location = new URL(res.headers.get('location'));
+    assert.equal(location.origin + location.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
+    assert.equal(location.searchParams.get('client_id'), 'test-google-client-id');
+    assert.ok(location.searchParams.get('state'));
+    const setCookie = res.headers.get('set-cookie');
+    assert.ok(setCookie.includes('oauth_state_google='));
+  });
 });
 
 test('GET /auth/oauth/unknown/start returns 404', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const res = await fetch(`http://localhost:${port}/auth/oauth/unknown/start`, { redirect: 'manual' });
-  assert.equal(res.status, 404);
-  server.close();
+  await withTestServer(async (port) => {
+    const res = await fetch(`http://localhost:${port}/auth/oauth/unknown/start`, { redirect: 'manual' });
+    assert.equal(res.status, 404);
+  });
 });
 
 test('callback rejects a missing or mismatched state', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const res = await fetch(
-    `http://localhost:${port}/auth/oauth/google/callback?code=abc&state=does-not-match`,
-    { headers: { Cookie: 'oauth_state_google=something-else' } }
-  );
-  assert.equal(res.status, 400);
-  server.close();
+  await withTestServer(async (port) => {
+    const res = await fetch(
+      `http://localhost:${port}/auth/oauth/google/callback?code=abc&state=does-not-match`,
+      { headers: { Cookie: 'oauth_state_google=something-else' } }
+    );
+    assert.equal(res.status, 400);
+  });
 });
 
 test('callback with access_denied redirects to login instead of erroring', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
+  await withTestServer(async (port) => {
+    const startRes = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
+    const state = new URL(startRes.headers.get('location')).searchParams.get('state');
+    const stateCookie = startRes.headers.get('set-cookie').split(';')[0];
 
-  const startRes = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
-  const state = new URL(startRes.headers.get('location')).searchParams.get('state');
-  const stateCookie = startRes.headers.get('set-cookie').split(';')[0];
-
-  const res = await fetch(
-    `http://localhost:${port}/auth/oauth/google/callback?error=access_denied&state=${state}`,
-    { headers: { Cookie: stateCookie }, redirect: 'manual' }
-  );
-  assert.equal(res.status, 302);
-  assert.ok(res.headers.get('location').startsWith('/login.html'));
-  server.close();
+    const res = await fetch(
+      `http://localhost:${port}/auth/oauth/google/callback?error=access_denied&state=${state}`,
+      { headers: { Cookie: stateCookie }, redirect: 'manual' }
+    );
+    assert.equal(res.status, 302);
+    assert.ok(res.headers.get('location').startsWith('/login.html'));
+  });
 });
 
 test('findOrCreateOAuthUser creates a new verified, password-less user on first login', async () => {
@@ -124,55 +120,52 @@ test('findOrCreateOAuthUser rejects linking when provider does not verify the em
 });
 
 test('callback with mocked provider responses creates a session and redirects', async (t) => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
+  await withTestServer(async (port) => {
+    const startRes = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
+    const state = new URL(startRes.headers.get('location')).searchParams.get('state');
+    const stateCookie = startRes.headers.get('set-cookie').split(';')[0];
 
-  const startRes = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
-  const state = new URL(startRes.headers.get('location')).searchParams.get('state');
-  const stateCookie = startRes.headers.get('set-cookie').split(';')[0];
+    const providerEmail = `oauth-callback-${crypto.randomUUID()}@example.com`;
+    let capturedTokenRequestBody;
+    const originalFetch = globalThis.fetch;
+    t.mock.method(globalThis, 'fetch', async (url, options) => {
+      const href = String(url);
+      if (href.startsWith('https://oauth2.googleapis.com/token')) {
+        capturedTokenRequestBody = options.body;
+        return new Response(JSON.stringify({ access_token: 'fake-access-token' }), { status: 200 });
+      }
+      if (href.startsWith('https://www.googleapis.com/oauth2/v3/userinfo')) {
+        return new Response(
+          JSON.stringify({
+            sub: `google-${crypto.randomUUID()}`,
+            email: providerEmail,
+            name: 'Callback User',
+            email_verified: true,
+          }),
+          { status: 200 }
+        );
+      }
+      return originalFetch(url, options);
+    });
 
-  const providerEmail = `oauth-callback-${crypto.randomUUID()}@example.com`;
-  let capturedTokenRequestBody;
-  const originalFetch = globalThis.fetch;
-  t.mock.method(globalThis, 'fetch', async (url, options) => {
-    const href = String(url);
-    if (href.startsWith('https://oauth2.googleapis.com/token')) {
-      capturedTokenRequestBody = options.body;
-      return new Response(JSON.stringify({ access_token: 'fake-access-token' }), { status: 200 });
-    }
-    if (href.startsWith('https://www.googleapis.com/oauth2/v3/userinfo')) {
-      return new Response(
-        JSON.stringify({
-          sub: `google-${crypto.randomUUID()}`,
-          email: providerEmail,
-          name: 'Callback User',
-          email_verified: true,
-        }),
-        { status: 200 }
-      );
-    }
-    return originalFetch(url, options);
+    const callbackRes = await fetch(
+      `http://localhost:${port}/auth/oauth/google/callback?code=fake-code&state=${state}`,
+      { headers: { Cookie: stateCookie }, redirect: 'manual' }
+    );
+    assert.equal(callbackRes.status, 302);
+    assert.equal(callbackRes.headers.get('location'), '/account.html');
+    const setCookieHeader = callbackRes.headers.get('set-cookie');
+    assert.ok(setCookieHeader.includes('session='));
+
+    const { rows } = await query('SELECT id FROM users WHERE email = $1', [providerEmail]);
+    assert.equal(rows.length, 1);
+
+    assert.ok(capturedTokenRequestBody instanceof URLSearchParams);
+    assert.equal(capturedTokenRequestBody.get('code'), 'fake-code');
+    assert.equal(capturedTokenRequestBody.get('redirect_uri'), 'http://localhost:3000/auth/oauth/google/callback');
+    assert.equal(capturedTokenRequestBody.get('grant_type'), 'authorization_code');
+    assert.equal(capturedTokenRequestBody.get('client_id'), 'test-google-client-id');
   });
-
-  const callbackRes = await fetch(
-    `http://localhost:${port}/auth/oauth/google/callback?code=fake-code&state=${state}`,
-    { headers: { Cookie: stateCookie }, redirect: 'manual' }
-  );
-  assert.equal(callbackRes.status, 302);
-  assert.equal(callbackRes.headers.get('location'), '/account.html');
-  const setCookieHeader = callbackRes.headers.get('set-cookie');
-  assert.ok(setCookieHeader.includes('session='));
-
-  const { rows } = await query('SELECT id FROM users WHERE email = $1', [providerEmail]);
-  assert.equal(rows.length, 1);
-
-  assert.ok(capturedTokenRequestBody instanceof URLSearchParams);
-  assert.equal(capturedTokenRequestBody.get('code'), 'fake-code');
-  assert.equal(capturedTokenRequestBody.get('redirect_uri'), 'http://localhost:3000/auth/oauth/google/callback');
-  assert.equal(capturedTokenRequestBody.get('grant_type'), 'authorization_code');
-  assert.equal(capturedTokenRequestBody.get('client_id'), 'test-google-client-id');
-
-  server.close();
 });
 
 test('PROVIDERS.facebook.extractUser always reports emailVerified: false', () => {

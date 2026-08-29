@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { withTestServer } from '../testServer.js';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   || 'postgres://app:app@localhost:5433/pakyrion_test';
@@ -35,105 +36,95 @@ async function registerAndVerify(port, email, password) {
 }
 
 test('login with correct credentials sets a session cookie', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const email = `login-${crypto.randomUUID()}@example.com`;
-  const password = 'correct horse battery staple';
-  await registerAndVerify(port, email, password);
+  await withTestServer(async (port) => {
+    const email = `login-${crypto.randomUUID()}@example.com`;
+    const password = 'correct horse battery staple';
+    await registerAndVerify(port, email, password);
 
-  const res = await fetch(`http://localhost:${port}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    const res = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    assert.equal(res.status, 200);
+    const setCookie = res.headers.get('set-cookie');
+    assert.ok(setCookie.startsWith(`${SESSION_COOKIE_NAME}=`));
   });
-  assert.equal(res.status, 200);
-  const setCookie = res.headers.get('set-cookie');
-  assert.ok(setCookie.startsWith(`${SESSION_COOKIE_NAME}=`));
-
-  server.close();
 });
 
 test('login succeeds with a different email casing than used at registration', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const localPart = `case-${crypto.randomUUID()}`;
-  const registerEmail = `${localPart}@Example.com`;
-  const password = 'correct horse battery staple';
-  await registerAndVerify(port, registerEmail, password);
+  await withTestServer(async (port) => {
+    const localPart = `case-${crypto.randomUUID()}`;
+    const registerEmail = `${localPart}@Example.com`;
+    const password = 'correct horse battery staple';
+    await registerAndVerify(port, registerEmail, password);
 
-  const res = await fetch(`http://localhost:${port}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: `${localPart}@EXAMPLE.COM`, password }),
+    const res = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `${localPart}@EXAMPLE.COM`, password }),
+    });
+    assert.equal(res.status, 200);
   });
-  assert.equal(res.status, 200);
-
-  server.close();
 });
 
 test('login with wrong password is rejected with 401', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const email = `wrongpw-${crypto.randomUUID()}@example.com`;
-  await registerAndVerify(port, email, 'correct horse battery staple');
+  await withTestServer(async (port) => {
+    const email = `wrongpw-${crypto.randomUUID()}@example.com`;
+    await registerAndVerify(port, email, 'correct horse battery staple');
 
-  const res = await fetch(`http://localhost:${port}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'wrong password' }),
+    const res = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'wrong password' }),
+    });
+    assert.equal(res.status, 401);
   });
-  assert.equal(res.status, 401);
-
-  server.close();
 });
 
 test('login before email verification is rejected with 403', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const email = `unverified-${crypto.randomUUID()}@example.com`;
-  const password = 'correct horse battery staple';
+  await withTestServer(async (port) => {
+    const email = `unverified-${crypto.randomUUID()}@example.com`;
+    const password = 'correct horse battery staple';
 
-  await fetch(`http://localhost:${port}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name: 'Unverified' }),
+    await fetch(`http://localhost:${port}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, name: 'Unverified' }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    assert.equal(res.status, 403);
   });
-
-  const res = await fetch(`http://localhost:${port}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  assert.equal(res.status, 403);
-
-  server.close();
 });
 
 test('logout clears the session so it can no longer be used', async () => {
-  const server = createServer().listen(0);
-  const { port } = server.address();
-  const email = `logout-${crypto.randomUUID()}@example.com`;
-  const password = 'correct horse battery staple';
-  await registerAndVerify(port, email, password);
+  await withTestServer(async (port) => {
+    const email = `logout-${crypto.randomUUID()}@example.com`;
+    const password = 'correct horse battery staple';
+    await registerAndVerify(port, email, password);
 
-  const loginRes = await fetch(`http://localhost:${port}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    const loginRes = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const cookie = loginRes.headers.get('set-cookie').split(';')[0];
+    const token = cookie.split('=')[1];
+
+    const logoutRes = await fetch(`http://localhost:${port}/auth/logout`, {
+      method: 'POST',
+      headers: { Cookie: cookie },
+    });
+    assert.equal(logoutRes.status, 200);
+
+    const { getSession } = await import('../../backend/auth/sessions.js');
+    assert.equal(await getSession(token), null);
   });
-  const cookie = loginRes.headers.get('set-cookie').split(';')[0];
-  const token = cookie.split('=')[1];
-
-  const logoutRes = await fetch(`http://localhost:${port}/auth/logout`, {
-    method: 'POST',
-    headers: { Cookie: cookie },
-  });
-  assert.equal(logoutRes.status, 200);
-
-  const { getSession } = await import('../../backend/auth/sessions.js');
-  assert.equal(await getSession(token), null);
-
-  server.close();
 });
 
 // The rate limiter's `buckets` Map is module-level state shared across every
