@@ -1,6 +1,5 @@
-import { createServer } from '../backend/server.js';
-
 export async function withTestServer(fn) {
+  const { createServer } = await import('../backend/server.js');
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
