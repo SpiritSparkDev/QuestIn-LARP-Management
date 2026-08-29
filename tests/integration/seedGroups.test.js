@@ -11,16 +11,15 @@ await runMigrations();
 const { seedGroups } = await import('../../db/seedGroups.js');
 const { query, closePool } = await import('../../backend/db.js');
 
-// This file's schema-mutating setup (re-adding/dropping the `role` column,
-// toggling group_id NOT NULL) is only safe because package.json's `test`
-// script runs with --test-concurrency=1 (sequential file execution). Without
-// that flag this races with other test files' seedGroups() calls, causing
-// the intermittent "column role does not exist" failures an earlier fix
-// round in this codebase had to chase down.
+// This file's schema-mutating setup (re-adding the `role` column, relaxing
+// group_id NOT NULL, and re-running migration 014) is only safe because
+// package.json's `test` script runs with --test-concurrency=1 (sequential
+// file execution). Without that flag this would race with other test
+// files' runMigrations()/seedGroups() calls against the same shared DB.
 
 // The shared test DB is not reset between runs (tmpfs, only cleared on
-// container restart), so a prior run's seedGroups() call may have already
-// dropped `role`. Restore it (matching its definition in
+// container restart), so a prior run may have already applied migration
+// 014 and dropped `role`. Restore both (matching users' original shape from
 // 001_users_and_sessions.sql) so the backfill test below always has a
 // role-bearing column to exercise, regardless of what earlier runs did.
 const { rows: roleColumn } = await query(
@@ -32,25 +31,36 @@ if (roleColumn.length === 0) {
   );
   // A prior finalization also set group_id NOT NULL; relax it back so a
   // role-only insert (no group_id yet) is legal again, matching the
-  // pre-finalization schema seedGroups() expects to backfill.
+  // pre-finalization schema the migration expects to backfill.
   await query('ALTER TABLE users ALTER COLUMN group_id DROP NOT NULL');
 }
 
-// This test must run first (before any other test's seedGroups() call) —
-// only at this point does the `role` column still exist, so it's the only
-// place the real backfill path is exercised rather than the "already
-// finalized" no-op path.
-test('backfills group_id for a user with an existing role value, then drops the role column', async () => {
+// This test must run first (before any other test in this file calls
+// seedGroups()) — only at this point does the `role` column still exist,
+// so it's the only place the real backfill path is exercised rather than
+// the "already finalized, role column absent" no-op path.
+test('migration 014 backfills group_id for a user with an existing role value, then drops the role column', async () => {
+  // Force migration 014 to be treated as "not yet applied" so runMigrations()
+  // re-executes it against the just-restored pre-migration schema shape.
+  await query(`DELETE FROM schema_migrations WHERE filename = '014_finalize_group_id.sql'`);
+
   const { rows } = await query(
     "INSERT INTO users (email, name, role) VALUES ($1, 'Backfill Test', 'checkin_helper') RETURNING id",
     [`backfill-${crypto.randomUUID()}@example.com`]
   );
-  await seedGroups();
+
+  await runMigrations();
+
   const { rows: after } = await query(
     `SELECT groups.key FROM users JOIN groups ON groups.id = users.group_id WHERE users.id = $1`,
     [rows[0].id]
   );
   assert.equal(after[0].key, 'sl');
+
+  const { rows: roleColumnAfter } = await query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role'`
+  );
+  assert.equal(roleColumnAfter.length, 0);
 });
 
 test('seeds all 8 default groups', async () => {
