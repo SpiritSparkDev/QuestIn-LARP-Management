@@ -64,7 +64,7 @@
 
 <script type="module">
 import { api } from '/js/api.js';
-import { escapeHtml } from '/js/formFields.js';
+import { escapeHtml, attachBirthdateFormatter } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const ACCOUNT_FIELD_LABELS = {
@@ -99,6 +99,8 @@ function buildFieldInputs(container, values = {}) {
       <label for="field-${key}">${escapeHtml(ACCOUNT_FIELD_LABELS[key] ?? key)}</label>
       <input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">
     `).join('');
+  const birthdateInput = container.querySelector('[data-field="birthdate"]');
+  if (birthdateInput) attachBirthdateFormatter(birthdateInput);
 }
 
 // Member-detail view: GET /members/:id already returns every field's value
@@ -113,6 +115,8 @@ function buildDetailFieldInputs(container, values = {}) {
     }
     return `<label>${escapeHtml(label)}</label><p>${escapeHtml(values[key] ?? '–')}</p>`;
   }).join('');
+  const birthdateInput = container.querySelector('[data-field="birthdate"]');
+  if (birthdateInput) attachBirthdateFormatter(birthdateInput);
 }
 
 async function loadGroupOptions(selectEl) {
