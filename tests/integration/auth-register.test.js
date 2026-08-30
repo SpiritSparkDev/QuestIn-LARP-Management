@@ -211,6 +211,29 @@ test('POST /auth/register is rate-limited per IP after 10 attempts in the window
   }
 });
 
+test('POST /auth/verify/resend is rate-limited per IP after 10 attempts in the window', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    let lastRes;
+    for (let i = 0; i < 11; i++) {
+      lastRes = await fetch(`http://localhost:${port}/auth/verify/resend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: `nobody-${i}@example.com` }),
+      });
+      if (i < 10) {
+        assert.notEqual(lastRes.status, 429, `attempt ${i + 1} should not be rate-limited`);
+      }
+    }
+    assert.equal(lastRes.status, 429);
+    const body = await lastRes.json();
+    assert.equal(body.error, 'too many requests, please try again later');
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await closePool();
 });

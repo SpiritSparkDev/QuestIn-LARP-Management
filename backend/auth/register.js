@@ -9,6 +9,7 @@ import { rateLimit } from '../middleware/rateLimit.js';
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const REGISTER_RATE_LIMIT = { keyPrefix: 'register', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
+const RESEND_RATE_LIMIT = { keyPrefix: 'verify-resend', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
 router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, requestId }) => {
   const body = await readJsonBody(req);
@@ -63,7 +64,7 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
   return { status: 201, body: { id: userId, email } };
 }));
 
-router.post('/auth/verify/resend', async ({ req, requestId }) => {
+router.post('/auth/verify/resend', rateLimit(RESEND_RATE_LIMIT)(async ({ req, requestId }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const email = body.email?.toLowerCase();
@@ -87,7 +88,7 @@ router.post('/auth/verify/resend', async ({ req, requestId }) => {
 
   // Always 200 regardless of whether the email is registered/already verified — avoids leaking account existence.
   return { status: 200, body: { requested: true } };
-});
+}));
 
 router.get('/auth/verify', async ({ req }) => {
   const { searchParams } = new URL(req.url, 'http://localhost');
