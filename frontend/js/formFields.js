@@ -35,10 +35,10 @@ export function renderField(field, value) {
     return `<span>${label}</span>${checkboxes}`;
   }
   if (field.type === 'number') {
-    return `<label for="${id}">${label}</label><input id="${id}" name="${key}" type="number" value="${val}" ${required}>`;
+    return `<input id="${id}" name="${key}" type="number" value="${val}" ${required}><label for="${id}">${label}</label>`;
   }
   if (field.type === 'textarea') {
-    return `<label for="${id}">${label}</label><textarea id="${id}" name="${key}" ${required}>${val}</textarea>`;
+    return `<textarea id="${id}" name="${key}" ${required}>${val}</textarea><label for="${id}">${label}</label>`;
   }
   if (field.type === 'select' && Array.isArray(field.options)) {
     const blankOption = field.required ? '' : '<option value=""></option>';
@@ -47,9 +47,9 @@ export function renderField(field, value) {
       const selected = opt === value ? ' selected' : '';
       return `<option value="${escapedOpt}"${selected}>${escapedOpt}</option>`;
     }).join('');
-    return `<label for="${id}">${label}</label><select id="${id}" name="${key}" ${required}>${blankOption}${options}</select>`;
+    return `<select id="${id}" name="${key}" ${required}>${blankOption}${options}</select><label for="${id}">${label}</label>`;
   }
-  return `<label for="${id}">${label}</label><input id="${id}" name="${key}" type="text" value="${val}" ${required}>`;
+  return `<input id="${id}" name="${key}" type="text" value="${val}" ${required}><label for="${id}">${label}</label>`;
 }
 
 // Reads a schema-driven form's current values back into a plain object.

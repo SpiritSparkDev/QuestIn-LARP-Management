@@ -66,6 +66,7 @@ h2:first-child{ margin-top:0; }
 
 form{ display:block; }
 label{ display:block; font-size:12px; font-weight:600; letter-spacing:0.07em; text-transform:uppercase; color:var(--on-surface-variant); margin:22px 0 8px; }
+#dynamic-fields label, #nsc-dynamic-fields label{ margin:4px 0 18px; }
 label:first-child{ margin-top:0; }
 input, select, textarea{
   display:block; width:100%; border:none; border-bottom:1.5px solid var(--outline-variant);
