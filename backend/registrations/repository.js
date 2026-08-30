@@ -140,7 +140,7 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
        status = $4,
        checked_in_at = CASE
          WHEN $4 = 'registered' THEN NULL
-         WHEN checked_in_at IS NULL THEN now()
+         WHEN $4 = 'checked_in' AND checked_in_at IS NULL THEN now()
          ELSE checked_in_at
        END,
        checked_out_at = CASE

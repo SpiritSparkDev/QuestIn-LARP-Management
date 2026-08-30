@@ -115,7 +115,12 @@ async function transition(eventId, userId, action) {
 async function overrideStatus(eventId, userId, newStatus, previousStatus) {
   const newIndex = STATUS_ORDER.indexOf(newStatus);
   const previousIndex = STATUS_ORDER.indexOf(previousStatus);
-  if (newIndex < previousIndex && !confirm('Bist du sicher? Dies setzt den Status zurück.')) {
+  const isBackward = newIndex < previousIndex;
+  const skipsStep = newIndex - previousIndex > 1;
+  const confirmMessage = isBackward
+    ? 'Bist du sicher? Dies setzt den Status zurück.'
+    : 'Bist du sicher? Dies überspringt den Check-in-Schritt.';
+  if ((isBackward || skipsStep) && !confirm(confirmMessage)) {
     await loadParticipants(eventId);
     return;
   }

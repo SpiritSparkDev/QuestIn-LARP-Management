@@ -181,7 +181,7 @@ test('a user with canOverrideCheckinStatus can set a status directly, including 
     assert.equal(toCheckedOut.status, 200);
     const checkedOutBody = await toCheckedOut.json();
     assert.equal(checkedOutBody.status, 'checked_out');
-    assert.ok(checkedOutBody.checked_in_at, 'skipping straight to checked_out should also set checked_in_at');
+    assert.equal(checkedOutBody.checked_in_at, null, 'skipping straight to checked_out must not fabricate checked_in_at');
     assert.ok(checkedOutBody.checked_out_at);
 
     const backToRegistered = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
@@ -285,6 +285,24 @@ test('the normal checkin/checkout flow still works unchanged alongside the overr
     });
     assert.equal(checkinRes.status, 200);
     assert.equal((await checkinRes.json()).status, 'checked_in');
+  });
+});
+
+test('overriding directly from registered to checked_out does not fabricate a checked_in_at timestamp', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const attendee = await makeUserAndSession('sc');
+    const eventId = await makeEvent();
+    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+
+    const overrideRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ status: 'checked_out', previousStatus: 'registered' }),
+    });
+    assert.equal(overrideRes.status, 200);
+    const overrideBody = await overrideRes.json();
+    assert.equal(overrideBody.checked_in_at, null, 'check-in never happened, so checked_in_at must stay null');
+    assert.ok(overrideBody.checked_out_at, 'checkout genuinely happened, so checked_out_at must be set');
   });
 });
 
