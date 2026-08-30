@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { GROUP_DEFAULTS } from '../../db/groupDefaults.js';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   || 'postgres://app:app@localhost:5433/pakyrion_test';
@@ -63,13 +64,6 @@ test('migration 014 backfills group_id for a user with an existing role value, t
   assert.equal(roleColumnAfter.length, 0);
 });
 
-test('seeds all 8 default groups', async () => {
-  await seedGroups();
-  const { rows } = await query('SELECT key FROM groups ORDER BY key');
-  const keys = rows.map((r) => r.key);
-  assert.deepEqual(keys, ['admin', 'gsc', 'hilfs_sl', 'nsc', 'orga', 'plot_orga', 'sc', 'sl']);
-});
-
 test('running twice does not duplicate groups or throw', async () => {
   await seedGroups();
   await seedGroups();
@@ -77,11 +71,21 @@ test('running twice does not duplicate groups or throw', async () => {
   assert.equal(rows[0].count, 8);
 });
 
-test('admin group has every menu and can edit characters', async () => {
+test('every seeded group matches GROUP_DEFAULTS field-for-field', async () => {
   await seedGroups();
-  const { rows } = await query('SELECT visible_menus, can_edit_characters FROM groups WHERE key = $1', ['admin']);
-  assert.deepEqual(rows[0].visible_menus.sort(), ['charaktere', 'checkin', 'events', 'konto', 'mitglieder']);
-  assert.equal(rows[0].can_edit_characters, true);
+  const { rows } = await query('SELECT * FROM groups ORDER BY key');
+  assert.equal(rows.length, GROUP_DEFAULTS.length);
+  for (const expected of GROUP_DEFAULTS) {
+    const row = rows.find((r) => r.key === expected.key);
+    assert.ok(row, `missing group: ${expected.key}`);
+    assert.equal(row.name, expected.name);
+    assert.deepEqual(row.visible_menus, expected.visibleMenus);
+    assert.deepEqual(row.account_fields, expected.accountFields);
+    assert.equal(row.can_edit_characters, expected.canEditCharacters);
+    assert.deepEqual(row.character_classes, expected.characterClasses);
+    assert.equal(row.can_override_checkin_status, expected.canOverrideCheckinStatus);
+    assert.equal(row.is_protected, expected.isProtected);
+  }
 });
 
 test.after(async () => {
