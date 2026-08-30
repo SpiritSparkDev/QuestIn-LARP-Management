@@ -25,7 +25,8 @@
       </table>
     </div>
 
-    <div class="card form-pad">
+    <button type="button" id="open-create">Neue Gruppe anlegen</button>
+    <dialog id="group-dialog">
       <h2 id="form-title">Neue Gruppe anlegen</h2>
       <form id="group-form">
         <div class="field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -75,9 +76,9 @@
         </div>
 
         <button type="submit">Speichern</button>
-        <button type="button" id="cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
+        <button type="button" id="cancel-edit" class="btn-ghost">Abbrechen</button>
       </form>
-    </div>
+    </dialog>
     <p id="message"></p>
   </div></div>
 </div>
@@ -94,6 +95,8 @@ const formTitle = document.getElementById('form-title');
 const nameInput = document.getElementById('group-name');
 const keyInput = document.getElementById('group-key');
 const cancelButton = document.getElementById('cancel-edit');
+const openCreateButton = document.getElementById('open-create');
+const dialog = document.getElementById('group-dialog');
 
 let editingGroupId = null;
 
@@ -139,7 +142,7 @@ function startEdit(group) {
   document.getElementById('can-edit-characters').checked = group.can_edit_characters;
   document.getElementById('can-override-checkin-status').checked = group.can_override_checkin_status;
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
-  cancelButton.style.display = '';
+  dialog.showModal();
 }
 
 function resetForm() {
@@ -148,10 +151,14 @@ function resetForm() {
   form.reset();
   keyInput.disabled = false;
   form.querySelector('button[type="submit"]').textContent = 'Speichern';
-  cancelButton.style.display = 'none';
+  dialog.close();
 }
 
 cancelButton.addEventListener('click', resetForm);
+openCreateButton.addEventListener('click', () => {
+  resetForm();
+  dialog.showModal();
+});
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
