@@ -1,6 +1,7 @@
 import { query } from '../db.js';
 import { getEvent } from '../events/repository.js';
 import { applyTransition } from './statusMachine.js';
+import { displayName } from '../displayName.js';
 
 export async function registerForEvent(userId, eventId) {
   const event = await getEvent(eventId);
@@ -51,11 +52,11 @@ export async function unregisterFromEvent(userId, eventId) {
 
 export async function listParticipantsForEvent(eventId) {
   const { rows: registrations } = await query(
-    `SELECT r.user_id, u.name, r.status, r.checked_in_at, r.checked_out_at
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.checked_in_at, r.checked_out_at
      FROM registrations r
      JOIN users u ON u.id = r.user_id
      WHERE r.event_id = $1
-     ORDER BY u.name`,
+     ORDER BY u.last_name, u.first_name`,
     [eventId]
   );
   const { rows: characters } = await query(
@@ -71,7 +72,7 @@ export async function listParticipantsForEvent(eventId) {
 
   return registrations.map((r) => ({
     userId: r.user_id,
-    name: r.name,
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
     status: r.status,
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,

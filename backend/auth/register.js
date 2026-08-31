@@ -15,10 +15,10 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
 
-  const { password, name } = body;
+  const { password, firstName, lastName, nickname } = body;
   const email = body.email?.toLowerCase();
-  if (!email || !password || !name) {
-    return { status: 400, body: { error: 'email, password, and name are required' } };
+  if (!email || !password || !firstName || !lastName) {
+    return { status: 400, body: { error: 'email, password, firstName, and lastName are required' } };
   }
   if (password.length < 8) {
     return { status: 400, body: { error: 'password must be at least 8 characters' } };
@@ -36,9 +36,9 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
   let userId;
   try {
     const { rows } = await query(
-      `INSERT INTO users (email, password_hash, group_id, name)
-       VALUES ($1, $2, (SELECT id FROM groups WHERE key = 'sc'), $3) RETURNING id`,
-      [email, passwordHash, name]
+      `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname)
+       VALUES ($1, $2, (SELECT id FROM groups WHERE key = 'sc'), $3, $4, $5) RETURNING id`,
+      [email, passwordHash, firstName, lastName, nickname ?? null]
     );
     userId = rows[0].id;
   } catch (err) {

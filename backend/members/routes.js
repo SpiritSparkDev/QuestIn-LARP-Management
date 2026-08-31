@@ -59,9 +59,9 @@ const DEFAULT_INVITE_GROUP_KEY = 'sc';
 router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { email, name, group, ...rest } = body;
-  if (!email || !name) {
-    return { status: 400, body: { error: 'email and name are required' } };
+  const { email, firstName, lastName, nickname, group, ...rest } = body;
+  if (!email || !firstName || !lastName) {
+    return { status: 400, body: { error: 'email, firstName, and lastName are required' } };
   }
   if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { status: 400, body: { error: 'invalid email format' } };
@@ -91,7 +91,9 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
 
   const invitation = await createInvitation({
     email: email.toLowerCase(),
-    name,
+    firstName,
+    lastName,
+    nickname,
     groupId: groupRows[0].id,
     invitedBy: user.id,
     address: rest.address,

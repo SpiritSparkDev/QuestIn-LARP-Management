@@ -12,7 +12,7 @@ export function requireAuth(handler) {
     if (!session) return { status: 401, body: { error: 'not authenticated' } };
 
     const { rows } = await query(
-      `SELECT users.id, users.email, users.name,
+      `SELECT users.id, users.email,
               groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
               groups.visible_menus, groups.account_fields, groups.can_edit_characters,
               groups.character_classes, groups.can_override_checkin_status
@@ -27,7 +27,6 @@ export function requireAuth(handler) {
     const user = {
       id: row.id,
       email: row.email,
-      name: row.name,
       group: {
         id: row.group_id,
         key: row.group_key,

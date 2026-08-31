@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
 import { query } from '../db.js';
 import { encryptField, decryptField } from '../crypto/fieldCrypto.js';
+import { displayName } from '../displayName.js';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const SELECT_COLUMNS = `
-  id, token, email, name, group_id,
+  id, token, email, first_name, last_name, nickname, group_id,
   address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc, pronomen_enc,
   invited_by, expires_at, created_at, redeemed_at
 `;
@@ -15,7 +16,10 @@ function decryptInvitation(row) {
     id: row.id,
     token: row.token,
     email: row.email,
-    name: row.name,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    nickname: row.nickname,
+    name: displayName({ firstName: row.first_name, lastName: row.last_name, nickname: row.nickname }),
     groupId: row.group_id,
     address: decryptField(row.address_enc),
     birthdate: decryptField(row.birthdate_enc),
@@ -30,15 +34,15 @@ function decryptInvitation(row) {
   };
 }
 
-export async function createInvitation({ email, name, groupId, invitedBy, address, birthdate, phone, emergencyContact, medicalNotes, pronomen }) {
+export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, address, birthdate, phone, emergencyContact, medicalNotes, pronomen }) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
   const { rows } = await query(
-    `INSERT INTO invitations (token, email, name, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc, pronomen_enc, invited_by, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc, pronomen_enc, invited_by, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      RETURNING ${SELECT_COLUMNS}`,
     [
-      token, email, name, groupId,
+      token, email, firstName, lastName, nickname ?? null, groupId,
       address !== undefined ? encryptField(address) : null,
       birthdate !== undefined ? encryptField(birthdate) : null,
       phone !== undefined ? encryptField(phone) : null,

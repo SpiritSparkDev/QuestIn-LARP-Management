@@ -6,6 +6,7 @@ import { parseCookies, serializeSessionCookie, secureFlag } from './cookies.js';
 import { PROVIDERS } from './oauthProviders.js';
 import { logger } from '../logger.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import { splitFullName } from '../displayName.js';
 
 const OAUTH_START_RATE_LIMIT = { keyPrefix: 'oauth-start', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
@@ -162,10 +163,11 @@ export async function findOrCreateOAuthUser(providerName, providerUserId, email,
     }
     userId = existingUser.rows[0].id;
   } else {
+    const { firstName, lastName } = splitFullName(name || normalizedEmail);
     const { rows } = await query(
-      `INSERT INTO users (email, password_hash, group_id, name, email_verified)
-       VALUES ($1, NULL, (SELECT id FROM groups WHERE key = 'sc'), $2, $3) RETURNING id`,
-      [normalizedEmail, name || normalizedEmail, !!emailVerifiedByProvider]
+      `INSERT INTO users (email, password_hash, group_id, first_name, last_name, email_verified)
+       VALUES ($1, NULL, (SELECT id FROM groups WHERE key = 'sc'), $2, $3, $4) RETURNING id`,
+      [normalizedEmail, firstName, lastName, !!emailVerifiedByProvider]
     );
     userId = rows[0].id;
   }
