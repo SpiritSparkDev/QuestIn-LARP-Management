@@ -42,8 +42,16 @@
       <form id="invite-form">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
           <div>
-            <label for="invite-name">Name</label>
-            <input id="invite-name" name="name" type="text" required>
+            <label for="invite-first-name">Vorname</label>
+            <input id="invite-first-name" name="firstName" type="text" required>
+          </div>
+          <div>
+            <label for="invite-last-name">Nachname</label>
+            <input id="invite-last-name" name="lastName" type="text" required>
+          </div>
+          <div>
+            <label for="invite-nickname">Rufname</label>
+            <input id="invite-nickname" name="nickname" type="text">
           </div>
           <div>
             <label for="invite-email">E-Mail</label>
@@ -108,7 +116,15 @@ function buildFieldInputs(container, values = {}) {
 // allowlist), so show every known field — editable when the caller may
 // change it, read-only text otherwise — instead of silently omitting it.
 function buildDetailFieldInputs(container, values = {}) {
-  container.innerHTML = ALL_FIELD_KEYS.map((key) => {
+  const nameFieldsHtml = `
+    <label for="field-firstName">Vorname</label>
+    <input id="field-firstName" data-field="firstName" type="text" value="${escapeHtml(values.firstName ?? '')}">
+    <label for="field-lastName">Nachname</label>
+    <input id="field-lastName" data-field="lastName" type="text" value="${escapeHtml(values.lastName ?? '')}">
+    <label for="field-nickname">Rufname</label>
+    <input id="field-nickname" data-field="nickname" type="text" value="${escapeHtml(values.nickname ?? '')}">
+  `;
+  container.innerHTML = nameFieldsHtml + ALL_FIELD_KEYS.map((key) => {
     const label = ACCOUNT_FIELD_LABELS[key] ?? key;
     if (myAccountFields.includes(key)) {
       return `<label for="field-${key}">${escapeHtml(label)}</label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">`;

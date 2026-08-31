@@ -17,8 +17,12 @@
     <a href="#" id="logout-link">Logout</a>
     <h1>Mein Konto</h1>
     <form id="account-form">
-      <label for="name">Name</label>
-      <input id="name" name="name" type="text">
+      <label for="firstName">Vorname</label>
+      <input id="firstName" name="firstName" type="text" required>
+      <label for="lastName">Nachname</label>
+      <input id="lastName" name="lastName" type="text" required>
+      <label for="nickname">Rufname</label>
+      <input id="nickname" name="nickname" type="text">
       <label for="address">Adresse <span class="sealed">Verschlüsselt</span></label>
       <input id="address" name="address" type="text">
       <label for="birthdate">Geburtsdatum <span class="sealed">Verschlüsselt</span></label>
@@ -57,7 +61,7 @@ async function loadAccount() {
   try {
     const account = await api.get('/account');
     document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
-    for (const field of ['name', 'address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes', 'pronomen']) {
+    for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes', 'pronomen']) {
       form.elements[field].value = account[field] ?? '';
     }
     formControls.forEach((el) => { el.disabled = false; });
