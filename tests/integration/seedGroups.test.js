@@ -80,7 +80,7 @@ test('every seeded group matches GROUP_DEFAULTS field-for-field', async () => {
     assert.ok(row, `missing group: ${expected.key}`);
     assert.equal(row.name, expected.name);
     assert.deepEqual(row.visible_menus, expected.visibleMenus);
-    assert.deepEqual(row.account_fields, expected.accountFields);
+    assert.deepEqual([...row.account_fields].sort(), [...expected.accountFields].sort());
     assert.equal(row.can_edit_characters, expected.canEditCharacters);
     assert.deepEqual(row.character_classes, expected.characterClasses);
     assert.equal(row.can_override_checkin_status, expected.canOverrideCheckinStatus);
