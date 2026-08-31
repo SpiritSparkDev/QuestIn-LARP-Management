@@ -29,8 +29,12 @@
       <input id="birthdate" name="birthdate" type="text" placeholder="TT.MM.JJJJ">
       <label for="phone">Telefon <span class="sealed">Verschlüsselt</span></label>
       <input id="phone" name="phone" type="text">
-      <label for="emergencyContact">Notfallkontakt <span class="sealed">Verschlüsselt</span></label>
-      <input id="emergencyContact" name="emergencyContact" type="text">
+      <label for="emergencyContactLastName">Notfallkontakt: Name <span class="sealed">Verschlüsselt</span></label>
+      <input id="emergencyContactLastName" name="emergencyContactLastName" type="text">
+      <label for="emergencyContactFirstName">Notfallkontakt: Vorname <span class="sealed">Verschlüsselt</span></label>
+      <input id="emergencyContactFirstName" name="emergencyContactFirstName" type="text">
+      <label for="emergencyContactPhone">Notfallkontakt: Telefonnummer <span class="sealed">Verschlüsselt</span></label>
+      <input id="emergencyContactPhone" name="emergencyContactPhone" type="text">
       <label for="medicalNotes">Gesundheitshinweise / Allergien <span class="sealed">Verschlüsselt</span></label>
       <textarea id="medicalNotes" name="medicalNotes"></textarea>
       <label for="pronomen">Pronomen <span class="sealed">Verschlüsselt</span></label>
@@ -61,7 +65,7 @@ async function loadAccount() {
   try {
     const account = await api.get('/account');
     document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
-    for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContact', 'medicalNotes', 'pronomen']) {
+    for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'pronomen']) {
       form.elements[field].value = account[field] ?? '';
     }
     formControls.forEach((el) => { el.disabled = false; });
