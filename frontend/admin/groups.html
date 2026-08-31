@@ -77,6 +77,7 @@
 
         <button type="submit">Speichern</button>
         <button type="button" id="cancel-edit" class="btn-ghost">Abbrechen</button>
+        <p id="dialog-message"></p>
       </form>
     </dialog>
     <p id="message"></p>
@@ -97,6 +98,7 @@ const keyInput = document.getElementById('group-key');
 const cancelButton = document.getElementById('cancel-edit');
 const openCreateButton = document.getElementById('open-create');
 const dialog = document.getElementById('group-dialog');
+const dialogMessage = document.getElementById('dialog-message');
 
 let editingGroupId = null;
 
@@ -152,6 +154,8 @@ function resetForm() {
   keyInput.disabled = false;
   form.querySelector('button[type="submit"]').textContent = 'Speichern';
   dialog.close();
+  dialogMessage.textContent = '';
+  dialogMessage.className = '';
 }
 
 cancelButton.addEventListener('click', resetForm);
@@ -164,6 +168,8 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   message.textContent = '';
   message.className = '';
+  dialogMessage.textContent = '';
+  dialogMessage.className = '';
   const payload = {
     name: nameInput.value,
     visibleMenus: getCheckedValues('menu-checkboxes'),
@@ -184,8 +190,8 @@ form.addEventListener('submit', async (event) => {
     resetForm();
     await loadGroups();
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    dialogMessage.textContent = err.message;
+    dialogMessage.className = 'error';
   }
 });
 
