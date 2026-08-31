@@ -99,7 +99,9 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     address: rest.address,
     birthdate: rest.birthdate,
     phone: rest.phone,
-    emergencyContact: rest.emergencyContact,
+    emergencyContactLastName: rest.emergencyContactLastName,
+    emergencyContactFirstName: rest.emergencyContactFirstName,
+    emergencyContactPhone: rest.emergencyContactPhone,
     medicalNotes: rest.medicalNotes,
     pronomen: rest.pronomen,
   });

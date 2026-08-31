@@ -7,7 +7,7 @@ const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const SELECT_COLUMNS = `
   id, token, email, first_name, last_name, nickname, group_id,
-  address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc, pronomen_enc,
+  address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc, pronomen_enc,
   invited_by, expires_at, created_at, redeemed_at
 `;
 
@@ -24,7 +24,9 @@ function decryptInvitation(row) {
     address: decryptField(row.address_enc),
     birthdate: decryptField(row.birthdate_enc),
     phone: decryptField(row.phone_enc),
-    emergencyContact: decryptField(row.emergency_contact_enc),
+    emergencyContactLastName: decryptField(row.emergency_contact_last_name_enc),
+    emergencyContactFirstName: decryptField(row.emergency_contact_first_name_enc),
+    emergencyContactPhone: decryptField(row.emergency_contact_phone_enc),
     medicalNotes: decryptField(row.medical_notes_enc),
     pronomen: decryptField(row.pronomen_enc),
     invitedBy: row.invited_by,
@@ -34,19 +36,21 @@ function decryptInvitation(row) {
   };
 }
 
-export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, address, birthdate, phone, emergencyContact, medicalNotes, pronomen }) {
+export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, address, birthdate, phone, emergencyContactLastName, emergencyContactFirstName, emergencyContactPhone, medicalNotes, pronomen }) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
   const { rows } = await query(
-    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_enc, medical_notes_enc, pronomen_enc, invited_by, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc, pronomen_enc, invited_by, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING ${SELECT_COLUMNS}`,
     [
       token, email, firstName, lastName, nickname ?? null, groupId,
       address !== undefined ? encryptField(address) : null,
       birthdate !== undefined ? encryptField(birthdate) : null,
       phone !== undefined ? encryptField(phone) : null,
-      emergencyContact !== undefined ? encryptField(emergencyContact) : null,
+      emergencyContactLastName !== undefined ? encryptField(emergencyContactLastName) : null,
+      emergencyContactFirstName !== undefined ? encryptField(emergencyContactFirstName) : null,
+      emergencyContactPhone !== undefined ? encryptField(emergencyContactPhone) : null,
       medicalNotes !== undefined ? encryptField(medicalNotes) : null,
       pronomen !== undefined ? encryptField(pronomen) : null,
       invitedBy, expiresAt,
