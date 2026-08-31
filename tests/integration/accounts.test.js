@@ -29,7 +29,7 @@ async function registerLoginAndGetCookie(port) {
 
   const registerRes = await fetch(`http://localhost:${port}/auth/register`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name: 'Account Test' }),
+    body: JSON.stringify({ email, password, firstName: 'Account', lastName: 'Test' }),
   });
   const { id } = await registerRes.json();
   const { rows } = await query('SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]);
@@ -103,7 +103,7 @@ test('PATCH /account silently ignores an nscData field (no longer a recognized a
     const res = await fetch(`http://localhost:${port}/account`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ name: 'Still Works', nscData: { anything: 'ignored' } }),
+      body: JSON.stringify({ firstName: 'Still', lastName: 'Works', nscData: { anything: 'ignored' } }),
     });
     assert.equal(res.status, 200);
     const body = await res.json();

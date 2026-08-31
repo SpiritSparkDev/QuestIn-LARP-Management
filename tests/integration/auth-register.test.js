@@ -28,7 +28,7 @@ test('register creates an unverified user with a verification token; verify acti
     const registerRes = await fetch(`http://localhost:${port}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correct horse battery staple', name: 'Test User' }),
+      body: JSON.stringify({ email, password: 'correct horse battery staple', firstName: 'Test', lastName: 'User' }),
     });
     assert.equal(registerRes.status, 201);
     const registerBody = await registerRes.json();
@@ -64,7 +64,7 @@ test('registering with a password shorter than 8 characters is rejected with 400
     const res = await fetch(`http://localhost:${port}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: 'abc', name: 'Short Password' }),
+      body: JSON.stringify({ email, password: 'abc', firstName: 'Short', lastName: 'Password' }),
     });
     assert.equal(res.status, 400);
   });
@@ -75,7 +75,7 @@ test('registering with a malformed email is rejected with 400', async () => {
     const res = await fetch(`http://localhost:${port}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'not-an-email', password: 'correct horse battery staple', name: 'Bad Email' }),
+      body: JSON.stringify({ email: 'not-an-email', password: 'correct horse battery staple', firstName: 'Bad', lastName: 'Email' }),
     });
     assert.equal(res.status, 400);
   });
@@ -84,7 +84,7 @@ test('registering with a malformed email is rejected with 400', async () => {
 test('registering the same email twice is rejected with 409', async () => {
   await withTestServer(async (port) => {
     const email = `dup-${crypto.randomUUID()}@example.com`;
-    const payload = { email, password: 'correct horse battery staple', name: 'Dup User' };
+    const payload = { email, password: 'correct horse battery staple', firstName: 'Dup', lastName: 'User' };
 
     await fetch(`http://localhost:${port}/auth/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -99,7 +99,7 @@ test('registering the same email twice is rejected with 409', async () => {
 test('concurrent registrations for the same email: one 201, one 409, no 500', async () => {
   await withTestServer(async (port) => {
     const email = `race-${crypto.randomUUID()}@example.com`;
-    const payload = { email, password: 'correct horse battery staple', name: 'Race User' };
+    const payload = { email, password: 'correct horse battery staple', firstName: 'Race', lastName: 'User' };
 
     const [firstRes, secondRes] = await Promise.all([
       fetch(`http://localhost:${port}/auth/register`, {
@@ -121,7 +121,7 @@ test('resending verification issues a new token and invalidates the old one', as
     const registerRes = await fetch(`http://localhost:${port}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correct horse battery staple', name: 'Resend User' }),
+      body: JSON.stringify({ email, password: 'correct horse battery staple', firstName: 'Resend', lastName: 'User' }),
     });
     const { id } = await registerRes.json();
     const { rows: oldTokenRows } = await query(
@@ -166,7 +166,7 @@ test('resending verification for an unknown or already-verified email still retu
     const registerRes = await fetch(`http://localhost:${port}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: 'correct horse battery staple', name: 'Verified User' }),
+      body: JSON.stringify({ email, password: 'correct horse battery staple', firstName: 'Verified', lastName: 'User' }),
     });
     const { id } = await registerRes.json();
     const { rows: tokenRows } = await query('SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]);
@@ -197,7 +197,7 @@ test('POST /auth/register is rate-limited per IP after 10 attempts in the window
       lastRes = await fetch(`http://localhost:${port}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: `ratelimit-${i}-${crypto.randomUUID()}@example.com`, password: 'correct horse battery staple', name: 'Rate Limit Test' }),
+        body: JSON.stringify({ email: `ratelimit-${i}-${crypto.randomUUID()}@example.com`, password: 'correct horse battery staple', firstName: 'Rate', lastName: 'Limit Test' }),
       });
       if (i < 10) {
         assert.notEqual(lastRes.status, 429, `attempt ${i + 1} should not be rate-limited`);

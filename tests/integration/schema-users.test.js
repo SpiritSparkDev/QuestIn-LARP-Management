@@ -24,11 +24,11 @@ test('users/sessions/tokens tables exist after migration', async () => {
 test('users.email is unique', async () => {
   const email = `unique-${Date.now()}@example.com`;
   await query(
-    "INSERT INTO users (email, name, group_id) VALUES ($1, 'A', (SELECT id FROM groups WHERE key = 'sc'))",
+    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'A', '', (SELECT id FROM groups WHERE key = 'sc'))",
     [email]
   );
   await assert.rejects(
-    query("INSERT INTO users (email, name, group_id) VALUES ($1, 'B', (SELECT id FROM groups WHERE key = 'sc'))", [email]),
+    query("INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'B', '', (SELECT id FROM groups WHERE key = 'sc'))", [email]),
     /duplicate key value violates unique constraint/
   );
   await query('DELETE FROM users WHERE email = $1', [email]);
@@ -64,6 +64,24 @@ test('admin, orga, and sl groups have can_override_checkin_status=true after mig
   for (const row of rows) {
     const expected = ['admin', 'orga', 'sl'].includes(row.key);
     assert.equal(row.can_override_checkin_status, expected, `${row.key} should have can_override_checkin_status=${expected}`);
+  }
+});
+
+test('users.name column no longer exists after migration', async () => {
+  const { rows } = await query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'name'`
+  );
+  assert.equal(rows.length, 0);
+});
+
+test('users.first_name and users.last_name columns exist and are NOT NULL', async () => {
+  const { rows } = await query(
+    `SELECT column_name, is_nullable FROM information_schema.columns
+     WHERE table_name = 'users' AND column_name IN ('first_name', 'last_name')`
+  );
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.is_nullable, 'NO', `${row.column_name} should be NOT NULL`);
   }
 });
 

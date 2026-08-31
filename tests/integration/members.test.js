@@ -19,7 +19,7 @@ const { createServer } = await import('../../backend/server.js');
 
 async function makeUserAndSession(groupKey = 'sc') {
   const { rows } = await query(
-    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Members Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Members', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`members-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
   );
   const session = await createSession(rows[0].id);
@@ -47,7 +47,7 @@ test('GET /members includes both active members and open invitations', async () 
     const inviteRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email: invitedEmail, name: 'Invited Member', group: 'sc' }),
+      body: JSON.stringify({ email: invitedEmail, firstName: 'Invited', lastName: 'Member', group: 'sc' }),
     });
     assert.equal(inviteRes.status, 201);
 
@@ -151,14 +151,14 @@ test('POST /members/invite allows multiple pending invitations to the same unreg
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, name: 'New Member', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'New', lastName: 'Member', group: 'sc' }),
     });
     assert.equal(res.status, 201);
 
     const dupeRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, name: 'Again', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Again', lastName: 'Member', group: 'sc' }),
     });
     // First invite doesn't create a users row, so this checks the SECOND
     // invite to the same still-pending address is allowed (no uniqueness
@@ -176,14 +176,14 @@ test('POST /members/invite rejects an email that already belongs to a registered
     const { cookie } = await makeUserAndSession('admin');
     const email = `members-invite-existing-${crypto.randomUUID()}@example.com`;
     await query(
-      "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Existing Member', (SELECT id FROM groups WHERE key = $2), true)",
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Existing', 'Member', (SELECT id FROM groups WHERE key = $2), true)",
       [email, 'sc']
     );
 
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, name: 'Duplicate', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Duplicate', lastName: 'Member', group: 'sc' }),
     });
     assert.equal(res.status, 409);
   } finally {
@@ -200,7 +200,7 @@ test('POST /members/invite defaults to the sc group when group is omitted', asyn
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, name: 'Default Group' }),
+      body: JSON.stringify({ email, firstName: 'Default', lastName: 'Group' }),
     });
     assert.equal(res.status, 201);
     const { rows } = await query('SELECT group_id FROM invitations WHERE email = $1', [email]);
@@ -223,7 +223,7 @@ test('POST /members/invite rejects an explicit group from a caller without the g
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email: `invite-blocked-${crypto.randomUUID()}@example.com`, name: 'Blocked', group: 'admin' }),
+      body: JSON.stringify({ email: `invite-blocked-${crypto.randomUUID()}@example.com`, firstName: 'Blocked', lastName: 'Member', group: 'admin' }),
     });
     assert.equal(res.status, 400);
   } finally {
@@ -240,7 +240,7 @@ test('POST /members/invitations/:id/resend issues a new token', async () => {
     const createRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, name: 'Resend Route', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Resend', lastName: 'Route', group: 'sc' }),
     });
     const created = await createRes.json();
     const resendRes = await fetch(`http://localhost:${port}/members/invitations/${created.id}/resend`, {
@@ -272,7 +272,7 @@ test('POST /members/invite ignores an attacker-supplied groupId that bypasses th
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, name: 'GroupId Bypass', groupId: adminGroup[0].id }),
+      body: JSON.stringify({ email, firstName: 'GroupId', lastName: 'Bypass', groupId: adminGroup[0].id }),
     });
     assert.equal(res.status, 201);
     const { rows } = await query('SELECT group_id FROM invitations WHERE email = $1', [email]);

@@ -46,7 +46,7 @@ test('migration 014 backfills group_id for a user with an existing role value, t
   await query(`DELETE FROM schema_migrations WHERE filename = '014_finalize_group_id.sql'`);
 
   const { rows } = await query(
-    "INSERT INTO users (email, name, role) VALUES ($1, 'Backfill Test', 'checkin_helper') RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, role) VALUES ($1, 'Backfill', 'Test', 'checkin_helper') RETURNING id",
     [`backfill-${crypto.randomUUID()}@example.com`]
   );
 

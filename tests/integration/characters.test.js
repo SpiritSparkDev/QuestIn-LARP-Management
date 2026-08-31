@@ -22,7 +22,7 @@ const { createSession } = await import('../../backend/auth/sessions.js');
 
 async function makeUserAndSession(groupKey = 'sc') {
   const { rows } = await query(
-    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Char Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Char', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`chars-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
   );
   const session = await createSession(rows[0].id);

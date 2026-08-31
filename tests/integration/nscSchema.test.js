@@ -22,7 +22,7 @@ const { createServer } = await import('../../backend/server.js');
 
 async function makeUserAndSession(groupKey = 'sc') {
   const { rows } = await query(
-    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'NSC Schema Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'NSC', 'Schema Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`nsc-schema-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
   );
   const session = await createSession(rows[0].id);

@@ -19,7 +19,7 @@ const { createInvitation, getInvitationByToken, regenerateToken, markRedeemed } 
 
 async function makeAdmin() {
   const { rows } = await query(
-    "INSERT INTO users (email, name, group_id, email_verified) VALUES ($1, 'Inviter', (SELECT id FROM groups WHERE key = 'admin'), true) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Inviter', '', (SELECT id FROM groups WHERE key = 'admin'), true) RETURNING id",
     [`inviter-${crypto.randomUUID()}@example.com`]
   );
   return rows[0].id;
@@ -35,7 +35,8 @@ test('createInvitation stores encrypted fields that decrypt back correctly', asy
   const groupId = await scGroupId();
   const invitation = await createInvitation({
     email: `invitee-${crypto.randomUUID()}@example.com`,
-    name: 'Invited Person',
+    firstName: 'Invited',
+    lastName: 'Person',
     groupId,
     invitedBy,
     medicalNotes: 'keine',
@@ -53,7 +54,8 @@ test('POST /auth/invite/redeem creates a real user, logs them in, and marks the 
     const groupId = await scGroupId();
     const invitation = await createInvitation({
       email: `redeem-${crypto.randomUUID()}@example.com`,
-      name: 'Redeemer',
+      firstName: 'Redeemer',
+      lastName: '',
       groupId,
       invitedBy,
       address: 'Teststraße 1',
@@ -87,7 +89,8 @@ test('POST /auth/invite/redeem rejects an already-redeemed token', async () => {
     const groupId = await scGroupId();
     const invitation = await createInvitation({
       email: `redeem-twice-${crypto.randomUUID()}@example.com`,
-      name: 'Twice',
+      firstName: 'Twice',
+      lastName: '',
       groupId,
       invitedBy,
     });
@@ -127,7 +130,8 @@ test('markRedeemed is a compare-and-swap: the second call on an already-redeemed
   const groupId = await scGroupId();
   const invitation = await createInvitation({
     email: `invitee-${crypto.randomUUID()}@example.com`,
-    name: 'CAS Check',
+    firstName: 'CAS',
+    lastName: 'Check',
     groupId,
     invitedBy,
   });
@@ -142,7 +146,8 @@ test('regenerateToken changes the token and invalidates the old one', async () =
   const groupId = await scGroupId();
   const invitation = await createInvitation({
     email: `resend-${crypto.randomUUID()}@example.com`,
-    name: 'Resend Me',
+    firstName: 'Resend',
+    lastName: 'Me',
     groupId,
     invitedBy,
   });

@@ -28,7 +28,7 @@ async function registerAndVerify(port, email, password) {
   const registerRes = await fetch(`http://localhost:${port}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name: 'Reset Test' }),
+    body: JSON.stringify({ email, password, firstName: 'Reset', lastName: 'Test' }),
   });
   const { id } = await registerRes.json();
   const { rows } = await query('SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]);

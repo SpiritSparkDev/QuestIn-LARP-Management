@@ -17,7 +17,7 @@ const { requireMenu } = await import('../../backend/middleware/authorize.js');
 
 async function makeUser(groupKey = 'sc') {
   const { rows } = await query(
-    "INSERT INTO users (email, name, group_id) VALUES ($1, 'Mid Test', (SELECT id FROM groups WHERE key = $2)) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'Mid', 'Test', (SELECT id FROM groups WHERE key = $2)) RETURNING id",
     [`mid-${Date.now()}-${Math.random()}@example.com`, groupKey]
   );
   return rows[0].id;

@@ -27,7 +27,7 @@ async function registerAndVerify(port, email, password) {
   const registerRes = await fetch(`http://localhost:${port}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name: 'Login Test' }),
+    body: JSON.stringify({ email, password, firstName: 'Login', lastName: 'Test' }),
   });
   const { id } = await registerRes.json();
   const { rows } = await query('SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]);
@@ -90,7 +90,7 @@ test('login before email verification is rejected with 403', async () => {
     await fetch(`http://localhost:${port}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, name: 'Unverified' }),
+      body: JSON.stringify({ email, password, firstName: 'Unverified', lastName: 'User' }),
     });
 
     const res = await fetch(`http://localhost:${port}/auth/login`, {
