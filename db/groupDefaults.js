@@ -2,13 +2,13 @@ export const GROUP_DEFAULTS = [
   {
     key: 'admin', name: 'Admin',
     visibleMenus: ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'],
-    accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'pronomen', 'group'],
+    accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'group'],
     canEditCharacters: true, characterClasses: ['sc'], canOverrideCheckinStatus: true, isProtected: true,
   },
   {
     key: 'orga', name: 'Orga',
     visibleMenus: ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'],
-    accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'pronomen'],
+    accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes'],
     canEditCharacters: true, characterClasses: ['sc'], canOverrideCheckinStatus: true, isProtected: false,
   },
   {

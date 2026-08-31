@@ -37,8 +37,6 @@
       <input id="emergencyContactPhone" name="emergencyContactPhone" type="text">
       <label for="medicalNotes">Gesundheitshinweise / Allergien <span class="sealed">Verschlüsselt</span></label>
       <textarea id="medicalNotes" name="medicalNotes"></textarea>
-      <label for="pronomen">Pronomen <span class="sealed">Verschlüsselt</span></label>
-      <input id="pronomen" name="pronomen" type="text">
       <button type="submit">Speichern</button>
     </form>
     <p id="message"></p>
@@ -65,7 +63,7 @@ async function loadAccount() {
   try {
     const account = await api.get('/account');
     document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
-    for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'pronomen']) {
+    for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes']) {
       form.elements[field].value = account[field] ?? '';
     }
     formControls.forEach((el) => { el.disabled = false; });

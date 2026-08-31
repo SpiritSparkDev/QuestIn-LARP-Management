@@ -4,7 +4,7 @@ import { displayName } from '../displayName.js';
 
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified,
-  users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc, users.pronomen_enc,
+  users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc,
   groups.id AS group_id, groups.key AS group_key, groups.name AS group_name
 `;
 
@@ -26,7 +26,6 @@ function decryptMember(row) {
     emergencyContactFirstName: decryptField(row.emergency_contact_first_name_enc),
     emergencyContactPhone: decryptField(row.emergency_contact_phone_enc),
     medicalNotes: decryptField(row.medical_notes_enc),
-    pronomen: decryptField(row.pronomen_enc),
   };
 }
 
@@ -65,10 +64,9 @@ export async function updateMember(id, fields) {
        emergency_contact_first_name_enc = COALESCE($7, emergency_contact_first_name_enc),
        emergency_contact_phone_enc = COALESCE($8, emergency_contact_phone_enc),
        medical_notes_enc = COALESCE($9, medical_notes_enc),
-       pronomen_enc = COALESCE($10, pronomen_enc),
-       first_name = COALESCE($11, first_name),
-       last_name = COALESCE($12, last_name),
-       nickname = COALESCE($13, nickname)
+       first_name = COALESCE($10, first_name),
+       last_name = COALESCE($11, last_name),
+       nickname = COALESCE($12, nickname)
      WHERE id = $1
      RETURNING id`,
     [
@@ -81,7 +79,6 @@ export async function updateMember(id, fields) {
       fields.emergencyContactFirstName !== undefined ? encryptField(fields.emergencyContactFirstName) : null,
       fields.emergencyContactPhone !== undefined ? encryptField(fields.emergencyContactPhone) : null,
       fields.medicalNotes !== undefined ? encryptField(fields.medicalNotes) : null,
-      fields.pronomen !== undefined ? encryptField(fields.pronomen) : null,
       fields.firstName ?? null,
       fields.lastName ?? null,
       fields.nickname ?? null,

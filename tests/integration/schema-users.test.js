@@ -34,11 +34,11 @@ test('users.email is unique', async () => {
   await query('DELETE FROM users WHERE email = $1', [email]);
 });
 
-test('admin and orga groups have pronomen in their account_fields after migration', async () => {
-  const { rows } = await query("SELECT key, account_fields FROM groups WHERE key IN ('admin', 'orga')");
-  for (const row of rows) {
-    assert.ok(row.account_fields.includes('pronomen'), `${row.key} should include pronomen`);
-  }
+test('users.pronomen_enc column no longer exists after migration', async () => {
+  const { rows } = await query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'pronomen_enc'`
+  );
+  assert.equal(rows.length, 0);
 });
 
 test('every group except nsc has "sc" in character_classes; nsc has "nsc" after migration', async () => {

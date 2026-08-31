@@ -24,13 +24,12 @@ function decryptAccount(row) {
     emergencyContactFirstName: decryptField(row.emergency_contact_first_name_enc),
     emergencyContactPhone: decryptField(row.emergency_contact_phone_enc),
     medicalNotes: decryptField(row.medical_notes_enc),
-    pronomen: decryptField(row.pronomen_enc),
   };
 }
 
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified,
-  users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc, users.pronomen_enc,
+  users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc,
   groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.character_classes, groups.can_override_checkin_status
 `;
 
@@ -54,8 +53,7 @@ export async function updateAccount(userId, fields) {
        emergency_contact_last_name_enc = COALESCE($8, emergency_contact_last_name_enc),
        emergency_contact_first_name_enc = COALESCE($9, emergency_contact_first_name_enc),
        emergency_contact_phone_enc = COALESCE($10, emergency_contact_phone_enc),
-       medical_notes_enc = COALESCE($11, medical_notes_enc),
-       pronomen_enc = COALESCE($12, pronomen_enc)
+       medical_notes_enc = COALESCE($11, medical_notes_enc)
      WHERE id = $1
      RETURNING id`,
     [
@@ -70,7 +68,6 @@ export async function updateAccount(userId, fields) {
       fields.emergencyContactFirstName !== undefined ? encryptField(fields.emergencyContactFirstName) : null,
       fields.emergencyContactPhone !== undefined ? encryptField(fields.emergencyContactPhone) : null,
       fields.medicalNotes !== undefined ? encryptField(fields.medicalNotes) : null,
-      fields.pronomen !== undefined ? encryptField(fields.pronomen) : null,
     ]
   );
   if (rows.length === 0) return null;

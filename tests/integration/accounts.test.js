@@ -74,7 +74,6 @@ test('PATCH /account encrypts and returns sensitive fields; unspecified fields s
       body: JSON.stringify({
         address: 'Musterstraße 1, 12345 Musterstadt',
         phone: '+49 123 456789',
-        pronomen: 'sie/ihr',
         emergencyContactLastName: 'Mustermann',
         emergencyContactFirstName: 'Erika',
         emergencyContactPhone: '+49 987 654321',
@@ -84,15 +83,13 @@ test('PATCH /account encrypts and returns sensitive fields; unspecified fields s
     const patched = await patchRes.json();
     assert.equal(patched.address, 'Musterstraße 1, 12345 Musterstadt');
     assert.equal(patched.phone, '+49 123 456789');
-    assert.equal(patched.pronomen, 'sie/ihr');
     assert.equal(patched.name, 'Account Test');
     assert.equal(patched.emergencyContactLastName, 'Mustermann');
     assert.equal(patched.emergencyContactFirstName, 'Erika');
     assert.equal(patched.emergencyContactPhone, '+49 987 654321');
 
-    const { rows } = await query('SELECT address_enc, pronomen_enc, emergency_contact_last_name_enc FROM users WHERE id = $1', [userId]);
+    const { rows } = await query('SELECT address_enc, emergency_contact_last_name_enc FROM users WHERE id = $1', [userId]);
     assert.notEqual(rows[0].address_enc.toString('utf8'), 'Musterstraße 1, 12345 Musterstadt');
-    assert.notEqual(rows[0].pronomen_enc.toString('utf8'), 'sie/ihr');
     assert.notEqual(rows[0].emergency_contact_last_name_enc.toString('utf8'), 'Mustermann');
 
     const secondPatchRes = await fetch(`http://localhost:${port}/account`, {
