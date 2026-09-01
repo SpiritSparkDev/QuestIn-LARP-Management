@@ -21,6 +21,14 @@ function redirectUri(providerName) {
   return `${base}/auth/oauth/${providerName}/callback`;
 }
 
+router.get('/auth/oauth/providers', async () => {
+  const available = {};
+  for (const [key, provider] of Object.entries(PROVIDERS)) {
+    available[key] = Boolean(provider.clientId() && provider.clientSecret());
+  }
+  return { status: 200, body: available };
+});
+
 router.get('/auth/oauth/:provider/start', rateLimit(OAUTH_START_RATE_LIMIT)(async ({ params }) => {
   const provider = Object.hasOwn(PROVIDERS, params.provider) ? PROVIDERS[params.provider] : undefined;
   if (!provider) return { status: 404, body: { error: 'unknown provider' } };
