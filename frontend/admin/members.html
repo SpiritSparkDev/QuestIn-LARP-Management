@@ -20,7 +20,7 @@
     <p class="sub">Bearbeite bestehende Mitglieder oder lade neue per E-Mail ein.</p>
     <div class="card">
       <table id="member-list">
-        <thead><tr><th>Name</th><th>E-Mail</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>E-Mail</th><th>Gruppe</th><th>Status</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -145,6 +145,7 @@ async function loadMembers() {
   listBody.innerHTML = members.map((m) => `<tr>
     <td>${escapeHtml(m.name)}</td>
     <td>${escapeHtml(m.email)}</td>
+    <td>${escapeHtml(m.group?.name ?? '–')}</td>
     <td>${m.status === 'active'
       ? `<span class="badge badge-active">Aktiv</span>`
       : `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`}</td>
