@@ -32,6 +32,8 @@
         <input id="event-name" name="name" type="text" required>
         <label for="event-date">Datum</label>
         <input id="event-date" name="eventDate" type="date" required>
+        <label for="event-code">QR-Code-Kennung <span style="opacity:0.6;font-size:12px;">optional, z.B. P17/2027</span></label>
+        <input id="event-code" name="code" type="text" placeholder="P17/2027">
         <hr class="hr">
         <h3>Charakterformular</h3>
         <div id="schema-rows"></div>
@@ -148,6 +150,7 @@ function startEdit(eventData) {
   formTitle.textContent = `Event bearbeiten: ${eventData.name}`;
   form.elements.name.value = eventData.name;
   form.elements.eventDate.value = eventData.event_date;
+  form.elements.code.value = eventData.code ?? '';
   schemaRows.innerHTML = '';
   eventData.character_form_schema.forEach((field) => addSchemaRow(field));
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
@@ -168,6 +171,7 @@ form.addEventListener('submit', async (event) => {
   const payload = {
     name: form.elements.name.value,
     eventDate: form.elements.eventDate.value,
+    code: form.elements.code.value || null,
     characterFormSchema: collectSchema(),
   };
   try {
