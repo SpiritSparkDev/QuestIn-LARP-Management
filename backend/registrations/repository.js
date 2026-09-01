@@ -80,6 +80,30 @@ export async function listParticipantsForEvent(eventId) {
   }));
 }
 
+export async function getScanLookup(eventId, userId) {
+  const { rows } = await query(
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, g.key AS group_key, r.status
+     FROM registrations r
+     JOIN users u ON u.id = r.user_id
+     JOIN groups g ON g.id = u.group_id
+     WHERE r.event_id = $1 AND r.user_id = $2`,
+    [eventId, userId]
+  );
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  const { rows: characters } = await query(
+    'SELECT id, name FROM characters WHERE event_id = $1 AND user_id = $2',
+    [eventId, userId]
+  );
+  return {
+    userId: r.user_id,
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
+    group: r.group_key,
+    status: r.status,
+    characters: characters.map((c) => ({ id: c.id, name: c.name })),
+  };
+}
+
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
     `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.checked_in_at, r.checked_out_at

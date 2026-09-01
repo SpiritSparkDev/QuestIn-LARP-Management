@@ -11,7 +11,21 @@ import {
   checkIn,
   checkOut,
   setStatus,
+  getScanLookup,
 } from './repository.js';
+
+function parseScanCode(code) {
+  if (typeof code !== 'string' || code.length < 38) return null;
+  const userId = code.slice(-36);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) return null;
+  const rest = code.slice(0, -37);
+  const lastDash = rest.lastIndexOf('-');
+  if (lastDash === -1) return null;
+  const eventCode = rest.slice(0, lastDash);
+  const groupKey = rest.slice(lastDash + 1);
+  if (!eventCode || !groupKey) return null;
+  return { eventCode, groupKey, userId };
+}
 
 router.post('/events/:id/register', requireAuth(async ({ params, user }) => {
   try {
@@ -45,6 +59,22 @@ router.get('/events/:id/participants', requireAuth(requireMenu('checkin')(async 
   if (!event) return { status: 404, body: { error: 'event not found' } };
   const participants = await listParticipantsForEvent(params.id);
   return { status: 200, body: participants };
+})));
+
+router.get('/events/:eventId/scan-lookup', requireAuth(requireMenu('checkin')(async ({ req, params }) => {
+  const code = new URL(req.url, 'http://localhost').searchParams.get('code');
+  const parsed = parseScanCode(code);
+  if (!parsed) return { status: 400, body: { error: 'invalid or malformed QR code' } };
+
+  const event = await getEvent(params.eventId);
+  if (!event) return { status: 404, body: { error: 'event not found' } };
+  if (event.code !== parsed.eventCode) {
+    return { status: 400, body: { error: 'this code belongs to a different event' } };
+  }
+
+  const lookup = await getScanLookup(params.eventId, parsed.userId);
+  if (!lookup) return { status: 404, body: { error: 'no registration found for this participant and event' } };
+  return { status: 200, body: lookup };
 })));
 
 router.post('/events/:id/checkin', requireAuth(requireMenu('checkin')(async ({ req, params }) => {

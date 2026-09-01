@@ -1,13 +1,13 @@
 import { query } from '../db.js';
 
-const SELECT_COLUMNS = 'id, name, event_date, character_form_schema, is_active, created_at';
+const SELECT_COLUMNS = 'id, name, event_date, code, character_form_schema, is_active, created_at';
 
-export async function createEvent({ name, eventDate, characterFormSchema }) {
+export async function createEvent({ name, eventDate, code, characterFormSchema }) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, character_form_schema)
-     VALUES ($1, $2, $3)
+    `INSERT INTO events (name, event_date, code, character_form_schema)
+     VALUES ($1, $2, $3, $4)
      RETURNING ${SELECT_COLUMNS}`,
-    [name, eventDate, JSON.stringify(characterFormSchema ?? [])]
+    [name, eventDate, code ?? null, JSON.stringify(characterFormSchema ?? [])]
   );
   return rows[0];
 }
@@ -27,18 +27,20 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { name, eventDate, characterFormSchema }) {
+export async function updateEvent(id, { name, eventDate, code, characterFormSchema }) {
   const { rows } = await query(
     `UPDATE events SET
        name = COALESCE($2, name),
        event_date = COALESCE($3, event_date),
-       character_form_schema = COALESCE($4, character_form_schema)
+       code = COALESCE($4, code),
+       character_form_schema = COALESCE($5, character_form_schema)
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
     [
       id,
       name ?? null,
       eventDate ?? null,
+      code ?? null,
       characterFormSchema !== undefined ? JSON.stringify(characterFormSchema) : null,
     ]
   );

@@ -8,14 +8,14 @@ import { validateSchemaShape } from './schemaValidation.js';
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, characterFormSchema } = body;
+  const { name, eventDate, code, characterFormSchema } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
   if (characterFormSchema !== undefined && !validateSchemaShape(characterFormSchema)) {
     return { status: 400, body: { error: 'characterFormSchema must be an array of objects, each with a unique, non-reserved string "key" (not "id" or "name")' } };
   }
-  const event = await createEvent({ name, eventDate, characterFormSchema });
+  const event = await createEvent({ name, eventDate, code, characterFormSchema });
   return { status: 201, body: event };
 })));
 
@@ -33,11 +33,11 @@ router.get('/events/:id', requireAuth(async ({ params }) => {
 router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { characterFormSchema } = body;
+  const { code, characterFormSchema } = body;
   if (characterFormSchema !== undefined && !validateSchemaShape(characterFormSchema)) {
     return { status: 400, body: { error: 'characterFormSchema must be an array of objects, each with a unique, non-reserved string "key" (not "id" or "name")' } };
   }
-  const event = await updateEvent(params.id, body);
+  const event = await updateEvent(params.id, { ...body, code });
   if (!event) return { status: 404, body: { error: 'event not found' } };
   return { status: 200, body: event };
 })));
