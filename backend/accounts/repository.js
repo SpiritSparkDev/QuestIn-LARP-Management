@@ -9,6 +9,7 @@ function decryptAccount(row) {
     firstName: row.first_name,
     lastName: row.last_name,
     nickname: row.nickname,
+    hotkeys: row.hotkeys,
     name: displayName({ firstName: row.first_name, lastName: row.last_name, nickname: row.nickname }),
     group: { key: row.group_key, name: row.group_name },
     menus: row.visible_menus,
@@ -28,7 +29,7 @@ function decryptAccount(row) {
 }
 
 const SELECT_COLUMNS = `
-  users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified,
+  users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys,
   users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc,
   groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.character_classes, groups.can_override_checkin_status
 `;
@@ -47,13 +48,14 @@ export async function updateAccount(userId, fields) {
        first_name = COALESCE($2, first_name),
        last_name = COALESCE($3, last_name),
        nickname = COALESCE($4, nickname),
-       address_enc = COALESCE($5, address_enc),
-       birthdate_enc = COALESCE($6, birthdate_enc),
-       phone_enc = COALESCE($7, phone_enc),
-       emergency_contact_last_name_enc = COALESCE($8, emergency_contact_last_name_enc),
-       emergency_contact_first_name_enc = COALESCE($9, emergency_contact_first_name_enc),
-       emergency_contact_phone_enc = COALESCE($10, emergency_contact_phone_enc),
-       medical_notes_enc = COALESCE($11, medical_notes_enc)
+       hotkeys = COALESCE($5, hotkeys),
+       address_enc = COALESCE($6, address_enc),
+       birthdate_enc = COALESCE($7, birthdate_enc),
+       phone_enc = COALESCE($8, phone_enc),
+       emergency_contact_last_name_enc = COALESCE($9, emergency_contact_last_name_enc),
+       emergency_contact_first_name_enc = COALESCE($10, emergency_contact_first_name_enc),
+       emergency_contact_phone_enc = COALESCE($11, emergency_contact_phone_enc),
+       medical_notes_enc = COALESCE($12, medical_notes_enc)
      WHERE id = $1
      RETURNING id`,
     [
@@ -61,6 +63,7 @@ export async function updateAccount(userId, fields) {
       fields.firstName ?? null,
       fields.lastName ?? null,
       fields.nickname ?? null,
+      fields.hotkeys !== undefined ? JSON.stringify(fields.hotkeys) : null,
       fields.address !== undefined ? encryptField(fields.address) : null,
       fields.birthdate !== undefined ? encryptField(fields.birthdate) : null,
       fields.phone !== undefined ? encryptField(fields.phone) : null,

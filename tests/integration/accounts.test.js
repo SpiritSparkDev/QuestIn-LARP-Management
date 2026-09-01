@@ -148,6 +148,47 @@ test('GET /account includes canOverrideCheckinStatus from the caller\'s group', 
   }
 });
 
+test('PATCH /account saves and returns hotkeys; GET /account defaults to an empty object', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await registerLoginAndGetCookie(port);
+
+    const beforeRes = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: cookie } });
+    assert.deepEqual((await beforeRes.json()).hotkeys, {});
+
+    const patchRes = await fetch(`http://localhost:${port}/account`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ hotkeys: { confirm: 'Enter', cancel: 'Escape', scan: ' ' } }),
+    });
+    assert.equal(patchRes.status, 200);
+    assert.deepEqual((await patchRes.json()).hotkeys, { confirm: 'Enter', cancel: 'Escape', scan: ' ' });
+
+    const afterRes = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: cookie } });
+    assert.deepEqual((await afterRes.json()).hotkeys, { confirm: 'Enter', cancel: 'Escape', scan: ' ' });
+  });
+});
+
+test('PATCH /account omitting hotkeys preserves the previously-saved value', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await registerLoginAndGetCookie(port);
+
+    await fetch(`http://localhost:${port}/account`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ hotkeys: { confirm: 'k' } }),
+    });
+
+    const secondPatchRes = await fetch(`http://localhost:${port}/account`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ nickname: 'Unrelated Change' }),
+    });
+    const secondPatched = await secondPatchRes.json();
+    assert.equal(secondPatched.nickname, 'Unrelated Change');
+    assert.deepEqual(secondPatched.hotkeys, { confirm: 'k' });
+  });
+});
+
 test.after(async () => {
   await closePool();
 });
