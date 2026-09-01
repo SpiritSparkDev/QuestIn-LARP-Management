@@ -2,7 +2,8 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
-import { createCharacter, getCharacter, listCharactersForUser, updateCharacter } from './repository.js';
+import { createCharacter, getCharacter, listCharactersForUser, listCharactersForEvent, updateCharacter } from './repository.js';
+import { filterCharacterFields } from './visibility.js';
 
 router.post('/characters', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
@@ -46,6 +47,19 @@ router.post('/characters', requireAuth(async ({ req, user }) => {
 router.get('/characters', requireAuth(async ({ user }) => {
   const characters = await listCharactersForUser(user.id);
   return { status: 200, body: characters };
+}));
+
+router.get('/events/:eventId/characters/public', requireAuth(async ({ params, user }) => {
+  const event = await getEvent(params.eventId);
+  if (!event) return { status: 404, body: { error: 'event not found' } };
+  const characters = await listCharactersForEvent(params.eventId);
+  const filtered = characters.map((c) => ({
+    id: c.id,
+    name: c.name,
+    userId: c.user_id,
+    data: filterCharacterFields(c, event.character_form_schema, user),
+  }));
+  return { status: 200, body: filtered };
 }));
 
 router.get('/characters/:id', requireAuth(async ({ params, user }) => {
