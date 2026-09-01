@@ -24,11 +24,11 @@
     </form>
     <p id="message"></p>
     <p><a href="#" id="forgot-link">Passwort vergessen?</a></p>
-    <div class="divider-word">oder anmelden mit</div>
-    <div class="oauth-row">
-      <a href="/auth/oauth/google/start">Google</a>
-      <a href="/auth/oauth/facebook/start">Facebook</a>
-      <a href="/auth/oauth/discord/start">Discord</a>
+    <div class="divider-word" id="oauth-divider">oder anmelden mit</div>
+    <div class="oauth-row" id="oauth-row">
+      <a href="/auth/oauth/google/start" data-provider="google">Google</a>
+      <a href="/auth/oauth/facebook/start" data-provider="facebook">Facebook</a>
+      <a href="/auth/oauth/discord/start" data-provider="discord">Discord</a>
     </div>
     <p class="text-center" style="margin-top:28px;"><a href="/register.html" class="btn-ghost">Noch kein Konto? Registrieren</a></p>
   </div>
@@ -38,6 +38,24 @@ import { api } from '/js/api.js';
 
 const form = document.getElementById('login-form');
 const message = document.getElementById('message');
+
+try {
+  const res = await fetch('/auth/oauth/providers');
+  if (res.ok) {
+    const available = await res.json();
+    const links = document.querySelectorAll('[data-provider]');
+    links.forEach((link) => {
+      if (!available[link.dataset.provider]) link.style.display = 'none';
+    });
+    if (!Object.values(available).some(Boolean)) {
+      document.getElementById('oauth-divider').style.display = 'none';
+      document.getElementById('oauth-row').style.display = 'none';
+    }
+  }
+} catch {
+  // Network hiccup fetching availability — leave every button visible;
+  // worst case a misconfigured provider shows its existing 503 error on click.
+}
 
 if (new URLSearchParams(window.location.search).get('oauth_error') === 'denied') {
   message.textContent = 'Anmeldung abgebrochen.';
