@@ -208,6 +208,55 @@ test('PUT /events/:id rejects a characterFormSchema using the reserved key "id" 
   });
 });
 
+test('events.code round-trips through POST/GET/PUT, can be changed, and can be cleared', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+
+    const createRes = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Codecon', eventDate: '2027-09-01', code: 'P17/2027' }),
+    });
+    assert.equal(createRes.status, 201);
+    const created = await createRes.json();
+    assert.equal(created.code, 'P17/2027');
+
+    const getRes = await fetch(`http://localhost:${port}/events/${created.id}`, { headers: { Cookie: admin.cookie } });
+    assert.equal((await getRes.json()).code, 'P17/2027');
+
+    const changeRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ code: 'P18/2028' }),
+    });
+    assert.equal((await changeRes.json()).code, 'P18/2028');
+
+    // A PUT that omits code entirely must preserve it (the same partial-update
+    // contract every other optional field on this route already has).
+    const untouchedRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Codecon Renamed' }),
+    });
+    const untouched = await untouchedRes.json();
+    assert.equal(untouched.name, 'Codecon Renamed');
+    assert.equal(untouched.code, 'P18/2028');
+
+    // A PUT that explicitly clears code (what the admin form sends when the
+    // field is emptied) must actually clear it, not silently preserve the
+    // old value.
+    const clearRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ code: null }),
+    });
+    assert.equal((await clearRes.json()).code, null);
+
+    const getAfterClear = await fetch(`http://localhost:${port}/events/${created.id}`, { headers: { Cookie: admin.cookie } });
+    assert.equal((await getAfterClear.json()).code, null);
+  });
+});
+
 test.after(async () => {
   await closePool();
 });

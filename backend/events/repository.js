@@ -28,11 +28,16 @@ export async function listEvents() {
 }
 
 export async function updateEvent(id, { name, eventDate, code, characterFormSchema }) {
+  // code is the one optional field a caller can legitimately want to CLEAR
+  // (an empty string from a form), not just omit -- COALESCE alone can't
+  // tell those apart, since both arrive as a falsy value bound to $4. $6
+  // carries that distinction explicitly: only skip the write when the
+  // field was genuinely absent from the call.
   const { rows } = await query(
     `UPDATE events SET
        name = COALESCE($2, name),
        event_date = COALESCE($3, event_date),
-       code = COALESCE($4, code),
+       code = CASE WHEN $6 THEN $4 ELSE code END,
        character_form_schema = COALESCE($5, character_form_schema)
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
@@ -42,6 +47,7 @@ export async function updateEvent(id, { name, eventDate, code, characterFormSche
       eventDate ?? null,
       code ?? null,
       characterFormSchema !== undefined ? JSON.stringify(characterFormSchema) : null,
+      code !== undefined,
     ]
   );
   return rows[0] ?? null;
