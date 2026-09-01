@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Einstellungen – Pakyrion Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/everest-registry.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
+  </aside>
+  <div class="main"><div class="content">
+    <h1>Einstellungen</h1>
+    <p class="sub">SMTP-Zugangsdaten für den E-Mail-Versand (Registrierung, Passwort-Reset, Einladungen).</p>
+    <div class="card form-pad">
+      <form id="smtp-form">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label for="smtp-host">Host</label>
+            <input id="smtp-host" name="host" type="text" placeholder="smtp.example.com">
+          </div>
+          <div>
+            <label for="smtp-port">Port</label>
+            <input id="smtp-port" name="port" type="number" placeholder="587">
+          </div>
+          <div>
+            <label for="smtp-username">Benutzername</label>
+            <input id="smtp-username" name="username" type="text">
+          </div>
+          <div>
+            <label for="smtp-password">Passwort</label>
+            <input id="smtp-password" name="password" type="password" placeholder="Leer lassen, um das bestehende Passwort zu behalten">
+          </div>
+        </div>
+        <label for="smtp-from">Absender-Adresse</label>
+        <input id="smtp-from" name="fromAddress" type="email" placeholder="no-reply@pakyrion.local">
+        <button type="submit">Speichern</button>
+      </form>
+    </div>
+
+    <div class="card form-pad">
+      <h2>Test-Mail senden</h2>
+      <p class="sub">Prüft die Felder oben, ohne sie zu speichern.</p>
+      <label for="test-to">Ziel-E-Mail-Adresse</label>
+      <input id="test-to" type="email">
+      <button type="button" id="send-test">Test-Mail senden</button>
+    </div>
+    <p id="message"></p>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { renderNavLinks } from '/js/nav.js';
+
+const form = document.getElementById('smtp-form');
+const message = document.getElementById('message');
+const testToInput = document.getElementById('test-to');
+
+async function loadSettings() {
+  const settings = await api.get('/admin/settings/smtp');
+  form.elements.host.value = settings.host ?? '';
+  form.elements.port.value = settings.port ?? '';
+  form.elements.username.value = settings.username ?? '';
+  form.elements.fromAddress.value = settings.fromAddress ?? '';
+  form.elements.password.placeholder = settings.hasPassword
+    ? 'Gesetzt — leer lassen, um es zu behalten'
+    : 'Leer lassen, um das bestehende Passwort zu behalten';
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  message.textContent = '';
+  message.className = '';
+  const data = Object.fromEntries(new FormData(form));
+  try {
+    await api.put('/admin/settings/smtp', data);
+    message.textContent = 'Gespeichert.';
+    message.className = 'success';
+    form.elements.password.value = '';
+    await loadSettings();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('send-test').addEventListener('click', async () => {
+  message.textContent = '';
+  message.className = '';
+  const data = Object.fromEntries(new FormData(form));
+  try {
+    await api.post('/admin/settings/smtp/test', { ...data, to: testToInput.value });
+    message.textContent = 'Test-Mail verschickt.';
+    message.className = 'success';
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  await loadSettings();
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins.'; message.className = 'error'; }
+}
+</script>
+</body>
+</html>
