@@ -12,14 +12,18 @@ export async function applyBranding() {
 
   const brandName = document.querySelector('.brand-name, .sidebar-brand');
   if (brandName && settings.appTitle) {
-    // .sidebar-brand has a nested <span>Admin</span> that must survive the rewrite.
-    const span = brandName.querySelector('span');
+    // .sidebar-brand has a nested <span>Admin</span> after the text node;
+    // only the text node's data changes, so the span is untouched already.
     brandName.childNodes[0].textContent = settings.appTitle;
-    if (span) brandName.appendChild(span);
   }
 
   if (settings.logoUrl) {
     const seal = document.querySelector('.brand-seal');
-    if (seal) seal.innerHTML = `<img src="${settings.logoUrl}" alt="Logo">`;
+    if (seal) {
+      const img = document.createElement('img');
+      img.src = settings.logoUrl;
+      img.alt = 'Logo';
+      seal.replaceChildren(img);
+    }
   }
 }
