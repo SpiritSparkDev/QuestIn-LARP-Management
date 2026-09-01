@@ -105,13 +105,15 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     medicalNotes: rest.medicalNotes,
   });
 
+  let emailSent = true;
   try {
     await sendInvitationEmail(invitation.email, invitation.token);
   } catch (err) {
+    emailSent = false;
     logger.error('failed to send invitation email', { error: err.message });
   }
 
-  return { status: 201, body: { id: invitation.id, email: invitation.email, status: 'invited' } };
+  return { status: 201, body: { id: invitation.id, email: invitation.email, status: 'invited', emailSent } };
 })));
 
 router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglieder')(async ({ params }) => {

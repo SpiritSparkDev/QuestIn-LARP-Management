@@ -231,6 +231,37 @@ test('POST /members/invite rejects an explicit group from a caller without the g
   }
 });
 
+test('POST /members/invite reports emailSent: false when SMTP is unreachable, but still creates the invitation', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const email = `invite-mail-fail-${crypto.randomUUID()}@example.com`;
+
+    // Point SMTP at an unreachable host for the duration of this one request —
+    // mailer.js's DB-first lookup finds no smtp_settings row in the test DB,
+    // so it falls through to these environment variables.
+    const originalHost = process.env.SMTP_HOST;
+    process.env.SMTP_HOST = '127.0.0.1';
+    process.env.SMTP_PORT = '1'; // nothing listens on port 1; connection refused fast
+    try {
+      const res = await fetch(`http://localhost:${port}/members/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ email, firstName: 'Mail', lastName: 'Fail', group: 'sc' }),
+      });
+      assert.equal(res.status, 201);
+      const body = await res.json();
+      assert.equal(body.emailSent, false);
+    } finally {
+      if (originalHost === undefined) delete process.env.SMTP_HOST; else process.env.SMTP_HOST = originalHost;
+      delete process.env.SMTP_PORT;
+    }
+  } finally {
+    server.close();
+  }
+});
+
 test('POST /members/invitations/:id/resend issues a new token', async () => {
   const server = createServer().listen(0);
   try {

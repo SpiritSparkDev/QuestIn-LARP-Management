@@ -240,9 +240,14 @@ document.getElementById('invite-form').addEventListener('submit', async (event) 
     payload[input.dataset.field] = input.value;
   });
   try {
-    await api.post('/members/invite', payload);
-    message.textContent = 'Einladung verschickt.';
-    message.className = 'success';
+    const result = await api.post('/members/invite', payload);
+    if (result.emailSent) {
+      message.textContent = 'Einladung verschickt.';
+      message.className = 'success';
+    } else {
+      message.textContent = 'Einladung erstellt, aber der E-Mail-Versand ist fehlgeschlagen. Bitte SMTP-Einstellungen prüfen oder über "Erneut senden" in der Mitgliederliste erneut versuchen.';
+      message.className = 'error';
+    }
     event.target.reset();
     buildFieldInputs(inviteFields);
     await loadMembers();
