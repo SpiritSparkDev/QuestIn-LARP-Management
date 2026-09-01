@@ -43,7 +43,7 @@ function tagValueForField(field, rawValue) {
 }
 
 function renderTag(field, value) {
-  if (field.type === 'link') {
+  if (field.type === 'link' && typeof value === 'string' && /^https?:\/\//.test(value)) {
     return `<span class="tag">${escapeHtml(field.label)}: <a href="${escapeHtml(value)}" target="_blank" rel="noopener">${escapeHtml(value)}</a></span>`;
   }
   return `<span class="tag">${escapeHtml(field.label)}: ${escapeHtml(value)}</span>`;
