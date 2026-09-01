@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/everest-registry.css">
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1/dist/jsQR.js"></script>
 </head>
 <body>
 <div class="app">
@@ -19,6 +20,29 @@
     <h1>Check-In</h1>
     <p class="sub">Teilnehmerliste für das ausgewählte Event.</p>
     <select id="event-select" aria-label="Event"></select>
+    <div class="card form-pad">
+      <h2>QR-Scan</h2>
+      <label for="scan-mode">Modus</label>
+      <select id="scan-mode">
+        <option value="off">Aus</option>
+        <option value="push">20s-Push-to-See</option>
+        <option value="always">Permanent an</option>
+      </select>
+      <button type="button" id="scan-start" style="display:none;">Scan starten (20s)</button>
+      <p id="scan-status" class="sub"></p>
+      <video id="scan-video" style="max-width:320px;display:none;" playsinline muted></video>
+      <canvas id="scan-canvas" style="display:none;"></canvas>
+    </div>
+    <dialog id="scan-dialog">
+      <h2>Gescannter Teilnehmer</h2>
+      <p><strong id="scan-name"></strong></p>
+      <p id="scan-group"></p>
+      <p id="scan-status-line"></p>
+      <p id="scan-characters"></p>
+      <p id="scan-warning" class="error" style="display:none;"></p>
+      <button type="button" id="scan-confirm">Einchecken</button>
+      <button type="button" id="scan-cancel">Abbrechen</button>
+    </dialog>
     <div class="stat-row">
       <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Gesamt</div></div>
       <div class="stat"><div class="stat-num forest" id="stat-checked-in">0</div><div class="stat-label">Eingecheckt</div></div>
@@ -40,6 +64,7 @@ import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { escapeHtml } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
+import { parseScanCode } from '/js/qrCode.js';
 
 const eventSelect = document.getElementById('event-select');
 const listBody = document.querySelector('#participant-list tbody');
@@ -53,6 +78,124 @@ const STATUS_LABELS = { registered: 'Angemeldet', checked_in: 'Eingecheckt', che
 let currentSearch = '';
 let canOverride = false;
 const STATUS_ORDER = ['registered', 'checked_in', 'checked_out'];
+
+const scanModeSelect = document.getElementById('scan-mode');
+const scanStartButton = document.getElementById('scan-start');
+const scanStatus = document.getElementById('scan-status');
+const scanVideo = document.getElementById('scan-video');
+const scanCanvas = document.getElementById('scan-canvas');
+const scanDialog = document.getElementById('scan-dialog');
+
+let scanStream = null;
+let scanIntervalId = null;
+let scanPushTimeoutId = null;
+let scanDialogAutoCloseId = null;
+let dialogOpenForEventId = null;
+
+function stopScanning() {
+  if (scanIntervalId) { clearInterval(scanIntervalId); scanIntervalId = null; }
+  if (scanPushTimeoutId) { clearTimeout(scanPushTimeoutId); scanPushTimeoutId = null; }
+  if (scanStream) { scanStream.getTracks().forEach((track) => track.stop()); scanStream = null; }
+  scanVideo.style.display = 'none';
+  scanVideo.srcObject = null;
+}
+
+async function startScanning({ pushMode }) {
+  stopScanning();
+  scanStatus.textContent = '';
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch {
+    scanStatus.textContent = 'Kamera nicht verfügbar oder Zugriff verweigert.';
+    return;
+  }
+  scanVideo.srcObject = scanStream;
+  scanVideo.style.display = '';
+  await scanVideo.play();
+  const ctx = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+  scanIntervalId = setInterval(() => {
+    if (scanDialog.open || scanVideo.readyState !== scanVideo.HAVE_ENOUGH_DATA) return;
+    scanCanvas.width = scanVideo.videoWidth;
+    scanCanvas.height = scanVideo.videoHeight;
+    ctx.drawImage(scanVideo, 0, 0, scanCanvas.width, scanCanvas.height);
+    const imageData = ctx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+    const result = jsQR(imageData.data, imageData.width, imageData.height);
+    if (result) handleScannedCode(result.data);
+  }, 750);
+
+  if (pushMode) {
+    scanPushTimeoutId = setTimeout(() => {
+      stopScanning();
+      scanStatus.textContent = '';
+    }, 20000);
+  }
+}
+
+async function handleScannedCode(rawCode) {
+  const parsed = parseScanCode(rawCode);
+  const eventId = eventSelect.value;
+  if (!parsed || !eventId) {
+    scanStatus.textContent = 'QR-Code hat ein ungültiges Format.';
+    return;
+  }
+  try {
+    const lookup = await api.get(`/events/${eventId}/scan-lookup?code=${encodeURIComponent(rawCode)}`);
+    openScanDialog(eventId, lookup);
+  } catch (err) {
+    scanStatus.textContent = err.message;
+  }
+}
+
+function openScanDialog(eventId, lookup) {
+  dialogOpenForEventId = eventId;
+  document.getElementById('scan-name').textContent = lookup.name;
+  document.getElementById('scan-group').textContent = `Kategorie: ${lookup.group}`;
+  document.getElementById('scan-status-line').textContent = `Status: ${STATUS_LABELS[lookup.status] ?? lookup.status}`;
+  document.getElementById('scan-characters').textContent = lookup.characters.length > 0
+    ? `Charaktere: ${lookup.characters.map((c) => c.name).join(', ')}`
+    : '';
+  const warning = document.getElementById('scan-warning');
+  const confirmButton = document.getElementById('scan-confirm');
+  if (lookup.status !== 'registered') {
+    warning.textContent = 'Bereits eingecheckt oder ausgecheckt.';
+    warning.style.display = '';
+    confirmButton.disabled = true;
+  } else {
+    warning.style.display = 'none';
+    confirmButton.disabled = false;
+  }
+  confirmButton.dataset.userId = lookup.userId;
+  scanDialog.showModal();
+  scanDialogAutoCloseId = setTimeout(() => { if (scanDialog.open) scanDialog.close(); }, 30000);
+}
+
+document.getElementById('scan-confirm').addEventListener('click', async (event) => {
+  clearTimeout(scanDialogAutoCloseId);
+  const userId = event.target.dataset.userId;
+  scanDialog.close();
+  await transition(dialogOpenForEventId, userId, 'checkin');
+});
+
+document.getElementById('scan-cancel').addEventListener('click', () => {
+  clearTimeout(scanDialogAutoCloseId);
+  scanDialog.close();
+});
+
+scanModeSelect.addEventListener('change', () => {
+  const mode = scanModeSelect.value;
+  localStorage.setItem('qrScanMode', mode);
+  stopScanning();
+  scanStartButton.style.display = mode === 'push' ? '' : 'none';
+  if (mode === 'always') startScanning({ pushMode: false });
+});
+
+scanStartButton.addEventListener('click', () => startScanning({ pushMode: true }));
+window.addEventListener('beforeunload', stopScanning);
+
+const savedScanMode = localStorage.getItem('qrScanMode') || 'off';
+scanModeSelect.value = savedScanMode;
+scanStartButton.style.display = savedScanMode === 'push' ? '' : 'none';
 
 function applySearchFilter() {
   const term = currentSearch.trim().toLowerCase();
@@ -154,6 +297,7 @@ try {
   eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
   if (events.length > 0) {
     await loadParticipants(events[0].id);
+    if (savedScanMode === 'always') startScanning({ pushMode: false });
   } else {
     message.textContent = 'Keine Events vorhanden.';
   }
