@@ -3,7 +3,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { getSmtpSettings, setSmtpSettings } from './repository.js';
+import { getSmtpSettings, getSmtpSettingsForSending, setSmtpSettings } from './repository.js';
 
 router.get('/admin/settings/smtp', requireAuth(requireAdminGroup(async () => {
   const settings = await getSmtpSettings();
@@ -23,11 +23,19 @@ router.post('/admin/settings/smtp/test', requireAuth(requireAdminGroup(async ({ 
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { host, port, username, password, fromAddress, to } = body;
   if (!host || !to) return { status: 400, body: { error: 'host and to are required' } };
+  let effectivePassword = password;
+  if (!effectivePassword) {
+    const saved = await getSmtpSettingsForSending();
+    if (saved && saved.username === username) effectivePassword = saved.password;
+  }
   try {
     const transporter = nodemailer.createTransport({
       host,
       port: Number(port) || 587,
-      auth: username ? { user: username, pass: password } : undefined,
+      auth: username ? { user: username, pass: effectivePassword } : undefined,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
     });
     await transporter.sendMail({
       to,

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64); // backend/smtpSettings/repository.js -> fieldCrypto.js fail-fasts at import time if unset
 delete process.env.SMTP_HOST; // force the no-network jsonTransport fallback
+delete process.env.DATABASE_URL; // this unit test must never attempt a real DB connection — see backend/auth/mailer.js's DATABASE_URL guard
 
 const { sendVerificationEmail, sendPasswordResetEmail } = await import('../../backend/auth/mailer.js');
 

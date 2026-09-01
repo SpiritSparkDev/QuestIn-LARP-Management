@@ -27,6 +27,9 @@ async function getTransporterAndFrom() {
         host,
         port,
         auth: username ? { user: username, pass: password } : undefined,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
       })
     : nodemailer.createTransport({ jsonTransport: true });
   return { transporter, from };

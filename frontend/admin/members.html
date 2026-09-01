@@ -220,9 +220,14 @@ async function resendInvitation(invitationId) {
   message.textContent = '';
   message.className = '';
   try {
-    await api.post(`/members/invitations/${invitationId}/resend`, {});
-    message.textContent = 'Einladung erneut verschickt.';
-    message.className = 'success';
+    const result = await api.post(`/members/invitations/${invitationId}/resend`, {});
+    if (result.emailSent) {
+      message.textContent = 'Einladung erneut verschickt.';
+      message.className = 'success';
+    } else {
+      message.textContent = 'Erneuter Versand fehlgeschlagen. Bitte SMTP-Einstellungen prüfen.';
+      message.className = 'error';
+    }
     await loadMembers();
   } catch (err) {
     message.textContent = err.message;

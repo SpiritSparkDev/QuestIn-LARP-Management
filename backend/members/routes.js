@@ -125,10 +125,12 @@ router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglied
   if (!updated) {
     return { status: 409, body: { error: 'invitation already redeemed' } };
   }
+  let emailSent = true;
   try {
     await sendInvitationEmail(updated.email, updated.token);
   } catch (err) {
+    emailSent = false;
     logger.error('failed to resend invitation email', { error: err.message });
   }
-  return { status: 200, body: { id: updated.id, email: updated.email, status: 'invited' } };
+  return { status: 200, body: { id: updated.id, email: updated.email, status: 'invited', emailSent } };
 })));
