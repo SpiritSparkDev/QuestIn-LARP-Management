@@ -20,6 +20,8 @@
 </div>
 <script type="module">
 import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+applyBranding();
 
 const message = document.getElementById('message');
 const token = new URLSearchParams(window.location.search).get('token');
