@@ -165,6 +165,29 @@ test('characters from multiple different users are each independently filtered p
   });
 });
 
+test('GET /characters/:id filters non-public fields for a non-owner, non-elevated viewer', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    const stranger = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ eventId, name: 'Delwyn', data: { fraction: 'Westmark', secretNote: 'Verraeter' } }),
+    });
+    const { id } = await createRes.json();
+
+    const strangerGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: stranger.cookie } });
+    assert.equal(strangerGet.status, 200);
+    const strangerBody = await strangerGet.json();
+    assert.deepEqual(Object.keys(strangerBody.data).sort(), ['fraction']);
+    assert.equal(strangerBody.data.fraction, 'Westmark');
+
+    const missingGet = await fetch(`http://localhost:${port}/characters/${crypto.randomUUID()}`, { headers: { Cookie: stranger.cookie } });
+    assert.equal(missingGet.status, 404);
+  });
+});
+
 test.after(async () => {
   await closePool();
 });

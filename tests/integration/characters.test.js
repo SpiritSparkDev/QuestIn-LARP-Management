@@ -103,7 +103,9 @@ test('a participant cannot view or edit another participant\'s character; an adm
     const { id } = await createRes.json();
 
     const strangerGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: stranger.cookie } });
-    assert.equal(strangerGet.status, 403);
+    assert.equal(strangerGet.status, 200);
+    const strangerBody = await strangerGet.json();
+    assert.deepEqual(strangerBody.data, {});
 
     const adminGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: admin.cookie } });
     assert.equal(adminGet.status, 200);
