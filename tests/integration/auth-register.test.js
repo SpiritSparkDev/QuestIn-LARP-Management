@@ -57,6 +57,18 @@ test('register creates an unverified user with a verification token; verify acti
   });
 });
 
+test('POST /auth/register accepts the exact field shape frontend/register.html sends', async () => {
+  await withTestServer(async (port) => {
+    const email = `register-html-shape-${crypto.randomUUID()}@example.com`;
+    const res = await fetch(`http://localhost:${port}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstName: 'Test', lastName: 'User', email, password: 'correct horse battery staple' }),
+    });
+    assert.equal(res.status, 201);
+  });
+});
+
 test('registering with a password shorter than 8 characters is rejected with 400', async () => {
   await withTestServer(async (port) => {
     const email = `shortpw-${crypto.randomUUID()}@example.com`;
