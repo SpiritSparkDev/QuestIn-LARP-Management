@@ -318,9 +318,17 @@ function renderHotkeyInputs() {
   document.getElementById('hotkey-cancel').value = displayKey(currentHotkeys.cancel);
   document.getElementById('hotkey-scan').value = displayKey(currentHotkeys.scan);
 }
+// Show the defaults immediately rather than leaving the card blank until
+// the account finishes loading below -- the later renderHotkeyInputs()
+// call (once the saved value, if any, is fetched) simply overwrites this.
+renderHotkeyInputs();
 
 function captureHotkey(inputId, action) {
   document.getElementById(inputId).addEventListener('keydown', async (event) => {
+    // Let Tab/Shift+Tab (and bare modifier presses) through untouched --
+    // otherwise a keyboard-only user tabbing into this field can never tab
+    // back out, since every keydown below is captured as the new binding.
+    if (event.key === 'Tab' || ['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return;
     // stopPropagation, not just preventDefault: preventDefault only blocks
     // the input's default keystroke behavior, it does NOT stop this event
     // from also bubbling up to the document-level listener below. Without
@@ -356,7 +364,7 @@ document.addEventListener('keydown', (event) => {
       event.preventDefault();
       document.getElementById('scan-cancel').click();
     }
-  } else if (event.key === currentHotkeys.scan && scanStartButton.style.display !== 'none') {
+  } else if (event.key === currentHotkeys.scan && scanStartButton.style.display !== 'none' && !event.repeat) {
     event.preventDefault();
     scanStartButton.click();
   }
