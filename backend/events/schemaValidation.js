@@ -53,6 +53,12 @@ export function validateCharacterData(schema, data) {
     if (!isEmpty && field.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) {
       errors.push(`${field.key} must be a number`);
     }
+    if (!isEmpty && field.type === 'link' && typeof value !== 'string') {
+      errors.push(`${field.key} must be a string`);
+    }
+    if (!isEmpty && field.type === 'link' && typeof value === 'string' && !/^https?:\/\//.test(value)) {
+      errors.push(`${field.key} must start with http:// or https://`);
+    }
     if (!isEmpty && typeof value === 'string' && value.length > MAX_VALUE_LENGTH) {
       errors.push(`${field.key} must be at most ${MAX_VALUE_LENGTH} characters`);
     }

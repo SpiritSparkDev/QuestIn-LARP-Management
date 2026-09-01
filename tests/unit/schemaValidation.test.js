@@ -137,6 +137,18 @@ test('NaN or Infinity for a number field is an error', () => {
   assert.ok(errorsInf.some((e) => e.includes('punkte')));
 });
 
+test('validateCharacterData rejects a link value that does not start with http:// or https://', () => {
+  const schema = [{ key: 'sheet', label: 'Sheet', type: 'link' }];
+  const errors = validateCharacterData(schema, { sheet: 'not-a-url' });
+  assert.ok(errors.some((e) => e.includes('sheet')));
+});
+
+test('validateCharacterData accepts a well-formed https link', () => {
+  const schema = [{ key: 'sheet', label: 'Sheet', type: 'link' }];
+  const errors = validateCharacterData(schema, { sheet: 'https://example.com/sheet' });
+  assert.deepEqual(errors, []);
+});
+
 test('validateSchemaShape accepts a well-formed schema', () => {
   assert.equal(validateSchemaShape([
     { key: 'klasse', label: 'Klasse', type: 'text' },

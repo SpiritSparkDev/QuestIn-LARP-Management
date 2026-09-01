@@ -37,6 +37,9 @@ export function renderField(field, value) {
   if (field.type === 'number') {
     return `<input id="${id}" name="${key}" type="number" value="${val}" ${required}><label for="${id}">${label}</label>`;
   }
+  if (field.type === 'link') {
+    return `<input id="${id}" name="${key}" type="url" value="${val}" ${required}><label for="${id}">${label}</label>`;
+  }
   if (field.type === 'textarea') {
     return `<textarea id="${id}" name="${key}" ${required}>${val}</textarea><label for="${id}">${label}</label>`;
   }
