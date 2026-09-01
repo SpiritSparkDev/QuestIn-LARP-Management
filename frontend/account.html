@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/chronicle-crest.css">
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1/qrcode.min.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -39,6 +40,11 @@
       <textarea id="medicalNotes" name="medicalNotes"></textarea>
       <button type="submit">Speichern</button>
     </form>
+    <div class="card form-pad" id="qr-section" style="display:none;">
+      <h2>Mein QR-Code</h2>
+      <p class="sub" id="qr-hint"></p>
+      <canvas id="qr-canvas"></canvas>
+    </div>
     <p id="message"></p>
   </div>
 </div>
@@ -48,6 +54,7 @@ import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { renderNavLinks } from '/js/nav.js';
 import { attachBirthdateFormatter } from '/js/formFields.js';
+import { buildScanCode } from '/js/qrCode.js';
 
 const form = document.getElementById('account-form');
 const message = document.getElementById('message');
@@ -61,6 +68,58 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
   window.location.href = '/login.html';
 });
 
+async function loadQrCode(account) {
+  const qrSection = document.getElementById('qr-section');
+  const qrHint = document.getElementById('qr-hint');
+  try {
+    const [events, registrations] = await Promise.all([api.get('/events'), api.get('/registrations')]);
+    const activeEvent = events.find((e) => e.is_active);
+    if (!activeEvent) {
+      qrSection.style.display = '';
+      qrHint.textContent = 'Aktuell ist kein Event für die Anmeldung geöffnet.';
+      return;
+    }
+    if (!activeEvent.code) {
+      qrSection.style.display = '';
+      qrHint.textContent = 'Für dieses Event ist noch kein QR-Code eingerichtet.';
+      return;
+    }
+    const registration = registrations.find((r) => r.eventId === activeEvent.id);
+    if (!registration) {
+      qrSection.style.display = '';
+      qrHint.textContent = `Du bist für "${activeEvent.name}" nicht angemeldet.`;
+      return;
+    }
+
+    const code = buildScanCode({ eventCode: activeEvent.code, groupKey: account.group.key, userId: account.id });
+    const qr = qrcode(0, 'M');
+    qr.addData(code);
+    qr.make();
+    const moduleCount = qr.getModuleCount();
+    const cellSize = 6;
+    const canvas = document.getElementById('qr-canvas');
+    canvas.width = moduleCount * cellSize;
+    canvas.height = moduleCount * cellSize;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+    for (let row = 0; row < moduleCount; row++) {
+      for (let col = 0; col < moduleCount; col++) {
+        if (qr.isDark(row, col)) ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+      }
+    }
+
+    qrSection.style.display = '';
+    qrHint.textContent = `Für "${activeEvent.name}" — zeig diesen Code beim Check-In vor.`;
+  } catch {
+    // Branding-style fail-quiet: the QR section is a convenience, not core
+    // account functionality, so a network hiccup here must not block or
+    // error out the rest of the account page.
+    qrSection.style.display = 'none';
+  }
+}
+
 async function loadAccount() {
   try {
     const account = await api.get('/account');
@@ -68,6 +127,7 @@ async function loadAccount() {
     for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes']) {
       form.elements[field].value = account[field] ?? '';
     }
+    await loadQrCode(account);
     formControls.forEach((el) => { el.disabled = false; });
   } catch (err) {
     if (err.status === 401) {
