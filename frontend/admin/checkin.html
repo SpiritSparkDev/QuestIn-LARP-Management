@@ -91,6 +91,7 @@ let scanIntervalId = null;
 let scanPushTimeoutId = null;
 let scanDialogAutoCloseId = null;
 let dialogOpenForEventId = null;
+let scanLookupPending = false;
 
 function stopScanning() {
   if (scanIntervalId) { clearInterval(scanIntervalId); scanIntervalId = null; }
@@ -98,6 +99,7 @@ function stopScanning() {
   if (scanStream) { scanStream.getTracks().forEach((track) => track.stop()); scanStream = null; }
   scanVideo.style.display = 'none';
   scanVideo.srcObject = null;
+  scanLookupPending = false;
 }
 
 async function startScanning({ pushMode }) {
@@ -115,7 +117,7 @@ async function startScanning({ pushMode }) {
   const ctx = scanCanvas.getContext('2d', { willReadFrequently: true });
 
   scanIntervalId = setInterval(() => {
-    if (scanDialog.open || scanVideo.readyState !== scanVideo.HAVE_ENOUGH_DATA) return;
+    if (scanDialog.open || scanLookupPending || scanVideo.readyState !== scanVideo.HAVE_ENOUGH_DATA) return;
     scanCanvas.width = scanVideo.videoWidth;
     scanCanvas.height = scanVideo.videoHeight;
     ctx.drawImage(scanVideo, 0, 0, scanCanvas.width, scanCanvas.height);
@@ -139,11 +141,18 @@ async function handleScannedCode(rawCode) {
     scanStatus.textContent = 'QR-Code hat ein ungültiges Format.';
     return;
   }
+  // Set before the first await so the very next 750ms interval tick (which
+  // runs synchronously on the main thread) is guaranteed to see it, closing
+  // the window where a slow lookup response let a second decode re-enter
+  // this function and race to open/populate the dialog concurrently.
+  scanLookupPending = true;
   try {
     const lookup = await api.get(`/events/${eventId}/scan-lookup?code=${encodeURIComponent(rawCode)}`);
     openScanDialog(eventId, lookup);
   } catch (err) {
     scanStatus.textContent = err.message;
+  } finally {
+    scanLookupPending = false;
   }
 }
 
