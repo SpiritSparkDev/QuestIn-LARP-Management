@@ -33,6 +33,16 @@
       <video id="scan-video" style="max-width:320px;display:none;" playsinline muted></video>
       <canvas id="scan-canvas" style="display:none;"></canvas>
     </div>
+    <div class="card form-pad">
+      <h2>Hotkeys</h2>
+      <p class="sub">Klicke in ein Feld und drücke die gewünschte Taste.</p>
+      <label for="hotkey-confirm">Einchecken (im Pop-up)</label>
+      <input id="hotkey-confirm" readonly>
+      <label for="hotkey-cancel">Abbrechen (im Pop-up)</label>
+      <input id="hotkey-cancel" readonly>
+      <label for="hotkey-scan">Scan starten (Push-to-See)</label>
+      <input id="hotkey-scan" readonly>
+    </div>
     <dialog id="scan-dialog">
       <h2>Gescannter Teilnehmer</h2>
       <p><strong id="scan-name"></strong></p>
@@ -74,6 +84,9 @@ const statTotal = document.getElementById('stat-total');
 const statCheckedIn = document.getElementById('stat-checked-in');
 
 const STATUS_LABELS = { registered: 'Angemeldet', checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt' };
+const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
+const HOTKEY_DISPLAY = { Enter: 'Enter', Escape: 'Esc', ' ': 'Leertaste' };
+function displayKey(key) { return HOTKEY_DISPLAY[key] ?? key; }
 
 let currentSearch = '';
 let canOverride = false;
@@ -298,10 +311,63 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
   window.location.href = '/login.html';
 });
 
+let currentHotkeys = { ...DEFAULT_HOTKEYS };
+
+function renderHotkeyInputs() {
+  document.getElementById('hotkey-confirm').value = displayKey(currentHotkeys.confirm);
+  document.getElementById('hotkey-cancel').value = displayKey(currentHotkeys.cancel);
+  document.getElementById('hotkey-scan').value = displayKey(currentHotkeys.scan);
+}
+
+function captureHotkey(inputId, action) {
+  document.getElementById(inputId).addEventListener('keydown', async (event) => {
+    // stopPropagation, not just preventDefault: preventDefault only blocks
+    // the input's default keystroke behavior, it does NOT stop this event
+    // from also bubbling up to the document-level listener below. Without
+    // stopping it here, capturing a key would ALSO immediately re-trigger
+    // whatever action that same key is (or was) already bound to.
+    event.preventDefault();
+    event.stopPropagation();
+    currentHotkeys = { ...currentHotkeys, [action]: event.key };
+    renderHotkeyInputs();
+    try {
+      await api.patch('/account', { hotkeys: currentHotkeys });
+    } catch (err) {
+      scanStatus.textContent = err.message;
+    }
+  });
+}
+
+captureHotkey('hotkey-confirm', 'confirm');
+captureHotkey('hotkey-cancel', 'cancel');
+captureHotkey('hotkey-scan', 'scan');
+
+function isTypingTarget(el) {
+  return el && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName);
+}
+
+document.addEventListener('keydown', (event) => {
+  if (!scanDialog.open && isTypingTarget(document.activeElement)) return;
+  if (scanDialog.open) {
+    if (event.key === currentHotkeys.confirm) {
+      event.preventDefault();
+      if (!document.getElementById('scan-confirm').disabled) document.getElementById('scan-confirm').click();
+    } else if (event.key === currentHotkeys.cancel) {
+      event.preventDefault();
+      document.getElementById('scan-cancel').click();
+    }
+  } else if (event.key === currentHotkeys.scan && scanStartButton.style.display !== 'none') {
+    event.preventDefault();
+    scanStartButton.click();
+  }
+});
+
 try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   canOverride = !!account.canOverrideCheckinStatus;
+  currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
+  renderHotkeyInputs();
   const events = await api.get('/events');
   eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
   if (events.length > 0) {
