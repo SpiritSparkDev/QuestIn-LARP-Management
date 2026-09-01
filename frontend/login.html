@@ -39,23 +39,25 @@ import { api } from '/js/api.js';
 const form = document.getElementById('login-form');
 const message = document.getElementById('message');
 
-try {
-  const res = await fetch('/auth/oauth/providers');
-  if (res.ok) {
-    const available = await res.json();
-    const links = document.querySelectorAll('[data-provider]');
-    links.forEach((link) => {
-      if (!available[link.dataset.provider]) link.style.display = 'none';
-    });
-    if (!Object.values(available).some(Boolean)) {
-      document.getElementById('oauth-divider').style.display = 'none';
-      document.getElementById('oauth-row').style.display = 'none';
+(async () => {
+  try {
+    const res = await fetch('/auth/oauth/providers');
+    if (res.ok) {
+      const available = await res.json();
+      const links = document.querySelectorAll('[data-provider]');
+      links.forEach((link) => {
+        if (!available[link.dataset.provider]) link.style.display = 'none';
+      });
+      if (![...links].some((link) => link.style.display !== 'none')) {
+        document.getElementById('oauth-divider').style.display = 'none';
+        document.getElementById('oauth-row').style.display = 'none';
+      }
     }
+  } catch {
+    // Network hiccup fetching availability — leave every button visible;
+    // worst case a misconfigured provider shows its existing 503 error on click.
   }
-} catch {
-  // Network hiccup fetching availability — leave every button visible;
-  // worst case a misconfigured provider shows its existing 503 error on click.
-}
+})();
 
 if (new URLSearchParams(window.location.search).get('oauth_error') === 'denied') {
   message.textContent = 'Anmeldung abgebrochen.';

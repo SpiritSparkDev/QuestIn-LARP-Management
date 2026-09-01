@@ -7,7 +7,7 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
 process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64);
 process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
 process.env.GOOGLE_CLIENT_SECRET = 'test-google-client-secret';
-delete process.env.FACEBOOK_CLIENT_ID;
+process.env.FACEBOOK_CLIENT_ID = 'test-facebook-client-id';
 delete process.env.FACEBOOK_CLIENT_SECRET;
 delete process.env.DISCORD_CLIENT_ID;
 delete process.env.DISCORD_CLIENT_SECRET;
@@ -27,10 +27,11 @@ test('GET /auth/oauth/providers reports which providers are configured, without 
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.google, true);
-    assert.equal(body.facebook, false);
+    assert.equal(body.facebook, false, 'facebook has only a client id, no secret — must still report unconfigured');
     assert.equal(body.discord, false);
     assert.ok(!JSON.stringify(body).includes('test-google-client-id'));
     assert.ok(!JSON.stringify(body).includes('test-google-client-secret'));
+    assert.ok(!JSON.stringify(body).includes('test-facebook-client-id'));
   });
 });
 
