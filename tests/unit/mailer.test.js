@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64); // backend/smtpSettings/repository.js -> fieldCrypto.js fail-fasts at import time if unset
 delete process.env.SMTP_HOST; // force the no-network jsonTransport fallback
 
 const { sendVerificationEmail, sendPasswordResetEmail } = await import('../../backend/auth/mailer.js');

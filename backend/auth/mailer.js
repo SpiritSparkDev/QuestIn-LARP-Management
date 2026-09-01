@@ -1,22 +1,35 @@
 import nodemailer from 'nodemailer';
+import { getSmtpSettingsForSending } from '../smtpSettings/repository.js';
+import { logger } from '../logger.js';
 
-let transporter;
-
-function getTransporter() {
-  if (!transporter) {
-    transporter = process.env.SMTP_HOST
-      ? nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT || 587),
-          auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-        })
-      : nodemailer.createTransport({ jsonTransport: true });
+async function resolveSmtpConfig() {
+  let settings = null;
+  if (process.env.DATABASE_URL) {
+    try {
+      settings = await getSmtpSettingsForSending();
+    } catch (err) {
+      logger.error('failed to read smtp_settings, falling back to environment variables', { error: err.message });
+    }
   }
-  return transporter;
+  return {
+    host: settings?.host || process.env.SMTP_HOST,
+    port: settings?.port || Number(process.env.SMTP_PORT || 587),
+    username: settings?.username || process.env.SMTP_USER,
+    password: settings?.password || process.env.SMTP_PASS,
+    from: settings?.fromAddress || process.env.SMTP_FROM || 'no-reply@pakyrion.local',
+  };
 }
 
-function fromAddress() {
-  return process.env.SMTP_FROM || 'no-reply@pakyrion.local';
+async function getTransporterAndFrom() {
+  const { host, port, username, password, from } = await resolveSmtpConfig();
+  const transporter = host
+    ? nodemailer.createTransport({
+        host,
+        port,
+        auth: username ? { user: username, pass: password } : undefined,
+      })
+    : nodemailer.createTransport({ jsonTransport: true });
+  return { transporter, from };
 }
 
 function baseUrl() {
@@ -24,30 +37,33 @@ function baseUrl() {
 }
 
 export async function sendVerificationEmail(to, token) {
+  const { transporter, from } = await getTransporterAndFrom();
   const url = `${baseUrl()}/verify.html?token=${token}`;
-  return getTransporter().sendMail({
+  return transporter.sendMail({
     to,
-    from: fromAddress(),
+    from,
     subject: 'Bitte bestätige deine E-Mail-Adresse',
     text: `Bitte bestätige deine E-Mail-Adresse: ${url}`,
   });
 }
 
 export async function sendPasswordResetEmail(to, token) {
+  const { transporter, from } = await getTransporterAndFrom();
   const url = `${baseUrl()}/reset-password.html?token=${token}`;
-  return getTransporter().sendMail({
+  return transporter.sendMail({
     to,
-    from: fromAddress(),
+    from,
     subject: 'Passwort zurücksetzen',
     text: `Setze dein Passwort zurück: ${url}`,
   });
 }
 
 export async function sendInvitationEmail(to, token) {
+  const { transporter, from } = await getTransporterAndFrom();
   const url = `${baseUrl()}/set-password.html?token=${token}`;
-  return getTransporter().sendMail({
+  return transporter.sendMail({
     to,
-    from: fromAddress(),
+    from,
     subject: 'Du wurdest zu Pakyrion eingeladen',
     text: `Du wurdest eingeladen. Setze dein Passwort, um loszulegen: ${url}`,
   });
