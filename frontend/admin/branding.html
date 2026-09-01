@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Branding – Pakyrion Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/everest-registry.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
+  </aside>
+  <div class="main"><div class="content">
+    <h1>Branding</h1>
+    <p class="sub">Logo, App-Titel und Event-Name für andere Organisationen anpassen.</p>
+    <div class="card form-pad">
+      <form id="branding-form">
+        <label for="app-title">App-Titel</label>
+        <input id="app-title" name="appTitle" type="text" placeholder="Pakyrion">
+        <label for="event-name">Event-Name</label>
+        <input id="event-name" name="eventName" type="text" placeholder="P17/2027">
+        <label for="logo-url">Logo-URL</label>
+        <input id="logo-url" name="logoUrl" type="url" placeholder="https://example.com/logo.png">
+        <button type="submit">Speichern</button>
+      </form>
+    </div>
+    <p id="message"></p>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { renderNavLinks } from '/js/nav.js';
+import { applyBranding } from '/js/branding.js';
+
+applyBranding();
+
+const form = document.getElementById('branding-form');
+const message = document.getElementById('message');
+
+async function loadSettings() {
+  const settings = await api.get('/app-settings');
+  form.elements.appTitle.value = settings.appTitle ?? '';
+  form.elements.eventName.value = settings.eventName ?? '';
+  form.elements.logoUrl.value = settings.logoUrl ?? '';
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  message.textContent = '';
+  message.className = '';
+  const data = Object.fromEntries(new FormData(form));
+  try {
+    await api.put('/app-settings', data);
+    message.textContent = 'Gespeichert.';
+    message.className = 'success';
+    await loadSettings();
+    await applyBranding();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  await loadSettings();
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins.'; message.className = 'error'; }
+}
+</script>
+</body>
+</html>

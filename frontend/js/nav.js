@@ -11,6 +11,7 @@ export function renderNavLinks(account, currentPath) {
   if (account.group.key === 'admin') {
     links.push({ key: 'gruppen', label: 'Gruppen', href: '/admin/groups.html' });
     links.push({ key: 'einstellungen', label: 'Einstellungen', href: '/admin/settings.html' });
+    links.push({ key: 'branding', label: 'Branding', href: '/admin/branding.html' });
   }
   return links.map(({ href, label }) => {
     const current = href === currentPath ? ' class="current"' : '';
