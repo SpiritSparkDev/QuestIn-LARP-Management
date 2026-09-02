@@ -1,0 +1,532 @@
+# Discord-Anbindung und automatische Gruppenrollen
+
+## 1. Ziel und Ausgangslage
+
+Teilnehmende sollen ihre Pakyrion-Gruppe mit einer Rolle auf dem Pakyrion-
+Discord verknüpfen können. Nach einer ausdrücklichen Zustimmung wird die
+passende Discord-Rolle automatisch vergeben und bei einer Änderung der
+Pakyrion-Gruppe aktualisiert.
+
+Die Anwendung besitzt bereits Discord als OAuth-Login-Provider. Die neue
+Funktion ist davon fachlich getrennt: Ein Discord-Login ist **keine**
+Zustimmung zur Rollenverwaltung. Die Rollenverwaltung benötigt einen
+separaten Opt-in und einen eigenen, widerrufbaren Verknüpfungsstatus.
+
+Diese Spec baut auf folgenden bestehenden Entscheidungen auf:
+
+- Kontodaten werden über `/account` gelesen und mit `PATCH /account`
+	geändert.
+- Gruppen werden in `groups` verwaltet und besitzen bereits
+	`visible_menus` und `account_fields`.
+- Der Server ist für Berechtigungen und externe Zugriffe verantwortlich;
+	eine ausgeblendete Schaltfläche ist niemals ein Zugriffsschutz.
+- Das Backend verwendet Node.js ohne Discord-SDK. HTTP-Aufrufe erfolgen mit
+	Node`s eingebautem `fetch`.
+
+## 2. Begriffe
+
+| Begriff | Bedeutung |
+|---|---|
+| Pakyrion-Gruppe | Interne Gruppe des Kontos, z. B. `sc`, `nsc`, `orga` oder `admin` |
+| Discord-Name | Vom Benutzer sichtbarer Discord-Name (`global_name` oder Fallback auf `username`) |
+| Discord-User-ID | Eindeutige, von Discord vergebene ID; alleinige technische Zuordnung |
+| Discord-Rolle | Rolle auf dem konfigurierten Pakyrion-Server |
+| Discord-Verknüpfung | Gespeicherte Zuordnung zwischen lokalem Konto und Discord-User-ID |
+| Opt-in | Explizite Zustimmung des Kontoinhabers zur Verknüpfung und Rollenpflege |
+| Synchronisation | Idempotenter Abgleich der Soll-Rolle mit Discord |
+
+Der Discord-Name darf nicht zur Identifizierung verwendet werden. Namen sind
+nicht eindeutig, können sich ändern und dürfen Sonderzeichen enthalten. Die
+Discord-User-ID ist die kanonische Identität.
+
+## 3. Ziele
+
+- Ein Benutzer kann sein eigenes Konto freiwillig mit Discord verknüpfen.
+- Der Benutzer versteht vor der Zustimmung, welche Daten übertragen werden
+	und welche Voraussetzungen gelten.
+- Eine Gruppe kann eine korrelierende Discord-Rolle konfigurieren.
+- Die konfigurierte Rolle wird nach erfolgreicher Zustimmung vergeben.
+- Ein Gruppenwechsel führt zu einem nachvollziehbaren Rollenwechsel.
+- Das Aufheben der Zustimmung entfernt die von Pakyrion verwaltete Rolle.
+- Wiederholte Synchronisationsversuche sind sicher und erzeugen keine
+	doppelten Zuordnungen.
+- Discord-Ausfälle blockieren weder Login noch Registrierung, sondern werden
+	als ausstehende Synchronisation behandelt.
+
+## 4. Nicht-Ziele
+
+- Kein allgemeiner Discord-Bot- oder Moderationsbereich.
+- Keine Verwaltung von Discord-Servern, Kanälen, Nachrichten oder Nicknames.
+- Keine automatische Vergabe beliebiger Rollen anhand frei eingegebener Namen.
+- Keine Übertragung von Charakterdaten, medizinischen Daten oder
+	Notfallkontakten an Discord.
+- Kein Zwang zur Discord-Verknüpfung für Registrierung, Login, Check-in oder
+	die Nutzung des Pakyrion-Tools.
+- Keine Entfernung von Rollen, die nicht durch Pakyrion verwaltet werden.
+- Kein Hintergrundjob als Voraussetzung für die erste Umsetzung. Eine
+	Synchronisation wird zunächst bei relevanten Benutzeraktionen ausgelöst;
+	ein späterer Retry-Job bleibt möglich.
+
+## 5. Fachliche Regeln
+
+### 5.1 Verknüpfung
+
+1. Der Benutzer öffnet im eigenen Konto den Bereich "Discord".
+2. Er startet die Schaltfläche "Mit Discord verbinden".
+3. Der Server führt einen OAuth-Flow mit Discord durch.
+4. Nach erfolgreichem Callback wird die Discord-User-ID dem lokal
+	 angemeldeten Konto zugeordnet.
+5. Die Rückgabe aus Discord darf nicht automatisch ein anderes lokales Konto
+	 übernehmen. Eine bereits verwendete Discord-User-ID führt zu `409` und
+	 muss vom Support/Admin geklärt werden.
+6. Erst nach erfolgreichem Callback und bestätigtem Opt-in darf eine Rolle
+	 synchronisiert werden.
+
+Der Benutzer muss nicht zwingend einen Namen abtippen. `discordName` wird
+aus der verifizierten Discord-Antwort vorbelegt. Ein manuell gepflegter
+Anzeigename darf angezeigt werden, ändert aber niemals die Zuordnung.
+
+### 5.2 Opt-in und Widerruf
+
+Der OAuth-Callback allein gilt nicht als ausreichendes Opt-in. Vor dem Start
+des Flows zeigt die Anwendung einen Dialog mit einer verständlichen
+Checkliste und einer nicht vorangekreuzten Zustimmungsaktion.
+
+Die Zustimmung umfasst ausschließlich:
+
+- Verknüpfung des Pakyrion-Kontos mit der Discord-User-ID.
+- Lesen der für die Verknüpfung nötigen Discord-Identität.
+- Hinzufügen, Aktualisieren und Entfernen der durch Pakyrion verwalteten
+	Gruppenrolle auf dem Pakyrion-Server.
+- Speichern des Discord-Namens und technischer Synchronisationsdaten im
+	Pakyrion-Konto.
+
+Der Benutzer kann die Zustimmung jederzeit widerrufen. Beim Widerruf wird
+die Pakyrion-Rolle, sofern erreichbar, entfernt; die lokale Verknüpfung wird
+anschließend deaktiviert. Bei einem Discord-Ausfall wird der Widerruf lokal
+sofort gespeichert und die Rollenentfernung als ausstehend markiert.
+
+### 5.3 Gruppen und Rollen
+
+Jede Gruppe kann höchstens eine Discord-Rollen-ID besitzen. Eine leere
+Rollen-ID bedeutet "keine automatische Discord-Rolle" und ist ein gültiger
+Zustand.
+
+- Die Rollen-ID wird als Discord-Snowflake gespeichert, nicht als Rollenname.
+- Der Rollenname dient nur zur Anzeige und darf optional beim Speichern aus
+	Discord geprüft werden.
+- Die `admin`-Gruppe bleibt geschützt wie bisher; ihre übrigen Berechtigungen
+	dürfen nicht durch die Discord-Konfiguration ausgehöhlt werden.
+- Rollen werden nur auf dem konfigurierten Pakyrion-Guild verwaltet.
+- Eine Gruppe ohne Discord-Rolle löst keine neue Rollenvergabe aus. Eine
+	zuvor von Pakyrion verwaltete Rolle muss bei einem Gruppenwechsel entfernt
+	werden.
+- Pakyrion verwaltet pro Verknüpfung nur die Rolle, die es selbst zuletzt
+	zugewiesen hat. Andere Discord-Rollen bleiben unverändert.
+
+### 5.4 Gruppenwechsel
+
+Bei einem Wechsel der Pakyrion-Gruppe:
+
+1. Die alte von Pakyrion verwaltete Rolle wird entfernt.
+2. Die neue Gruppenrolle wird hinzugefügt, falls konfiguriert.
+3. Der lokale Status wird erst nach erfolgreicher Ausführung als
+	 synchronisiert gespeichert.
+
+Bei Teilerfolg wird der Zustand als `pending` oder `error` gespeichert und
+eine erneute Synchronisation ermöglicht. Das Konto bleibt im Pakyrion-System
+normal nutzbar.
+
+## 6. Technische Architektur
+
+### 6.1 Discord-Integration
+
+Die Anwendung verwendet zwei getrennte OAuth-/API-Konzepte:
+
+- Der bestehende Discord-OAuth-Provider bleibt für Login bestehen.
+- Für die Rollenfunktion gibt es einen separaten Connect-Flow mit eigener
+	`state`-Prüfung, eigener Callback-Route und explizitem Opt-in.
+
+Die Rollenvergabe erfolgt mit einem Discord-Bot-Token auf der Serverseite.
+Der Token wird ausschließlich aus der Laufzeitumgebung gelesen und nie an
+den Browser gesendet. Der Bot benötigt auf dem Guild nur die kleinstmögliche
+Berechtigung zum Verwalten von Rollen; seine höchste Rolle muss über den zu
+verwaltenden Rollen liegen.
+
+Die konkrete Discord-API-Version und Endpunkte werden in einem kleinen
+Adapter `backend/discord/client.js` gekapselt. Route- und Repository-Code
+dürfen keine Discord-HTTP-Details enthalten.
+
+### 6.2 Konfiguration
+
+Neue verpflichtende Einstellungen für die aktivierte Funktion:
+
+```text
+DISCORD_BOT_TOKEN
+DISCORD_GUILD_ID
+DISCORD_CONNECT_CLIENT_ID
+DISCORD_CONNECT_CLIENT_SECRET
+DISCORD_CONNECT_REDIRECT_BASE_URL
+```
+
+Optional:
+
+```text
+DISCORD_API_BASE_URL=https://discord.com/api
+DISCORD_SYNC_TIMEOUT_MS=5000
+```
+
+Die Connect-Credentials sollten nicht ungeprüft mit den bestehenden
+Login-Credentials vermischt werden. Falls Discord OAuth dieselbe Discord-
+Application verwenden soll, darf das intern wiederverwendet werden, die
+Umgebungsvariablen und der Zweck bleiben dennoch getrennt dokumentiert.
+
+Ist die Konfiguration unvollständig, wird der Connect-Button nicht als
+funktionsfähig angezeigt. Login mit Discord bleibt davon unabhängig und darf
+nicht kaputtgehen.
+
+## 7. Datenmodell
+
+### 7.1 Erweiterung `groups`
+
+Neue Spalten in einer Migration:
+
+```sql
+ALTER TABLE groups
+	ADD COLUMN discord_role_id text,
+	ADD COLUMN discord_role_name text;
+```
+
+`discord_role_id` ist nullable. `discord_role_name` ist ein gecachter
+Anzeigename und darf bei der Validierung aktualisiert werden. Eine Unique-
+Constraint über `discord_role_id` ist nicht zwingend: Eine Rolle kann bei
+Bedarf bewusst mehreren internen Gruppen zugeordnet werden, auch wenn dies
+in der Admin-UI mit einer Warnung angezeigt wird.
+
+### 7.2 Erweiterung `users`
+
+Das Konto erhält den sichtbaren Feldwert:
+
+```sql
+ALTER TABLE users
+	ADD COLUMN discord_name text;
+```
+
+`discord_name` ist kein Mitglieds-Berechtigungsfeld und wird nicht in die
+bestehende `ACCOUNT_FIELD_KEYS`-Allowlist für das Bearbeiten fremder Konten
+aufgenommen. Der Eigentümer kann den Wert sehen; der verifizierte Connect-
+Flow ist die Quelle für die Aktualisierung.
+
+### 7.3 Neue Tabelle `discord_connections`
+
+```sql
+CREATE TABLE discord_connections (
+	id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	user_id uuid NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+	discord_user_id text NOT NULL UNIQUE,
+	discord_name text NOT NULL,
+	consented_at timestamptz NOT NULL,
+	revoked_at timestamptz,
+	managed_role_id text,
+	managed_group_id uuid REFERENCES groups(id) ON DELETE SET NULL,
+	sync_status text NOT NULL DEFAULT 'pending'
+		CHECK (sync_status IN ('pending', 'synced', 'error', 'revoked')),
+	last_synced_at timestamptz,
+	last_error text,
+	created_at timestamptz NOT NULL DEFAULT now(),
+	updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX discord_connections_sync_idx
+	ON discord_connections(sync_status);
+```
+
+Die Tabelle ist die technische Quelle für Verknüpfung, Einwilligung und
+Synchronisationsstatus. Der `discord_name`-Wert in `users` dient nur dem
+Account-Formular und darf bei erfolgreicher Verknüpfung gespiegelt werden.
+Tokens, Secrets und vollständige Discord-API-Antworten werden nicht
+gespeichert.
+
+### 7.4 Migration und Rückwärtskompatibilität
+
+- Bestehende Konten erhalten `discord_name = NULL` und keine Verbindung.
+- Bestehende Gruppen erhalten keine Discord-Rolle.
+- Die Migration ist idempotent und darf ohne externe Discord-Konfiguration
+	ausgeführt werden.
+- Ein Rollback entfernt keine externen Discord-Rollen automatisch; ein
+	manueller Abgleich ist in den Betriebsunterlagen zu dokumentieren.
+
+## 8. Backend-API
+
+Alle geschützten Routen verwenden die bestehende Session-Authentifizierung.
+CSRF-/State-Schutz folgt den vorhandenen Auth-Mustern.
+
+### 8.1 Eigene Verbindung
+
+`GET /account` erweitert die Antwort um:
+
+```json
+{
+	"discord": {
+		"configured": true,
+		"connected": true,
+		"discordName": "Beispielname",
+		"consentedAt": "2026-09-02T10:00:00.000Z",
+		"syncStatus": "synced",
+		"lastSyncedAt": "2026-09-02T10:00:05.000Z",
+		"error": null
+	}
+}
+```
+
+Bei fehlender Serverkonfiguration ist `configured: false` zu liefern; geheime
+Konfigurationswerte oder Discord-User-IDs werden nicht an den Browser gegeben.
+
+Neue Routen:
+
+- `GET /auth/discord/connect/start` – prüft Login und Konfiguration, legt
+	einen kurzlebigen HttpOnly-State-Cookie an und leitet zu Discord weiter.
+- `GET /auth/discord/connect/callback` – prüft State, tauscht den Code aus,
+	validiert die Antwort und legt die Verbindung an oder aktualisiert sie.
+- `POST /account/discord/revoke` – widerruft das Opt-in und stößt die
+	Entfernung der verwalteten Rolle an.
+- `POST /account/discord/sync` – wiederholt eine fehlgeschlagene oder
+	ausstehende Synchronisation für das eigene Konto.
+
+Beispiel für Fehlerantworten:
+
+```json
+{ "error": "discord_not_configured" }
+{ "error": "discord_connection_already_used" }
+{ "error": "discord_sync_failed", "retryable": true }
+```
+
+Die Callback-Route darf nach erfolgreicher Verbindung nur in das eigene
+Konto zurückleiten. Ein `next`-Parameter muss auf interne Pfade beschränkt
+oder ganz weggelassen werden.
+
+### 8.2 Gruppenverwaltung
+
+`GET /groups` liefert zusätzlich `discordRoleId` und `discordRoleName`.
+
+`POST /groups` und `PUT /groups/:id` akzeptieren:
+
+```json
+{
+	"discordRoleId": "123456789012345678",
+	"discordRoleName": "SC"
+}
+```
+
+Nur die Admin-Gruppe darf die Zuordnung konfigurieren. Die Eingabe wird
+serverseitig validiert:
+
+- Rollen-ID ist leer oder eine gültige Discord-Snowflake.
+- Der Rollenname darf nicht als alleinige Identifikation akzeptiert werden.
+- Bei erreichbarem Discord wird geprüft, dass Guild und Rolle existieren und
+	die Rolle durch den Bot verwaltet werden kann.
+- Bei nicht erreichbarem Discord kann die Zuordnung optional gespeichert und
+	als ungeprüft markiert werden; die UI muss dies deutlich anzeigen.
+
+Nach einer Änderung der Rollen-ID werden alle aktiven Verbindungen mit der
+betroffenen Gruppe als `pending` markiert. Die konkrete Neusynchronisation
+erfolgt über einen expliziten Admin-Aktionsendpunkt oder einen späteren
+Retry-Job. Das Speichern der Gruppe darf nicht an einem einzelnen Discord-
+Fehler scheitern.
+
+### 8.3 Admin-Status und Retry
+
+Für die Gruppenverwaltung oder eine separate Admin-Übersicht wird benötigt:
+
+- `GET /admin/discord/sync-status` – Anzahl und Liste der `pending`/`error`
+	Verbindungen, ohne Discord-Tokens.
+- `POST /admin/discord/sync/:userId` – erneuter Abgleich einer Verbindung.
+
+Beide Routen sind ausschließlich für die Admin-Gruppe erreichbar. Ein Admin
+darf keine fremde Zustimmung setzen, widerrufen oder eine Verbindung mit
+einer anderen Discord-Identität überschreiben.
+
+## 9. Synchronisationslogik
+
+Die Synchronisation muss idempotent sein:
+
+1. Verbindung und aktuelles `group_id` werden in einer Transaktion gelesen.
+2. Ist die Verbindung widerrufen, wird die bisher verwaltete Rolle entfernt;
+	 es wird keine neue Rolle hinzugefügt.
+3. Ist die Verbindung aktiv und der Gruppe ist eine Rolle zugeordnet, wird
+	 die Rolle hinzugefügt.
+4. Eine vorherige `managed_role_id` wird entfernt, wenn sie von der neuen
+	 Rolle abweicht.
+5. Nach vollständigem Erfolg werden `managed_role_id`,
+	 `managed_group_id`, `sync_status = 'synced'` und `last_synced_at`
+	 aktualisiert.
+6. Bei einem Fehler werden keine Secrets gespeichert; `sync_status = 'error'`
+	 und eine kurze, nicht-sensitive Fehlerklasse werden gesetzt.
+
+Parallele Synchronisationen für dieselbe Verbindung werden durch eine
+transaktionale Sperre oder eine vergleichbare lokale Serialisierung verhindert.
+Discord-HTTP-Aufrufe erhalten ein Timeout. Rate-Limit-Antworten werden als
+wiederholbar behandelt und respektieren `Retry-After`; Endlosschleifen sind
+unzulässig.
+
+Ein `404` für eine nicht mehr existierende Discord-Rolle wird nicht durch
+blindes Wiederholen behoben. Die Verbindung bleibt fehlerhaft und die
+Administration erhält eine konkrete Aufforderung, die Gruppen-Konfiguration
+zu korrigieren.
+
+## 10. Benutzeroberfläche
+
+### 10.1 Konto-Seite
+
+Auf `frontend/account.html` erscheint ein eigener Discord-Abschnitt:
+
+- Status: nicht verbunden, verbunden/synchronisiert, ausstehend oder Fehler.
+- Discord-Name, falls verbunden.
+- Schaltfläche "Mit Discord verbinden".
+- Schaltfläche "Discord-Verbindung trennen".
+- Schaltfläche "Synchronisation wiederholen" nur bei `pending`/`error`.
+- Link auf die Discord-Hilfeseite.
+
+Der Abschnitt wird nicht als interner Gruppenname missbraucht und enthält
+keine technischen IDs oder Bot-Tokens.
+
+### 10.2 Zustimmungsdialog
+
+Vor dem Weiterleiten zu Discord öffnet sich ein Modal. Der Weiter-Button ist
+erst nach einer nicht vorangekreuzten Checkbox aktiv.
+
+Die Checkliste erklärt mindestens:
+
+- Discord ist geöffnet oder im Browser erreichbar.
+- Der Benutzer ist im richtigen Discord-Konto angemeldet.
+- Der Benutzer befindet sich auf dem Pakyrion-Discord oder akzeptiert den
+	anschließenden Beitritts-/Autorisierungsdialog.
+- Pakyrion darf die Discord-Verknüpfung speichern.
+- Pakyrion darf ausschließlich die konfigurierte Gruppenrolle verwalten.
+- Die Verbindung kann jederzeit im Konto widerrufen werden.
+- Ein Discord-Ausfall verhindert die Nutzung von Pakyrion nicht; die Rolle
+	kann später synchronisiert werden.
+
+Der Dialog nennt konkret den aktuell vorgesehenen Gruppennamen und, sofern
+bekannt, den Discord-Rollennamen. Es wird ausdrücklich klargestellt, dass
+Charakter-, Gesundheits- und Kontaktdaten nicht an Discord übertragen werden.
+
+Ein Hilfe-Link öffnet `frontend/discord-help.html`. Die Seite erklärt:
+
+- Unterschied zwischen Benutzername, globalem Anzeigenamen und Server-
+	Nickname.
+- Warum das manuelle Kopieren eines Namens nicht zur technischen Zuordnung
+	genügt.
+- Wie man prüft, dass das richtige Discord-Konto angemeldet ist.
+- Was bei mehreren Discord-Konten, geändertem Namen oder einem Fehler zu tun
+	ist.
+
+### 10.3 Gruppenverwaltung
+
+Auf `frontend/admin/groups.html` erhält jede Gruppe ein Feld für die
+Discord-Rollen-ID und eine Anzeige des Rollennamens.
+
+- Eingabe und Speichern sind nur für Admins möglich.
+- Ein Rollenname ohne Rollen-ID ist nicht speicherbar.
+- Eine Warnung erscheint bei doppelter Zuordnung oder ungeprüfter Rolle.
+- Das Entfernen der Rollen-ID verlangt eine kurze Bestätigung, da dadurch
+	automatische Rollenvergaben auslaufen.
+
+### 10.4 Rückgaben und Fehler
+
+Nach dem Callback wird nicht pauschal Erfolg angezeigt, sondern der konkrete
+Zustand:
+
+- Verbindung hergestellt und Rolle synchronisiert.
+- Verbindung hergestellt, Synchronisation ausstehend.
+- Verbindung nicht hergestellt, weil der Benutzer abgebrochen hat.
+- Verbindung fehlgeschlagen, mit erneuter Startmöglichkeit.
+
+Fehlermeldungen enthalten keine rohen Discord-API-Antworten und keine Tokens.
+
+## 11. Datenschutz und Sicherheit
+
+- Opt-in und Widerruf werden mit Zeitstempel protokolliert.
+- OAuth-State ist zufällig, kurzlebig, HttpOnly, SameSite und wird exakt
+	geprüft; der OAuth-Code wird nur serverseitig verarbeitet.
+- Callback-Parameter und Discord-API-Antworten werden nicht vollständig
+	geloggt.
+- Logs dürfen Discord-User-ID, E-Mail-Adresse und Tokens nicht enthalten.
+- Bot-Token und Client-Secret kommen ausschließlich aus Secrets/ENV.
+- Nur die kleinste notwendige Discord-Berechtigung wird beantragt.
+- Die Discord-User-ID wird nur für die Verknüpfung und Synchronisation
+	verwendet und nicht öffentlich in Mitgliederlisten ausgegeben.
+- Widerruf verhindert weitere Synchronisationen sofort auf lokaler Ebene.
+- Ein Benutzer kann nur seine eigene Verbindung starten, sehen und widerrufen.
+- Alle Aktionen sind gegen Session- und CSRF-Angriffe abzusichern.
+- Externe Fehler werden in generische Benutzerfehler und interne
+	strukturierte Log-Kategorien übersetzt.
+
+## 12. Tests und Abnahmekriterien
+
+### 12.1 Backend- und Repository-Tests
+
+- Migration legt Spalten und `discord_connections` idempotent an.
+- Eine Discord-User-ID kann nicht mit zwei lokalen Konten verknüpft werden.
+- OAuth-State fehlt, ist abgelaufen oder stimmt nicht überein: kein Connect.
+- Callback mit gültiger Discord-Antwort legt genau eine Verbindung an.
+- Ein bereits verknüpfter Discord-Account liefert einen fachlichen Konflikt.
+- Discord-Login bleibt unabhängig vom Connect-Opt-in funktionsfähig.
+- Widerruf setzt den lokalen Status sofort auf `revoked`.
+- Gruppenänderung markiert betroffene Verbindungen als `pending`.
+- Synchronisation ist bei Wiederholung ohne Nebenwirkung.
+- Alte Pakyrion-Rolle wird bei Gruppenwechsel entfernt; fremde Rollen bleiben
+	erhalten.
+- Discord-Timeout, Rate Limit und `404` werden korrekt klassifiziert.
+- Kein Test verwendet einen echten Discord-Server; `fetch` wird gemockt.
+
+### 12.2 API-Integrationstests
+
+- Nicht eingeloggte Benutzer erhalten `401` für geschützte Routen.
+- Nicht-Admins erhalten `403` für Rollen-Konfiguration und Admin-Retry.
+- Ungültige Rollen-IDs erhalten `400`.
+- Fehlende Discord-Konfiguration liefert einen kontrollierten Zustand statt
+	eines Serverfehlers.
+- Fremde oder externe Kontodaten können über diese Funktion nicht verändert
+	werden.
+
+### 12.3 Manuelle UI-Abnahme
+
+- Connect-Dialog ist nicht vorangekreuzt und blockiert ohne Zustimmung.
+- Abbruch bei Discord kehrt verständlich zum Konto zurück.
+- Erfolgreiche Verbindung zeigt Namen und Synchronisationsstatus.
+- Widerruf zeigt den neuen Status und entfernt die Buttons für aktive Pflege.
+- Fehler- und Retry-Zustände sind auf Desktop und Mobilgerät lesbar.
+- Gruppenadmin kann eine Rolle eintragen, ändern und entfernen.
+- Ein normaler Benutzer kann die Admin-Gruppenverwaltung nicht aufrufen.
+
+### 12.4 Definition of Done
+
+Das Feature ist fertig, wenn Migration, Repository, Discord-Adapter, Routen,
+Opt-in-Dialog, Hilfeseite, Konto- und Gruppen-UI, Fehlerzustände sowie die
+beschriebenen automatisierten Tests umgesetzt sind. Zusätzlich müssen die
+Betriebsvariablen dokumentiert und ein Test mit einem Discord-Test-Guild
+manuell erfolgreich durchgeführt worden sein.
+
+## 13. Umsetzungsreihenfolge
+
+1. Migration und Repository für Gruppenfelder und Verbindungen.
+2. Konfigurationsprüfung und Discord-API-Adapter mit gemockten Tests.
+3. Connect-OAuth mit State-Schutz und Opt-in-Weitergabe.
+4. Synchronisationsservice, Widerruf und Retry-Endpunkte.
+5. Erweiterung der Gruppen- und Account-API.
+6. Konto-UI, Zustimmungsdialog und Hilfeseite.
+7. Gruppenverwaltungs-UI und Admin-Status.
+8. Integrations-, Fehler- und manuelle Browser-Abnahme.
+
+## 14. Offene Punkte vor der Implementierung
+
+- Wird dieselbe Discord-Application wie beim bestehenden Login verwendet,
+	oder wird eine eigene Connect-Application angelegt?
+- Muss der Connect-Flow dem Benutzer zusätzlich den Guild-Beitritt anbieten,
+	oder sind alle Benutzer bereits Mitglied des Pakyrion-Guilds?
+- Soll die Admin-UI Rollen ausschließlich über eine Snowflake-ID verwalten,
+	oder soll sie eine sichere Liste der Rollen aus Discord anbieten?
+- Wird für Version 1 nur aktionsbasierte Synchronisation benötigt, oder soll
+	direkt ein periodischer Retry-Job betrieben werden?
+- Wie lange sollen technische Synchronisationsfehler und Opt-in-/Widerruf-
+	Ereignisse in den Anwendungslogs vorgehalten werden?
