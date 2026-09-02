@@ -50,9 +50,14 @@ async function handleRequest(req, res) {
   try {
     const result = await match.handler({ req, params: match.params, requestId });
     const status = result?.status ?? 200;
-    const payload = JSON.stringify(result?.body ?? {});
-    res.writeHead(status, { 'Content-Type': 'application/json', ...result?.headers });
-    res.end(payload);
+    if (result?.isBinary) {
+      res.writeHead(status, result?.headers);
+      res.end(result.body);
+    } else {
+      const payload = JSON.stringify(result?.body ?? {});
+      res.writeHead(status, { 'Content-Type': 'application/json', ...result?.headers });
+      res.end(payload);
+    }
     logger.info('request', { requestId, method: req.method, path: pathname, status, durationMs: Date.now() - start });
   } catch (err) {
     const CLIENT_ERROR_CODES = new Set(['22P02', '22P05', '22007', '22008']);

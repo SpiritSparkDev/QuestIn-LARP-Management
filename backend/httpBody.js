@@ -1,6 +1,6 @@
 const MAX_BODY_BYTES = 1_000_000;
 
-export function readJsonBody(req) {
+export function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
   return new Promise((resolve) => {
     let data = '';
     let settled = false;
@@ -12,7 +12,7 @@ export function readJsonBody(req) {
     req.on('error', () => finish(null));
     req.on('data', (chunk) => {
       data += chunk;
-      if (data.length > MAX_BODY_BYTES) {
+      if (data.length > maxBytes) {
         finish(null);
         req.destroy();
       }

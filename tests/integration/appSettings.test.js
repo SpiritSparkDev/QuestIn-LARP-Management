@@ -30,7 +30,7 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100 });
   });
 });
 
@@ -49,7 +49,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027' });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100 });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
@@ -78,6 +78,29 @@ test('PUT /app-settings rejects a non-admin group and an unauthenticated request
       body: JSON.stringify({ appTitle: 'Hijacked' }),
     });
     assert.equal(anonymous.status, 401);
+  });
+});
+
+test('PUT /app-settings validates and saves quotaMbPerCharacter; defaults to 100', async () => {
+  await withTestServer(async (port) => {
+    const res = await fetch(`http://localhost:${port}/app-settings`);
+    assert.equal((await res.json()).quotaMbPerCharacter, 100);
+
+    const cookie = await makeUserAndSession('admin');
+    const badRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ quotaMbPerCharacter: -5 }),
+    });
+    assert.equal(badRes.status, 400);
+
+    const goodRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ quotaMbPerCharacter: 250 }),
+    });
+    assert.equal(goodRes.status, 200);
+    assert.equal((await goodRes.json()).quotaMbPerCharacter, 250);
   });
 });
 
