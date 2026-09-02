@@ -6,6 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/chronicle-crest.css">
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1/qrcode.min.js"></script>
 </head>
@@ -15,7 +16,11 @@
   <p class="brand-sub">Chronicle Registry</p>
   <div class="folio folio--wide">
     <nav class="app-nav" id="nav-links"></nav>
-    <a href="#" id="logout-link">Logout</a>
+    <div class="header-actions">
+      <button type="button" id="logout-link" class="btn-danger">
+        <span class="material-symbols-outlined" aria-hidden="true">logout</span> Logout
+      </button>
+    </div>
     <h1>Mein Konto</h1>
     <form id="account-form">
       <label for="firstName">Vorname</label>
@@ -63,8 +68,8 @@ const formControls = form.querySelectorAll('input, textarea, button');
 formControls.forEach((el) => { el.disabled = true; });
 attachBirthdateFormatter(document.getElementById('birthdate'));
 
-document.getElementById('logout-link').addEventListener('click', async (evt) => {
-  evt.preventDefault();
+document.getElementById('logout-link').addEventListener('click', async () => {
+  if (!confirm('Wirklich abmelden?')) return;
   await api.post('/auth/logout', {});
   window.location.href = '/login.html';
 });
