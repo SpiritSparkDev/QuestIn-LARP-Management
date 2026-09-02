@@ -177,6 +177,103 @@ copyFromSelect.addEventListener('change', () => {
   renderSchemaFields(targetEvent ? targetEvent.character_form_schema : [], source.data);
 });
 
+const FILE_MIME_ALLOWLIST = { image: ['image/jpeg', 'image/png', 'image/webp'], document: ['application/pdf'] };
+
+function kindForMimeType(mimeType) {
+  if (FILE_MIME_ALLOWLIST.image.includes(mimeType)) return 'image';
+  if (FILE_MIME_ALLOWLIST.document.includes(mimeType)) return 'document';
+  return null;
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderFileList(characterId, files) {
+  const items = files.map((f) => {
+    const url = `/characters/${characterId}/files/${f.id}`;
+    const preview = f.kind === 'image'
+      ? `<a href="${url}" target="_blank"><img src="${url}" alt="${escapeHtml(f.original_filename)}" style="max-width:80px;max-height:80px;"></a>`
+      : `<a href="${url}" target="_blank">${escapeHtml(f.original_filename)}</a>`;
+    return `<div class="file-item">
+      ${preview}
+      <span class="tag">${f.is_public ? 'Öffentlich' : 'Privat'}</span>
+      <button type="button" data-delete-file="${f.id}" data-delete-character="${characterId}" class="btn-ghost">Löschen</button>
+    </div>`;
+  }).join('');
+
+  return `${items}
+    <form data-upload-form="${characterId}" class="file-upload-form">
+      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+      <label><input type="checkbox" required> Ich habe den Hinweis gelesen</label>
+      <label><input type="checkbox"> Öffentlich sichtbar</label>
+      <button type="submit">Hochladen</button>
+      <p class="upload-status"></p>
+    </form>
+    <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an dieser Datei besitzt und einverstanden bist, dass sie im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>`;
+}
+
+async function loadFilesInto(characterId) {
+  const container = document.querySelector(`[data-files-for="${characterId}"]`);
+  if (!container) return;
+  try {
+    const files = await api.get(`/characters/${characterId}/files`);
+    container.innerHTML = renderFileList(characterId, files);
+    wireFileSection(characterId, container);
+  } catch (err) {
+    container.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function wireFileSection(characterId, container) {
+  container.querySelectorAll('[data-delete-file]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await api.delete(`/characters/${button.dataset.deleteCharacter}/files/${button.dataset.deleteFile}`);
+        await loadFilesInto(characterId);
+      } catch (err) {
+        container.querySelector('.upload-status').textContent = err.message;
+      }
+    });
+  });
+
+  const uploadForm = container.querySelector(`[data-upload-form="${characterId}"]`);
+  const fileInput = uploadForm.querySelector('input[type="file"]');
+  const consentCheckbox = uploadForm.querySelector('input[type="checkbox"][required]');
+  const publicCheckbox = uploadForm.querySelectorAll('input[type="checkbox"]')[1];
+  const status = uploadForm.querySelector('.upload-status');
+  const submitButton = uploadForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  consentCheckbox.addEventListener('change', () => { submitButton.disabled = !consentCheckbox.checked; });
+
+  uploadForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    status.textContent = '';
+    const file = fileInput.files[0];
+    if (!file) return;
+    const kind = kindForMimeType(file.type);
+    if (!kind) {
+      status.textContent = 'Nicht unterstützter Dateityp.';
+      return;
+    }
+    try {
+      const dataBase64 = await readFileAsBase64(file);
+      await api.post(`/characters/${characterId}/files`, {
+        kind, filename: file.name, mimeType: file.type, dataBase64,
+        isPublic: publicCheckbox.checked, gdprConsent: consentCheckbox.checked,
+      });
+      await loadFilesInto(characterId);
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  });
+}
+
 function tagValueForField(field, rawValue) {
   if (field.type === 'multiselect') {
     return Array.isArray(rawValue) && rawValue.length > 0 ? rawValue.join(', ') : undefined;
@@ -217,11 +314,15 @@ function renderNscList() {
       <h3>${escapeHtml(c.name)}</h3>
       <div class="char-tags">${tagsForNscCharacter(c)}</div>
       <button type="button" data-nsc-edit="${c.id}" class="btn-ghost" style="margin-top:14px;">Bearbeiten</button>
+      <div class="char-files" data-files-for="${c.id}">
+        <p class="sub">Dateien werden geladen …</p>
+      </div>
     </div>`).join('');
 
   nscListBody.querySelectorAll('[data-nsc-edit]').forEach((button) => {
     button.addEventListener('click', () => startNscEdit(button.dataset.nscEdit));
   });
+  nscCharacters.forEach((c) => loadFilesInto(c.id));
 }
 
 function startNscEdit(characterId) {
@@ -289,12 +390,16 @@ async function loadCharacters() {
       <div class="char-meta">${escapeHtml(event ? event.name : c.event_id)}</div>
       <div class="char-tags">${tagsHtml}</div>
       <button type="button" data-edit="${c.id}" class="btn-ghost" style="margin-top:14px;">Bearbeiten</button>
+      <div class="char-files" data-files-for="${c.id}">
+        <p class="sub">Dateien werden geladen …</p>
+      </div>
     </div>`;
   }).join('');
 
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => startEdit(button.dataset.edit));
   });
+  scCharacters.forEach((c) => loadFilesInto(c.id));
 
   populateCopyFromOptions();
 
