@@ -61,6 +61,14 @@ export async function listCharactersForUser(userId) {
   return rows;
 }
 
+export async function listCharactersForEvent(eventId) {
+  const { rows } = await query(
+    `SELECT ${SELECT_COLUMNS} FROM characters WHERE event_id = $1 AND class = 'sc' ORDER BY name`,
+    [eventId]
+  );
+  return rows;
+}
+
 export async function updateCharacter(id, userId, { name, data }) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;

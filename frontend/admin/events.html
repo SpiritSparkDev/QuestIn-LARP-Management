@@ -62,7 +62,7 @@ const formTitle = document.getElementById('form-title');
 
 let editingEventId = null;
 
-function addSchemaRow(field = { key: '', label: '', type: 'text', required: false, options: [] }) {
+function addSchemaRow(field = { key: '', label: '', type: 'text', required: false, public: false, options: [] }) {
   const row = document.createElement('div');
   row.className = 'schema-row';
   const optionsValue = Array.isArray(field.options) ? field.options.join(', ') : '';
@@ -76,9 +76,11 @@ function addSchemaRow(field = { key: '', label: '', type: 'text', required: fals
       <option value="number" ${field.type === 'number' ? 'selected' : ''}>Zahl</option>
       <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>Ja/Nein</option>
       <option value="multiselect" ${field.type === 'multiselect' ? 'selected' : ''}>Mehrfachauswahl</option>
+      <option value="link" ${field.type === 'link' ? 'selected' : ''}>Link</option>
     </select>
     <input type="text" placeholder="Optionen (kommagetrennt, nur bei Auswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
     <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
+    <label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>
     <button type="button" class="remove-row">Entfernen</button>
   `;
   row.querySelector('.remove-row').addEventListener('click', () => row.remove());
@@ -100,6 +102,7 @@ function collectSchema() {
       label: row.querySelector('.schema-label').value.trim(),
       type,
       required: row.querySelector('.schema-required').checked,
+      public: row.querySelector('.schema-public').checked,
     };
     if (type === 'select' || type === 'multiselect') {
       field.options = row.querySelector('.schema-options').value

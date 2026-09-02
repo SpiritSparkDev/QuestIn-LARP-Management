@@ -93,6 +93,13 @@ test('renderField renders an input type="number" for type "number"', () => {
   assert.ok(html.includes('value="42"'));
 });
 
+test('renderField renders a URL input for type "link"', () => {
+  const html = renderField({ key: 'characterSheet', label: 'Charakterbogen', type: 'link' }, 'https://example.com/sheet');
+  assert.ok(html.includes('type="url"'));
+  assert.ok(html.includes('name="characterSheet"'));
+  assert.ok(html.includes('value="https://example.com/sheet"'));
+});
+
 test('renderField escapes multiselect option labels', () => {
   const field = { key: 'x', label: 'X', type: 'multiselect', options: ['<b>evil</b>'] };
   const html = renderField(field, []);
