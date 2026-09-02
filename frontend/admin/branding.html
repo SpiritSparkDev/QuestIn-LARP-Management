@@ -26,6 +26,8 @@
         <input id="event-name" name="eventName" type="text" placeholder="P17/2027">
         <label for="logo-url">Logo-URL</label>
         <input id="logo-url" name="logoUrl" type="url" placeholder="https://example.com/logo.png">
+        <label for="quota-mb">Speicher-Kontingent pro Charakter (MB)</label>
+        <input id="quota-mb" name="quotaMbPerCharacter" type="number" min="1" step="1" placeholder="100">
         <button type="submit">Speichern</button>
       </form>
     </div>
@@ -48,6 +50,7 @@ async function loadSettings() {
   form.elements.appTitle.value = settings.appTitle ?? '';
   form.elements.eventName.value = settings.eventName ?? '';
   form.elements.logoUrl.value = settings.logoUrl ?? '';
+  form.elements.quotaMbPerCharacter.value = settings.quotaMbPerCharacter ?? '';
 }
 
 form.addEventListener('submit', async (event) => {
@@ -55,6 +58,7 @@ form.addEventListener('submit', async (event) => {
   message.textContent = '';
   message.className = '';
   const data = Object.fromEntries(new FormData(form));
+  data.quotaMbPerCharacter = data.quotaMbPerCharacter ? Number(data.quotaMbPerCharacter) : undefined;
   try {
     await api.put('/app-settings', data);
     message.textContent = 'Gespeichert.';
