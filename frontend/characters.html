@@ -71,13 +71,14 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, renderField, collectFieldValues } from '/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, attachLiveValidation } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const scFormSection = document.getElementById('sc-form-section');
 const eventSelect = document.getElementById('event-select');
 const dynamicFields = document.getElementById('dynamic-fields');
 const form = document.getElementById('character-form');
+attachLiveValidation(form);
 const message = document.getElementById('message');
 const listBody = document.getElementById('character-list');
 const formTitle = document.getElementById('form-title');
@@ -151,6 +152,10 @@ document.getElementById('register-button').addEventListener('click', async () =>
 
 function renderSchemaFields(schema, data = {}) {
   dynamicFields.innerHTML = schema.map((field) => renderField(field, data[field.key])).join('');
+  // Dynamic fields are (re-)created here on every event switch / edit / copy,
+  // after attachLiveValidation(form) already ran once over the (then-empty)
+  // #dynamic-fields container -- re-attach to the fresh nodes each time.
+  attachLiveValidation(dynamicFields);
 }
 
 eventSelect.addEventListener('change', () => {
@@ -305,6 +310,7 @@ function tagsForCharacter(c) {
 
 function renderNscSchemaFields(data = {}) {
   nscDynamicFields.innerHTML = nscSchema.map((field) => renderField(field, data[field.key])).join('');
+  attachLiveValidation(nscDynamicFields);
 }
 
 function tagsForNscCharacter(c) {

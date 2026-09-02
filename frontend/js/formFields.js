@@ -14,9 +14,39 @@ export function attachBirthdateFormatter(inputEl) {
   });
 }
 
+// Shows a field's native validation message only after the user has
+// actually interacted with it -- otherwise every required-but-empty field
+// on a freshly-loaded form would show as invalid immediately, before the
+// user has had any chance to fill it in.
+export function attachLiveValidation(formEl) {
+  const controls = formEl.querySelectorAll('input, select, textarea');
+  controls.forEach((el) => {
+    let hasInteracted = false;
+    const errorEl = document.createElement('p');
+    errorEl.className = 'field-error';
+    // In this project's static forms, a label precedes its input, so the
+    // error belongs right after the input. Schema-driven fields (renderField)
+    // do the reverse -- input then label -- so putting it straight after the
+    // input would wedge the error between an input and its own label; anchor
+    // after the label instead when that's what immediately follows.
+    const anchor = el.nextElementSibling?.tagName === 'LABEL' ? el.nextElementSibling : el;
+    anchor.insertAdjacentElement('afterend', errorEl);
+
+    function refresh() {
+      if (!hasInteracted) return;
+      const valid = el.checkValidity();
+      el.classList.toggle('invalid', !valid);
+      errorEl.textContent = valid ? '' : el.validationMessage;
+    }
+
+    el.addEventListener('blur', () => { hasInteracted = true; refresh(); });
+    el.addEventListener('input', refresh);
+  });
+}
+
 export function renderField(field, value) {
   const val = escapeHtml(value);
-  const label = escapeHtml(field.label ?? field.key);
+  const label = escapeHtml(field.label ?? field.key) + (field.required ? ' *' : '');
   const key = escapeHtml(field.key);
   const required = field.required ? 'required' : '';
   const id = `field-${key}`;

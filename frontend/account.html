@@ -25,8 +25,8 @@
     <h1>Mein Konto</h1>
     <form id="account-form">
       <div class="field-grid">
-        <div><label for="firstName">Vorname</label><input id="firstName" name="firstName" type="text" required></div>
-        <div><label for="lastName">Nachname</label><input id="lastName" name="lastName" type="text" required></div>
+        <div><label for="firstName">Vorname *</label><input id="firstName" name="firstName" type="text" required></div>
+        <div><label for="lastName">Nachname *</label><input id="lastName" name="lastName" type="text" required></div>
         <div><label for="nickname">Rufname</label><input id="nickname" name="nickname" type="text"></div>
       </div>
       <div class="field-grid">
@@ -57,7 +57,7 @@ import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { renderNavLinks } from '/js/nav.js';
-import { attachBirthdateFormatter } from '/js/formFields.js';
+import { attachBirthdateFormatter, attachLiveValidation } from '/js/formFields.js';
 import { buildScanCode } from '/js/qrCode.js';
 
 const form = document.getElementById('account-form');
@@ -65,6 +65,7 @@ const message = document.getElementById('message');
 const formControls = form.querySelectorAll('input, textarea, button');
 formControls.forEach((el) => { el.disabled = true; });
 attachBirthdateFormatter(document.getElementById('birthdate'));
+attachLiveValidation(form);
 
 document.getElementById('logout-link').addEventListener('click', async () => {
   if (!confirm('Wirklich abmelden?')) return;
