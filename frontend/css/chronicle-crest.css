@@ -131,3 +131,9 @@ tr:last-child td{ border-bottom:none; }
 
 .error{ color:var(--error); font-size:13px; font-weight:600; }
 .success{ color:var(--success); font-size:13px; font-weight:600; }
+.sub{ color:var(--on-surface-variant); font-size:13px; font-style:normal; margin:8px 0 0; }
+
+.char-files{ margin-top:14px; padding-top:14px; border-top:1px solid var(--outline-variant); }
+.file-item{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.file-upload-form{ margin-top:10px; }
+.file-upload-form button[type="submit"]{ padding:9px 20px; font-size:14px; margin-top:8px; }
