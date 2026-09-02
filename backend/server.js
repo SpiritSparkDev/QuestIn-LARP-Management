@@ -13,6 +13,7 @@ import './auth/invite.js';
 import './accounts/routes.js';
 import './events/routes.js';
 import './characters/routes.js';
+import './characterFiles/routes.js';
 import './registrations/routes.js';
 import './groups/routes.js';
 import './members/routes.js';
