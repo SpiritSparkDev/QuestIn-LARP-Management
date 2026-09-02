@@ -52,6 +52,13 @@ router.post('/characters/:id/files', requireAuth(async ({ req, params, user }) =
   if (typeof filename !== 'string' || !filename) {
     return { status: 400, body: { error: 'filename is required' } };
   }
+  // Buffer.from ignores the 'base64' encoding argument for an array-like
+  // object (e.g. {length: 4_000_000_000}) and instead allocates a
+  // zero-filled buffer of that length -- an unauthenticated-size request
+  // body can force a multi-second, memory-exhausting allocation this way.
+  if (typeof dataBase64 !== 'string') {
+    return { status: 400, body: { error: 'dataBase64 must be a base64 string' } };
+  }
 
   let buffer;
   try {
@@ -117,6 +124,10 @@ router.get('/characters/:characterId/files/:fileId', requireAuth(async ({ params
     headers: {
       'Content-Type': file.mime_type,
       'Content-Disposition': `inline; filename="${safeFilename}"`,
+      // mime_type is only ever the client's claimed type, never verified
+      // against the actual bytes -- this stops a browser from ignoring it
+      // and guessing a more "interesting" type (e.g. HTML) to render.
+      'X-Content-Type-Options': 'nosniff',
     },
   };
 }));
