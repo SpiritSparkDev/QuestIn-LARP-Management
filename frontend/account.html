@@ -24,24 +24,21 @@
     </div>
     <h1>Mein Konto</h1>
     <form id="account-form">
-      <label for="firstName">Vorname</label>
-      <input id="firstName" name="firstName" type="text" required>
-      <label for="lastName">Nachname</label>
-      <input id="lastName" name="lastName" type="text" required>
-      <label for="nickname">Rufname</label>
-      <input id="nickname" name="nickname" type="text">
-      <label for="address">Adresse <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label>
-      <input id="address" name="address" type="text">
-      <label for="birthdate">Geburtsdatum <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label>
-      <input id="birthdate" name="birthdate" type="text" placeholder="TT.MM.JJJJ">
-      <label for="phone">Telefon <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label>
-      <input id="phone" name="phone" type="text">
-      <label for="emergencyContactLastName">Notfallkontakt: Name <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label>
-      <input id="emergencyContactLastName" name="emergencyContactLastName" type="text">
-      <label for="emergencyContactFirstName">Notfallkontakt: Vorname <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label>
-      <input id="emergencyContactFirstName" name="emergencyContactFirstName" type="text">
-      <label for="emergencyContactPhone">Notfallkontakt: Telefonnummer <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label>
-      <input id="emergencyContactPhone" name="emergencyContactPhone" type="text">
+      <div class="field-grid">
+        <div><label for="firstName">Vorname</label><input id="firstName" name="firstName" type="text" required></div>
+        <div><label for="lastName">Nachname</label><input id="lastName" name="lastName" type="text" required></div>
+        <div><label for="nickname">Rufname</label><input id="nickname" name="nickname" type="text"></div>
+      </div>
+      <div class="field-grid">
+        <div><label for="address">Adresse <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="address" name="address" type="text"></div>
+        <div><label for="birthdate">Geburtsdatum <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="birthdate" name="birthdate" type="text" placeholder="TT.MM.JJJJ"></div>
+        <div><label for="phone">Telefon <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="phone" name="phone" type="text"></div>
+      </div>
+      <div class="field-grid">
+        <div><label for="emergencyContactLastName">Notfallkontakt: Name <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="emergencyContactLastName" name="emergencyContactLastName" type="text"></div>
+        <div><label for="emergencyContactFirstName">Notfallkontakt: Vorname <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="emergencyContactFirstName" name="emergencyContactFirstName" type="text"></div>
+        <div><label for="emergencyContactPhone">Notfallkontakt: Telefonnummer <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="emergencyContactPhone" name="emergencyContactPhone" type="text"></div>
+      </div>
       <label for="medicalNotes">Gesundheitshinweise / Allergien <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label>
       <textarea id="medicalNotes" name="medicalNotes"></textarea>
       <button type="submit">Speichern</button>

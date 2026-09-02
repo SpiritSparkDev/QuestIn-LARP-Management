@@ -148,6 +148,14 @@ tr:last-child td{ border-bottom:none; }
 
 .char-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:8px; }
 @media (max-width:560px){ .char-grid{ grid-template-columns:1fr; } }
+.field-grid{ display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
+@media (max-width:560px){ .field-grid{ grid-template-columns:1fr; } }
+/* ponytail: wrapping each field in its own div (for the grid) makes every
+   label a first-child of that div, so the global `label:first-child{
+   margin-top:0 }` rule (line 71) now matches ALL of them instead of just the
+   form's true first field -- it silently zeroed the row spacing this grid
+   relies on. Restore it here with higher specificity. */
+.field-grid > div > label{ margin-top:22px; }
 .char-card{ background:var(--surface-container-low); border:1px solid var(--outline-variant); border-radius:4px; padding:20px; position:relative; }
 .char-card::after{ content:""; position:absolute; top:0; right:18px; width:16px; height:24px; background:var(--gold-container); clip-path:polygon(0 0,100% 0,100% 100%,50% 75%,0 100%); }
 .char-card h3{ margin:0 0 4px; font-size:20px; }
