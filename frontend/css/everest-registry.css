@@ -22,6 +22,19 @@ body{ margin:0; background:var(--bg); color:var(--on-surface); font-family:"Inte
 .main{ flex:1; min-width:0; }
 .content{ padding:32px; max-width:1024px; }
 
+/* This theme's pages never had a mobile layout at all -- .sidebar's fixed
+   220px width left almost no room for .content on a real phone viewport
+   once the [konto-charaktere-ui] branch gave every page a proper
+   <meta name="viewport"> (previously the missing tag silently masked this
+   by rendering the whole page zoomed out on a virtual desktop-width
+   viewport instead). Stack the sidebar above the content below 768px. */
+@media (max-width:768px){
+  .app{ flex-direction:column; }
+  .sidebar{ width:100%; padding:16px; }
+  .sidebar nav{ flex-direction:row; flex-wrap:wrap; }
+  .content{ padding:20px; }
+}
+
 h1{ font-size:28px; font-weight:700; letter-spacing:-0.01em; margin:0 0 4px; }
 .sub{ color:var(--on-surface-variant); font-size:14px; margin:0 0 28px; }
 h2{ font-size:16px; font-weight:600; margin:0 0 14px; }

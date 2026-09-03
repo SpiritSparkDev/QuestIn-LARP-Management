@@ -49,8 +49,14 @@ h1,h2,h3{ font-family:"EB Garamond",Georgia,serif; text-wrap:balance; margin:0; 
 .folio--wide{ max-width:880px; margin:0 auto; }
 
 .app-nav{
-  display:flex; gap:24px; padding-bottom:16px; margin-bottom:28px;
+  display:flex; flex-wrap:wrap; row-gap:8px; gap:24px; padding-bottom:16px; margin-bottom:28px;
   border-bottom:1px solid var(--outline-variant); font-size:14px; font-weight:600;
+  /* Reserves real space for .header-actions (position:absolute, so it takes
+     none itself) instead of relying on font size/label length happening to
+     leave enough of a gap -- the prior fixed-width assumption broke with a
+     9th nav item or a slightly larger font. Reset to 0 below, where
+     .header-actions switches to position:static and no longer overlaps. */
+  padding-right:150px;
 }
 .app-nav a{ color:var(--on-surface-variant); text-decoration:none; padding-bottom:14px; margin-bottom:-1px; }
 .app-nav a.current{ color:var(--primary); border-bottom:2px solid var(--primary); }
@@ -122,6 +128,7 @@ button[type="submit"]:active, .btn-seal:active{ box-shadow:0 1px 0 var(--primary
 @media (max-width:1024px){
   .header-actions{ position:static; text-align:right; margin-bottom:16px; }
   .btn-danger{ padding:7px 14px; font-size:13px; }
+  .app-nav{ padding-right:0; }
 }
 
 .divider-word{ display:flex; align-items:center; gap:14px; color:var(--outline); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; margin:28px 0; }
