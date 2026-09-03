@@ -277,6 +277,24 @@ select:focus {
   padding: 8.5px 11.5px;
 }
 
+.field-below label {
+  margin-bottom: 0;
+  margin-top: 6px;
+  order: 2;
+}
+
+.field-below input,
+.field-below select {
+  margin-bottom: 0;
+  order: 1;
+}
+
+.field-below {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+}
+
 .hr {
   border: none;
   border-top: 1px solid var(--outline);
