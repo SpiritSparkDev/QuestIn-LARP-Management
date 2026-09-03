@@ -17,11 +17,11 @@ export async function applyBranding() {
     brandName.childNodes[0].textContent = settings.appTitle;
   }
 
-  if (settings.logoUrl) {
+  if (settings.hasUploadedLogo || settings.logoUrl) {
     const seal = document.querySelector('.brand-seal');
     if (seal) {
       const img = document.createElement('img');
-      img.src = settings.logoUrl;
+      img.src = settings.hasUploadedLogo ? '/app-settings/logo' : settings.logoUrl;
       img.alt = 'Logo';
       seal.replaceChildren(img);
     }

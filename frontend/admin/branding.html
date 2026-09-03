@@ -20,16 +20,32 @@
     <p class="sub">Logo, App-Titel und Event-Name für andere Organisationen anpassen.</p>
     <div class="card form-pad">
       <form id="branding-form">
-        <label for="app-title">App-Titel</label>
-        <input id="app-title" name="appTitle" type="text" placeholder="Pakyrion">
-        <label for="event-name">Event-Name</label>
-        <input id="event-name" name="eventName" type="text" placeholder="P17/2027">
-        <label for="logo-url">Logo-URL</label>
-        <input id="logo-url" name="logoUrl" type="url" placeholder="https://example.com/logo.png">
-        <label for="quota-mb">Speicher-Kontingent pro Charakter (MB)</label>
-        <input id="quota-mb" name="quotaMbPerCharacter" type="number" min="1" step="1" placeholder="100">
+        <div class="field-below">
+          <label for="app-title">App-Titel</label>
+          <input id="app-title" name="appTitle" type="text" placeholder="Pakyrion">
+        </div>
+        <div class="field-below">
+          <label for="event-name">Event-Name</label>
+          <input id="event-name" name="eventName" type="text" placeholder="P17/2027">
+        </div>
+        <div class="field-below">
+          <label for="logo-url">Logo-URL</label>
+          <input id="logo-url" name="logoUrl" type="url" placeholder="https://example.com/logo.png">
+        </div>
+        <p class="sub" id="logo-url-note" style="display:none;">Ein hochgeladenes Logo hat Vorrang vor dieser URL.</p>
+        <div class="field-below">
+          <label for="quota-mb">Speicher-Kontingent pro Charakter (MB)</label>
+          <input id="quota-mb" name="quotaMbPerCharacter" type="number" min="1" step="1" placeholder="100">
+        </div>
         <button type="submit">Speichern</button>
       </form>
+      <hr class="hr">
+      <h2>Logo hochladen</h2>
+      <img id="logo-preview" alt="Aktuelles Logo" style="max-width:120px;max-height:120px;display:none;">
+      <p id="logo-preview-empty" class="sub">Kein Logo hochgeladen.</p>
+      <input type="file" id="logo-file" accept="image/jpeg,image/png,image/webp">
+      <button type="button" id="logo-upload-btn">Hochladen</button>
+      <button type="button" id="logo-remove-btn" style="display:none;">Logo entfernen</button>
     </div>
     <p id="message"></p>
   </div></div>
@@ -51,7 +67,76 @@ async function loadSettings() {
   form.elements.eventName.value = settings.eventName ?? '';
   form.elements.logoUrl.value = settings.logoUrl ?? '';
   form.elements.quotaMbPerCharacter.value = settings.quotaMbPerCharacter ?? '';
+  refreshLogoPreview(settings.hasUploadedLogo);
 }
+
+const LOGO_MIME_ALLOWLIST = ['image/jpeg', 'image/png', 'image/webp'];
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function refreshLogoPreview(hasUploadedLogo) {
+  const preview = document.getElementById('logo-preview');
+  const empty = document.getElementById('logo-preview-empty');
+  const removeBtn = document.getElementById('logo-remove-btn');
+  const urlNote = document.getElementById('logo-url-note');
+  if (hasUploadedLogo) {
+    preview.src = `/app-settings/logo?t=${Date.now()}`;
+    preview.style.display = '';
+    empty.style.display = 'none';
+    removeBtn.style.display = '';
+    urlNote.style.display = '';
+  } else {
+    preview.style.display = 'none';
+    empty.style.display = '';
+    removeBtn.style.display = 'none';
+    urlNote.style.display = 'none';
+  }
+}
+
+document.getElementById('logo-upload-btn').addEventListener('click', async () => {
+  message.textContent = '';
+  message.className = '';
+  const file = document.getElementById('logo-file').files[0];
+  if (!file) return;
+  if (!LOGO_MIME_ALLOWLIST.includes(file.type)) {
+    message.textContent = 'Nicht unterstützter Dateityp.';
+    message.className = 'error';
+    return;
+  }
+  try {
+    const dataBase64 = await readFileAsBase64(file);
+    await api.put('/app-settings/logo', { dataBase64, mimeType: file.type });
+    refreshLogoPreview(true);
+    await applyBranding();
+    message.textContent = 'Logo hochgeladen.';
+    message.className = 'success';
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('logo-remove-btn').addEventListener('click', async () => {
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.delete('/app-settings/logo');
+    refreshLogoPreview(false);
+    await applyBranding();
+    message.textContent = 'Logo entfernt.';
+    message.className = 'success';
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
