@@ -110,6 +110,11 @@ document.getElementById('logo-upload-btn').addEventListener('click', async () =>
     message.className = 'error';
     return;
   }
+  if (file.size > 2 * 1024 * 1024) {
+    message.textContent = 'Datei ist größer als 2 MB.';
+    message.className = 'error';
+    return;
+  }
   try {
     const dataBase64 = await readFileAsBase64(file);
     await api.put('/app-settings/logo', { dataBase64, mimeType: file.type });

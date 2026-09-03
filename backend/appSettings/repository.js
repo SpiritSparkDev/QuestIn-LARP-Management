@@ -1,14 +1,14 @@
 import { query } from '../db.js';
 
 export async function getAppSettings() {
-  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, logo_data FROM app_settings LIMIT 1');
+  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, logo_data IS NOT NULL AS has_uploaded_logo FROM app_settings LIMIT 1');
   if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, hasUploadedLogo: false };
   return {
     logoUrl: rows[0].logo_url,
     appTitle: rows[0].app_title,
     eventName: rows[0].event_name,
     quotaMbPerCharacter: rows[0].quota_mb_per_character,
-    hasUploadedLogo: rows[0].logo_data !== null,
+    hasUploadedLogo: rows[0].has_uploaded_logo,
   };
 }
 

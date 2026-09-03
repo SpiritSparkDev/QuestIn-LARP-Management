@@ -25,5 +25,7 @@ export async function applyBranding() {
       img.alt = 'Logo';
       seal.replaceChildren(img);
     }
+  } else {
+    document.querySelector('.brand-seal')?.querySelector('img')?.remove();
   }
 }
