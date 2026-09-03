@@ -2,6 +2,9 @@ import { query } from '../db.js';
 import { getEvent } from '../events/repository.js';
 import { applyTransition } from './statusMachine.js';
 import { displayName } from '../displayName.js';
+import { decryptField } from '../crypto/fieldCrypto.js';
+import { ENCRYPTED_ACCOUNT_FIELD_COLUMNS } from '../accountFields.js';
+import { filterCharacterFields } from '../characters/visibility.js';
 
 export async function registerForEvent(userId, eventId) {
   const event = await getEvent(eventId);
@@ -50,9 +53,17 @@ export async function unregisterFromEvent(userId, eventId) {
   }
 }
 
-export async function listParticipantsForEvent(eventId) {
+// `schema` (the event's character_form_schema) and `viewer` (the requesting
+// user) gate what gets returned: OT fields are limited to the viewer's own
+// group.accountFields (the same rule members.html enforces for editing), and
+// character data is filtered through filterCharacterFields — full data only
+// for the owner or for canOverrideCheckinStatus staff, public-only otherwise.
+export async function listParticipantsForEvent(eventId, { schema = [], viewer } = {}) {
+  const otKeys = (viewer?.group?.accountFields ?? []).filter((key) => key in ENCRYPTED_ACCOUNT_FIELD_COLUMNS);
+  const otColumnsSql = otKeys.map((key) => `, u.${ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]}`).join('');
+
   const { rows: registrations } = await query(
-    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.checked_in_at, r.checked_out_at
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.checked_in_at, r.checked_out_at${otColumnsSql}
      FROM registrations r
      JOIN users u ON u.id = r.user_id
      WHERE r.event_id = $1
@@ -60,14 +71,18 @@ export async function listParticipantsForEvent(eventId) {
     [eventId]
   );
   const { rows: characters } = await query(
-    'SELECT id, user_id, name FROM characters WHERE event_id = $1',
+    'SELECT id, user_id, name, data FROM characters WHERE event_id = $1',
     [eventId]
   );
 
   const charactersByUser = new Map();
   for (const c of characters) {
     if (!charactersByUser.has(c.user_id)) charactersByUser.set(c.user_id, []);
-    charactersByUser.get(c.user_id).push({ id: c.id, name: c.name });
+    charactersByUser.get(c.user_id).push({
+      id: c.id,
+      name: c.name,
+      data: filterCharacterFields(c, schema, viewer),
+    });
   }
 
   return registrations.map((r) => ({
@@ -77,6 +92,7 @@ export async function listParticipantsForEvent(eventId) {
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,
     characters: charactersByUser.get(r.user_id) ?? [],
+    otFields: Object.fromEntries(otKeys.map((key) => [key, decryptField(r[ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]])])),
   }));
 }
 

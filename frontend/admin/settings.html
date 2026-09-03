@@ -51,6 +51,17 @@
       <input id="test-to" type="email">
       <button type="button" id="send-test">Test-Mail senden</button>
     </div>
+
+    <div class="card form-pad">
+      <h2>Hotkeys</h2>
+      <p class="sub">Klicke in ein Feld und drücke die gewünschte Taste. Gilt für den Check-In-Scanner.</p>
+      <label for="hotkey-confirm">Einchecken (im Pop-up)</label>
+      <input id="hotkey-confirm" readonly>
+      <label for="hotkey-cancel">Abbrechen (im Pop-up)</label>
+      <input id="hotkey-cancel" readonly>
+      <label for="hotkey-scan">Scan starten (Push-to-See)</label>
+      <input id="hotkey-scan" readonly>
+    </div>
     <p id="message"></p>
   </div></div>
 </div>
@@ -64,6 +75,39 @@ import { renderNavLinks } from '/js/nav.js';
 const form = document.getElementById('smtp-form');
 const message = document.getElementById('message');
 const testToInput = document.getElementById('test-to');
+
+const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
+const HOTKEY_DISPLAY = { Enter: 'Enter', Escape: 'Esc', ' ': 'Leertaste' };
+function displayKey(key) { return HOTKEY_DISPLAY[key] ?? key; }
+
+let currentHotkeys = { ...DEFAULT_HOTKEYS };
+
+function renderHotkeyInputs() {
+  document.getElementById('hotkey-confirm').value = displayKey(currentHotkeys.confirm);
+  document.getElementById('hotkey-cancel').value = displayKey(currentHotkeys.cancel);
+  document.getElementById('hotkey-scan').value = displayKey(currentHotkeys.scan);
+}
+renderHotkeyInputs();
+
+function captureHotkey(inputId, action) {
+  document.getElementById(inputId).addEventListener('keydown', async (event) => {
+    if (event.key === 'Tab' || ['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    currentHotkeys = { ...currentHotkeys, [action]: event.key };
+    renderHotkeyInputs();
+    try {
+      await api.patch('/account', { hotkeys: currentHotkeys });
+    } catch (err) {
+      message.textContent = err.message;
+      message.className = 'error';
+    }
+  });
+}
+
+captureHotkey('hotkey-confirm', 'confirm');
+captureHotkey('hotkey-cancel', 'cancel');
+captureHotkey('hotkey-scan', 'scan');
 
 async function loadSettings() {
   const settings = await api.get('/admin/settings/smtp');
@@ -116,6 +160,8 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
+  renderHotkeyInputs();
   await loadSettings();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

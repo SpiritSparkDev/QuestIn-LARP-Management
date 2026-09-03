@@ -26,7 +26,7 @@
 
 <script type="module">
 import { api } from '/js/api.js';
-import { escapeHtml } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const eventSelect = document.getElementById('event-select');
@@ -34,13 +34,6 @@ const listBody = document.getElementById('character-list');
 const message = document.getElementById('message');
 
 let events = [];
-
-function tagValueForField(field, rawValue) {
-  if (rawValue === undefined || rawValue === null || rawValue === '') return undefined;
-  if (Array.isArray(rawValue)) return rawValue.length > 0 ? rawValue.join(', ') : undefined;
-  if (typeof rawValue === 'boolean') return rawValue ? 'Ja' : undefined;
-  return rawValue;
-}
 
 function renderTag(field, value) {
   if (field.type === 'link' && typeof value === 'string' && /^https?:\/\//.test(value)) {
@@ -51,7 +44,7 @@ function renderTag(field, value) {
 
 function tagsForCharacter(character, schema) {
   return schema
-    .map((field) => ({ field, value: tagValueForField(field, character.data[field.key]) }))
+    .map((field) => ({ field, value: formatFieldValue(field, character.data[field.key]) }))
     .filter(({ value }) => value !== undefined)
     .map(({ field, value }) => renderTag(field, value))
     .join('');

@@ -1,11 +1,63 @@
-:root { --border: #ccc; font-family: system-ui, sans-serif; }
-body { max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
-nav { display: flex; gap: 1rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }
-form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 480px; }
-label { font-weight: 600; }
-input, textarea, select, button { font: inherit; padding: 0.5rem; }
-button { cursor: pointer; width: fit-content; }
-.error { color: #b00020; }
-.success { color: #0a7a0a; }
-table { border-collapse: collapse; width: 100%; margin-bottom: 2rem; }
-th, td { border: 1px solid var(--border); padding: 0.5rem; text-align: left; }
+:root {
+    --border: #ccc;
+    font-family: system-ui, sans-serif;
+}
+
+body {
+    max-width: 720px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+nav {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1rem;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 480px;
+}
+
+label {
+    font-weight: 600;
+}
+
+input,
+textarea,
+select,
+button {
+    font: inherit;
+    padding: 0.5rem;
+}
+
+button {
+    cursor: pointer;
+    width: fit-content;
+}
+
+.error {
+    color: #b00020;
+}
+
+.success {
+    color: #0a7a0a;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 2rem;
+}
+
+th,
+td {
+    border: 1px solid var(--border);
+    padding: 0.5rem;
+    text-align: left;
+}

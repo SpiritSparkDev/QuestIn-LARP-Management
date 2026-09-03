@@ -54,10 +54,10 @@ router.get('/registrations', requireAuth(async ({ user }) => {
   return { status: 200, body: registrations };
 }));
 
-router.get('/events/:id/participants', requireAuth(requireMenu('checkin')(async ({ params }) => {
+router.get('/events/:id/participants', requireAuth(requireMenu('checkin')(async ({ params, user }) => {
   const event = await getEvent(params.id);
   if (!event) return { status: 404, body: { error: 'event not found' } };
-  const participants = await listParticipantsForEvent(params.id);
+  const participants = await listParticipantsForEvent(params.id, { schema: event.character_form_schema, viewer: user });
   return { status: 200, body: participants };
 })));
 

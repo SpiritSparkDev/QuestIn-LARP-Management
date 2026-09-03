@@ -18,14 +18,15 @@
   <div class="main"><div class="content">
     <h1>Mitglieder verwalten</h1>
     <p class="sub">Bearbeite bestehende Mitglieder oder lade neue per E-Mail ein.</p>
-    <div class="card">
+    <button type="button" id="invite-open">Neues Mitglied anlegen</button>
+    <div class="card" style="margin-top:16px;">
       <table id="member-list">
         <thead><tr><th>Name</th><th>E-Mail</th><th>Gruppe</th><th>Status</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
 
-    <div class="card form-pad" id="detail-card" style="display:none;">
+    <dialog id="detail-dialog">
       <h2 id="detail-title">Mitglied bearbeiten</h2>
       <div id="detail-group-wrap" style="display:none;">
         <label for="detail-group">Gruppe</label>
@@ -35,9 +36,9 @@
       <div id="detail-characters"></div>
       <button type="button" id="detail-save">Speichern</button>
       <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
-    </div>
+    </dialog>
 
-    <div class="card form-pad">
+    <dialog id="invite-dialog">
       <h2>Neues Mitglied einladen</h2>
       <form id="invite-form">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -64,8 +65,9 @@
         </div>
         <div id="invite-fields"></div>
         <button type="submit">Einladung senden</button>
+        <button type="button" id="invite-cancel" class="btn-ghost">Abbrechen</button>
       </form>
-    </div>
+    </dialog>
     <p id="message"></p>
   </div></div>
 </div>
@@ -74,19 +76,14 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, attachBirthdateFormatter } from '/js/formFields.js';
+import { escapeHtml, attachBirthdateFormatter, ACCOUNT_FIELD_LABELS } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
-
-const ACCOUNT_FIELD_LABELS = {
-  address: 'Adresse', birthdate: 'Geburtsdatum', phone: 'Telefon',
-  emergencyContactLastName: 'Notfallkontakt: Name', emergencyContactFirstName: 'Notfallkontakt: Vorname', emergencyContactPhone: 'Notfallkontakt: Telefonnummer',
-  medicalNotes: 'Gesundheitshinweise',
-};
 
 const ALL_FIELD_KEYS = Object.keys(ACCOUNT_FIELD_LABELS);
 
 const listBody = document.querySelector('#member-list tbody');
-const detailCard = document.getElementById('detail-card');
+const detailDialog = document.getElementById('detail-dialog');
+const inviteDialog = document.getElementById('invite-dialog');
 const detailFields = document.getElementById('detail-fields');
 const detailTitle = document.getElementById('detail-title');
 const detailGroupWrap = document.getElementById('detail-group-wrap');
@@ -189,12 +186,12 @@ async function openDetail(memberId) {
     detailGroupWrap.style.display = 'none';
   }
 
-  detailCard.style.display = '';
+  detailDialog.showModal();
 }
 
 document.getElementById('detail-cancel').addEventListener('click', () => {
   editingMemberId = null;
-  detailCard.style.display = 'none';
+  detailDialog.close();
 });
 
 document.getElementById('detail-save').addEventListener('click', async () => {
@@ -211,7 +208,7 @@ document.getElementById('detail-save').addEventListener('click', async () => {
     await api.patch(`/members/${editingMemberId}`, payload);
     message.textContent = 'Gespeichert.';
     message.className = 'success';
-    detailCard.style.display = 'none';
+    detailDialog.close();
     await loadMembers();
   } catch (err) {
     message.textContent = err.message;
@@ -238,6 +235,9 @@ async function resendInvitation(invitationId) {
   }
 }
 
+document.getElementById('invite-open').addEventListener('click', () => inviteDialog.showModal());
+document.getElementById('invite-cancel').addEventListener('click', () => inviteDialog.close());
+
 document.getElementById('invite-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   message.textContent = '';
@@ -258,6 +258,7 @@ document.getElementById('invite-form').addEventListener('submit', async (event) 
     }
     event.target.reset();
     buildFieldInputs(inviteFields);
+    inviteDialog.close();
     await loadMembers();
   } catch (err) {
     message.textContent = err.message;

@@ -1,3 +1,21 @@
+// OT (out-of-time) member fields: the encrypted, personal data columns a
+// group's account_fields permission can grant access to.
+export const ACCOUNT_FIELD_LABELS = {
+  address: 'Adresse', birthdate: 'Geburtsdatum', phone: 'Telefon',
+  emergencyContactLastName: 'Notfallkontakt: Name', emergencyContactFirstName: 'Notfallkontakt: Vorname', emergencyContactPhone: 'Notfallkontakt: Telefonnummer',
+  medicalNotes: 'Gesundheitshinweise',
+};
+
+// Formats a character (IT) custom-field value for display, e.g. as a
+// checkin-table cell or a browse-page tag. Returns undefined for values that
+// shouldn't be shown at all (empty/absent).
+export function formatFieldValue(field, rawValue) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') return undefined;
+  if (Array.isArray(rawValue)) return rawValue.length > 0 ? rawValue.join(', ') : undefined;
+  if (typeof rawValue === 'boolean') return rawValue ? 'Ja' : undefined;
+  return rawValue;
+}
+
 export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

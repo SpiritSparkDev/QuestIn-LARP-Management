@@ -20,29 +20,22 @@
     <h1>Check-In</h1>
     <p class="sub">Teilnehmerliste für das ausgewählte Event.</p>
     <select id="event-select" aria-label="Event"></select>
-    <div class="card form-pad">
-      <h2>QR-Scan</h2>
-      <label for="scan-mode">Modus</label>
-      <select id="scan-mode">
-        <option value="off">Aus</option>
-        <option value="push">20s-Push-to-See</option>
-        <option value="always">Permanent an</option>
-      </select>
-      <button type="button" id="scan-start" style="display:none;">Scan starten (20s)</button>
-      <p id="scan-status" class="sub"></p>
-      <video id="scan-video" style="max-width:320px;display:none;" playsinline muted></video>
-      <canvas id="scan-canvas" style="display:none;"></canvas>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Gesamt</div></div>
+      <div class="stat"><div class="stat-num forest" id="stat-checked-in">0</div><div class="stat-label">Eingecheckt</div></div>
+      <div class="stat">
+        <div class="stat-label" id="scan-mode-label">QR-Scan</div>
+        <div class="toggle-group toggle-group-sm" role="group" aria-labelledby="scan-mode-label">
+          <button type="button" class="toggle-btn" data-mode="off">Aus</button>
+          <button type="button" class="toggle-btn" data-mode="push">Push</button>
+          <button type="button" class="toggle-btn" data-mode="always">An</button>
+        </div>
+      </div>
     </div>
-    <div class="card form-pad">
-      <h2>Hotkeys</h2>
-      <p class="sub">Klicke in ein Feld und drücke die gewünschte Taste.</p>
-      <label for="hotkey-confirm">Einchecken (im Pop-up)</label>
-      <input id="hotkey-confirm" readonly>
-      <label for="hotkey-cancel">Abbrechen (im Pop-up)</label>
-      <input id="hotkey-cancel" readonly>
-      <label for="hotkey-scan">Scan starten (Push-to-See)</label>
-      <input id="hotkey-scan" readonly>
-    </div>
+    <button type="button" id="scan-start" style="display:none;">Scan starten (20s)</button>
+    <p id="scan-status" class="sub"></p>
+    <video id="scan-video" style="max-width:320px;display:none;" playsinline muted></video>
+    <canvas id="scan-canvas" style="display:none;"></canvas>
     <dialog id="scan-dialog">
       <h2>Gescannter Teilnehmer</h2>
       <p><strong id="scan-name"></strong></p>
@@ -53,16 +46,25 @@
       <button type="button" id="scan-confirm">Einchecken</button>
       <button type="button" id="scan-cancel">Abbrechen</button>
     </dialog>
-    <div class="stat-row">
-      <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Gesamt</div></div>
-      <div class="stat"><div class="stat-num forest" id="stat-checked-in">0</div><div class="stat-label">Eingecheckt</div></div>
-    </div>
+    <details id="column-settings" class="card form-pad">
+      <summary>Spalten</summary>
+      <div>
+        <span>Charakter-Felder (IT)</span>
+        <div id="it-column-checkboxes" class="checkbox-group"></div>
+      </div>
+      <div>
+        <span>Mitglieder-Felder (OT)</span>
+        <div id="ot-column-checkboxes" class="checkbox-group"></div>
+      </div>
+    </details>
     <div class="card">
       <div class="toolbar"><input class="search" id="participant-search" placeholder="Suche nach Name oder Charakter …"></div>
+      <div class="table-scroll">
       <table id="participant-list">
-        <thead><tr><th>Name</th><th>Charaktere</th><th>Status</th><th></th><th>Override</th></tr></thead>
+        <thead><tr><th>Name</th><th>Charaktere</th></tr></thead>
         <tbody></tbody>
       </table>
+      </div>
     </div>
     <p id="message"></p>
   </div></div>
@@ -72,12 +74,15 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 import { parseScanCode } from '/js/qrCode.js';
 
 const eventSelect = document.getElementById('event-select');
 const listBody = document.querySelector('#participant-list tbody');
+const tableHeadRow = document.querySelector('#participant-list thead tr');
+const itColumnCheckboxes = document.getElementById('it-column-checkboxes');
+const otColumnCheckboxes = document.getElementById('ot-column-checkboxes');
 const message = document.getElementById('message');
 const searchInput = document.getElementById('participant-search');
 const statTotal = document.getElementById('stat-total');
@@ -85,14 +90,81 @@ const statCheckedIn = document.getElementById('stat-checked-in');
 
 const STATUS_LABELS = { registered: 'Angemeldet', checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt' };
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
-const HOTKEY_DISPLAY = { Enter: 'Enter', Escape: 'Esc', ' ': 'Leertaste' };
-function displayKey(key) { return HOTKEY_DISPLAY[key] ?? key; }
-
 let currentSearch = '';
 let canOverride = false;
+let events = [];
+let myAccountFields = [];
+let currentSchema = [];
+let selectedColumns = { it: [], ot: [] };
 const STATUS_ORDER = ['registered', 'checked_in', 'checked_out'];
 
-const scanModeSelect = document.getElementById('scan-mode');
+function loadSelectedColumns(eventId) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(`checkinColumns:${eventId}`));
+    return { it: Array.isArray(parsed?.it) ? parsed.it : [], ot: Array.isArray(parsed?.ot) ? parsed.ot : [] };
+  } catch {
+    return { it: [], ot: [] };
+  }
+}
+
+function saveSelectedColumns() {
+  localStorage.setItem(`checkinColumns:${eventSelect.value}`, JSON.stringify(selectedColumns));
+}
+
+function renderColumnCheckboxes() {
+  itColumnCheckboxes.innerHTML = currentSchema.map((field) => `
+    <label><input type="checkbox" data-it-column="${escapeHtml(field.key)}" ${selectedColumns.it.includes(field.key) ? 'checked' : ''}> ${escapeHtml(field.label ?? field.key)}</label>
+  `).join('');
+  const otKeys = Object.keys(ACCOUNT_FIELD_LABELS).filter((key) => myAccountFields.includes(key));
+  otColumnCheckboxes.innerHTML = otKeys.map((key) => `
+    <label><input type="checkbox" data-ot-column="${escapeHtml(key)}" ${selectedColumns.ot.includes(key) ? 'checked' : ''}> ${escapeHtml(ACCOUNT_FIELD_LABELS[key])}</label>
+  `).join('');
+
+  itColumnCheckboxes.querySelectorAll('[data-it-column]').forEach((cb) => {
+    cb.addEventListener('change', () => toggleColumn('it', cb.dataset.itColumn, cb.checked));
+  });
+  otColumnCheckboxes.querySelectorAll('[data-ot-column]').forEach((cb) => {
+    cb.addEventListener('change', () => toggleColumn('ot', cb.dataset.otColumn, cb.checked));
+  });
+}
+
+function toggleColumn(group, key, checked) {
+  const set = new Set(selectedColumns[group]);
+  if (checked) set.add(key); else set.delete(key);
+  selectedColumns[group] = [...set];
+  saveSelectedColumns();
+  renderTableHead();
+  loadParticipants(eventSelect.value);
+}
+
+function renderTableHead() {
+  const itLabels = selectedColumns.it.map((key) => currentSchema.find((f) => f.key === key)?.label ?? key);
+  const otLabels = selectedColumns.ot.map((key) => ACCOUNT_FIELD_LABELS[key] ?? key);
+  const extraTh = [...itLabels, ...otLabels].map((label) => `<th>${escapeHtml(label)}</th>`).join('');
+  tableHeadRow.innerHTML = `<th>Name</th><th>Charaktere</th>${extraTh}<th>Status</th><th></th><th>Override</th>`;
+}
+
+function renderExtraCells(p) {
+  const itCells = selectedColumns.it.map((key) => {
+    const field = currentSchema.find((f) => f.key === key) ?? { key };
+    const values = p.characters.map((c) => formatFieldValue(field, c.data?.[key])).filter((v) => v !== undefined);
+    return `<td>${escapeHtml(values.join(', '))}</td>`;
+  }).join('');
+  const otCells = selectedColumns.ot.map((key) => `<td>${escapeHtml(p.otFields?.[key] ?? '')}</td>`).join('');
+  return itCells + otCells;
+}
+
+function onEventChanged() {
+  const event = events.find((e) => e.id === eventSelect.value);
+  currentSchema = event?.character_form_schema ?? [];
+  selectedColumns = loadSelectedColumns(eventSelect.value);
+  // drop columns from a previous event's schema that don't exist here
+  selectedColumns.it = selectedColumns.it.filter((key) => currentSchema.some((f) => f.key === key));
+  renderColumnCheckboxes();
+  renderTableHead();
+}
+
+const scanModeButtons = document.querySelectorAll('.toggle-btn[data-mode]');
 const scanStartButton = document.getElementById('scan-start');
 const scanStatus = document.getElementById('scan-status');
 const scanVideo = document.getElementById('scan-video');
@@ -204,19 +276,23 @@ document.getElementById('scan-cancel').addEventListener('click', () => {
   scanDialog.close();
 });
 
-scanModeSelect.addEventListener('change', () => {
-  const mode = scanModeSelect.value;
+function setScanMode(mode) {
   localStorage.setItem('qrScanMode', mode);
+  scanModeButtons.forEach((button) => button.classList.toggle('active', button.dataset.mode === mode));
   stopScanning();
   scanStartButton.style.display = mode === 'push' ? '' : 'none';
   if (mode === 'always') startScanning({ pushMode: false });
+}
+
+scanModeButtons.forEach((button) => {
+  button.addEventListener('click', () => setScanMode(button.dataset.mode));
 });
 
 scanStartButton.addEventListener('click', () => startScanning({ pushMode: true }));
 window.addEventListener('beforeunload', stopScanning);
 
 const savedScanMode = localStorage.getItem('qrScanMode') || 'off';
-scanModeSelect.value = savedScanMode;
+scanModeButtons.forEach((button) => button.classList.toggle('active', button.dataset.mode === savedScanMode));
 scanStartButton.style.display = savedScanMode === 'push' ? '' : 'none';
 
 function applySearchFilter() {
@@ -243,6 +319,7 @@ async function loadParticipants(eventId) {
   listBody.innerHTML = participants.map((p) => `<tr>
     <td>${escapeHtml(p.name)}</td>
     <td>${escapeHtml(p.characters.map((c) => c.name).join(', '))}</td>
+    ${renderExtraCells(p)}
     <td><span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span></td>
     <td>
       <button type="button" class="btn" data-checkin="${p.userId}" ${p.status !== 'registered' ? 'disabled' : ''}>Check-In</button>
@@ -303,7 +380,10 @@ async function overrideStatus(eventId, userId, newStatus, previousStatus) {
   }
 }
 
-eventSelect.addEventListener('change', () => loadParticipants(eventSelect.value));
+eventSelect.addEventListener('change', () => {
+  onEventChanged();
+  loadParticipants(eventSelect.value);
+});
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
@@ -312,43 +392,6 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 });
 
 let currentHotkeys = { ...DEFAULT_HOTKEYS };
-
-function renderHotkeyInputs() {
-  document.getElementById('hotkey-confirm').value = displayKey(currentHotkeys.confirm);
-  document.getElementById('hotkey-cancel').value = displayKey(currentHotkeys.cancel);
-  document.getElementById('hotkey-scan').value = displayKey(currentHotkeys.scan);
-}
-// Show the defaults immediately rather than leaving the card blank until
-// the account finishes loading below -- the later renderHotkeyInputs()
-// call (once the saved value, if any, is fetched) simply overwrites this.
-renderHotkeyInputs();
-
-function captureHotkey(inputId, action) {
-  document.getElementById(inputId).addEventListener('keydown', async (event) => {
-    // Let Tab/Shift+Tab (and bare modifier presses) through untouched --
-    // otherwise a keyboard-only user tabbing into this field can never tab
-    // back out, since every keydown below is captured as the new binding.
-    if (event.key === 'Tab' || ['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return;
-    // stopPropagation, not just preventDefault: preventDefault only blocks
-    // the input's default keystroke behavior, it does NOT stop this event
-    // from also bubbling up to the document-level listener below. Without
-    // stopping it here, capturing a key would ALSO immediately re-trigger
-    // whatever action that same key is (or was) already bound to.
-    event.preventDefault();
-    event.stopPropagation();
-    currentHotkeys = { ...currentHotkeys, [action]: event.key };
-    renderHotkeyInputs();
-    try {
-      await api.patch('/account', { hotkeys: currentHotkeys });
-    } catch (err) {
-      scanStatus.textContent = err.message;
-    }
-  });
-}
-
-captureHotkey('hotkey-confirm', 'confirm');
-captureHotkey('hotkey-cancel', 'cancel');
-captureHotkey('hotkey-scan', 'scan');
 
 function isTypingTarget(el) {
   return el && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName);
@@ -374,11 +417,12 @@ try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   canOverride = !!account.canOverrideCheckinStatus;
+  myAccountFields = account.accountFields ?? [];
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
-  renderHotkeyInputs();
-  const events = await api.get('/events');
+  events = await api.get('/events');
   eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
   if (events.length > 0) {
+    onEventChanged();
     await loadParticipants(events[0].id);
     if (savedScanMode === 'always') startScanning({ pushMode: false });
   } else {

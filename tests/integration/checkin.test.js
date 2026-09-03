@@ -26,9 +26,10 @@ async function makeUserAndSession(groupKey = 'sc') {
   return { userId: rows[0].id, cookie: `session=${session.token}` };
 }
 
-async function makeEvent() {
+async function makeEvent(schema) {
   const { rows } = await query(
-    "INSERT INTO events (name, event_date) VALUES ('Checkin Test Con', '2027-09-01') RETURNING id"
+    'INSERT INTO events (name, event_date, character_form_schema) VALUES ($1, $2, $3) RETURNING id',
+    ['Checkin Test Con', '2027-09-01', JSON.stringify(schema ?? [])]
   );
   return rows[0].id;
 }
@@ -303,6 +304,61 @@ test('overriding directly from registered to checked_out does not fabricate a ch
     const overrideBody = await overrideRes.json();
     assert.equal(overrideBody.checked_in_at, null, 'check-in never happened, so checked_in_at must stay null');
     assert.ok(overrideBody.checked_out_at, 'checkout genuinely happened, so checked_out_at must be set');
+  });
+});
+
+test('participants list exposes only the OT fields the viewer\'s group is allowed to see', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const helper = await makeUserAndSession('sl');
+    const attendee = await makeUserAndSession('sc');
+    const eventId = await makeEvent();
+    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    const patchRes = await fetch(`http://localhost:${port}/members/${attendee.userId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ phone: '0123456789', medicalNotes: 'Erdnussallergie' }),
+    });
+    assert.equal(patchRes.status, 200);
+
+    const adminList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: admin.cookie } });
+    const adminEntry = (await adminList.json()).find((p) => p.userId === attendee.userId);
+    assert.equal(adminEntry.otFields.phone, '0123456789');
+    assert.equal(adminEntry.otFields.medicalNotes, 'Erdnussallergie');
+
+    // 'sl' has accountFields: [] (see db/groupDefaults.js), so it must not
+    // receive decrypted OT values even though it can run check-in.
+    const helperList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
+    const helperEntry = (await helperList.json()).find((p) => p.userId === attendee.userId);
+    assert.deepEqual(helperEntry.otFields, {});
+    assert.equal(JSON.stringify(helperEntry).includes('0123456789'), false);
+  });
+});
+
+test('participants list filters character (IT) fields by canOverrideCheckinStatus and the schema\'s public flag', async () => {
+  await withTestServer(async (port) => {
+    const schema = [
+      { key: 'faction', label: 'Fraktion', type: 'text', public: true },
+      { key: 'secretGoal', label: 'Geheimes Ziel', type: 'text', public: false },
+    ];
+    const eventId = await makeEvent(schema);
+    const admin = await makeUserAndSession('admin'); // canOverrideCheckinStatus: true
+    const hilfsSl = await makeUserAndSession('hilfs_sl'); // canOverrideCheckinStatus: false
+    const attendee = await makeUserAndSession('sc');
+    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    await query(
+      "INSERT INTO characters (user_id, event_id, name, data) VALUES ($1, $2, 'Aldric', $3)",
+      [attendee.userId, eventId, JSON.stringify({ faction: 'Nordbund', secretGoal: 'Den Thron stürzen' })]
+    );
+
+    const adminList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: admin.cookie } });
+    const adminChar = (await adminList.json()).find((p) => p.userId === attendee.userId).characters[0];
+    assert.equal(adminChar.data.faction, 'Nordbund');
+    assert.equal(adminChar.data.secretGoal, 'Den Thron stürzen');
+
+    const hilfsSlList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: hilfsSl.cookie } });
+    const hilfsSlChar = (await hilfsSlList.json()).find((p) => p.userId === attendee.userId).characters[0];
+    assert.equal(hilfsSlChar.data.faction, 'Nordbund');
+    assert.equal('secretGoal' in hilfsSlChar.data, false);
   });
 });
 
