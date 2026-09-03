@@ -54,7 +54,15 @@ h1,h2,h3{ font-family:"EB Garamond",Georgia,serif; text-wrap:balance; margin:0; 
   /* Reserves real space for .header-actions (position:absolute, so it takes
      none itself) instead of relying on font size/label length happening to
      leave enough of a gap -- the prior fixed-width assumption broke with a
-     9th nav item or a slightly larger font. Reset to 0 below, where
+     9th nav item or a slightly larger font. Measured: the button itself is
+     ~111px wide, and the 8-item admin nav already wraps to 2 rows at ANY
+     reservation above 0 within this folio's 880px cap (there's essentially
+     no slack in that nav's own width) -- so this can't avoid the wrap AND
+     keep real margin at the same time. Chooses margin: 150px clears the
+     button with room to spare even if it grows slightly (a longer/larger
+     label), rather than trimming to the ~111-119px range where a single
+     extra pixel of button width would reopen the exact click-interception
+     bug this reservation exists to close. Reset to 0 below, where
      .header-actions switches to position:static and no longer overlaps. */
   padding-right:150px;
 }
@@ -120,11 +128,11 @@ button[type="submit"]:active, .btn-seal:active{ box-shadow:0 1px 0 var(--primary
 }
 .btn-danger:hover{ background:var(--error); color:var(--surface); }
 .header-actions{ position:absolute; top:40px; right:44px; }
-/* ponytail: 1024px (not 600px) because .header-actions is position:absolute and
-   reserves no space from .app-nav's flex layout -- a long nav (e.g. the admin
-   role's 8 items) can run underneath and behind it below ~1024px, hiding the
-   last nav link's click target. Reusing the existing static/stacked fallback
-   over a wider range is simpler than teaching .app-nav to reserve space itself. */
+/* ponytail: 1024px (not 600px) because .header-actions is position:absolute
+   and .app-nav only reserves space for it above this breakpoint (see
+   .app-nav's own padding-right) -- below it there isn't room for both a
+   multi-row nav and a reserved gutter, so .header-actions drops to static
+   and stacks below the nav instead, and the reservation resets to 0. */
 @media (max-width:1024px){
   .header-actions{ position:static; text-align:right; margin-bottom:16px; }
   .btn-danger{ padding:7px 14px; font-size:13px; }
