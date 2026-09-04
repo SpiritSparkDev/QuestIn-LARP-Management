@@ -17,15 +17,19 @@ export async function applyBranding() {
     brandName.childNodes[0].textContent = settings.appTitle;
   }
 
-  if (settings.hasUploadedLogo || settings.logoUrl) {
-    const seal = document.querySelector('.brand-seal');
-    if (seal) {
-      const img = document.createElement('img');
-      img.src = settings.hasUploadedLogo ? '/app-settings/logo' : settings.logoUrl;
-      img.alt = 'Logo';
-      seal.replaceChildren(img);
-    }
-  } else {
-    document.querySelector('.brand-seal')?.querySelector('img')?.remove();
+  const seal = document.querySelector('.brand-seal');
+  if (seal && (settings.hasUploadedLogo || settings.logoUrl)) {
+    const img = document.createElement('img');
+    img.src = settings.hasUploadedLogo ? '/app-settings/logo' : settings.logoUrl;
+    img.alt = 'Logo';
+    seal.replaceChildren(img);
+    // Wait for the brand font to be ready so the width measured below
+    // isn't taken from a fallback-font layout that's about to shift.
+    if (document.fonts) await document.fonts.ready;
+    if (brandName) seal.style.width = `${brandName.getBoundingClientRect().width}px`;
+    seal.style.display = 'block';
+  } else if (seal) {
+    seal.replaceChildren();
+    seal.style.display = 'none';
   }
 }
