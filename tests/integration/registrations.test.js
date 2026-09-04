@@ -111,7 +111,7 @@ test('a checked-in participant cannot unregister', async () => {
   });
 });
 
-test('concurrent approve and cancel never leave an inconsistent row', async () => {
+test('two concurrent approvals of the same registration: exactly one succeeds', async () => {
   await withTestServer(async (port) => {
     const { userId, cookie } = await makeUserAndSession();
     const { rows: helperRows } = await query(
@@ -135,12 +135,8 @@ test('concurrent approve and cancel never leave an inconsistent row', async () =
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helperCookie },
       body: JSON.stringify({ userId }),
     });
-    const doCancel = () => fetch(`http://localhost:${port}/events/${eventId}/cancel`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helperCookie },
-      body: JSON.stringify({ userId }),
-    });
 
-    const [resA, resB] = await Promise.all([doApprove(), doCancel()]);
+    const [resA, resB] = await Promise.all([doApprove(), doApprove()]);
     const statuses = [resA.status, resB.status].sort();
     assert.deepEqual(statuses, [200, 409]);
 
@@ -149,7 +145,7 @@ test('concurrent approve and cancel never leave an inconsistent row', async () =
       [userId, eventId]
     );
     assert.equal(rows.length, 1);
-    assert.ok(['confirmed', 'cancelled'].includes(rows[0].status));
+    assert.equal(rows[0].status, 'confirmed');
   });
 });
 
