@@ -51,7 +51,7 @@ test('a participant can register and unregister for an event', async () => {
     });
     assert.equal(registerRes.status, 201);
     const registration = await registerRes.json();
-    assert.equal(registration.status, 'registered');
+    assert.equal(registration.status, 'pending');
 
     const dupRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { Cookie: cookie },
@@ -111,7 +111,7 @@ test('a checked-in participant cannot unregister', async () => {
   });
 });
 
-test('concurrent check-in and unregister never leave an inconsistent row', async () => {
+test('concurrent approve and cancel never leave an inconsistent row', async () => {
   await withTestServer(async (port) => {
     const { userId, cookie } = await makeUserAndSession();
     const { rows: helperRows } = await query(
@@ -126,32 +126,30 @@ test('concurrent check-in and unregister never leave an inconsistent row', async
       method: 'POST', headers: { Cookie: cookie },
     });
     assert.equal(registerRes.status, 201);
+    await query(
+      "INSERT INTO characters (user_id, event_id, name, data) VALUES ($1, $2, 'Aldric', '{}')",
+      [userId, eventId]
+    );
 
-    const doCheckin = () => fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
+    const doApprove = () => fetch(`http://localhost:${port}/events/${eventId}/approve`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helperCookie },
       body: JSON.stringify({ userId }),
     });
-    const doUnregister = () => fetch(`http://localhost:${port}/events/${eventId}/register`, {
-      method: 'DELETE', headers: { Cookie: cookie },
+    const doCancel = () => fetch(`http://localhost:${port}/events/${eventId}/cancel`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helperCookie },
+      body: JSON.stringify({ userId }),
     });
 
-    await Promise.all([doCheckin(), doUnregister()]);
+    const [resA, resB] = await Promise.all([doApprove(), doCancel()]);
+    const statuses = [resA.status, resB.status].sort();
+    assert.deepEqual(statuses, [200, 409]);
 
-    // Whichever operation's DB round-trip commits first wins the race; the fix
-    // (conditional DELETE guarded by status = 'registered') guarantees the two
-    // outcomes below are the only possible end states — never a row that was
-    // deleted after becoming checked_in, and never two conflicting writes both
-    // "succeeding".
     const { rows } = await query(
       'SELECT status FROM registrations WHERE user_id = $1 AND event_id = $2',
       [userId, eventId]
     );
-    // Unregister won (row gone, only possible if DELETE saw status='registered')
-    // or checkin won (row exists, and if so its status must be 'checked_in' -
-    // never left half-updated or deleted out from under a completed check-in).
-    if (rows.length > 0) {
-      assert.equal(rows[0].status, 'checked_in');
-    }
+    assert.equal(rows.length, 1);
+    assert.ok(['confirmed', 'cancelled'].includes(rows[0].status));
   });
 });
 
@@ -184,7 +182,7 @@ test('GET /registrations lists only the calling participant\'s registrations', a
     for (const r of list) {
       assert.ok(r.eventName);
       assert.ok(r.eventDate);
-      assert.equal(r.status, 'registered');
+      assert.equal(r.status, 'pending');
     }
   });
 });

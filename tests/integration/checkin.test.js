@@ -62,7 +62,7 @@ test('checkin_helper sees the participant list with characters and no encrypted 
     const attendee = await makeUserAndSession('sc');
     const eventId = await makeEvent();
 
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
     await query(
       "INSERT INTO characters (user_id, event_id, name, data) VALUES ($1, $2, 'Aldric', '{}')",
       [attendee.userId, eventId]
@@ -73,7 +73,7 @@ test('checkin_helper sees the participant list with characters and no encrypted 
     const list = await listRes.json();
     const entry = list.find((p) => p.userId === attendee.userId);
     assert.ok(entry);
-    assert.equal(entry.status, 'registered');
+    assert.equal(entry.status, 'confirmed');
     assert.deepEqual(entry.characters.map((c) => c.name), ['Aldric']);
     assert.equal(JSON.stringify(entry).includes('_enc'), false);
     assert.equal('address' in entry, false);
@@ -135,7 +135,7 @@ test('two concurrent check-ins for the same attendee: exactly one succeeds', asy
     const attendee = await makeUserAndSession('sc');
     const eventId = await makeEvent();
 
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
 
     const doCheckin = () => fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
@@ -177,7 +177,7 @@ test('a user with canOverrideCheckinStatus can set a status directly, including 
 
     const toCheckedOut = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ status: 'checked_out', previousStatus: 'registered' }),
+      body: JSON.stringify({ status: 'checked_out', previousStatus: 'pending' }),
     });
     assert.equal(toCheckedOut.status, 200);
     const checkedOutBody = await toCheckedOut.json();
@@ -185,15 +185,15 @@ test('a user with canOverrideCheckinStatus can set a status directly, including 
     assert.equal(checkedOutBody.checked_in_at, null, 'skipping straight to checked_out must not fabricate checked_in_at');
     assert.ok(checkedOutBody.checked_out_at);
 
-    const backToRegistered = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
+    const backToConfirmed = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ status: 'registered', previousStatus: 'checked_out' }),
+      body: JSON.stringify({ status: 'confirmed', previousStatus: 'checked_out' }),
     });
-    assert.equal(backToRegistered.status, 200);
-    const registeredBody = await backToRegistered.json();
-    assert.equal(registeredBody.status, 'registered');
-    assert.equal(registeredBody.checked_in_at, null);
-    assert.equal(registeredBody.checked_out_at, null);
+    assert.equal(backToConfirmed.status, 200);
+    const confirmedBody = await backToConfirmed.json();
+    assert.equal(confirmedBody.status, 'confirmed');
+    assert.equal(confirmedBody.checked_in_at, null);
+    assert.equal(confirmedBody.checked_out_at, null);
   });
 });
 
@@ -203,7 +203,7 @@ test('overriding to checked_out preserves an already-set checked_in_at instead o
     const admin = await makeUserAndSession('admin');
     const attendee = await makeUserAndSession('sc');
     const eventId = await makeEvent();
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
 
     const checkinRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
@@ -249,7 +249,7 @@ test('the override endpoint returns 404 for a user with no registration for the 
 
     const res = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${stranger.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ status: 'checked_in', previousStatus: 'registered' }),
+      body: JSON.stringify({ status: 'checked_in', previousStatus: 'pending' }),
     });
     assert.equal(res.status, 404);
   });
@@ -264,7 +264,7 @@ test('two concurrent overrides on the same registration with the same previousSt
 
     const doOverride = (status) => fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ status, previousStatus: 'registered' }),
+      body: JSON.stringify({ status, previousStatus: 'pending' }),
     });
 
     const [resA, resB] = await Promise.all([doOverride('checked_in'), doOverride('checked_out')]);
@@ -278,7 +278,7 @@ test('the normal checkin/checkout flow still works unchanged alongside the overr
     const helper = await makeUserAndSession('sl');
     const attendee = await makeUserAndSession('sc');
     const eventId = await makeEvent();
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
 
     const checkinRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
@@ -289,7 +289,7 @@ test('the normal checkin/checkout flow still works unchanged alongside the overr
   });
 });
 
-test('overriding directly from registered to checked_out does not fabricate a checked_in_at timestamp', async () => {
+test('overriding directly from pending to checked_out does not fabricate a checked_in_at timestamp', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
     const attendee = await makeUserAndSession('sc');
@@ -298,7 +298,7 @@ test('overriding directly from registered to checked_out does not fabricate a ch
 
     const overrideRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ status: 'checked_out', previousStatus: 'registered' }),
+      body: JSON.stringify({ status: 'checked_out', previousStatus: 'pending' }),
     });
     assert.equal(overrideRes.status, 200);
     const overrideBody = await overrideRes.json();

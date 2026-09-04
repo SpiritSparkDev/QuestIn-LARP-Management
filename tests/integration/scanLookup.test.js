@@ -53,7 +53,7 @@ test('GET .../scan-lookup resolves a valid, well-formed code to name/group/statu
     const body = await res.json();
     assert.equal(body.userId, scUserId);
     assert.equal(body.group, 'sc');
-    assert.equal(body.status, 'registered');
+    assert.equal(body.status, 'pending');
     assert.deepEqual(body.characters.map((c) => c.name), ['Aldric']);
   });
 });

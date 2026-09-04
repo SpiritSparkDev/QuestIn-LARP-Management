@@ -10,6 +10,8 @@ import {
   listRegistrationsForUser,
   checkIn,
   checkOut,
+  approveRegistration,
+  cancelRegistration,
   setStatus,
   getScanLookup,
 } from './repository.js';
@@ -105,7 +107,42 @@ router.post('/events/:id/checkout', requireAuth(requireMenu('checkin')(async ({ 
   }
 })));
 
-const VALID_STATUSES = ['registered', 'checked_in', 'checked_out'];
+router.post('/events/:id/approve', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
+  if (!user.group.canOverrideCheckinStatus) {
+    return { status: 403, body: { error: 'forbidden' } };
+  }
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (!body.userId) return { status: 400, body: { error: 'userId is required' } };
+  try {
+    const registration = await approveRegistration(params.id, body.userId);
+    return { status: 200, body: registration };
+  } catch (err) {
+    if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
+    if (err.code === 'NO_CHARACTER') return { status: 409, body: { error: err.message } };
+    if (err.code === 'INVALID_TRANSITION') return { status: 409, body: { error: err.message } };
+    throw err;
+  }
+})));
+
+router.post('/events/:id/cancel', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
+  if (!user.group.canOverrideCheckinStatus) {
+    return { status: 403, body: { error: 'forbidden' } };
+  }
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (!body.userId) return { status: 400, body: { error: 'userId is required' } };
+  try {
+    const registration = await cancelRegistration(params.id, body.userId);
+    return { status: 200, body: registration };
+  } catch (err) {
+    if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
+    if (err.code === 'INVALID_TRANSITION') return { status: 409, body: { error: err.message } };
+    throw err;
+  }
+})));
+
+const VALID_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
 
 router.put('/events/:id/checkin/:userId', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
   if (!user.group.canOverrideCheckinStatus) {

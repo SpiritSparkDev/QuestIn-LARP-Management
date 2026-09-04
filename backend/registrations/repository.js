@@ -34,7 +34,7 @@ export async function registerForEvent(userId, eventId) {
 
 export async function unregisterFromEvent(userId, eventId) {
   const { rowCount } = await query(
-    "DELETE FROM registrations WHERE user_id = $1 AND event_id = $2 AND status = 'registered'",
+    "DELETE FROM registrations WHERE user_id = $1 AND event_id = $2 AND status = 'pending'",
     [userId, eventId]
   );
   if (rowCount === 0) {
@@ -139,6 +139,8 @@ export async function listRegistrationsForUser(userId) {
   }));
 }
 
+const TIMESTAMP_COLUMNS = { checkin: 'checked_in_at', checkout: 'checked_out_at' };
+
 async function transitionStatus(eventId, userId, action) {
   const { rows } = await query(
     'SELECT status FROM registrations WHERE event_id = $1 AND user_id = $2',
@@ -152,9 +154,14 @@ async function transitionStatus(eventId, userId, action) {
 
   const currentStatus = rows[0].status;
   const nextStatus = applyTransition(currentStatus, action);
-  const timestampColumn = action === 'checkin' ? 'checked_in_at' : 'checked_out_at';
+  // Only checkin/checkout stamp a timestamp column; approve/cancel touch
+  // only `status`. A binary ternary here (as the pre-existing code had)
+  // would silently stamp checked_out_at on every non-checkin action once
+  // more than two actions exist -- this map makes "no timestamp" explicit.
+  const timestampColumn = TIMESTAMP_COLUMNS[action];
+  const setClause = timestampColumn ? `status = $4, ${timestampColumn} = now()` : 'status = $4';
   const { rows: updated } = await query(
-    `UPDATE registrations SET status = $4, ${timestampColumn} = now()
+    `UPDATE registrations SET ${setClause}
      WHERE event_id = $1 AND user_id = $2 AND status = $3
      RETURNING user_id, event_id, status, checked_in_at, checked_out_at`,
     [eventId, userId, currentStatus, nextStatus]
@@ -175,17 +182,34 @@ export async function checkOut(eventId, userId) {
   return transitionStatus(eventId, userId, 'checkout');
 }
 
+export async function approveRegistration(eventId, userId) {
+  const { rows: charRows } = await query(
+    'SELECT 1 FROM characters WHERE event_id = $1 AND user_id = $2 LIMIT 1',
+    [eventId, userId]
+  );
+  if (charRows.length === 0) {
+    const err = new Error('cannot approve: no character assigned for this event');
+    err.code = 'NO_CHARACTER';
+    throw err;
+  }
+  return transitionStatus(eventId, userId, 'approve');
+}
+
+export async function cancelRegistration(eventId, userId) {
+  return transitionStatus(eventId, userId, 'cancel');
+}
+
 export async function setStatus(eventId, userId, status, expectedStatus) {
   const { rows } = await query(
     `UPDATE registrations SET
        status = $4,
        checked_in_at = CASE
-         WHEN $4 = 'registered' THEN NULL
+         WHEN $4 IN ('pending', 'confirmed', 'cancelled') THEN NULL
          WHEN $4 = 'checked_in' AND checked_in_at IS NULL THEN now()
          ELSE checked_in_at
        END,
        checked_out_at = CASE
-         WHEN $4 IN ('registered', 'checked_in') THEN NULL
+         WHEN $4 IN ('pending', 'confirmed', 'cancelled', 'checked_in') THEN NULL
          WHEN checked_out_at IS NULL THEN now()
          ELSE checked_out_at
        END
