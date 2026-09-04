@@ -18,7 +18,7 @@ router.post('/auth/invite/redeem', async ({ req }) => {
   }
 
   const invitation = await getInvitationByToken(token);
-  if (!invitation || invitation.redeemedAt || new Date(invitation.expiresAt) < new Date()) {
+  if (!invitation || invitation.redeemedAt || invitation.cancelledAt || new Date(invitation.expiresAt) < new Date()) {
     return { status: 400, body: { error: 'invalid or expired invitation' } };
   }
 

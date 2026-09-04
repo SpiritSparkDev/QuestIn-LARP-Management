@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { listMembers, getMember, updateMember } from './repository.js';
-import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations } from '../invitations/repository.js';
+import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
 import { sendInvitationEmail } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 import { query } from '../db.js';
@@ -59,7 +59,7 @@ const DEFAULT_INVITE_GROUP_KEY = 'sc';
 router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { email, firstName, lastName, nickname, group, ...rest } = body;
+  const { email, firstName, lastName, nickname, group, eventId, ...rest } = body;
   if (!email || !firstName || !lastName) {
     return { status: 400, body: { error: 'email, firstName, and lastName are required' } };
   }
@@ -89,6 +89,11 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
   const { rows: groupRows } = await query('SELECT id FROM groups WHERE key = $1', [groupKey]);
   if (groupRows.length === 0) return { status: 400, body: { error: 'unknown group' } };
 
+  if (eventId !== undefined && eventId !== null && eventId !== '') {
+    const { rows: eventRows } = await query('SELECT id FROM events WHERE id = $1', [eventId]);
+    if (eventRows.length === 0) return { status: 400, body: { error: 'unknown event' } };
+  }
+
   const invitation = await createInvitation({
     email: email.toLowerCase(),
     firstName,
@@ -96,6 +101,7 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     nickname,
     groupId: groupRows[0].id,
     invitedBy: user.id,
+    eventId: eventId || undefined,
     address: rest.address,
     birthdate: rest.birthdate,
     phone: rest.phone,
@@ -133,4 +139,10 @@ router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglied
     logger.error('failed to resend invitation email', { error: err.message });
   }
   return { status: 200, body: { id: updated.id, email: updated.email, status: 'invited', emailSent } };
+})));
+
+router.post('/members/invitations/:id/cancel', requireAuth(requireMenu('mitglieder')(async ({ params }) => {
+  const cancelled = await cancelInvitation(params.id);
+  if (!cancelled) return { status: 409, body: { error: 'invitation already redeemed, cancelled, or not found' } };
+  return { status: 200, body: { cancelled: true } };
 })));

@@ -8,6 +8,7 @@ const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const SELECT_COLUMNS = `
   id, token, email, first_name, last_name, nickname, group_id,
   address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc,
+  event_id, cancelled_at,
   invited_by, expires_at, created_at, redeemed_at
 `;
 
@@ -21,6 +22,8 @@ function decryptInvitation(row) {
     nickname: row.nickname,
     name: displayName({ firstName: row.first_name, lastName: row.last_name, nickname: row.nickname }),
     groupId: row.group_id,
+    eventId: row.event_id,
+    cancelledAt: row.cancelled_at,
     address: decryptField(row.address_enc),
     birthdate: decryptField(row.birthdate_enc),
     phone: decryptField(row.phone_enc),
@@ -35,12 +38,12 @@ function decryptInvitation(row) {
   };
 }
 
-export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, address, birthdate, phone, emergencyContactLastName, emergencyContactFirstName, emergencyContactPhone, medicalNotes }) {
+export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, eventId, address, birthdate, phone, emergencyContactLastName, emergencyContactFirstName, emergencyContactPhone, medicalNotes }) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
   const { rows } = await query(
-    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc, invited_by, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc, event_id, invited_by, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING ${SELECT_COLUMNS}`,
     [
       token, email, firstName, lastName, nickname ?? null, groupId,
@@ -51,6 +54,7 @@ export async function createInvitation({ email, firstName, lastName, nickname, g
       emergencyContactFirstName !== undefined ? encryptField(emergencyContactFirstName) : null,
       emergencyContactPhone !== undefined ? encryptField(emergencyContactPhone) : null,
       medicalNotes !== undefined ? encryptField(medicalNotes) : null,
+      eventId ?? null,
       invitedBy, expiresAt,
     ]
   );
@@ -92,7 +96,39 @@ export async function markRedeemed(id, client) {
 
 export async function listOpenInvitations() {
   const { rows } = await query(
-    `SELECT ${SELECT_COLUMNS} FROM invitations WHERE redeemed_at IS NULL ORDER BY created_at DESC`
+    `SELECT ${SELECT_COLUMNS} FROM invitations WHERE redeemed_at IS NULL AND cancelled_at IS NULL ORDER BY created_at DESC`
   );
   return rows.map(decryptInvitation);
+}
+
+export async function cancelInvitation(id) {
+  const { rows } = await query(
+    'UPDATE invitations SET cancelled_at = now() WHERE id = $1 AND redeemed_at IS NULL AND cancelled_at IS NULL RETURNING id',
+    [id]
+  );
+  return rows.length > 0;
+}
+
+// Used to render "Benachrichtigt" rows in an event's participant list: an
+// invitation for this event with no matching registration yet. The
+// expires_at check only matters pre-redemption -- a redeemed invitation's
+// expiry is irrelevant, it already did its job.
+export async function listOpenInvitationsForEvent(eventId) {
+  const { rows } = await query(
+    `SELECT i.id, i.email, i.first_name, i.last_name, i.nickname
+     FROM invitations i
+     LEFT JOIN users u ON u.email = i.email
+     LEFT JOIN registrations r ON r.user_id = u.id AND r.event_id = i.event_id
+     WHERE i.event_id = $1
+       AND i.cancelled_at IS NULL
+       AND r.user_id IS NULL
+       AND (i.redeemed_at IS NOT NULL OR i.expires_at > now())
+     ORDER BY i.created_at`,
+    [eventId]
+  );
+  return rows.map((r) => ({
+    invitationId: r.id,
+    email: r.email,
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
+  }));
 }

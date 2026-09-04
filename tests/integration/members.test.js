@@ -357,6 +357,67 @@ test('POST /members/invite ignores an attacker-supplied groupId that bypasses th
   }
 });
 
+test('POST /members/invite accepts an optional eventId and rejects an unknown one', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const { rows: eventRows } = await query(
+      "INSERT INTO events (name, event_date) VALUES ('Members Invite Test Con', '2027-06-01') RETURNING id"
+    );
+    const email = `invite-event-${crypto.randomUUID()}@example.com`;
+
+    const badRes = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email, firstName: 'Event', lastName: 'Invite', group: 'sc', eventId: crypto.randomUUID() }),
+    });
+    assert.equal(badRes.status, 400);
+
+    const okRes = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email, firstName: 'Event', lastName: 'Invite', group: 'sc', eventId: eventRows[0].id }),
+    });
+    assert.equal(okRes.status, 201);
+    const { rows } = await query('SELECT event_id FROM invitations WHERE email = $1', [email]);
+    assert.equal(rows[0].event_id, eventRows[0].id);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/invitations/:id/cancel cancels an open invitation and it disappears from GET /members', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const email = `invite-cancel-route-${crypto.randomUUID()}@example.com`;
+    const createRes = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email, firstName: 'Cancel', lastName: 'Route', group: 'sc' }),
+    });
+    const created = await createRes.json();
+
+    const cancelRes = await fetch(`http://localhost:${port}/members/invitations/${created.id}/cancel`, {
+      method: 'POST', headers: { Cookie: cookie },
+    });
+    assert.equal(cancelRes.status, 200);
+
+    const listRes = await fetch(`http://localhost:${port}/members`, { headers: { Cookie: cookie } });
+    const list = await listRes.json();
+    assert.equal(list.some((m) => m.email === email), false);
+
+    const secondCancelRes = await fetch(`http://localhost:${port}/members/invitations/${created.id}/cancel`, {
+      method: 'POST', headers: { Cookie: cookie },
+    });
+    assert.equal(secondCancelRes.status, 409);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM invitations");
   await query("DELETE FROM users WHERE email LIKE 'members-%'");

@@ -15,7 +15,7 @@ await seedGroups();
 
 const { query, closePool } = await import('../../backend/db.js');
 const { createServer } = await import('../../backend/server.js');
-const { createInvitation, getInvitationByToken, regenerateToken, markRedeemed } = await import('../../backend/invitations/repository.js');
+const { createInvitation, getInvitationByToken, regenerateToken, markRedeemed, getInvitationById, cancelInvitation } = await import('../../backend/invitations/repository.js');
 
 async function makeAdmin() {
   const { rows } = await query(
@@ -155,6 +155,67 @@ test('regenerateToken changes the token and invalidates the old one', async () =
   assert.notEqual(updated.token, invitation.token);
   const oldLookup = await getInvitationByToken(invitation.token);
   assert.equal(oldLookup, null);
+});
+
+test('createInvitation stores an eventId and it round-trips', async () => {
+  const invitedBy = await makeAdmin();
+  const groupId = await scGroupId();
+  const { rows: eventRows } = await query(
+    "INSERT INTO events (name, event_date) VALUES ('Invite Test Con', '2027-05-01') RETURNING id"
+  );
+  const invitation = await createInvitation({
+    email: `invitee-event-${crypto.randomUUID()}@example.com`,
+    firstName: 'Invited',
+    lastName: 'Person',
+    groupId,
+    invitedBy,
+    eventId: eventRows[0].id,
+  });
+  assert.equal(invitation.eventId, eventRows[0].id);
+});
+
+test('cancelInvitation marks an open invitation cancelled and rejects a second call', async () => {
+  const invitedBy = await makeAdmin();
+  const groupId = await scGroupId();
+  const invitation = await createInvitation({
+    email: `invitee-cancel-${crypto.randomUUID()}@example.com`,
+    firstName: 'To',
+    lastName: 'Cancel',
+    groupId,
+    invitedBy,
+  });
+  const first = await cancelInvitation(invitation.id);
+  assert.equal(first, true);
+  const second = await cancelInvitation(invitation.id);
+  assert.equal(second, false);
+  const reloaded = await getInvitationById(invitation.id);
+  assert.ok(reloaded.cancelledAt);
+});
+
+test('POST /auth/invite/redeem rejects a cancelled invitation', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const invitedBy = await makeAdmin();
+    const groupId = await scGroupId();
+    const invitation = await createInvitation({
+      email: `redeem-cancelled-${crypto.randomUUID()}@example.com`,
+      firstName: 'Cancelled',
+      lastName: 'Invite',
+      groupId,
+      invitedBy,
+    });
+    await cancelInvitation(invitation.id);
+
+    const res = await fetch(`http://localhost:${port}/auth/invite/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: invitation.token, password: 'correct horse battery staple' }),
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
 });
 
 test.after(async () => {
