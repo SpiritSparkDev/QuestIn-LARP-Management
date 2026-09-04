@@ -5,6 +5,7 @@ import { displayName } from '../displayName.js';
 import { decryptField } from '../crypto/fieldCrypto.js';
 import { ENCRYPTED_ACCOUNT_FIELD_COLUMNS } from '../accountFields.js';
 import { filterCharacterFields } from '../characters/visibility.js';
+import { listOpenInvitationsForEvent } from '../invitations/repository.js';
 
 export async function registerForEvent(userId, eventId) {
   const event = await getEvent(eventId);
@@ -85,8 +86,9 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     });
   }
 
-  return registrations.map((r) => ({
+  const registered = registrations.map((r) => ({
     userId: r.user_id,
+    invitationId: null,
     name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
     status: r.status,
     checkedInAt: r.checked_in_at,
@@ -94,6 +96,19 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     characters: charactersByUser.get(r.user_id) ?? [],
     otFields: Object.fromEntries(otKeys.map((key) => [key, decryptField(r[ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]])])),
   }));
+
+  const notified = (await listOpenInvitationsForEvent(eventId)).map((inv) => ({
+    userId: null,
+    invitationId: inv.invitationId,
+    name: inv.name,
+    status: 'notified',
+    checkedInAt: null,
+    checkedOutAt: null,
+    characters: [],
+    otFields: {},
+  }));
+
+  return [...notified, ...registered];
 }
 
 export async function getScanLookup(eventId, userId) {

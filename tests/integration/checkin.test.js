@@ -362,6 +362,64 @@ test('participants list filters character (IT) fields by canOverrideCheckinStatu
   });
 });
 
+test('participants list includes an open, event-scoped invitation as a "notified" entry with no userId', async () => {
+  await withTestServer(async (port) => {
+    const helper = await makeUserAndSession('sl');
+    const eventId = await makeEvent();
+    const admin = await makeUserAndSession('admin');
+
+    const inviteRes = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ email: `notified-${crypto.randomUUID()}@example.com`, firstName: 'Notified', lastName: 'Person', group: 'sc', eventId }),
+    });
+    assert.equal(inviteRes.status, 201);
+    const invitation = await inviteRes.json();
+
+    const listRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
+    const list = await listRes.json();
+    const entry = list.find((p) => p.invitationId === invitation.id);
+    assert.ok(entry);
+    assert.equal(entry.userId, null);
+    assert.equal(entry.status, 'notified');
+    assert.equal(entry.name, 'Notified Person');
+  });
+});
+
+test('a redeemed invitation with no registration yet still shows as "notified", and disappears once registered', async () => {
+  await withTestServer(async (port) => {
+    const helper = await makeUserAndSession('sl');
+    const eventId = await makeEvent();
+    const admin = await makeUserAndSession('admin');
+    const email = `notified-redeemed-${crypto.randomUUID()}@example.com`;
+
+    const inviteRes = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ email, firstName: 'Redeemed', lastName: 'Notified', group: 'sc', eventId }),
+    });
+    const invitation = await inviteRes.json();
+    const { rows } = await query('SELECT token FROM invitations WHERE id = $1', [invitation.id]);
+
+    const redeemRes = await fetch(`http://localhost:${port}/auth/invite/redeem`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: rows[0].token, password: 'correct horse battery staple' }),
+    });
+    assert.equal(redeemRes.status, 200);
+    const newUserId = (await redeemRes.json()).id;
+
+    const beforeRegisterRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
+    const beforeRegisterList = await beforeRegisterRes.json();
+    assert.ok(beforeRegisterList.find((p) => p.invitationId === invitation.id && p.status === 'notified'));
+
+    const newUserCookie = `session=${(await createSession(newUserId)).token}`;
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, { method: 'POST', headers: { Cookie: newUserCookie } });
+
+    const afterRegisterRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
+    const afterRegisterList = await afterRegisterRes.json();
+    assert.equal(afterRegisterList.some((p) => p.invitationId === invitation.id), false);
+    assert.ok(afterRegisterList.find((p) => p.userId === newUserId && p.status === 'pending'));
+  });
+});
+
 test.after(async () => {
   await closePool();
 });
