@@ -1108,7 +1108,7 @@ Chronicle & Crest theme (participant-facing — an invited person is a future pa
 <body>
 <div class="shell">
   <div class="brand"><div class="brand-seal">P</div><div class="brand-name">Pakyrion</div></div>
-  <p class="brand-sub">Chronicle Registry</p>
+  <p class="brand-sub">QuestIn LARP Management</p>
   <div class="folio folio--narrow">
     <p class="eyebrow text-center">Willkommen</p>
     <h1 class="text-center">Passwort festlegen</h1>

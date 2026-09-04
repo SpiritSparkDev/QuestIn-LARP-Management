@@ -317,7 +317,7 @@ Follow the structural pattern already established by `frontend/characters.html` 
 <body>
 <div class="shell">
   <div class="brand"><div class="brand-seal">P</div><div class="brand-name">Pakyrion</div></div>
-  <p class="brand-sub">Chronicle Registry</p>
+  <p class="brand-sub">QuestIn LARP Management</p>
   <div class="folio folio--wide">
     <nav class="app-nav" id="nav-links"></nav>
     <a href="#" id="logout-link">Logout</a>
