@@ -168,6 +168,30 @@ test('a user without canOverrideCheckinStatus cannot use the override endpoint',
   });
 });
 
+test('a user without canOverrideCheckinStatus cannot use the approve endpoint', async () => {
+  await withTestServer(async (port) => {
+    const stranger = await makeUserAndSession('hilfs_sl');
+    const eventId = await makeEvent();
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: stranger.cookie },
+      body: JSON.stringify({ userId: crypto.randomUUID() }),
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
+test('a user without canOverrideCheckinStatus cannot use the cancel endpoint', async () => {
+  await withTestServer(async (port) => {
+    const stranger = await makeUserAndSession('hilfs_sl');
+    const eventId = await makeEvent();
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/cancel`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: stranger.cookie },
+      body: JSON.stringify({ userId: crypto.randomUUID() }),
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
 test('a user with canOverrideCheckinStatus can set a status directly, including a backward transition', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');

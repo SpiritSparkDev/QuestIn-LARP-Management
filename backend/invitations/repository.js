@@ -103,7 +103,7 @@ export async function listOpenInvitations() {
 
 export async function cancelInvitation(id) {
   const { rows } = await query(
-    'UPDATE invitations SET cancelled_at = now() WHERE id = $1 AND redeemed_at IS NULL AND cancelled_at IS NULL RETURNING id',
+    'UPDATE invitations SET cancelled_at = now() WHERE id = $1 AND cancelled_at IS NULL RETURNING id',
     [id]
   );
   return rows.length > 0;

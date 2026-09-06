@@ -218,6 +218,21 @@ test('POST /auth/invite/redeem rejects a cancelled invitation', async () => {
   }
 });
 
+test('cancelInvitation still succeeds on an already-redeemed invitation', async () => {
+  const invitedBy = await makeAdmin();
+  const groupId = await scGroupId();
+  const invitation = await createInvitation({
+    email: `redeem-then-cancel-${crypto.randomUUID()}@example.com`,
+    firstName: 'Redeem',
+    lastName: 'ThenCancel',
+    groupId,
+    invitedBy,
+  });
+  await markRedeemed(invitation.id);
+  const cancelled = await cancelInvitation(invitation.id);
+  assert.equal(cancelled, true);
+});
+
 test.after(async () => {
   await query("DELETE FROM invitations");
   await query("DELETE FROM users WHERE email LIKE 'inviter-%' OR email LIKE 'invitee-%' OR email LIKE 'redeem-%' OR email LIKE 'resend-%'");

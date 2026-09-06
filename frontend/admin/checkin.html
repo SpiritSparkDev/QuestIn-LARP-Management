@@ -92,6 +92,7 @@ const STATUS_LABELS = { notified: 'Benachrichtigt', pending: 'Vorgemerkt', confi
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
 let currentSearch = '';
 let canOverride = false;
+let canManageMembers = false;
 let events = [];
 let myAccountFields = [];
 let currentSchema = [];
@@ -251,8 +252,9 @@ function openScanDialog(eventId, lookup) {
     : '';
   const warning = document.getElementById('scan-warning');
   const confirmButton = document.getElementById('scan-confirm');
+  const NOT_READY_MESSAGES = { pending: 'Noch nicht freigegeben.', cancelled: 'Abgesagt.', checked_in: 'Bereits eingecheckt.', checked_out: 'Bereits ausgecheckt.' };
   if (lookup.status !== 'confirmed') {
-    warning.textContent = 'Bereits eingecheckt oder ausgecheckt.';
+    warning.textContent = NOT_READY_MESSAGES[lookup.status] ?? 'Nicht bereit zum Einchecken.';
     warning.style.display = '';
     confirmButton.disabled = true;
   } else {
@@ -316,15 +318,15 @@ searchInput.addEventListener('input', () => {
 
 function renderActionCell(p) {
   if (p.status === 'notified') {
-    return `<button type="button" class="btn btn-ghost" data-cancel-invitation="${p.invitationId}">Absagen</button>`;
+    return canManageMembers ? `<button type="button" class="btn btn-ghost" data-cancel-invitation="${p.invitationId}">Absagen</button>` : '';
   }
   const parts = [];
-  if (p.status === 'pending') {
+  if (p.status === 'pending' && canOverride) {
     parts.push(`<button type="button" class="btn" data-approve="${p.userId}">Freigeben</button>`);
   }
   parts.push(`<button type="button" class="btn" data-checkin="${p.userId}" ${p.status !== 'confirmed' ? 'disabled' : ''}>Check-In</button>`);
   parts.push(`<button type="button" class="btn btn-ghost" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>`);
-  if (p.status === 'pending' || p.status === 'confirmed') {
+  if ((p.status === 'pending' || p.status === 'confirmed') && canOverride) {
     parts.push(`<button type="button" class="btn btn-ghost" data-cancel="${p.userId}">Absagen</button>`);
   }
   return parts.join(' ');
@@ -451,6 +453,7 @@ try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   canOverride = !!account.canOverrideCheckinStatus;
+  canManageMembers = (account.menus ?? []).includes('mitglieder');
   myAccountFields = account.accountFields ?? [];
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
   events = await api.get('/events');
