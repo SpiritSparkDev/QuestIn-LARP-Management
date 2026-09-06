@@ -77,6 +77,12 @@ test('PATCH /account encrypts and returns sensitive fields; unspecified fields s
         emergencyContactLastName: 'Mustermann',
         emergencyContactFirstName: 'Erika',
         emergencyContactPhone: '+49 987 654321',
+        conTage: '5',
+        accommodation: 'OT-Zelt, 1 Person, 6qm',
+        craftOffer: 'Lederarbeiten',
+        travelMethod: 'Auto',
+        dataSharingOptOut: 'Ja',
+        photoOptOut: 'Nein',
       }),
     });
     assert.equal(patchRes.status, 200);
@@ -87,6 +93,12 @@ test('PATCH /account encrypts and returns sensitive fields; unspecified fields s
     assert.equal(patched.emergencyContactLastName, 'Mustermann');
     assert.equal(patched.emergencyContactFirstName, 'Erika');
     assert.equal(patched.emergencyContactPhone, '+49 987 654321');
+    assert.equal(patched.conTage, '5');
+    assert.equal(patched.accommodation, 'OT-Zelt, 1 Person, 6qm');
+    assert.equal(patched.craftOffer, 'Lederarbeiten');
+    assert.equal(patched.travelMethod, 'Auto');
+    assert.equal(patched.dataSharingOptOut, 'Ja');
+    assert.equal(patched.photoOptOut, 'Nein');
 
     const { rows } = await query('SELECT address_enc, emergency_contact_last_name_enc FROM users WHERE id = $1', [userId]);
     assert.notEqual(rows[0].address_enc.toString('utf8'), 'Musterstraße 1, 12345 Musterstadt');

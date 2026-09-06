@@ -4,6 +4,12 @@ export const ACCOUNT_FIELD_LABELS = {
   address: 'Adresse', birthdate: 'Geburtsdatum', phone: 'Telefon',
   emergencyContactLastName: 'Notfallkontakt: Name', emergencyContactFirstName: 'Notfallkontakt: Vorname', emergencyContactPhone: 'Notfallkontakt: Telefonnummer',
   medicalNotes: 'Gesundheitshinweise',
+  conTage: 'Con-Tage des Spielers',
+  accommodation: 'Unterbringung (Hütte/IT-Zelt/OT-Zelt, Anzahl, qm)',
+  craftOffer: 'Angebotenes Handwerk',
+  travelMethod: 'Anreise (Auto/Motorrad, Bahn, muss abgeholt werden)',
+  dataSharingOptOut: 'Daten nicht an andere Teilnehmer weitergeben (Ja/Nein)',
+  photoOptOut: 'Keine Fotoveröffentlichung (Ja/Nein)',
 };
 
 // Formats a character (IT) custom-field value for display, e.g. as a

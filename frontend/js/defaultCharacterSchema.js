@@ -5,6 +5,8 @@
 export const DEFAULT_CHARACTER_SCHEMA = [
   { key: 'klasse', label: 'Klasse', type: 'text', required: true },
   { key: 'volk', label: 'Volk', type: 'text', required: true },
+  { key: 'beruf', label: 'Beruf', type: 'text', required: false },
+  { key: 'gruppe', label: 'Gruppe', type: 'text', required: false },
   { key: 'religion', label: 'Religion', type: 'text', required: false },
   {
     key: 'magischBegabt',
@@ -17,6 +19,7 @@ export const DEFAULT_CHARACTER_SCHEMA = [
   { key: 'titel', label: 'Titel', type: 'text', required: false },
   { key: 'gesinnung', label: 'Gesinnung', type: 'text', required: false },
   { key: 'heimatland', label: 'Heimatland', type: 'text', required: false },
+  { key: 'spezCharakter', label: 'Spezieller Charakter', type: 'boolean', required: false },
   { key: 'erfahrungspunkte', label: 'Erfahrung (Punkte)', type: 'number', required: false },
   { key: 'charakterVorlieben', label: 'Charakter-Gerne', type: 'textarea', required: false },
   { key: 'charaktergeschichte', label: 'Charaktergeschichte/Wissenswertes', type: 'textarea', required: false },

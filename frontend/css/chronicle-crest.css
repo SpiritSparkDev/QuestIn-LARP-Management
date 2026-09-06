@@ -1,22 +1,22 @@
 :root {
-  --surface: #fff9ee;
-  --surface-container-low: #fbf3df;
-  --surface-container: #f5edd9;
-  --surface-container-high: #f0e8d4;
-  --on-surface: #1f1c0f;
-  --on-surface-variant: #584141;
-  --outline: #8c7071;
-  --outline-variant: #e0bfbf;
-  --primary: #800020;
-  --primary-deep: #570013;
-  --on-primary: #fff9ee;
-  --gold: #a3820a;
-  --gold-container: #fed65b;
-  --on-gold-container: #5c4700;
-  --oak: #3C2F2F;
+  --surface: #e9ecfa;
+  --surface-container-low: #dfe4f5;
+  --surface-container: #d3d9ef;
+  --surface-container-high: #c7cfea;
+  --on-surface: #191830;
+  --on-surface-variant: #4c4d72;
+  --outline: #6d6f9c;
+  --outline-variant: #c3c9e8;
+  --primary: #2b2f6e;
+  --primary-deep: #1a1c45;
+  --on-primary: #eef1fb;
+  --gold: #1f95a8;
+  --gold-container: #6fd8e0;
+  --on-gold-container: #063740;
+  --oak: #191833;
   --error: #93000a;
   --success: #2c5223;
-  --shadow: rgba(42, 31, 31, 0.4);
+  --shadow: rgba(10, 10, 30, 0.45);
 }
 
 * {
@@ -83,7 +83,7 @@ h3 {
 
 .brand-sub {
   text-align: center;
-  color: #c9b98a;
+  color: #a8b0e0;
   font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -253,7 +253,7 @@ textarea {
 
 input::placeholder,
 textarea::placeholder {
-  color: #a89a99;
+  color: #8688b0;
   font-style: italic;
 }
 
@@ -280,7 +280,7 @@ button[type="submit"],
   font-family: "EB Garamond", serif;
   font-size: 17px;
   font-weight: 600;
-  background: radial-gradient(circle at 35% 30%, #a3001f, var(--primary-deep) 75%);
+  background: radial-gradient(circle at 35% 30%, #3a3d8a, var(--primary-deep) 75%);
   color: var(--on-primary);
   border: none;
   padding: 13px 30px;
@@ -400,8 +400,8 @@ tr:last-child td {
 }
 
 .ribbon.status-registered {
-  background: #e3d4a3;
-  color: #5c4700;
+  background: #cfe9ec;
+  color: #063740;
 }
 
 .ribbon.status-checked_in {
@@ -410,8 +410,8 @@ tr:last-child td {
 }
 
 .ribbon.status-checked_out {
-  background: #ded6d6;
-  color: #584141;
+  background: #d8dae8;
+  color: #4c4d72;
 }
 
 .char-grid {

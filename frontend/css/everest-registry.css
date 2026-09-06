@@ -6,9 +6,9 @@
   --on-surface: #191c1e;
   --on-surface-variant: #45474c;
   --outline: #c5c6cd;
-  --primary: #0F172A;
-  --forest: #059669;
-  --forest-dark: #006c4a;
+  --primary: #1E1B4B;
+  --forest: #0E7C86;
+  --forest-dark: #0B5F66;
   --error: #ba1a1a;
   --registered: #3B82F6;
   --checked-in: #10B981;
@@ -40,6 +40,9 @@ body {
   padding: 24px 16px;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  max-height: 100vh;
+  position: fixed;
 }
 
 .sidebar-brand {
@@ -92,6 +95,7 @@ body {
 .main {
   flex: 1;
   min-width: 0;
+  margin-left: 220px;
 }
 
 .content {

@@ -28,7 +28,7 @@ router.post('/auth/invite/redeem', async ({ req }) => {
   try {
     userId = await withTransaction(async (client) => {
       const { rows } = await client.query(
-        `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname, email_verified, address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc)
+        `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname, email_verified, address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc, con_tage_enc, accommodation_enc, craft_offer_enc, travel_method_enc, data_sharing_opt_out_enc, photo_opt_out_enc)
          VALUES ($1, $2, $3, $4, $5, $6, true,
            (SELECT address_enc FROM invitations WHERE id = $7),
            (SELECT birthdate_enc FROM invitations WHERE id = $7),
@@ -36,7 +36,13 @@ router.post('/auth/invite/redeem', async ({ req }) => {
            (SELECT emergency_contact_last_name_enc FROM invitations WHERE id = $7),
            (SELECT emergency_contact_first_name_enc FROM invitations WHERE id = $7),
            (SELECT emergency_contact_phone_enc FROM invitations WHERE id = $7),
-           (SELECT medical_notes_enc FROM invitations WHERE id = $7))
+           (SELECT medical_notes_enc FROM invitations WHERE id = $7),
+           (SELECT con_tage_enc FROM invitations WHERE id = $7),
+           (SELECT accommodation_enc FROM invitations WHERE id = $7),
+           (SELECT craft_offer_enc FROM invitations WHERE id = $7),
+           (SELECT travel_method_enc FROM invitations WHERE id = $7),
+           (SELECT data_sharing_opt_out_enc FROM invitations WHERE id = $7),
+           (SELECT photo_opt_out_enc FROM invitations WHERE id = $7))
          RETURNING id`,
         [invitation.email, passwordHash, invitation.groupId, invitation.firstName, invitation.lastName, invitation.nickname ?? null, invitation.id]
       );

@@ -8,6 +8,7 @@ const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const SELECT_COLUMNS = `
   id, token, email, first_name, last_name, nickname, group_id,
   address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc,
+  con_tage_enc, accommodation_enc, craft_offer_enc, travel_method_enc, data_sharing_opt_out_enc, photo_opt_out_enc,
   invited_by, expires_at, created_at, redeemed_at
 `;
 
@@ -28,6 +29,12 @@ function decryptInvitation(row) {
     emergencyContactFirstName: decryptField(row.emergency_contact_first_name_enc),
     emergencyContactPhone: decryptField(row.emergency_contact_phone_enc),
     medicalNotes: decryptField(row.medical_notes_enc),
+    conTage: decryptField(row.con_tage_enc),
+    accommodation: decryptField(row.accommodation_enc),
+    craftOffer: decryptField(row.craft_offer_enc),
+    travelMethod: decryptField(row.travel_method_enc),
+    dataSharingOptOut: decryptField(row.data_sharing_opt_out_enc),
+    photoOptOut: decryptField(row.photo_opt_out_enc),
     invitedBy: row.invited_by,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
@@ -35,12 +42,12 @@ function decryptInvitation(row) {
   };
 }
 
-export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, address, birthdate, phone, emergencyContactLastName, emergencyContactFirstName, emergencyContactPhone, medicalNotes }) {
+export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, address, birthdate, phone, emergencyContactLastName, emergencyContactFirstName, emergencyContactPhone, medicalNotes, conTage, accommodation, craftOffer, travelMethod, dataSharingOptOut, photoOptOut }) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
   const { rows } = await query(
-    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc, invited_by, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc, con_tage_enc, accommodation_enc, craft_offer_enc, travel_method_enc, data_sharing_opt_out_enc, photo_opt_out_enc, invited_by, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
      RETURNING ${SELECT_COLUMNS}`,
     [
       token, email, firstName, lastName, nickname ?? null, groupId,
@@ -51,6 +58,12 @@ export async function createInvitation({ email, firstName, lastName, nickname, g
       emergencyContactFirstName !== undefined ? encryptField(emergencyContactFirstName) : null,
       emergencyContactPhone !== undefined ? encryptField(emergencyContactPhone) : null,
       medicalNotes !== undefined ? encryptField(medicalNotes) : null,
+      conTage !== undefined ? encryptField(conTage) : null,
+      accommodation !== undefined ? encryptField(accommodation) : null,
+      craftOffer !== undefined ? encryptField(craftOffer) : null,
+      travelMethod !== undefined ? encryptField(travelMethod) : null,
+      dataSharingOptOut !== undefined ? encryptField(dataSharingOptOut) : null,
+      photoOptOut !== undefined ? encryptField(photoOptOut) : null,
       invitedBy, expiresAt,
     ]
   );

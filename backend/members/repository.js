@@ -5,6 +5,7 @@ import { displayName } from '../displayName.js';
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified,
   users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc,
+  users.con_tage_enc, users.accommodation_enc, users.craft_offer_enc, users.travel_method_enc, users.data_sharing_opt_out_enc, users.photo_opt_out_enc,
   groups.id AS group_id, groups.key AS group_key, groups.name AS group_name
 `;
 
@@ -26,6 +27,12 @@ function decryptMember(row) {
     emergencyContactFirstName: decryptField(row.emergency_contact_first_name_enc),
     emergencyContactPhone: decryptField(row.emergency_contact_phone_enc),
     medicalNotes: decryptField(row.medical_notes_enc),
+    conTage: decryptField(row.con_tage_enc),
+    accommodation: decryptField(row.accommodation_enc),
+    craftOffer: decryptField(row.craft_offer_enc),
+    travelMethod: decryptField(row.travel_method_enc),
+    dataSharingOptOut: decryptField(row.data_sharing_opt_out_enc),
+    photoOptOut: decryptField(row.photo_opt_out_enc),
   };
 }
 
@@ -66,7 +73,13 @@ export async function updateMember(id, fields) {
        medical_notes_enc = COALESCE($9, medical_notes_enc),
        first_name = COALESCE($10, first_name),
        last_name = COALESCE($11, last_name),
-       nickname = COALESCE($12, nickname)
+       nickname = COALESCE($12, nickname),
+       con_tage_enc = COALESCE($13, con_tage_enc),
+       accommodation_enc = COALESCE($14, accommodation_enc),
+       craft_offer_enc = COALESCE($15, craft_offer_enc),
+       travel_method_enc = COALESCE($16, travel_method_enc),
+       data_sharing_opt_out_enc = COALESCE($17, data_sharing_opt_out_enc),
+       photo_opt_out_enc = COALESCE($18, photo_opt_out_enc)
      WHERE id = $1
      RETURNING id`,
     [
@@ -82,6 +95,12 @@ export async function updateMember(id, fields) {
       fields.firstName ?? null,
       fields.lastName ?? null,
       fields.nickname ?? null,
+      fields.conTage !== undefined ? encryptField(fields.conTage) : null,
+      fields.accommodation !== undefined ? encryptField(fields.accommodation) : null,
+      fields.craftOffer !== undefined ? encryptField(fields.craftOffer) : null,
+      fields.travelMethod !== undefined ? encryptField(fields.travelMethod) : null,
+      fields.dataSharingOptOut !== undefined ? encryptField(fields.dataSharingOptOut) : null,
+      fields.photoOptOut !== undefined ? encryptField(fields.photoOptOut) : null,
     ]
   );
   if (rows.length === 0) return null;

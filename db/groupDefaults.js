@@ -2,13 +2,13 @@ export const GROUP_DEFAULTS = [
   {
     key: 'admin', name: 'Admin',
     visibleMenus: ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'],
-    accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'group'],
+    accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut', 'group'],
     canEditCharacters: true, characterClasses: ['sc'], canOverrideCheckinStatus: true, isProtected: true,
   },
   {
     key: 'orga', name: 'Orga',
     visibleMenus: ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'],
-    accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes'],
+    accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut'],
     canEditCharacters: true, characterClasses: ['sc'], canOverrideCheckinStatus: true, isProtected: false,
   },
   {
