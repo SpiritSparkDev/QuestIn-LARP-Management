@@ -88,7 +88,7 @@ const searchInput = document.getElementById('participant-search');
 const statTotal = document.getElementById('stat-total');
 const statCheckedIn = document.getElementById('stat-checked-in');
 
-const STATUS_LABELS = { registered: 'Angemeldet', checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt' };
+const STATUS_LABELS = { notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet', checked_in: 'Eingechecked', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt' };
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
 let currentSearch = '';
 let canOverride = false;
@@ -96,7 +96,7 @@ let events = [];
 let myAccountFields = [];
 let currentSchema = [];
 let selectedColumns = { it: [], ot: [] };
-const STATUS_ORDER = ['registered', 'checked_in', 'checked_out'];
+const STATUS_ORDER = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
 
 function loadSelectedColumns(eventId) {
   try {
@@ -251,7 +251,7 @@ function openScanDialog(eventId, lookup) {
     : '';
   const warning = document.getElementById('scan-warning');
   const confirmButton = document.getElementById('scan-confirm');
-  if (lookup.status !== 'registered') {
+  if (lookup.status !== 'confirmed') {
     warning.textContent = 'Bereits eingecheckt oder ausgecheckt.';
     warning.style.display = '';
     confirmButton.disabled = true;
@@ -304,7 +304,7 @@ function applySearchFilter() {
 }
 
 function renderOverrideCell(p) {
-  if (!canOverride) return '';
+  if (!canOverride || !p.userId) return '';
   const options = STATUS_ORDER.map((s) => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[s])}</option>`).join('');
   return `<select data-override="${escapeHtml(p.userId)}" data-prev-status="${escapeHtml(p.status)}" aria-label="Status-Override">${options}</select>`;
 }
@@ -314,6 +314,22 @@ searchInput.addEventListener('input', () => {
   applySearchFilter();
 });
 
+function renderActionCell(p) {
+  if (p.status === 'notified') {
+    return `<button type="button" class="btn btn-ghost" data-cancel-invitation="${p.invitationId}">Absagen</button>`;
+  }
+  const parts = [];
+  if (p.status === 'pending') {
+    parts.push(`<button type="button" class="btn" data-approve="${p.userId}">Freigeben</button>`);
+  }
+  parts.push(`<button type="button" class="btn" data-checkin="${p.userId}" ${p.status !== 'confirmed' ? 'disabled' : ''}>Check-In</button>`);
+  parts.push(`<button type="button" class="btn btn-ghost" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>`);
+  if (p.status === 'pending' || p.status === 'confirmed') {
+    parts.push(`<button type="button" class="btn btn-ghost" data-cancel="${p.userId}">Absagen</button>`);
+  }
+  return parts.join(' ');
+}
+
 async function loadParticipants(eventId) {
   const participants = await api.get(`/events/${eventId}/participants`);
   listBody.innerHTML = participants.map((p) => `<tr>
@@ -321,10 +337,7 @@ async function loadParticipants(eventId) {
     <td>${escapeHtml(p.characters.map((c) => c.name).join(', '))}</td>
     ${renderExtraCells(p)}
     <td><span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span></td>
-    <td>
-      <button type="button" class="btn" data-checkin="${p.userId}" ${p.status !== 'registered' ? 'disabled' : ''}>Check-In</button>
-      <button type="button" class="btn btn-ghost" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>
-    </td>
+    <td>${renderActionCell(p)}</td>
     <td>${renderOverrideCell(p)}</td>
   </tr>`).join('');
 
@@ -337,11 +350,32 @@ async function loadParticipants(eventId) {
   listBody.querySelectorAll('[data-checkout]').forEach((button) => {
     button.addEventListener('click', () => transition(eventId, button.dataset.checkout, 'checkout'));
   });
+  listBody.querySelectorAll('[data-approve]').forEach((button) => {
+    button.addEventListener('click', () => transition(eventId, button.dataset.approve, 'approve'));
+  });
+  listBody.querySelectorAll('[data-cancel]').forEach((button) => {
+    button.addEventListener('click', () => transition(eventId, button.dataset.cancel, 'cancel'));
+  });
+  listBody.querySelectorAll('[data-cancel-invitation]').forEach((button) => {
+    button.addEventListener('click', () => cancelInvitationRow(button.dataset.cancelInvitation, eventId));
+  });
   listBody.querySelectorAll('[data-override]').forEach((select) => {
     select.addEventListener('change', () => overrideStatus(eventId, select.dataset.override, select.value, select.dataset.prevStatus));
   });
 
   applySearchFilter();
+}
+
+async function cancelInvitationRow(invitationId, eventId) {
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.post(`/members/invitations/${invitationId}/cancel`, {});
+    await loadParticipants(eventId);
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
 }
 
 async function transition(eventId, userId, action) {
