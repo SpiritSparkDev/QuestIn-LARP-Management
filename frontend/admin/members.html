@@ -59,6 +59,10 @@
             <input id="invite-email" name="email" type="email" required>
           </div>
         </div>
+        <label for="invite-event">Veranstaltung (optional)</label>
+        <select id="invite-event" name="eventId">
+          <option value="">– keine –</option>
+        </select>
         <div id="invite-group-wrap" style="display:none;">
           <label for="invite-group">Gruppe</label>
           <select id="invite-group" name="group" disabled></select>
@@ -92,6 +96,7 @@ const detailCharacters = document.getElementById('detail-characters');
 const inviteFields = document.getElementById('invite-fields');
 const inviteGroupWrap = document.getElementById('invite-group-wrap');
 const inviteGroupSelect = document.getElementById('invite-group');
+const inviteEventSelect = document.getElementById('invite-event');
 const message = document.getElementById('message');
 
 let myAccountFields = [];
@@ -139,6 +144,11 @@ async function loadGroupOptions(selectEl) {
   selectEl.innerHTML = groups.map((g) => `<option value="${escapeHtml(g.key)}">${escapeHtml(g.name)}</option>`).join('');
 }
 
+async function loadEventOptions(selectEl) {
+  const events = await api.get('/events');
+  selectEl.innerHTML = '<option value="">– keine –</option>' + events.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
+}
+
 async function loadMembers() {
   const members = await api.get('/members');
   listBody.innerHTML = members.map((m) => `<tr>
@@ -150,7 +160,8 @@ async function loadMembers() {
       : `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`}</td>
     <td>${m.status === 'active'
       ? `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button>`
-      : `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>`}</td>
+      : `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>
+         <button type="button" class="btn-sm btn-ghost" data-cancel-invite="${m.id}">Absagen</button>`}</td>
   </tr>`).join('');
 
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
@@ -158,6 +169,9 @@ async function loadMembers() {
   });
   listBody.querySelectorAll('[data-resend]').forEach((button) => {
     button.addEventListener('click', () => resendInvitation(button.dataset.resend));
+  });
+  listBody.querySelectorAll('[data-cancel-invite]').forEach((button) => {
+    button.addEventListener('click', () => cancelInvite(button.dataset.cancelInvite));
   });
 }
 
@@ -235,6 +249,20 @@ async function resendInvitation(invitationId) {
   }
 }
 
+async function cancelInvite(invitationId) {
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.post(`/members/invitations/${invitationId}/cancel`, {});
+    message.textContent = 'Einladung abgesagt.';
+    message.className = 'success';
+    await loadMembers();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+}
+
 document.getElementById('invite-open').addEventListener('click', () => inviteDialog.showModal());
 document.getElementById('invite-cancel').addEventListener('click', () => inviteDialog.close());
 
@@ -244,6 +272,7 @@ document.getElementById('invite-form').addEventListener('submit', async (event) 
   message.className = '';
   const formData = new FormData(event.target);
   const payload = Object.fromEntries(formData);
+  if (!payload.eventId) delete payload.eventId;
   inviteFields.querySelectorAll('[data-field]').forEach((input) => {
     payload[input.dataset.field] = input.value;
   });
@@ -277,6 +306,7 @@ try {
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   myAccountFields = account.accountFields ?? [];
   buildFieldInputs(inviteFields);
+  await loadEventOptions(inviteEventSelect);
   // The group select is only shown (and thus only ever sent) if the
   // viewer's own group is actually permitted to set it — matching the
   // backend's exact rule for POST /members/invite (a group without
