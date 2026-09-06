@@ -97,7 +97,7 @@ let canEditCharacters = false;
 const registrationListBody = document.querySelector('#registration-list tbody');
 const registrationMessage = document.getElementById('registration-message');
 
-const STATUS_LABELS = { registered: 'Angemeldet', checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt' };
+const STATUS_LABELS = { notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet', checked_in: 'Eingechecked', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt' };
 
 async function loadRegistrations() {
   const registrations = await api.get('/registrations');
@@ -106,7 +106,7 @@ async function loadRegistrations() {
     return `<tr>
     <td>${escapeHtml(r.eventName)}</td>
     <td><span class="ribbon status-${escapeHtml(r.status)}">${escapeHtml(label)}</span></td>
-    <td>${r.status === 'registered' ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ''}</td>
+    <td>${r.status === 'pending' ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ''}</td>
   </tr>`;
   }).join('');
 

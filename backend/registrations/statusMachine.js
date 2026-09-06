@@ -1,7 +1,9 @@
 const TRANSITIONS = {
-  registered: { checkin: 'checked_in' },
+  pending: { approve: 'confirmed', cancel: 'cancelled' },
+  confirmed: { checkin: 'checked_in', cancel: 'cancelled' },
   checked_in: { checkout: 'checked_out' },
   checked_out: {},
+  cancelled: {},
 };
 
 export function applyTransition(currentStatus, action) {

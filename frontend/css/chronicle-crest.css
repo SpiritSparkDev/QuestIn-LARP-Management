@@ -414,6 +414,26 @@ tr:last-child td {
   color: #4c4d72;
 }
 
+.ribbon.status-notified {
+  background: #d8dae8;
+  color: #4c4d72;
+}
+
+.ribbon.status-pending {
+  background: #fde8b6;
+  color: #7a5b00;
+}
+
+.ribbon.status-confirmed {
+  background: #cfe9ec;
+  color: #063740;
+}
+
+.ribbon.status-cancelled {
+  background: #f3c6c6;
+  color: #7a1f1f;
+}
+
 .char-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
