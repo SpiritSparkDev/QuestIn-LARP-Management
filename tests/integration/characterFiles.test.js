@@ -195,6 +195,76 @@ test('a fileId that exists but under the wrong characterId in the URL 404s, not 
   });
 });
 
+test('upload against a broken external backend surfaces 502, not silently succeeding or 500', async () => {
+  await withTestServer(async (port) => {
+    await query(
+      `INSERT INTO storage_settings (backend, s3_bucket, s3_region, s3_endpoint, s3_access_key_id)
+       VALUES ('s3', 'nonexistent-bucket', 'us-east-1', 'http://127.0.0.1:1', 'x')`
+    );
+    try {
+      const owner = await makeUserAndSession('sc');
+      const characterId = await makeCharacter(owner.userId);
+      const uploadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+        body: JSON.stringify({ kind: 'image', filename: 'x.png', mimeType: 'image/png', dataBase64: TINY_PNG_BASE64, gdprConsent: true }),
+      });
+      assert.equal(uploadRes.status, 502);
+    } finally {
+      await query('DELETE FROM storage_settings');
+    }
+  });
+});
+
+test('a file already stored on "local" is still served correctly even while a different backend is active', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession('sc');
+    const characterId = await makeCharacter(owner.userId);
+    const uploadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ kind: 'image', filename: 'x.png', mimeType: 'image/png', dataBase64: TINY_PNG_BASE64, gdprConsent: true }),
+    });
+    const { id: fileId } = await uploadRes.json();
+
+    // Switch the active backend to something unreachable AFTER the file was
+    // already uploaded to 'local' -- the file's own stamped storage_backend
+    // must still control where it's read from, not whatever is active now.
+    await query(
+      `INSERT INTO storage_settings (backend, s3_bucket, s3_region, s3_endpoint, s3_access_key_id)
+       VALUES ('s3', 'nonexistent-bucket', 'us-east-1', 'http://127.0.0.1:1', 'x')`
+    );
+    try {
+      const downloadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files/${fileId}`, { headers: { Cookie: owner.cookie } });
+      assert.equal(downloadRes.status, 200);
+    } finally {
+      await query('DELETE FROM storage_settings');
+    }
+  });
+});
+
+test('delete surfaces 502 if removal from an external backend fails, even though the DB row is already gone', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession('sc');
+    const characterId = await makeCharacter(owner.userId);
+    await query(
+      `INSERT INTO storage_settings (backend, s3_bucket, s3_region, s3_endpoint, s3_access_key_id)
+       VALUES ('s3', 'nonexistent-bucket', 'us-east-1', 'http://127.0.0.1:1', 'x')`
+    );
+    try {
+      const { rows } = await query(
+        `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, storage_backend)
+         VALUES (gen_random_uuid(), $1, $2, 'image', 'x.png', 'image/png', 10, 's3') RETURNING id`,
+        [characterId, owner.userId]
+      );
+      const fileId = rows[0].id;
+
+      const deleteRes = await fetch(`http://localhost:${port}/characters/${characterId}/files/${fileId}`, { method: 'DELETE', headers: { Cookie: owner.cookie } });
+      assert.equal(deleteRes.status, 502);
+    } finally {
+      await query('DELETE FROM storage_settings');
+    }
+  });
+});
+
 test.after(async () => {
   await query("DELETE FROM characters WHERE name = 'File Test Char'");
   await query("DELETE FROM users WHERE email LIKE 'char-files-%'");
