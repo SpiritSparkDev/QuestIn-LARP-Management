@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
 import { getCharacter } from '../characters/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
+import { getStorageSettingsForUse } from '../storageSettings/repository.js';
+import { getStorage } from '../storage/index.js';
 import {
   createCharacterFile,
   getCharacterFile,
@@ -14,7 +14,6 @@ import {
   deleteCharacterFile,
 } from './repository.js';
 
-const UPLOADS_DIR = process.env.UPLOADS_DIR || './uploads';
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 // A 20MB file base64-encodes to exactly ~26.7MB, before the surrounding
 // JSON envelope (field names, other short fields) adds a bit more -- 30MB
@@ -79,8 +78,13 @@ router.post('/characters/:id/files', requireAuth(async ({ req, params, user }) =
   }
 
   const id = crypto.randomUUID();
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
-  await fs.writeFile(path.join(UPLOADS_DIR, id), buffer);
+  const storageSettings = await getStorageSettingsForUse();
+  const storage = getStorage(storageSettings.backend, storageSettings);
+  try {
+    await storage.upload(id, buffer);
+  } catch (err) {
+    return { status: 502, body: { error: `Datei konnte nicht auf dem Speicher-Backend abgelegt werden: ${err.message}` } };
+  }
 
   const file = await createCharacterFile({
     id,
@@ -91,6 +95,7 @@ router.post('/characters/:id/files', requireAuth(async ({ req, params, user }) =
     mimeType,
     sizeBytes: buffer.length,
     isPublic: isPublic === true,
+    storageBackend: storageSettings.backend,
   });
   return { status: 201, body: file };
 }));
@@ -109,10 +114,15 @@ router.get('/characters/:characterId/files/:fileId', requireAuth(async ({ params
   const character = await getCharacter(file.character_id);
   if (!character || !canView(file, character, user)) return { status: 404, body: { error: 'not found' } };
 
+  const storageSettings = await getStorageSettingsForUse();
+  const storage = getStorage(file.storage_backend, storageSettings);
   let data;
   try {
-    data = await fs.readFile(path.join(UPLOADS_DIR, file.id));
-  } catch {
+    data = await storage.download(file.id);
+  } catch (err) {
+    if (file.storage_backend !== 'local') {
+      return { status: 502, body: { error: `Datei konnte nicht vom Speicher-Backend geladen werden: ${err.message}` } };
+    }
     return { status: 404, body: { error: 'not found' } };
   }
 
@@ -139,12 +149,17 @@ router.delete('/characters/:characterId/files/:fileId', requireAuth(async ({ par
   if (!character || !canManage(character, user)) return { status: 403, body: { error: 'forbidden' } };
 
   await deleteCharacterFile(file.id);
+  const storageSettings = await getStorageSettingsForUse();
+  const storage = getStorage(file.storage_backend, storageSettings);
   try {
-    await fs.unlink(path.join(UPLOADS_DIR, file.id));
-  } catch {
-    // File already gone from disk (or never wrote successfully) -- the DB
-    // row is already deleted, which is what actually controls reachability,
-    // so this is not an error condition worth surfacing.
+    await storage.remove(file.id);
+  } catch (err) {
+    if (file.storage_backend !== 'local') {
+      return { status: 502, body: { error: `Datei-Zeile gelöscht, aber Entfernen vom Speicher-Backend fehlgeschlagen: ${err.message}` } };
+    }
+    // local: file already gone from disk (or never wrote successfully) -- the
+    // DB row is already deleted, which is what actually controls
+    // reachability, so this is not an error condition worth surfacing.
   }
   return { status: 200, body: { deleted: true } };
 }));
