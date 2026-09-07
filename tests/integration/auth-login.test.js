@@ -102,6 +102,24 @@ test('login before email verification is rejected with 403', async () => {
   });
 });
 
+test('POST /auth/login rejects a correct password for a deactivated account', async () => {
+  await withTestServer(async (port) => {
+    const email = `login-deactivated-${crypto.randomUUID()}@example.com`;
+    const password = 'correct horse battery staple';
+    await registerAndVerify(port, email, password);
+    await query('UPDATE users SET deactivated_at = now() WHERE email = $1', [email]);
+
+    const res = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert.match(body.error, /deactivated/);
+  });
+});
+
 test('logout clears the session so it can no longer be used', async () => {
   await withTestServer(async (port) => {
     const email = `logout-${crypto.randomUUID()}@example.com`;

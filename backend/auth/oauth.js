@@ -136,6 +136,14 @@ router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
         headers: { 'Set-Cookie': clearStateCookie },
       };
     }
+    if (err.code === 'OAUTH_ACCOUNT_DEACTIVATED') {
+      logger.info('oauth login rejected: account deactivated', { provider: params.provider });
+      return {
+        status: 403,
+        body: { error: 'this account has been deactivated' },
+        headers: { 'Set-Cookie': clearStateCookie },
+      };
+    }
     throw err;
   }
   const session = await createSession(userId);
@@ -154,16 +162,28 @@ export async function findOrCreateOAuthUser(providerName, providerUserId, email,
   const normalizedEmail = email.toLowerCase();
 
   const existingOAuth = await query(
-    'SELECT user_id FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2',
+    `SELECT oauth_accounts.user_id, users.deactivated_at
+     FROM oauth_accounts JOIN users ON users.id = oauth_accounts.user_id
+     WHERE oauth_accounts.provider = $1 AND oauth_accounts.provider_user_id = $2`,
     [providerName, providerUserId]
   );
   if (existingOAuth.rows.length > 0) {
+    if (existingOAuth.rows[0].deactivated_at) {
+      const err = new Error('oauth account deactivated');
+      err.code = 'OAUTH_ACCOUNT_DEACTIVATED';
+      throw err;
+    }
     return existingOAuth.rows[0].user_id;
   }
 
-  const existingUser = await query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+  const existingUser = await query('SELECT id, deactivated_at FROM users WHERE email = $1', [normalizedEmail]);
   let userId;
   if (existingUser.rows.length > 0) {
+    if (existingUser.rows[0].deactivated_at) {
+      const err = new Error('oauth account deactivated');
+      err.code = 'OAUTH_ACCOUNT_DEACTIVATED';
+      throw err;
+    }
     if (!emailVerifiedByProvider) {
       const err = new Error('oauth email not verified by provider, cannot link to an existing account');
       err.code = 'OAUTH_EMAIL_NOT_VERIFIED';
