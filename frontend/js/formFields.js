@@ -12,6 +12,19 @@ export const ACCOUNT_FIELD_LABELS = {
   photoOptOut: 'Keine Fotoveröffentlichung (Ja/Nein)',
 };
 
+// Registration/participant status, keyed by the status column's DB value.
+export const STATUS_LABELS = {
+  notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet',
+  checked_in: 'Eingechecked', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt',
+};
+
+// True if a Ja/Nein opt-out field's raw stored value means "yes" (checked).
+// These fields are free text at the DB layer, so this also accepts whatever
+// case a user typed before the field became a checkbox.
+export function isOptOutYes(value) {
+  return typeof value === 'string' && value.trim().toLowerCase() === 'ja';
+}
+
 // Formats a character (IT) custom-field value for display, e.g. as a
 // checkin-table cell or a browse-page tag. Returns undefined for values that
 // shouldn't be shown at all (empty/absent).
@@ -20,6 +33,13 @@ export function formatFieldValue(field, rawValue) {
   if (Array.isArray(rawValue)) return rawValue.length > 0 ? rawValue.join(', ') : undefined;
   if (typeof rawValue === 'boolean') return rawValue ? 'Ja' : undefined;
   return rawValue;
+}
+
+// Renders <option> markup for an event dropdown, e.g. "Sommer-Con (2026-08-01)".
+// `blankLabel`, if given, adds a leading blank/placeholder option.
+export function renderEventOptions(events, blankLabel) {
+  const blank = blankLabel !== undefined ? `<option value="">${escapeHtml(blankLabel)}</option>` : '';
+  return blank + events.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
 }
 
 export function escapeHtml(value) {

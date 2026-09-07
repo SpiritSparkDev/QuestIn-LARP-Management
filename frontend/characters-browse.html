@@ -27,7 +27,7 @@
 
 <script type="module">
 import { api } from '/js/api.js';
-import { escapeHtml, formatFieldValue } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, renderEventOptions } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const eventSelect = document.getElementById('event-select');
@@ -85,7 +85,7 @@ try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   events = await api.get('/events');
-  eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
+  eventSelect.innerHTML = renderEventOptions(events);
   await loadCharacters();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

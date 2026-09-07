@@ -1,6 +1,6 @@
 import { query } from '../db.js';
-import { encryptField, decryptField } from '../crypto/fieldCrypto.js';
 import { displayName } from '../displayName.js';
+import { decryptEncryptedAccountFields, encryptAccountFieldValues } from '../accountFields.js';
 
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified,
@@ -20,19 +20,7 @@ function decryptMember(row) {
     emailVerified: row.email_verified,
     status: 'active',
     group: { id: row.group_id, key: row.group_key, name: row.group_name },
-    address: decryptField(row.address_enc),
-    birthdate: decryptField(row.birthdate_enc),
-    phone: decryptField(row.phone_enc),
-    emergencyContactLastName: decryptField(row.emergency_contact_last_name_enc),
-    emergencyContactFirstName: decryptField(row.emergency_contact_first_name_enc),
-    emergencyContactPhone: decryptField(row.emergency_contact_phone_enc),
-    medicalNotes: decryptField(row.medical_notes_enc),
-    conTage: decryptField(row.con_tage_enc),
-    accommodation: decryptField(row.accommodation_enc),
-    craftOffer: decryptField(row.craft_offer_enc),
-    travelMethod: decryptField(row.travel_method_enc),
-    dataSharingOptOut: decryptField(row.data_sharing_opt_out_enc),
-    photoOptOut: decryptField(row.photo_opt_out_enc),
+    ...decryptEncryptedAccountFields(row),
   };
 }
 
@@ -64,16 +52,16 @@ export async function updateMember(id, fields) {
   const { rows } = await query(
     `UPDATE users SET
        group_id = COALESCE($2, group_id),
-       address_enc = COALESCE($3, address_enc),
-       birthdate_enc = COALESCE($4, birthdate_enc),
-       phone_enc = COALESCE($5, phone_enc),
-       emergency_contact_last_name_enc = COALESCE($6, emergency_contact_last_name_enc),
-       emergency_contact_first_name_enc = COALESCE($7, emergency_contact_first_name_enc),
-       emergency_contact_phone_enc = COALESCE($8, emergency_contact_phone_enc),
-       medical_notes_enc = COALESCE($9, medical_notes_enc),
-       first_name = COALESCE($10, first_name),
-       last_name = COALESCE($11, last_name),
-       nickname = COALESCE($12, nickname),
+       first_name = COALESCE($3, first_name),
+       last_name = COALESCE($4, last_name),
+       nickname = COALESCE($5, nickname),
+       address_enc = COALESCE($6, address_enc),
+       birthdate_enc = COALESCE($7, birthdate_enc),
+       phone_enc = COALESCE($8, phone_enc),
+       emergency_contact_last_name_enc = COALESCE($9, emergency_contact_last_name_enc),
+       emergency_contact_first_name_enc = COALESCE($10, emergency_contact_first_name_enc),
+       emergency_contact_phone_enc = COALESCE($11, emergency_contact_phone_enc),
+       medical_notes_enc = COALESCE($12, medical_notes_enc),
        con_tage_enc = COALESCE($13, con_tage_enc),
        accommodation_enc = COALESCE($14, accommodation_enc),
        craft_offer_enc = COALESCE($15, craft_offer_enc),
@@ -85,22 +73,10 @@ export async function updateMember(id, fields) {
     [
       id,
       fields.group ?? null,
-      fields.address !== undefined ? encryptField(fields.address) : null,
-      fields.birthdate !== undefined ? encryptField(fields.birthdate) : null,
-      fields.phone !== undefined ? encryptField(fields.phone) : null,
-      fields.emergencyContactLastName !== undefined ? encryptField(fields.emergencyContactLastName) : null,
-      fields.emergencyContactFirstName !== undefined ? encryptField(fields.emergencyContactFirstName) : null,
-      fields.emergencyContactPhone !== undefined ? encryptField(fields.emergencyContactPhone) : null,
-      fields.medicalNotes !== undefined ? encryptField(fields.medicalNotes) : null,
       fields.firstName ?? null,
       fields.lastName ?? null,
       fields.nickname ?? null,
-      fields.conTage !== undefined ? encryptField(fields.conTage) : null,
-      fields.accommodation !== undefined ? encryptField(fields.accommodation) : null,
-      fields.craftOffer !== undefined ? encryptField(fields.craftOffer) : null,
-      fields.travelMethod !== undefined ? encryptField(fields.travelMethod) : null,
-      fields.dataSharingOptOut !== undefined ? encryptField(fields.dataSharingOptOut) : null,
-      fields.photoOptOut !== undefined ? encryptField(fields.photoOptOut) : null,
+      ...encryptAccountFieldValues(fields),
     ]
   );
   if (rows.length === 0) return null;

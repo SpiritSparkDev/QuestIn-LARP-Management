@@ -5,6 +5,7 @@ import { createSession } from './sessions.js';
 import { serializeSessionCookie } from './cookies.js';
 import { readJsonBody } from '../httpBody.js';
 import { getInvitationByToken, markRedeemed } from '../invitations/repository.js';
+import { isValidPassword } from '../validation.js';
 
 router.post('/auth/invite/redeem', async ({ req }) => {
   const body = await readJsonBody(req);
@@ -13,7 +14,7 @@ router.post('/auth/invite/redeem', async ({ req }) => {
   if (!token || !password) {
     return { status: 400, body: { error: 'token and password are required' } };
   }
-  if (password.length < 8) {
+  if (!isValidPassword(password)) {
     return { status: 400, body: { error: 'password must be at least 8 characters' } };
   }
 

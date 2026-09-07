@@ -6,6 +6,7 @@ import { sendPasswordResetEmail } from './mailer.js';
 import { readJsonBody } from '../httpBody.js';
 import { logger } from '../logger.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import { isValidPassword } from '../validation.js';
 
 const RESET_TTL_MS = 60 * 60 * 1000;
 const RESET_RATE_LIMIT = { keyPrefix: 'password-reset', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
@@ -42,7 +43,7 @@ router.post('/auth/password-reset/confirm', rateLimit(RESET_RATE_LIMIT)(async ({
   if (!token || !password) {
     return { status: 400, body: { error: 'token and password are required' } };
   }
-  if (password.length < 8) {
+  if (!isValidPassword(password)) {
     return { status: 400, body: { error: 'password must be at least 8 characters' } };
   }
 

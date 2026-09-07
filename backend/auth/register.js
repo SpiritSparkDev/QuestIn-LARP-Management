@@ -6,6 +6,7 @@ import { sendVerificationEmail } from './mailer.js';
 import { readJsonBody } from '../httpBody.js';
 import { logger } from '../logger.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import { isValidEmail, isValidPassword } from '../validation.js';
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const REGISTER_RATE_LIMIT = { keyPrefix: 'register', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
@@ -20,10 +21,10 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
   if (!email || !password || !firstName || !lastName) {
     return { status: 400, body: { error: 'email, password, firstName, and lastName are required' } };
   }
-  if (password.length < 8) {
+  if (!isValidPassword(password)) {
     return { status: 400, body: { error: 'password must be at least 8 characters' } };
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!isValidEmail(email)) {
     return { status: 400, body: { error: 'invalid email format' } };
   }
 

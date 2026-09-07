@@ -267,6 +267,11 @@ textarea {
   font-style: italic;
 }
 
+input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: #8688b0;
@@ -327,18 +332,6 @@ button[type="submit"]:active,
   transform: translateY(2px);
 }
 
-.btn-vellum {
-  font-family: "Work Sans", sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  background: transparent;
-  color: var(--primary-deep);
-  border: 1.5px solid var(--gold);
-  padding: 11px 22px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
 .btn-ghost {
   background: none;
   border: none;
@@ -355,25 +348,6 @@ button[type="submit"]:active,
   vertical-align: middle;
   line-height: 1;
   user-select: none;
-}
-
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  color: var(--on-surface-variant);
-  transition: transform 0.12s ease, color 0.12s ease;
-}
-
-.icon-btn:hover {
-  transform: scale(1.15);
-  color: var(--primary-deep);
 }
 
 .btn-danger {
@@ -502,11 +476,6 @@ tr:last-child td {
   background: var(--gold-container);
   clip-path: polygon(6% 0, 100% 0, 100% 100%, 6% 100%, 0 50%);
   padding-left: 16px;
-}
-
-.ribbon.status-registered {
-  background: #cfe9ec;
-  color: #063740;
 }
 
 .ribbon.status-checked_in {

@@ -49,10 +49,8 @@
       <input id="craftOffer" name="craftOffer" type="text">
       <label for="travelMethod">Anreise (Auto/Motorrad, Bahn, muss abgeholt werden) <span class="sealed">Verschlüsselt</span></label>
       <input id="travelMethod" name="travelMethod" type="text">
-      <label for="dataSharingOptOut">Daten nicht an andere Teilnehmer weitergeben (Ja/Nein) <span class="sealed">Verschlüsselt</span></label>
-      <input id="dataSharingOptOut" name="dataSharingOptOut" type="text">
-      <label for="photoOptOut">Keine Fotoveröffentlichung (Ja/Nein) <span class="sealed">Verschlüsselt</span></label>
-      <input id="photoOptOut" name="photoOptOut" type="text">
+      <label for="dataSharingOptOut"><input id="dataSharingOptOut" name="dataSharingOptOut" type="checkbox"> Daten nicht an andere Teilnehmer weitergeben <span class="sealed">Verschlüsselt</span></label>
+      <label for="photoOptOut"><input id="photoOptOut" name="photoOptOut" type="checkbox"> Keine Fotoveröffentlichung <span class="sealed">Verschlüsselt</span></label>
       <button type="submit">Speichern</button>
     </form>
     <div id="qr-section" style="display:none;">
@@ -69,7 +67,7 @@ import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { renderNavLinks } from '/js/nav.js';
-import { attachBirthdateFormatter, attachLiveValidation } from '/js/formFields.js';
+import { attachBirthdateFormatter, attachLiveValidation, isOptOutYes } from '/js/formFields.js';
 import { buildScanCode } from '/js/qrCode.js';
 
 const form = document.getElementById('account-form');
@@ -141,9 +139,11 @@ async function loadAccount() {
   try {
     const account = await api.get('/account');
     document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
-    for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut']) {
+    for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'conTage', 'accommodation', 'craftOffer', 'travelMethod']) {
       form.elements[field].value = account[field] ?? '';
     }
+    form.elements.dataSharingOptOut.checked = isOptOutYes(account.dataSharingOptOut);
+    form.elements.photoOptOut.checked = isOptOutYes(account.photoOptOut);
     formControls.forEach((el) => { el.disabled = false; });
     await loadQrCode(account);
   } catch (err) {
@@ -161,6 +161,8 @@ form.addEventListener('submit', async (event) => {
   message.textContent = '';
   message.className = '';
   const data = Object.fromEntries(new FormData(form));
+  data.dataSharingOptOut = form.elements.dataSharingOptOut.checked ? 'Ja' : 'Nein';
+  data.photoOptOut = form.elements.photoOptOut.checked ? 'Ja' : 'Nein';
   try {
     await api.patch('/account', data);
     message.textContent = 'Gespeichert.';

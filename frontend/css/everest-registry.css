@@ -10,9 +10,6 @@
   --forest: #0E7C86;
   --forest-dark: #0B5F66;
   --error: #ba1a1a;
-  --registered: #3B82F6;
-  --checked-in: #10B981;
-  --checked-out: #6B7280;
 }
 
 * {
@@ -345,6 +342,17 @@ select:focus {
   user-select: none;
 }
 
+.sealed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .toggle-group {
   display: flex;
   border: 1px solid var(--outline);
@@ -465,11 +473,6 @@ select:focus {
   font-weight: 600;
   padding: 3px 10px;
   border-radius: 8px;
-}
-
-.status-registered {
-  background: rgba(59, 130, 246, 0.15);
-  color: #1d4ed8;
 }
 
 .status-checked_in {

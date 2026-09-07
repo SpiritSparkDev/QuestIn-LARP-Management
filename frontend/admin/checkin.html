@@ -75,7 +75,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS, STATUS_LABELS, renderEventOptions } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 import { parseScanCode } from '/js/qrCode.js';
 
@@ -89,7 +89,6 @@ const searchInput = document.getElementById('participant-search');
 const statTotal = document.getElementById('stat-total');
 const statCheckedIn = document.getElementById('stat-checked-in');
 
-const STATUS_LABELS = { notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet', checked_in: 'Eingechecked', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt' };
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
 let currentSearch = '';
 let canOverride = false;
@@ -458,7 +457,7 @@ try {
   myAccountFields = account.accountFields ?? [];
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
   events = await api.get('/events');
-  eventSelect.innerHTML = events.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
+  eventSelect.innerHTML = renderEventOptions(events);
   if (events.length > 0) {
     onEventChanged();
     await loadParticipants(events[0].id);

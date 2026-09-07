@@ -82,7 +82,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, attachBirthdateFormatter, ACCOUNT_FIELD_LABELS } from '/js/formFields.js';
+import { escapeHtml, attachBirthdateFormatter, ACCOUNT_FIELD_LABELS, renderEventOptions, isOptOutYes } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const ALL_FIELD_KEYS = Object.keys(ACCOUNT_FIELD_LABELS);
@@ -104,15 +104,26 @@ const message = document.getElementById('message');
 let myAccountFields = [];
 let editingMemberId = null;
 
+// Free text let a caller type anything besides Ja/Nein; these two are
+// rendered as checkboxes everywhere instead, same as buildDetailFieldInputs.
+const OPT_OUT_KEYS = ['dataSharingOptOut', 'photoOptOut'];
+
 // Invite form: only ever shows/submits fields the caller is permitted to
 // set on a brand-new member.
 function buildFieldInputs(container, values = {}) {
   container.innerHTML = myAccountFields
     .filter((key) => key !== 'group')
-    .map((key) => `
-      <label for="field-${key}">${escapeHtml(ACCOUNT_FIELD_LABELS[key] ?? key)}</label>
+    .map((key) => {
+      const label = escapeHtml(ACCOUNT_FIELD_LABELS[key] ?? key);
+      if (OPT_OUT_KEYS.includes(key)) {
+        const checked = isOptOutYes(values[key]) ? ' checked' : '';
+        return `<label for="field-${key}"><input id="field-${key}" data-field="${key}" type="checkbox"${checked}> ${label}</label>`;
+      }
+      return `
+      <label for="field-${key}">${label}</label>
       <input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">
-    `).join('');
+    `;
+    }).join('');
   const birthdateInput = container.querySelector('[data-field="birthdate"]');
   if (birthdateInput) attachBirthdateFormatter(birthdateInput);
 }
@@ -133,7 +144,12 @@ function buildDetailFieldInputs(container, values = {}) {
   container.innerHTML = nameFieldsHtml + ALL_FIELD_KEYS.map((key) => {
     const label = ACCOUNT_FIELD_LABELS[key] ?? key;
     if (myAccountFields.includes(key)) {
-      return `<label for="field-${key}">${escapeHtml(label)} <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span></label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">`;
+      const sealedBadge = '<span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>';
+      if (OPT_OUT_KEYS.includes(key)) {
+        const checked = isOptOutYes(values[key]) ? ' checked' : '';
+        return `<label for="field-${key}"><input id="field-${key}" data-field="${key}" type="checkbox"${checked}> ${escapeHtml(label)} ${sealedBadge}</label>`;
+      }
+      return `<label for="field-${key}">${escapeHtml(label)} ${sealedBadge}</label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">`;
     }
     return `<label>${escapeHtml(label)}</label><p>${escapeHtml(values[key] ?? '–')}</p>`;
   }).join('');
@@ -148,7 +164,7 @@ async function loadGroupOptions(selectEl) {
 
 async function loadEventOptions(selectEl) {
   const events = await api.get('/events');
-  selectEl.innerHTML = '<option value="">– keine –</option>' + events.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
+  selectEl.innerHTML = renderEventOptions(events, '– keine –');
 }
 
 async function loadMembers() {
@@ -215,7 +231,7 @@ document.getElementById('detail-save').addEventListener('click', async () => {
   message.className = '';
   const payload = {};
   detailFields.querySelectorAll('[data-field]').forEach((input) => {
-    payload[input.dataset.field] = input.value;
+    payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
   });
   if (myAccountFields.includes('group') && detailGroupSelect.value) {
     payload.group = detailGroupSelect.value;
@@ -276,7 +292,7 @@ document.getElementById('invite-form').addEventListener('submit', async (event) 
   const payload = Object.fromEntries(formData);
   if (!payload.eventId) delete payload.eventId;
   inviteFields.querySelectorAll('[data-field]').forEach((input) => {
-    payload[input.dataset.field] = input.value;
+    payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
   });
   try {
     const result = await api.post('/members/invite', payload);

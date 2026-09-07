@@ -8,6 +8,7 @@ import { sendInvitationEmail } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 import { query } from '../db.js';
 import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
+import { isValidEmail } from '../validation.js';
 
 function filterToAllowedFields(body, allowedFields) {
   const disallowed = Object.keys(body).filter((key) => ACCOUNT_FIELD_KEYS.includes(key) && !allowedFields.includes(key));
@@ -63,7 +64,7 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
   if (!email || !firstName || !lastName) {
     return { status: 400, body: { error: 'email, firstName, and lastName are required' } };
   }
-  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!isValidEmail(email)) {
     return { status: 400, body: { error: 'invalid email format' } };
   }
 

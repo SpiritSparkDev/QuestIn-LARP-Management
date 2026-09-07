@@ -1,6 +1,6 @@
 import { query } from '../db.js';
-import { encryptField, decryptField } from '../crypto/fieldCrypto.js';
 import { displayName } from '../displayName.js';
+import { decryptEncryptedAccountFields, encryptAccountFieldValues } from '../accountFields.js';
 
 function decryptAccount(row) {
   return {
@@ -18,19 +18,7 @@ function decryptAccount(row) {
     characterClasses: row.character_classes,
     canOverrideCheckinStatus: row.can_override_checkin_status,
     emailVerified: row.email_verified,
-    address: decryptField(row.address_enc),
-    birthdate: decryptField(row.birthdate_enc),
-    phone: decryptField(row.phone_enc),
-    emergencyContactLastName: decryptField(row.emergency_contact_last_name_enc),
-    emergencyContactFirstName: decryptField(row.emergency_contact_first_name_enc),
-    emergencyContactPhone: decryptField(row.emergency_contact_phone_enc),
-    medicalNotes: decryptField(row.medical_notes_enc),
-    conTage: decryptField(row.con_tage_enc),
-    accommodation: decryptField(row.accommodation_enc),
-    craftOffer: decryptField(row.craft_offer_enc),
-    travelMethod: decryptField(row.travel_method_enc),
-    dataSharingOptOut: decryptField(row.data_sharing_opt_out_enc),
-    photoOptOut: decryptField(row.photo_opt_out_enc),
+    ...decryptEncryptedAccountFields(row),
   };
 }
 
@@ -77,19 +65,7 @@ export async function updateAccount(userId, fields) {
       fields.lastName ?? null,
       fields.nickname ?? null,
       fields.hotkeys !== undefined ? JSON.stringify(fields.hotkeys) : null,
-      fields.address !== undefined ? encryptField(fields.address) : null,
-      fields.birthdate !== undefined ? encryptField(fields.birthdate) : null,
-      fields.phone !== undefined ? encryptField(fields.phone) : null,
-      fields.emergencyContactLastName !== undefined ? encryptField(fields.emergencyContactLastName) : null,
-      fields.emergencyContactFirstName !== undefined ? encryptField(fields.emergencyContactFirstName) : null,
-      fields.emergencyContactPhone !== undefined ? encryptField(fields.emergencyContactPhone) : null,
-      fields.medicalNotes !== undefined ? encryptField(fields.medicalNotes) : null,
-      fields.conTage !== undefined ? encryptField(fields.conTage) : null,
-      fields.accommodation !== undefined ? encryptField(fields.accommodation) : null,
-      fields.craftOffer !== undefined ? encryptField(fields.craftOffer) : null,
-      fields.travelMethod !== undefined ? encryptField(fields.travelMethod) : null,
-      fields.dataSharingOptOut !== undefined ? encryptField(fields.dataSharingOptOut) : null,
-      fields.photoOptOut !== undefined ? encryptField(fields.photoOptOut) : null,
+      ...encryptAccountFieldValues(fields),
     ]
   );
   if (rows.length === 0) return null;
