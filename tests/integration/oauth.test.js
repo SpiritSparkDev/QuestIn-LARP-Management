@@ -120,6 +120,37 @@ test('findOrCreateOAuthUser rejects linking when provider does not verify the em
   assert.equal(oauthRows[0].count, 0);
 });
 
+test('findOrCreateOAuthUser rejects a deactivated account already linked to this provider', async () => {
+  const email = `oauth-deactivated-linked-${crypto.randomUUID()}@example.com`;
+  const { rows } = await query(
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'OAuth', 'Deactivated', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
+    [email]
+  );
+  const userId = rows[0].id;
+  await query('INSERT INTO oauth_accounts (user_id, provider, provider_user_id) VALUES ($1, $2, $3)', [userId, 'google', `provider-id-${crypto.randomUUID()}`]);
+  await query('UPDATE users SET deactivated_at = now() WHERE id = $1', [userId]);
+
+  const providerUserId = (await query('SELECT provider_user_id FROM oauth_accounts WHERE user_id = $1', [userId])).rows[0].provider_user_id;
+  await assert.rejects(
+    () => findOrCreateOAuthUser('google', providerUserId, email, 'OAuth Deactivated', true),
+    (err) => err.code === 'OAUTH_ACCOUNT_DEACTIVATED'
+  );
+});
+
+test('findOrCreateOAuthUser rejects linking a new provider to a deactivated existing account', async () => {
+  const email = `oauth-deactivated-link-${crypto.randomUUID()}@example.com`;
+  const { rows } = await query(
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'OAuth', 'Deactivated', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
+    [email]
+  );
+  await query('UPDATE users SET deactivated_at = now() WHERE id = $1', [rows[0].id]);
+
+  await assert.rejects(
+    () => findOrCreateOAuthUser('google', `new-provider-id-${crypto.randomUUID()}`, email, 'OAuth Deactivated', true),
+    (err) => err.code === 'OAUTH_ACCOUNT_DEACTIVATED'
+  );
+});
+
 test('callback with mocked provider responses creates a session and redirects', async (t) => {
   await withTestServer(async (port) => {
     const startRes = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });

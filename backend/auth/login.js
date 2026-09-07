@@ -25,7 +25,7 @@ router.post('/auth/login', rateLimit(LOGIN_IP_RATE_LIMIT)(async ({ req }) => {
   }
 
   const { rows } = await query(
-    'SELECT id, password_hash, email_verified FROM users WHERE email = $1',
+    'SELECT id, password_hash, email_verified, deactivated_at FROM users WHERE email = $1',
     [email]
   );
   if (rows.length === 0 || !rows[0].password_hash) {
@@ -36,6 +36,9 @@ router.post('/auth/login', rateLimit(LOGIN_IP_RATE_LIMIT)(async ({ req }) => {
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) {
     return { status: 401, body: { error: 'invalid credentials' } };
+  }
+  if (user.deactivated_at) {
+    return { status: 403, body: { error: 'account deactivated' } };
   }
   if (!user.email_verified) {
     return { status: 403, body: { error: 'email not verified' } };

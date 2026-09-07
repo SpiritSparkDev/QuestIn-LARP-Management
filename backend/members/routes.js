@@ -2,7 +2,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { listMembers, getMember, updateMember } from './repository.js';
+import { listMembers, getMember, updateMember, deactivateMember, reactivateMember } from './repository.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
 import { sendInvitationEmail, baseUrl } from '../auth/mailer.js';
 import { getAppSettings } from '../appSettings/repository.js';
@@ -16,8 +16,10 @@ function filterToAllowedFields(body, allowedFields) {
   return disallowed;
 }
 
-router.get('/members', requireAuth(requireMenu('mitglieder')(async () => {
-  const members = await listMembers();
+router.get('/members', requireAuth(requireMenu('mitglieder')(async ({ req }) => {
+  const { searchParams } = new URL(req.url, 'http://localhost');
+  const includeDeactivated = searchParams.get('includeDeactivated') === 'true';
+  const members = await listMembers(includeDeactivated);
   const invitations = await listOpenInvitations();
   const invited = invitations.map((inv) => ({
     id: inv.id,
@@ -54,6 +56,21 @@ router.patch('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ req,
   const member = await updateMember(params.id, fields);
   if (!member) return { status: 404, body: { error: 'member not found' } };
   return { status: 200, body: member };
+})));
+
+router.post('/members/:id/deactivate', requireAuth(requireMenu('mitglieder')(async ({ params, user }) => {
+  if (params.id.toLowerCase() === user.id.toLowerCase()) {
+    return { status: 400, body: { error: 'cannot deactivate your own account' } };
+  }
+  const deactivated = await deactivateMember(params.id);
+  if (!deactivated) return { status: 404, body: { error: 'member not found' } };
+  return { status: 200, body: { deactivated: true } };
+})));
+
+router.post('/members/:id/reactivate', requireAuth(requireMenu('mitglieder')(async ({ params }) => {
+  const reactivated = await reactivateMember(params.id);
+  if (!reactivated) return { status: 404, body: { error: 'member not found' } };
+  return { status: 200, body: { reactivated: true } };
 })));
 
 const DEFAULT_INVITE_GROUP_KEY = 'sc';

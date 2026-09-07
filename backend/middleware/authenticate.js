@@ -12,7 +12,7 @@ export function requireAuth(handler) {
     if (!session) return { status: 401, body: { error: 'not authenticated' } };
 
     const { rows } = await query(
-      `SELECT users.id, users.email,
+      `SELECT users.id, users.email, users.deactivated_at,
               groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
               groups.visible_menus, groups.account_fields, groups.can_edit_characters,
               groups.character_classes, groups.can_override_checkin_status
@@ -22,6 +22,7 @@ export function requireAuth(handler) {
       [session.userId]
     );
     if (rows.length === 0) return { status: 401, body: { error: 'not authenticated' } };
+    if (rows[0].deactivated_at) return { status: 401, body: { error: 'account deactivated' } };
 
     const row = rows[0];
     const user = {
