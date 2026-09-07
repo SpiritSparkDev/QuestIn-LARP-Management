@@ -82,7 +82,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, attachBirthdateFormatter, ACCOUNT_FIELD_LABELS, renderEventOptions, isOptOutYes } from '/js/formFields.js';
+import { escapeHtml, attachBirthdateFormatter, ACCOUNT_FIELD_LABELS, renderEventOptions, renderAccountFieldInput } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const ALL_FIELD_KEYS = Object.keys(ACCOUNT_FIELD_LABELS);
@@ -104,26 +104,13 @@ const message = document.getElementById('message');
 let myAccountFields = [];
 let editingMemberId = null;
 
-// Free text let a caller type anything besides Ja/Nein; these two are
-// rendered as checkboxes everywhere instead, same as buildDetailFieldInputs.
-const OPT_OUT_KEYS = ['dataSharingOptOut', 'photoOptOut'];
-
 // Invite form: only ever shows/submits fields the caller is permitted to
 // set on a brand-new member.
 function buildFieldInputs(container, values = {}) {
   container.innerHTML = myAccountFields
     .filter((key) => key !== 'group')
-    .map((key) => {
-      const label = escapeHtml(ACCOUNT_FIELD_LABELS[key] ?? key);
-      if (OPT_OUT_KEYS.includes(key)) {
-        const checked = isOptOutYes(values[key]) ? ' checked' : '';
-        return `<label for="field-${key}"><input id="field-${key}" data-field="${key}" type="checkbox"${checked}> ${label}</label>`;
-      }
-      return `
-      <label for="field-${key}">${label}</label>
-      <input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">
-    `;
-    }).join('');
+    .map((key) => renderAccountFieldInput(key, ACCOUNT_FIELD_LABELS[key] ?? key, values[key]))
+    .join('');
   const birthdateInput = container.querySelector('[data-field="birthdate"]');
   if (birthdateInput) attachBirthdateFormatter(birthdateInput);
 }
@@ -144,12 +131,8 @@ function buildDetailFieldInputs(container, values = {}) {
   container.innerHTML = nameFieldsHtml + ALL_FIELD_KEYS.map((key) => {
     const label = ACCOUNT_FIELD_LABELS[key] ?? key;
     if (myAccountFields.includes(key)) {
-      const sealedBadge = '<span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>';
-      if (OPT_OUT_KEYS.includes(key)) {
-        const checked = isOptOutYes(values[key]) ? ' checked' : '';
-        return `<label for="field-${key}"><input id="field-${key}" data-field="${key}" type="checkbox"${checked}> ${escapeHtml(label)} ${sealedBadge}</label>`;
-      }
-      return `<label for="field-${key}">${escapeHtml(label)} ${sealedBadge}</label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">`;
+      const sealedBadge = ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>';
+      return renderAccountFieldInput(key, label, values[key], { sealedBadge });
     }
     return `<label>${escapeHtml(label)}</label><p>${escapeHtml(values[key] ?? '–')}</p>`;
   }).join('');
