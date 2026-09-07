@@ -64,21 +64,32 @@ router.get('/admin/settings/storage/usage', requireAuth(requireAdminGroup(async 
 router.post('/admin/settings/storage/migrate', requireAuth(requireAdminGroup(async () => {
   const settings = await getStorageSettingsForUse();
   const targetBackend = settings.backend;
-  const targetStorage = getStorage(targetBackend, settings);
   const files = await listCharacterFilesNotOnBackend(targetBackend);
+
+  const storageCache = new Map();
+  function cachedStorage(backend) {
+    if (!storageCache.has(backend)) storageCache.set(backend, getStorage(backend, settings));
+    return storageCache.get(backend);
+  }
+  const targetStorage = cachedStorage(targetBackend);
 
   let migrated = 0;
   const failed = [];
   for (const file of files) {
-    const sourceStorage = getStorage(file.storage_backend, settings);
+    const sourceStorage = cachedStorage(file.storage_backend);
     try {
       const data = await sourceStorage.download(file.id);
       await targetStorage.upload(file.id, data);
       await updateCharacterFileStorageBackend(file.id, targetBackend);
-      await sourceStorage.remove(file.id);
       migrated += 1;
     } catch (err) {
       failed.push({ id: file.id, error: err.message });
+      continue;
+    }
+    try {
+      await sourceStorage.remove(file.id);
+    } catch (err) {
+      failed.push({ id: file.id, error: `migriert, aber alte Kopie auf ${file.storage_backend} konnte nicht entfernt werden: ${err.message}` });
     }
   }
   return { status: 200, body: { migrated, failed } };

@@ -23,6 +23,14 @@ export async function getStorageSettings() {
   };
 }
 
+function safeDecrypt(buffer) {
+  try {
+    return decryptField(buffer);
+  } catch {
+    return null;
+  }
+}
+
 export async function getStorageSettingsForUse() {
   const { rows } = await query(
     `SELECT backend, ftp_host, ftp_port, ftp_username, ftp_password_enc, ftp_secure, ftp_base_dir,
@@ -35,8 +43,8 @@ export async function getStorageSettingsForUse() {
   const r = rows[0];
   return {
     backend: r.backend,
-    ftp: { host: r.ftp_host, port: r.ftp_port, username: r.ftp_username, password: decryptField(r.ftp_password_enc), secure: r.ftp_secure, baseDir: r.ftp_base_dir },
-    s3: { bucket: r.s3_bucket, region: r.s3_region, endpoint: r.s3_endpoint, accessKeyId: r.s3_access_key_id, secretAccessKey: decryptField(r.s3_secret_access_key_enc) },
+    ftp: { host: r.ftp_host, port: r.ftp_port, username: r.ftp_username, password: safeDecrypt(r.ftp_password_enc), secure: r.ftp_secure, baseDir: r.ftp_base_dir },
+    s3: { bucket: r.s3_bucket, region: r.s3_region, endpoint: r.s3_endpoint, accessKeyId: r.s3_access_key_id, secretAccessKey: safeDecrypt(r.s3_secret_access_key_enc) },
   };
 }
 
