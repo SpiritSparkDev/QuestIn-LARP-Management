@@ -418,6 +418,120 @@ test('POST /members/invitations/:id/cancel cancels an open invitation and it dis
   }
 });
 
+test('POST /members/:id/deactivate blocks login, kills sessions, and hides the member from the default list', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId, cookie: targetCookie } = await makeUserAndSession('sc');
+
+    const listBefore = await fetch(`http://localhost:${port}/members`, { headers: { Cookie: adminCookie } });
+    const membersBefore = await listBefore.json();
+    assert.ok(membersBefore.some((m) => m.id === targetId));
+
+    const deactivateRes = await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(deactivateRes.status, 200);
+
+    // The target's pre-existing session must be dead immediately.
+    const meRes = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: targetCookie } });
+    assert.equal(meRes.status, 401);
+
+    // Deactivated members are hidden from the default list...
+    const listAfter = await fetch(`http://localhost:${port}/members`, { headers: { Cookie: adminCookie } });
+    const membersAfter = await listAfter.json();
+    assert.ok(!membersAfter.some((m) => m.id === targetId));
+
+    // ...but visible with includeDeactivated=true, with status 'deactivated'.
+    const listIncluding = await fetch(`http://localhost:${port}/members?includeDeactivated=true`, { headers: { Cookie: adminCookie } });
+    const membersIncluding = await listIncluding.json();
+    const found = membersIncluding.find((m) => m.id === targetId);
+    assert.ok(found);
+    assert.equal(found.status, 'deactivated');
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/deactivate rejects deactivating your own account', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { userId: adminId, cookie: adminCookie } = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/members/${adminId}/deactivate`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/deactivate returns 404 for an unknown member', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/members/${crypto.randomUUID()}/deactivate`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 404);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/reactivate restores login and default-list visibility', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId } = await makeUserAndSession('sc');
+
+    await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, { method: 'POST', headers: { Cookie: adminCookie } });
+    const reactivateRes = await fetch(`http://localhost:${port}/members/${targetId}/reactivate`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(reactivateRes.status, 200);
+
+    const listAfter = await fetch(`http://localhost:${port}/members`, { headers: { Cookie: adminCookie } });
+    const membersAfter = await listAfter.json();
+    const found = membersAfter.find((m) => m.id === targetId);
+    assert.ok(found);
+    assert.equal(found.status, 'active');
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/deactivate and /reactivate are rejected for a group without the mitglieder menu', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: scCookie } = await makeUserAndSession('sc');
+    const { userId: targetId } = await makeUserAndSession('sc');
+
+    const deactivateRes = await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, {
+      method: 'POST',
+      headers: { Cookie: scCookie },
+    });
+    assert.equal(deactivateRes.status, 403);
+
+    const reactivateRes = await fetch(`http://localhost:${port}/members/${targetId}/reactivate`, {
+      method: 'POST',
+      headers: { Cookie: scCookie },
+    });
+    assert.equal(reactivateRes.status, 403);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM invitations");
   await query("DELETE FROM users WHERE email LIKE 'members-%'");
