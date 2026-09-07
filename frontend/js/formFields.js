@@ -121,12 +121,12 @@ export function attachLiveValidation(formEl) {
   });
 }
 
-export function renderField(field, value) {
+export function renderField(field, value, idPrefix = '') {
   const val = escapeHtml(value);
   const label = escapeHtml(field.label ?? field.key) + (field.required ? ' *' : '');
   const key = escapeHtml(field.key);
   const required = field.required ? 'required' : '';
-  const id = `field-${key}`;
+  const id = `${idPrefix}field-${key}`;
 
   if (field.type === 'boolean') {
     const checked = value ? ' checked' : '';
