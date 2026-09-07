@@ -21,6 +21,10 @@
     <h1>Mitglieder verwalten</h1>
     <p class="sub">Bearbeite bestehende Mitglieder oder lade neue per E-Mail ein.</p>
     <button type="button" id="invite-open">Neues Mitglied anlegen</button>
+    <div class="toggle-group toggle-group-sm" style="margin:16px 0 0;">
+      <button type="button" class="toggle-btn active" data-view="active">Aktive Mitglieder</button>
+      <button type="button" class="toggle-btn" data-view="deactivated">Deaktivierte Mitglieder</button>
+    </div>
     <div class="card" style="margin-top:16px;">
       <table id="member-list">
         <thead><tr><th>Name</th><th>E-Mail</th><th>Gruppe</th><th>Status</th><th></th></tr></thead>
@@ -103,6 +107,8 @@ const message = document.getElementById('message');
 
 let myAccountFields = [];
 let editingMemberId = null;
+let currentView = 'active';
+let myUserId = null;
 
 // Free text let a caller type anything besides Ja/Nein; these two are
 // rendered as checkboxes everywhere instead, same as buildDetailFieldInputs.
@@ -168,19 +174,36 @@ async function loadEventOptions(selectEl) {
 }
 
 async function loadMembers() {
-  const members = await api.get('/members');
-  listBody.innerHTML = members.map((m) => `<tr>
+  const members = await api.get(`/members${currentView === 'deactivated' ? '?includeDeactivated=true' : ''}`);
+  const visible = currentView === 'deactivated'
+    ? members.filter((m) => m.status === 'deactivated')
+    : members.filter((m) => m.status !== 'deactivated');
+
+  listBody.innerHTML = visible.map((m) => {
+    let statusCell;
+    let actionsCell;
+    if (m.status === 'active') {
+      statusCell = `<span class="badge badge-active">Aktiv</span>`;
+      const deactivateBtn = m.id === myUserId
+        ? ''
+        : `<button type="button" class="btn-sm btn-ghost" data-deactivate="${m.id}">Deaktivieren</button>`;
+      actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn}`;
+    } else if (m.status === 'deactivated') {
+      statusCell = `<span class="badge badge-inactive">Deaktiviert</span>`;
+      actionsCell = `<button type="button" class="btn-sm btn-ghost" data-reactivate="${m.id}">Reaktivieren</button>`;
+    } else {
+      statusCell = `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`;
+      actionsCell = `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>
+         <button type="button" class="btn-sm btn-ghost" data-cancel-invite="${m.id}">Absagen</button>`;
+    }
+    return `<tr>
     <td>${escapeHtml(m.name)}</td>
     <td>${escapeHtml(m.email)}</td>
     <td>${escapeHtml(m.group?.name ?? '–')}</td>
-    <td>${m.status === 'active'
-      ? `<span class="badge badge-active">Aktiv</span>`
-      : `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`}</td>
-    <td>${m.status === 'active'
-      ? `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button>`
-      : `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>
-         <button type="button" class="btn-sm btn-ghost" data-cancel-invite="${m.id}">Absagen</button>`}</td>
-  </tr>`).join('');
+    <td>${statusCell}</td>
+    <td>${actionsCell}</td>
+  </tr>`;
+  }).join('');
 
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => openDetail(button.dataset.edit));
@@ -190,6 +213,12 @@ async function loadMembers() {
   });
   listBody.querySelectorAll('[data-cancel-invite]').forEach((button) => {
     button.addEventListener('click', () => cancelInvite(button.dataset.cancelInvite));
+  });
+  listBody.querySelectorAll('[data-deactivate]').forEach((button) => {
+    button.addEventListener('click', () => deactivateMemberRow(button.dataset.deactivate));
+  });
+  listBody.querySelectorAll('[data-reactivate]').forEach((button) => {
+    button.addEventListener('click', () => reactivateMemberRow(button.dataset.reactivate));
   });
 }
 
@@ -281,6 +310,44 @@ async function cancelInvite(invitationId) {
   }
 }
 
+async function deactivateMemberRow(id) {
+  if (!confirm('Mitglied wirklich deaktivieren? Der Login wird gesperrt und alle aktiven Sitzungen werden sofort beendet.')) return;
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.post(`/members/${id}/deactivate`, {});
+    message.textContent = 'Mitglied deaktiviert.';
+    message.className = 'success';
+    await loadMembers();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+}
+
+async function reactivateMemberRow(id) {
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.post(`/members/${id}/reactivate`, {});
+    message.textContent = 'Mitglied reaktiviert.';
+    message.className = 'success';
+    await loadMembers();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+}
+
+document.querySelectorAll('[data-view]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (currentView === btn.dataset.view) return;
+    currentView = btn.dataset.view;
+    document.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('active', b === btn));
+    loadMembers();
+  });
+});
+
 document.getElementById('invite-open').addEventListener('click', () => inviteDialog.showModal());
 document.getElementById('invite-cancel').addEventListener('click', () => inviteDialog.close());
 
@@ -323,6 +390,7 @@ try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   myAccountFields = account.accountFields ?? [];
+  myUserId = account.id;
   buildFieldInputs(inviteFields);
   await loadEventOptions(inviteEventSelect);
   // The group select is only shown (and thus only ever sent) if the
