@@ -2,10 +2,12 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mitglieder verwalten – Pakyrion Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/everest-registry.css">
 </head>
 <body>
@@ -131,7 +133,7 @@ function buildDetailFieldInputs(container, values = {}) {
   container.innerHTML = nameFieldsHtml + ALL_FIELD_KEYS.map((key) => {
     const label = ACCOUNT_FIELD_LABELS[key] ?? key;
     if (myAccountFields.includes(key)) {
-      return `<label for="field-${key}">${escapeHtml(label)}</label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">`;
+      return `<label for="field-${key}">${escapeHtml(label)} <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span></label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(values[key] ?? '')}">`;
     }
     return `<label>${escapeHtml(label)}</label><p>${escapeHtml(values[key] ?? '–')}</p>`;
   }).join('');

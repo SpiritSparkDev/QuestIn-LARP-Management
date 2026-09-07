@@ -110,6 +110,38 @@ body {
     box-shadow: 0px 0px 30px;
 }
 
+/* .sidebar switched to position:fixed (see above) after this theme's pages
+   got a real <meta name="viewport"> -- previously the missing tag silently
+   masked the lack of any mobile layout by rendering the whole page zoomed
+   out on a virtual desktop-width viewport instead. Drop the sidebar back
+   into flow and stack it above the content below 768px. */
+@media (max-width: 768px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    padding: 16px;
+  }
+
+  .sidebar nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .main {
+    margin-left: 0;
+  }
+
+  .content {
+    padding: 20px;
+  }
+}
+
 h1 {
   font-size: 28px;
   font-weight: 700;
@@ -303,6 +335,14 @@ select:focus {
   border: none;
   border-top: 1px solid var(--outline);
   margin: 24px 0;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  font-size: 16px;
+  vertical-align: middle;
+  line-height: 1;
+  user-select: none;
 }
 
 .toggle-group {

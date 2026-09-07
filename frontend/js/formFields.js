@@ -38,9 +38,56 @@ export function attachBirthdateFormatter(inputEl) {
   });
 }
 
+let liveValidationIdCounter = 0;
+
+// Shows a field's native validation message only after the user has
+// actually interacted with it -- otherwise every required-but-empty field
+// on a freshly-loaded form would show as invalid immediately, before the
+// user has had any chance to fill it in.
+export function attachLiveValidation(formEl) {
+  const controls = formEl.querySelectorAll('input, select, textarea');
+  controls.forEach((el) => {
+    // A checkbox rendered by renderField's boolean/multiselect branches is
+    // wrapped INSIDE its own <label>...text</label> -- inserting a message
+    // element next to it would land inside that label (invalid HTML, and
+    // visually splits the checkbox from its own caption). These controls
+    // keep only their existing native (submit-time) validation, same as
+    // before this feature existed.
+    if (el.closest('label')) return;
+
+    let hasInteracted = false;
+    const errorEl = document.createElement('p');
+    errorEl.className = 'field-error';
+    errorEl.id = `field-error-${liveValidationIdCounter++}`;
+    el.setAttribute('aria-describedby', errorEl.id);
+    // In this project's static forms, a label precedes its input, so the
+    // error belongs right after the input. Schema-driven fields (renderField)
+    // do the reverse -- input then label -- so putting it straight after the
+    // input would wedge the error between an input and its own label; anchor
+    // after the label instead, but only when that label is genuinely THIS
+    // control's own (matching `for`) -- otherwise, on a flat static form, the
+    // "next sibling label" belongs to the NEXT field entirely, and anchoring
+    // there would attribute this field's error to the wrong one.
+    const next = el.nextElementSibling;
+    const anchor = (next?.tagName === 'LABEL' && next.htmlFor === el.id) ? next : el;
+    anchor.insertAdjacentElement('afterend', errorEl);
+
+    function refresh() {
+      if (!hasInteracted) return;
+      const valid = el.checkValidity();
+      el.classList.toggle('invalid', !valid);
+      el.setAttribute('aria-invalid', String(!valid));
+      errorEl.textContent = valid ? '' : el.validationMessage;
+    }
+
+    el.addEventListener('blur', () => { hasInteracted = true; refresh(); });
+    el.addEventListener('input', refresh);
+  });
+}
+
 export function renderField(field, value) {
   const val = escapeHtml(value);
-  const label = escapeHtml(field.label ?? field.key);
+  const label = escapeHtml(field.label ?? field.key) + (field.required ? ' *' : '');
   const key = escapeHtml(field.key);
   const required = field.required ? 'required' : '';
   const id = `field-${key}`;
