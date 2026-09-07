@@ -495,10 +495,14 @@ test('POST /members/invite uses the configured invitationTtlDays for expires_at,
     const { port } = server.address();
     const { cookie } = await makeUserAndSession('admin');
 
+    // Use a value that differs from both the column default (3, from the
+    // migration) and createInvitation's own fallback default (also 3) --
+    // otherwise this test would pass even if the app-settings wiring were
+    // never hooked up at all.
     const putRes = await fetch(`http://localhost:${port}/app-settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ invitationTtlDays: 3 }),
+      body: JSON.stringify({ invitationTtlDays: 10 }),
     });
     assert.equal(putRes.status, 200);
 
@@ -512,10 +516,10 @@ test('POST /members/invite uses the configured invitationTtlDays for expires_at,
 
     const { rows } = await query('SELECT expires_at, created_at FROM invitations WHERE email = $1', [email]);
     const ttlMs = new Date(rows[0].expires_at).getTime() - new Date(rows[0].created_at).getTime();
-    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-    // Allow a small margin for test execution time; a hardcoded 7-day TTL
-    // would miss this window entirely.
-    assert.ok(Math.abs(ttlMs - threeDaysMs) < 60_000, `expected ~3 days, got ${ttlMs}ms`);
+    const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
+    // Allow a small margin for test execution time; a hardcoded or
+    // default-only TTL would miss this window entirely.
+    assert.ok(Math.abs(ttlMs - tenDaysMs) < 60_000, `expected ~10 days, got ${ttlMs}ms`);
   } finally {
     server.close();
   }

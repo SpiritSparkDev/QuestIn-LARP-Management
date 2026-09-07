@@ -132,14 +132,27 @@ test('PUT /app-settings validates and saves invitationTtlDays; defaults to 3', a
     assert.equal(goodRes.status, 200);
     assert.equal((await goodRes.json()).invitationTtlDays, 5);
 
-    // A subsequent partial update that omits invitationTtlDays must not
-    // clobber it back to the column default.
+    // Set logoUrl/eventName so the next step can prove a partial update
+    // (like the settings.html invitation-TTL card, which only ever sends
+    // invitationTtlDays) doesn't null out unrelated columns.
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ logoUrl: 'https://example.com/logo.png', eventName: 'P17/2027' }),
+    });
+
+    // A subsequent partial update that omits invitationTtlDays, logoUrl, and
+    // eventName must not clobber any of them.
     const partialRes = await fetch(`http://localhost:${port}/app-settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({ appTitle: 'Still 5 days' }),
     });
-    assert.equal((await partialRes.json()).invitationTtlDays, 5);
+    const partialBody = await partialRes.json();
+    assert.equal(partialBody.invitationTtlDays, 5);
+    assert.equal(partialBody.appTitle, 'Still 5 days');
+    assert.equal(partialBody.logoUrl, 'https://example.com/logo.png');
+    assert.equal(partialBody.eventName, 'P17/2027');
   });
 });
 

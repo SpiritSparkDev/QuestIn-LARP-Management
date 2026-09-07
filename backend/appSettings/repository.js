@@ -16,7 +16,7 @@ export async function getAppSettings() {
 export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays }) {
   const id = await ensureSettingsRow();
   await query(
-    'UPDATE app_settings SET logo_url = $2, app_title = $3, event_name = $4, quota_mb_per_character = COALESCE($5, quota_mb_per_character), invitation_ttl_days = COALESCE($6, invitation_ttl_days) WHERE id = $1',
+    'UPDATE app_settings SET logo_url = COALESCE($2, logo_url), app_title = COALESCE($3, app_title), event_name = COALESCE($4, event_name), quota_mb_per_character = COALESCE($5, quota_mb_per_character), invitation_ttl_days = COALESCE($6, invitation_ttl_days) WHERE id = $1',
     [id, logoUrl ?? null, appTitle ?? null, eventName ?? null, quotaMbPerCharacter ?? null, invitationTtlDays ?? null]
   );
   return getAppSettings();
