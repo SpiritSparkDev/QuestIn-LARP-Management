@@ -37,7 +37,7 @@ Migration `026_storage_backend.sql`:
 
 ```sql
 CREATE TABLE storage_settings (
-  id boolean PRIMARY KEY DEFAULT true CHECK (id),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   backend text NOT NULL DEFAULT 'local' CHECK (backend IN ('local', 'ftp', 's3')),
   ftp_host text,
   ftp_port integer,
@@ -49,16 +49,17 @@ CREATE TABLE storage_settings (
   s3_region text,
   s3_endpoint text,
   s3_access_key_id text,
-  s3_secret_access_key_enc bytea,
-  updated_at timestamptz NOT NULL DEFAULT now()
+  s3_secret_access_key_enc bytea
 );
 
 ALTER TABLE character_files ADD COLUMN storage_backend text NOT NULL DEFAULT 'local'
   CHECK (storage_backend IN ('local', 'ftp', 's3'));
 ```
 
-Gleiches Single-Row-Muster wie `smtp_settings`/`app_settings`
-(`id boolean PRIMARY KEY DEFAULT true CHECK (id)`). Nur die beiden
+Gleiches Single-Row-Muster wie tatsächlich bei `smtp_settings`/`app_settings`
+umgesetzt (`id uuid PRIMARY KEY DEFAULT gen_random_uuid()` + eine
+`ensureSettingsRow()`-Helper-Funktion, die die einzige Zeile bei Bedarf
+anlegt, statt eines rein-DB-seitig erzwungenen Singletons). Nur die beiden
 Zugangsdaten-Geheimnisse (`ftp_password_enc`, `s3_secret_access_key_enc`)
 werden verschlüsselt (`encryptField`/`decryptField` aus
 `backend/crypto/fieldCrypto.js`) — Host/Port/User/Bucket/Region/Endpoint
