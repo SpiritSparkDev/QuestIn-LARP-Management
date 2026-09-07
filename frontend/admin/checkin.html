@@ -327,21 +327,27 @@ document.getElementById('edit-save').addEventListener('click', async () => {
     otPayload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
   });
   const characterForms = [...editCharacters.querySelectorAll('.checkin-character-form')];
+  let savedAnything = false;
   try {
     if (Object.keys(otPayload).length > 0) {
       await api.patch(`/members/${editingUserId}`, otPayload);
+      savedAnything = true;
     }
     for (const form of characterForms) {
       const data = collectFieldValues(form, currentSchema);
       await api.put(`/characters/${form.dataset.characterId}`, { data });
+      savedAnything = true;
     }
     message.textContent = 'Gespeichert.';
     message.className = 'success';
     editDialog.close();
     await loadParticipants(eventSelect.value);
   } catch (err) {
-    message.textContent = err.message;
+    message.textContent = savedAnything
+      ? `Teilweise gespeichert, dann Fehler: ${err.message}`
+      : err.message;
     message.className = 'error';
+    if (savedAnything) await loadParticipants(eventSelect.value);
   }
 });
 
