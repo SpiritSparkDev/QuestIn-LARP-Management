@@ -35,7 +35,7 @@ async function getTransporterAndFrom() {
   return { transporter, from };
 }
 
-function baseUrl() {
+export function baseUrl() {
   return process.env.APP_BASE_URL || 'http://localhost:3000';
 }
 

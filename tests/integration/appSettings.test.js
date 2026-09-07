@@ -30,7 +30,7 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, hasUploadedLogo: false });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, hasUploadedLogo: false });
   });
 });
 
@@ -49,7 +49,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, hasUploadedLogo: false });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, hasUploadedLogo: false });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
@@ -101,6 +101,58 @@ test('PUT /app-settings validates and saves quotaMbPerCharacter; defaults to 100
     });
     assert.equal(goodRes.status, 200);
     assert.equal((await goodRes.json()).quotaMbPerCharacter, 250);
+  });
+});
+
+test('PUT /app-settings validates and saves invitationTtlDays; defaults to 3', async () => {
+  await withTestServer(async (port) => {
+    const res = await fetch(`http://localhost:${port}/app-settings`);
+    assert.equal((await res.json()).invitationTtlDays, 3);
+
+    const cookie = await makeUserAndSession('admin');
+    const badRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ invitationTtlDays: 0 }),
+    });
+    assert.equal(badRes.status, 400);
+
+    const nonIntRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ invitationTtlDays: 1.5 }),
+    });
+    assert.equal(nonIntRes.status, 400);
+
+    const goodRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ invitationTtlDays: 5 }),
+    });
+    assert.equal(goodRes.status, 200);
+    assert.equal((await goodRes.json()).invitationTtlDays, 5);
+
+    // Set logoUrl/eventName so the next step can prove a partial update
+    // (like the settings.html invitation-TTL card, which only ever sends
+    // invitationTtlDays) doesn't null out unrelated columns.
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ logoUrl: 'https://example.com/logo.png', eventName: 'P17/2027' }),
+    });
+
+    // A subsequent partial update that omits invitationTtlDays, logoUrl, and
+    // eventName must not clobber any of them.
+    const partialRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ appTitle: 'Still 5 days' }),
+    });
+    const partialBody = await partialRes.json();
+    assert.equal(partialBody.invitationTtlDays, 5);
+    assert.equal(partialBody.appTitle, 'Still 5 days');
+    assert.equal(partialBody.logoUrl, 'https://example.com/logo.png');
+    assert.equal(partialBody.eventName, 'P17/2027');
   });
 });
 

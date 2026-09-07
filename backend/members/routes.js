@@ -4,7 +4,8 @@ import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { listMembers, getMember, updateMember } from './repository.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
-import { sendInvitationEmail } from '../auth/mailer.js';
+import { sendInvitationEmail, baseUrl } from '../auth/mailer.js';
+import { getAppSettings } from '../appSettings/repository.js';
 import { logger } from '../logger.js';
 import { query } from '../db.js';
 import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
@@ -60,7 +61,8 @@ const DEFAULT_INVITE_GROUP_KEY = 'sc';
 router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { email, firstName, lastName, nickname, group, eventId, ...rest } = body;
+  const { email, firstName, lastName, nickname, group, eventId, sendEmail, ...rest } = body;
+  const shouldSendEmail = sendEmail !== false;
   if (!email || !firstName || !lastName) {
     return { status: 400, body: { error: 'email, firstName, and lastName are required' } };
   }
@@ -95,6 +97,8 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     if (eventRows.length === 0) return { status: 400, body: { error: 'unknown event' } };
   }
 
+  const { invitationTtlDays } = await getAppSettings();
+
   const invitation = await createInvitation({
     email: email.toLowerCase(),
     firstName,
@@ -116,36 +120,49 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     travelMethod: rest.travelMethod,
     dataSharingOptOut: rest.dataSharingOptOut,
     photoOptOut: rest.photoOptOut,
+    ttlDays: invitationTtlDays,
   });
 
-  let emailSent = true;
-  try {
-    await sendInvitationEmail(invitation.email, invitation.token);
-  } catch (err) {
-    emailSent = false;
-    logger.error('failed to send invitation email', { error: err.message });
+  let emailSent = null;
+  if (shouldSendEmail) {
+    emailSent = true;
+    try {
+      await sendInvitationEmail(invitation.email, invitation.token);
+    } catch (err) {
+      emailSent = false;
+      logger.error('failed to send invitation email', { error: err.message });
+    }
   }
 
-  return { status: 201, body: { id: invitation.id, email: invitation.email, status: 'invited', emailSent } };
+  const link = `${baseUrl()}/set-password.html?token=${invitation.token}`;
+  return { status: 201, body: { id: invitation.id, email: invitation.email, status: 'invited', emailSent, link } };
 })));
 
-router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglieder')(async ({ params }) => {
+router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglieder')(async ({ req, params }) => {
+  const body = (await readJsonBody(req)) ?? {};
+  const shouldSendEmail = body.sendEmail !== false;
+
   const invitation = await getInvitationById(params.id);
   if (!invitation) return { status: 404, body: { error: 'invitation not found' } };
   if (invitation.redeemedAt) return { status: 409, body: { error: 'invitation already redeemed' } };
 
-  const updated = await regenerateToken(params.id);
+  const { invitationTtlDays } = await getAppSettings();
+  const updated = await regenerateToken(params.id, invitationTtlDays);
   if (!updated) {
     return { status: 409, body: { error: 'invitation already redeemed' } };
   }
-  let emailSent = true;
-  try {
-    await sendInvitationEmail(updated.email, updated.token);
-  } catch (err) {
-    emailSent = false;
-    logger.error('failed to resend invitation email', { error: err.message });
+  let emailSent = null;
+  if (shouldSendEmail) {
+    emailSent = true;
+    try {
+      await sendInvitationEmail(updated.email, updated.token);
+    } catch (err) {
+      emailSent = false;
+      logger.error('failed to resend invitation email', { error: err.message });
+    }
   }
-  return { status: 200, body: { id: updated.id, email: updated.email, status: 'invited', emailSent } };
+  const link = `${baseUrl()}/set-password.html?token=${updated.token}`;
+  return { status: 200, body: { id: updated.id, email: updated.email, status: 'invited', emailSent, link } };
 })));
 
 router.post('/members/invitations/:id/cancel', requireAuth(requireMenu('mitglieder')(async ({ params }) => {

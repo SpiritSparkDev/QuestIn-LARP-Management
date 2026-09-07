@@ -418,8 +418,116 @@ test('POST /members/invitations/:id/cancel cancels an open invitation and it dis
   }
 });
 
+test('POST /members/invite with sendEmail: false skips the mail send and returns a link with the token', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const email = `invite-no-email-${crypto.randomUUID()}@example.com`;
+    const res = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email, firstName: 'No', lastName: 'Email', group: 'sc', sendEmail: false }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.emailSent, null);
+    const { rows } = await query('SELECT token FROM invitations WHERE email = $1', [email]);
+    assert.ok(body.link.includes(rows[0].token));
+    assert.ok(body.link.includes('/set-password.html?token='));
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/invite defaults sendEmail to true and still attempts to send', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const email = `invite-default-send-${crypto.randomUUID()}@example.com`;
+    const res = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email, firstName: 'Default', lastName: 'Send', group: 'sc' }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    // No SMTP configured, so mailer.js falls back to nodemailer's
+    // jsonTransport, which always "succeeds" -- emailSent is true (attempted
+    // and succeeded), not null (which would mean "never attempted").
+    assert.equal(body.emailSent, true);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/invitations/:id/resend with sendEmail: false skips the mail send and returns a link', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const email = `resend-no-email-${crypto.randomUUID()}@example.com`;
+    const createRes = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email, firstName: 'Resend', lastName: 'NoEmail', group: 'sc' }),
+    });
+    const created = await createRes.json();
+
+    const resendRes = await fetch(`http://localhost:${port}/members/invitations/${created.id}/resend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ sendEmail: false }),
+    });
+    assert.equal(resendRes.status, 200);
+    const body = await resendRes.json();
+    assert.equal(body.emailSent, null);
+    assert.ok(body.link.includes('/set-password.html?token='));
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/invite uses the configured invitationTtlDays for expires_at, not a hardcoded value', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+
+    // Use a value that differs from both the column default (3, from the
+    // migration) and createInvitation's own fallback default (also 3) --
+    // otherwise this test would pass even if the app-settings wiring were
+    // never hooked up at all.
+    const putRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ invitationTtlDays: 10 }),
+    });
+    assert.equal(putRes.status, 200);
+
+    const email = `invite-ttl-${crypto.randomUUID()}@example.com`;
+    const res = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ email, firstName: 'Ttl', lastName: 'Check', group: 'sc' }),
+    });
+    assert.equal(res.status, 201);
+
+    const { rows } = await query('SELECT expires_at, created_at FROM invitations WHERE email = $1', [email]);
+    const ttlMs = new Date(rows[0].expires_at).getTime() - new Date(rows[0].created_at).getTime();
+    const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
+    // Allow a small margin for test execution time; a hardcoded or
+    // default-only TTL would miss this window entirely.
+    assert.ok(Math.abs(ttlMs - tenDaysMs) < 60_000, `expected ~10 days, got ${ttlMs}ms`);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM invitations");
   await query("DELETE FROM users WHERE email LIKE 'members-%'");
+  await query('DELETE FROM app_settings');
   await closePool();
 });
