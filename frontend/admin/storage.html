@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speicher – Pakyrion Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/everest-registry.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
+  </aside>
+  <div class="main"><div class="content">
+    <h1>Speicher</h1>
+    <p class="sub">Wo hochgeladene Charakter-Dateien gespeichert werden.</p>
+
+    <div class="card form-pad">
+      <form id="storage-form">
+        <label for="backend-select">Backend</label>
+        <select id="backend-select" name="backend">
+          <option value="local">Lokal</option>
+          <option value="ftp">FTP</option>
+          <option value="s3">S3</option>
+        </select>
+
+        <fieldset id="ftp-fields" hidden>
+          <legend>FTP</legend>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div><label for="ftp-host">Host</label><input id="ftp-host" name="ftpHost" type="text"></div>
+            <div><label for="ftp-port">Port</label><input id="ftp-port" name="ftpPort" type="number" placeholder="21"></div>
+            <div><label for="ftp-username">Benutzername</label><input id="ftp-username" name="ftpUsername" type="text"></div>
+            <div><label for="ftp-password">Passwort</label><input id="ftp-password" name="ftpPassword" type="password" placeholder="Leer lassen, um das bestehende Passwort zu behalten"></div>
+            <div><label for="ftp-basedir">Basis-Verzeichnis</label><input id="ftp-basedir" name="ftpBaseDir" type="text" placeholder="/uploads"></div>
+            <div><label for="ftp-secure"><input id="ftp-secure" name="ftpSecure" type="checkbox" checked> FTPS (verschlüsselt)</label></div>
+          </div>
+        </fieldset>
+
+        <fieldset id="s3-fields" hidden>
+          <legend>S3</legend>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div><label for="s3-bucket">Bucket</label><input id="s3-bucket" name="s3Bucket" type="text"></div>
+            <div><label for="s3-region">Region</label><input id="s3-region" name="s3Region" type="text" placeholder="eu-central-1"></div>
+            <div><label for="s3-endpoint">Endpoint (optional, für S3-kompatible Dienste)</label><input id="s3-endpoint" name="s3Endpoint" type="text" placeholder="https://s3.example.com"></div>
+            <div><label for="s3-access-key">Access Key ID</label><input id="s3-access-key" name="s3AccessKeyId" type="text"></div>
+            <div><label for="s3-secret-key">Secret Access Key</label><input id="s3-secret-key" name="s3SecretAccessKey" type="password" placeholder="Leer lassen, um den bestehenden Schlüssel zu behalten"></div>
+          </div>
+        </fieldset>
+
+        <button type="submit">Speichern</button>
+        <button type="button" id="test-connection">Verbindung testen</button>
+      </form>
+    </div>
+
+    <div class="card form-pad">
+      <h2>Speicherverbrauch</h2>
+      <svg id="usage-chart" viewBox="0 0 400 90" width="400" height="90" role="img" aria-label="Speicherverbrauch pro Backend"></svg>
+    </div>
+
+    <div class="card form-pad">
+      <h2>Migration</h2>
+      <p class="sub">Verschiebt alle Dateien, die noch nicht auf dem aktuell aktiven Backend liegen, dorthin.</p>
+      <button type="button" id="migrate-button">Migrieren</button>
+      <span id="migrate-spinner" hidden>Migriere…</span>
+      <p id="migrate-result"></p>
+    </div>
+
+    <p id="message"></p>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+applyBranding();
+import { renderNavLinks } from '/js/nav.js';
+
+const form = document.getElementById('storage-form');
+const message = document.getElementById('message');
+const backendSelect = document.getElementById('backend-select');
+const ftpFields = document.getElementById('ftp-fields');
+const s3Fields = document.getElementById('s3-fields');
+
+function updateVisibleFields() {
+  ftpFields.hidden = backendSelect.value !== 'ftp';
+  s3Fields.hidden = backendSelect.value !== 's3';
+}
+backendSelect.addEventListener('change', updateVisibleFields);
+
+function formToPayload(data) {
+  return {
+    backend: data.backend,
+    ftp: {
+      host: data.ftpHost || null,
+      port: data.ftpPort ? Number(data.ftpPort) : null,
+      username: data.ftpUsername || null,
+      password: data.ftpPassword || undefined,
+      secure: data.ftpSecure === 'on',
+      baseDir: data.ftpBaseDir || null,
+    },
+    s3: {
+      bucket: data.s3Bucket || null,
+      region: data.s3Region || null,
+      endpoint: data.s3Endpoint || null,
+      accessKeyId: data.s3AccessKeyId || null,
+      secretAccessKey: data.s3SecretAccessKey || undefined,
+    },
+  };
+}
+
+async function loadSettings() {
+  const settings = await api.get('/admin/settings/storage');
+  backendSelect.value = settings.backend;
+  form.elements.ftpHost.value = settings.ftp.host ?? '';
+  form.elements.ftpPort.value = settings.ftp.port ?? '';
+  form.elements.ftpUsername.value = settings.ftp.username ?? '';
+  form.elements.ftpPassword.placeholder = settings.ftp.hasPassword
+    ? 'Gesetzt — leer lassen, um es zu behalten'
+    : 'Leer lassen, um das bestehende Passwort zu behalten';
+  form.elements.ftpSecure.checked = settings.ftp.secure;
+  form.elements.ftpBaseDir.value = settings.ftp.baseDir ?? '';
+  form.elements.s3Bucket.value = settings.s3.bucket ?? '';
+  form.elements.s3Region.value = settings.s3.region ?? '';
+  form.elements.s3Endpoint.value = settings.s3.endpoint ?? '';
+  form.elements.s3AccessKeyId.value = settings.s3.accessKeyId ?? '';
+  form.elements.s3SecretAccessKey.placeholder = settings.s3.hasSecretKey
+    ? 'Gesetzt — leer lassen, um ihn zu behalten'
+    : 'Leer lassen, um den bestehenden Schlüssel zu behalten';
+  updateVisibleFields();
+}
+
+function renderUsageChart(usage) {
+  const entries = [['Lokal', usage.local], ['FTP', usage.ftp], ['S3', usage.s3]];
+  const max = Math.max(1, ...entries.map(([, bytes]) => bytes));
+  const svg = document.getElementById('usage-chart');
+  const barHeight = 20;
+  const gap = 10;
+  const chartWidth = 260;
+  svg.innerHTML = entries.map(([label, bytes], i) => {
+    const y = i * (barHeight + gap);
+    const width = Math.max(2, (bytes / max) * chartWidth);
+    const mb = (bytes / (1024 * 1024)).toFixed(1);
+    return `
+      <text x="0" y="${y + barHeight - 5}" font-size="12">${label}</text>
+      <rect x="60" y="${y}" width="${width}" height="${barHeight}" fill="currentColor"></rect>
+      <text x="${60 + chartWidth + 10}" y="${y + barHeight - 5}" font-size="12">${mb} MB</text>
+    `;
+  }).join('');
+}
+
+async function loadUsage() {
+  const usage = await api.get('/admin/settings/storage/usage');
+  renderUsageChart(usage);
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  message.textContent = '';
+  message.className = '';
+  const data = Object.fromEntries(new FormData(form));
+  try {
+    await api.put('/admin/settings/storage', formToPayload(data));
+    message.textContent = 'Gespeichert.';
+    message.className = 'success';
+    form.elements.ftpPassword.value = '';
+    form.elements.s3SecretAccessKey.value = '';
+    await loadSettings();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('test-connection').addEventListener('click', async () => {
+  message.textContent = '';
+  message.className = '';
+  const data = Object.fromEntries(new FormData(form));
+  try {
+    await api.post('/admin/settings/storage/test', formToPayload(data));
+    message.textContent = 'Verbindung erfolgreich.';
+    message.className = 'success';
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
+document.getElementById('migrate-button').addEventListener('click', async () => {
+  const spinner = document.getElementById('migrate-spinner');
+  const result = document.getElementById('migrate-result');
+  result.textContent = '';
+  spinner.hidden = false;
+  try {
+    const { migrated, failed } = await api.post('/admin/settings/storage/migrate', {});
+    result.textContent = failed.length === 0
+      ? `${migrated} Datei(en) migriert.`
+      : `${migrated} Datei(en) migriert, ${failed.length} fehlgeschlagen: ${failed.map((f) => f.error).join('; ')}`;
+    await loadUsage();
+  } catch (err) {
+    result.textContent = err.message;
+  } finally {
+    spinner.hidden = true;
+  }
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  await loadSettings();
+  await loadUsage();
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins.'; message.className = 'error'; }
+}
+</script>
+</body>
+</html>
