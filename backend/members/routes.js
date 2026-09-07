@@ -58,7 +58,7 @@ router.patch('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ req,
 })));
 
 router.post('/members/:id/deactivate', requireAuth(requireMenu('mitglieder')(async ({ params, user }) => {
-  if (params.id === user.id) {
+  if (params.id.toLowerCase() === user.id.toLowerCase()) {
     return { status: 400, body: { error: 'cannot deactivate your own account' } };
   }
   const deactivated = await deactivateMember(params.id);

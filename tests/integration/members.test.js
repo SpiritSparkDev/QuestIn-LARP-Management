@@ -470,6 +470,42 @@ test('POST /members/:id/deactivate rejects deactivating your own account', async
   }
 });
 
+test('POST /members/:id/deactivate rejects an uppercase-cased version of your own id', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { userId: adminId, cookie: adminCookie } = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/members/${adminId.toUpperCase()}/deactivate`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/deactivate is idempotent — a second call does not change the original timestamp', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId } = await makeUserAndSession('sc');
+
+    await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, { method: 'POST', headers: { Cookie: adminCookie } });
+    const firstTimestamp = (await query('SELECT deactivated_at FROM users WHERE id = $1', [targetId])).rows[0].deactivated_at;
+
+    await new Promise((resolve) => setTimeout(resolve, 50)); // ensure now() would differ if it were re-applied
+    const secondRes = await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, { method: 'POST', headers: { Cookie: adminCookie } });
+    assert.equal(secondRes.status, 200);
+    const secondTimestamp = (await query('SELECT deactivated_at FROM users WHERE id = $1', [targetId])).rows[0].deactivated_at;
+
+    assert.equal(new Date(firstTimestamp).getTime(), new Date(secondTimestamp).getTime());
+  } finally {
+    server.close();
+  }
+});
+
 test('POST /members/:id/deactivate returns 404 for an unknown member', async () => {
   const server = createServer().listen(0);
   try {

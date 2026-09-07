@@ -88,7 +88,7 @@ export async function updateMember(id, fields) {
 export async function deactivateMember(id) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      'UPDATE users SET deactivated_at = now() WHERE id = $1 RETURNING id',
+      'UPDATE users SET deactivated_at = COALESCE(deactivated_at, now()) WHERE id = $1 RETURNING id',
       [id]
     );
     if (rows.length === 0) return null;
