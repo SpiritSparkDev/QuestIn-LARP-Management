@@ -70,11 +70,17 @@
           <select id="invite-group" name="group" disabled></select>
         </div>
         <div id="invite-fields"></div>
+        <label for="invite-send-email"><input id="invite-send-email" name="sendEmail" type="checkbox" checked> Per E-Mail versenden</label>
         <button type="submit">Einladung senden</button>
         <button type="button" id="invite-cancel" class="btn-ghost">Abbrechen</button>
       </form>
     </dialog>
     <p id="message"></p>
+    <div id="invite-link-box" style="display:none;">
+      <label for="invite-link-text">Einladungslink</label>
+      <input id="invite-link-text" readonly>
+      <button type="button" id="invite-link-copy">Kopieren</button>
+    </div>
   </div></div>
 </div>
 
@@ -100,6 +106,17 @@ const inviteGroupWrap = document.getElementById('invite-group-wrap');
 const inviteGroupSelect = document.getElementById('invite-group');
 const inviteEventSelect = document.getElementById('invite-event');
 const message = document.getElementById('message');
+const inviteLinkBox = document.getElementById('invite-link-box');
+const inviteLinkText = document.getElementById('invite-link-text');
+
+function showInviteLink(link) {
+  inviteLinkText.value = link;
+  inviteLinkBox.style.display = '';
+}
+
+document.getElementById('invite-link-copy').addEventListener('click', () => {
+  navigator.clipboard.writeText(inviteLinkText.value);
+});
 
 let myAccountFields = [];
 let editingMemberId = null;
@@ -253,13 +270,14 @@ async function resendInvitation(invitationId) {
   message.className = '';
   try {
     const result = await api.post(`/members/invitations/${invitationId}/resend`, {});
-    if (result.emailSent) {
-      message.textContent = 'Einladung erneut verschickt.';
-      message.className = 'success';
-    } else {
+    if (result.emailSent === false) {
       message.textContent = 'Erneuter Versand fehlgeschlagen. Bitte SMTP-Einstellungen prüfen.';
       message.className = 'error';
+    } else {
+      message.textContent = 'Einladung erneut verschickt.';
+      message.className = 'success';
     }
+    showInviteLink(result.link);
     await loadMembers();
   } catch (err) {
     message.textContent = err.message;
@@ -281,7 +299,10 @@ async function cancelInvite(invitationId) {
   }
 }
 
-document.getElementById('invite-open').addEventListener('click', () => inviteDialog.showModal());
+document.getElementById('invite-open').addEventListener('click', () => {
+  inviteLinkBox.style.display = 'none';
+  inviteDialog.showModal();
+});
 document.getElementById('invite-cancel').addEventListener('click', () => inviteDialog.close());
 
 document.getElementById('invite-form').addEventListener('submit', async (event) => {
@@ -291,21 +312,26 @@ document.getElementById('invite-form').addEventListener('submit', async (event) 
   const formData = new FormData(event.target);
   const payload = Object.fromEntries(formData);
   if (!payload.eventId) delete payload.eventId;
+  payload.sendEmail = formData.has('sendEmail');
   inviteFields.querySelectorAll('[data-field]').forEach((input) => {
     payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
   });
   try {
     const result = await api.post('/members/invite', payload);
-    if (result.emailSent) {
-      message.textContent = 'Einladung verschickt.';
-      message.className = 'success';
-    } else {
+    if (result.emailSent === false) {
       message.textContent = 'Einladung erstellt, aber der E-Mail-Versand ist fehlgeschlagen. Bitte SMTP-Einstellungen prüfen oder über "Erneut senden" in der Mitgliederliste erneut versuchen.';
       message.className = 'error';
+    } else if (result.emailSent === null) {
+      message.textContent = 'Einladung erstellt. Link unten kopieren und manuell teilen.';
+      message.className = 'success';
+    } else {
+      message.textContent = 'Einladung verschickt.';
+      message.className = 'success';
     }
     event.target.reset();
     buildFieldInputs(inviteFields);
     inviteDialog.close();
+    showInviteLink(result.link);
     await loadMembers();
   } catch (err) {
     message.textContent = err.message;

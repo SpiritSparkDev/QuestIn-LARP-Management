@@ -63,6 +63,15 @@
       <label for="hotkey-scan">Scan starten (Push-to-See)</label>
       <input id="hotkey-scan" readonly>
     </div>
+    <div class="card form-pad">
+      <h2>Einladungen</h2>
+      <p class="sub">Wie lange ein Einladungslink gültig bleibt, bevor er abläuft.</p>
+      <form id="invitation-form">
+        <label for="invitation-ttl-days">Gültig für (Tage)</label>
+        <input id="invitation-ttl-days" name="invitationTtlDays" type="number" min="1">
+        <button type="submit">Speichern</button>
+      </form>
+    </div>
     <p id="message"></p>
   </div></div>
 </div>
@@ -138,6 +147,27 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
+const invitationForm = document.getElementById('invitation-form');
+
+async function loadInvitationSettings() {
+  const settings = await api.get('/app-settings');
+  invitationForm.elements.invitationTtlDays.value = settings.invitationTtlDays ?? 3;
+}
+
+invitationForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.put('/app-settings', { invitationTtlDays: Number(invitationForm.elements.invitationTtlDays.value) });
+    message.textContent = 'Gespeichert.';
+    message.className = 'success';
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
 document.getElementById('send-test').addEventListener('click', async () => {
   message.textContent = '';
   message.className = '';
@@ -164,6 +194,7 @@ try {
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
   renderHotkeyInputs();
   await loadSettings();
+  await loadInvitationSettings();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
   else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins.'; message.className = 'error'; }
