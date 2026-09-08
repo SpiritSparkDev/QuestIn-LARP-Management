@@ -297,7 +297,7 @@ function openEditDialog(userId) {
   editingUserId = userId;
   document.getElementById('edit-dialog-title').textContent = `Bearbeiten: ${p.name}`;
 
-  const otKeys = Object.keys(p.otFields ?? {});
+  const otKeys = canManageMembers ? Object.keys(p.otFields ?? {}) : [];
   editOtFields.innerHTML = otKeys.length > 0
     ? `<h3>Konto-Felder</h3>` + otKeys.map((key) => renderAccountFieldInput(key, ACCOUNT_FIELD_LABELS[key] ?? key, p.otFields[key])).join('')
     : '';
@@ -347,7 +347,10 @@ document.getElementById('edit-save').addEventListener('click', async () => {
       ? `Teilweise gespeichert, dann Fehler: ${err.message}`
       : err.message;
     message.className = 'error';
-    if (savedAnything) await loadParticipants(eventSelect.value);
+    if (savedAnything) {
+      editDialog.close();
+      await loadParticipants(eventSelect.value);
+    }
   }
 });
 
@@ -402,7 +405,7 @@ function renderActionCell(p) {
   if ((p.status === 'pending' || p.status === 'confirmed') && canOverride) {
     parts.push(`<button type="button" class="btn btn-ghost" data-cancel="${p.userId}">Absagen</button>`);
   }
-  const canEditOt = Object.keys(p.otFields ?? {}).length > 0;
+  const canEditOt = canManageMembers && Object.keys(p.otFields ?? {}).length > 0;
   const canEditCharacters = canOverride && (p.characters ?? []).length > 0;
   if (canEditOt || canEditCharacters) {
     parts.push(`<button type="button" class="btn-ghost" data-edit="${p.userId}">Bearbeiten</button>`);
