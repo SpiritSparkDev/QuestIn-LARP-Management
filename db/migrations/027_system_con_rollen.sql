@@ -5,7 +5,7 @@ ALTER TABLE registrations ADD COLUMN con_role text
 
 UPDATE registrations r SET con_role = sub.mapped
 FROM (
-  SELECT u.id AS user_id, CASE g.key
+  SELECT u.id AS user_id, COALESCE(CASE g.key
     WHEN 'sc' THEN 'sc'
     WHEN 'gsc' THEN 'gsc'
     WHEN 'nsc' THEN 'nsc'
@@ -14,7 +14,7 @@ FROM (
     WHEN 'sl' THEN 'orga'
     WHEN 'hilfs_sl' THEN 'hilfs_orga'
     WHEN 'admin' THEN 'orga'
-  END AS mapped
+  END, 'sc') AS mapped
   FROM users u JOIN groups g ON g.id = u.group_id
 ) sub
 WHERE r.user_id = sub.user_id AND r.con_role IS NULL;

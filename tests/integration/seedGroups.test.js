@@ -58,34 +58,45 @@ test('migration 014 backfills group_id for a user with an existing role value, t
     await query(`ALTER TABLE groups ADD COLUMN character_classes jsonb NOT NULL DEFAULT '[]'`);
   }
 
-  const { rows } = await query(
-    "INSERT INTO users (email, first_name, last_name, role) VALUES ($1, 'Backfill', 'Test', 'checkin_helper') RETURNING id",
-    [`backfill-${crypto.randomUUID()}@example.com`]
-  );
+  // Wrapped in try/finally: if any assertion below throws, the cleanup in
+  // `finally` still runs — otherwise the shared, non-reset test DB is left
+  // with the 7 resurrected legacy groups and a restored character_classes
+  // column, corrupting every other test file's "exactly 3 groups" / "no
+  // character_classes column" assumptions for the rest of the suite run.
+  let userId;
+  try {
+    const { rows } = await query(
+      "INSERT INTO users (email, first_name, last_name, role) VALUES ($1, 'Backfill', 'Test', 'checkin_helper') RETURNING id",
+      [`backfill-${crypto.randomUUID()}@example.com`]
+    );
+    userId = rows[0].id;
 
-  await runMigrations();
+    await runMigrations();
 
-  const { rows: after } = await query(
-    `SELECT groups.key FROM users JOIN groups ON groups.id = users.group_id WHERE users.id = $1`,
-    [rows[0].id]
-  );
-  assert.equal(after[0].key, 'sl');
+    const { rows: after } = await query(
+      `SELECT groups.key FROM users JOIN groups ON groups.id = users.group_id WHERE users.id = $1`,
+      [userId]
+    );
+    assert.equal(after[0].key, 'sl');
 
-  const { rows: roleColumnAfter } = await query(
-    `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role'`
-  );
-  assert.equal(roleColumnAfter.length, 0);
-
-  // Migration 014's INSERT (ON CONFLICT DO NOTHING) just resurrected the 7
-  // legacy groups migration 027 already deleted, since they no longer exist
-  // to conflict on. On a real from-scratch migrate run 014 runs BEFORE 027
-  // deletes them, so this resurrection never happens there — undo it here so
-  // this test doesn't leak state that breaks the "exactly 3 groups" and "no
-  // character_classes column" invariants for every other test file sharing
-  // this DB.
-  await query('DELETE FROM users WHERE id = $1', [rows[0].id]);
-  await query(`DELETE FROM groups WHERE key IN ('orga', 'plot_orga', 'sl', 'hilfs_sl', 'nsc', 'gsc', 'sc')`);
-  await query('ALTER TABLE groups DROP COLUMN character_classes');
+    const { rows: roleColumnAfter } = await query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role'`
+    );
+    assert.equal(roleColumnAfter.length, 0);
+  } finally {
+    // Migration 014's INSERT (ON CONFLICT DO NOTHING) just resurrected the 7
+    // legacy groups migration 027 already deleted, since they no longer exist
+    // to conflict on. On a real from-scratch migrate run 014 runs BEFORE 027
+    // deletes them, so this resurrection never happens there — undo it here so
+    // this test doesn't leak state that breaks the "exactly 3 groups" and "no
+    // character_classes column" invariants for every other test file sharing
+    // this DB.
+    if (userId) {
+      await query('DELETE FROM users WHERE id = $1', [userId]);
+    }
+    await query(`DELETE FROM groups WHERE key IN ('orga', 'plot_orga', 'sl', 'hilfs_sl', 'nsc', 'gsc', 'sc')`);
+    await query('ALTER TABLE groups DROP COLUMN character_classes');
+  }
 });
 
 test('running twice does not duplicate groups or throw', async () => {
