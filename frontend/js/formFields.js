@@ -36,9 +36,9 @@ export function renderAccountFieldInput(key, label, value, { sealedBadge = '' } 
   const escapedLabel = escapeHtml(label);
   if (OPT_OUT_KEYS.includes(key)) {
     const checked = isOptOutYes(value) ? ' checked' : '';
-    return `<label for="field-${key}"><input id="field-${key}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}${sealedBadge}</label>`;
+    return `<div class="${key}-container"><label for="field-${key}"><input id="field-${key}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}${sealedBadge}</label></div>`;
   }
-  return `<label for="field-${key}">${escapedLabel}${sealedBadge}</label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(value ?? '')}">`;
+  return `<div class="${key}-container"><label for="field-${key}">${escapedLabel}${sealedBadge}</label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(value ?? '')}"></div>`;
 }
 
 // Formats a character (IT) custom-field value for display, e.g. as a

@@ -1,434 +1,458 @@
 <!DOCTYPE html>
 <html lang="de">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mitglieder verwalten – Pakyrion Admin</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
-<link rel="stylesheet" href="/css/everest-registry.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mitglieder verwalten – Pakyrion Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/css/everest-registry.css">
 </head>
+
 <body>
-<div class="app">
-  <aside class="sidebar">
-    <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
-    <nav id="nav-links"></nav>
-    <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
-  </aside>
-  <div class="main"><div class="content">
-    <h1>Mitglieder verwalten</h1>
-    <p class="sub">Bearbeite bestehende Mitglieder oder lade neue per E-Mail ein.</p>
-    <button type="button" id="invite-open">Neues Mitglied anlegen</button>
-    <div class="toggle-group toggle-group-sm" style="margin:16px 0 0;">
-      <button type="button" class="toggle-btn active" data-view="active">Aktive Mitglieder</button>
-      <button type="button" class="toggle-btn" data-view="deactivated">Deaktivierte Mitglieder</button>
-    </div>
-    <div class="card" style="margin-top:16px;">
-      <table id="member-list">
-        <thead><tr><th>Name</th><th>E-Mail</th><th>Gruppe</th><th>Status</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      <nav id="nav-links"></nav>
+      <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
+    </aside>
+    <div class="main">
+      <div class="content">
+        <h1>Mitglieder verwalten</h1>
+        <p class="sub">Bearbeite bestehende Mitglieder oder lade neue per E-Mail ein.</p>
+        <button type="button" id="invite-open">Neues Mitglied anlegen</button>
+        <div class="toggle-group toggle-group-sm" style="margin:16px 0 0;">
+          <button type="button" class="toggle-btn active" data-view="active">Aktive Mitglieder</button>
+          <button type="button" class="toggle-btn" data-view="deactivated">Deaktivierte Mitglieder</button>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <table id="member-list">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>E-Mail</th>
+                <th>Gruppe</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
 
-    <dialog id="detail-dialog">
-      <h2 id="detail-title">Mitglied bearbeiten</h2>
-      <div id="detail-group-wrap" style="display:none;">
-        <label for="detail-group">Gruppe</label>
-        <select id="detail-group" name="group"></select>
+        <dialog id="detail-dialog">
+          <h2 id="detail-title">Mitglied bearbeiten</h2>
+          <div id="detail-group-wrap" style="display:none;">
+            <label for="detail-group">Gruppe</label>
+            <select id="detail-group" name="group"></select>
+          </div>
+          <div id="detail-fields"></div>
+          <div id="detail-characters"></div>
+          <button type="button" id="detail-save">Speichern</button>
+          <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
+        </dialog>
+
+        <dialog id="invite-dialog">
+          <h2>Neues Mitglied einladen</h2>
+          <form id="invite-form">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <label for="invite-first-name">Vorname</label>
+                <input id="invite-first-name" name="firstName" type="text" required>
+              </div>
+              <div>
+                <label for="invite-last-name">Nachname</label>
+                <input id="invite-last-name" name="lastName" type="text" required>
+              </div>
+              <div>
+                <label for="invite-nickname">Rufname</label>
+                <input id="invite-nickname" name="nickname" type="text">
+              </div>
+              <div>
+                <label for="invite-email">E-Mail</label>
+                <input id="invite-email" name="email" type="email" required>
+              </div>
+            </div>
+            <div>
+              <label for="invite-event">Veranstaltung (optional)</label>
+              <select id="invite-event" name="eventId">
+                <option value="">– keine –</option>
+              </select>
+            </div>
+            <div id="invite-group-wrap" style="display:none;">
+              <label for="invite-group">Gruppe</label>
+              <select id="invite-group" name="group" disabled></select>
+            </div>
+            <div id="invite-fields"></div>
+            <label for="invite-send-email"><input id="invite-send-email" name="sendEmail" type="checkbox" checked> Per
+              E-Mail versenden</label>
+            <button type="submit">Einladung senden</button>
+            <button type="button" id="invite-cancel" class="btn-ghost">Abbrechen</button>
+          </form>
+        </dialog>
+        <p id="message"></p>
+        <div id="invite-link-box" style="display:none;">
+          <label for="invite-link-text">Einladungslink</label>
+          <input id="invite-link-text" readonly>
+          <button type="button" id="invite-link-copy">Kopieren</button>
+        </div>
       </div>
-      <div id="detail-fields"></div>
-      <div id="detail-characters"></div>
-      <button type="button" id="detail-save">Speichern</button>
-      <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
-    </dialog>
-
-    <dialog id="invite-dialog">
-      <h2>Neues Mitglied einladen</h2>
-      <form id="invite-form">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <label for="invite-first-name">Vorname</label>
-            <input id="invite-first-name" name="firstName" type="text" required>
-          </div>
-          <div>
-            <label for="invite-last-name">Nachname</label>
-            <input id="invite-last-name" name="lastName" type="text" required>
-          </div>
-          <div>
-            <label for="invite-nickname">Rufname</label>
-            <input id="invite-nickname" name="nickname" type="text">
-          </div>
-          <div>
-            <label for="invite-email">E-Mail</label>
-            <input id="invite-email" name="email" type="email" required>
-          </div>
-        </div>
-        <label for="invite-event">Veranstaltung (optional)</label>
-        <select id="invite-event" name="eventId">
-          <option value="">– keine –</option>
-        </select>
-        <div id="invite-group-wrap" style="display:none;">
-          <label for="invite-group">Gruppe</label>
-          <select id="invite-group" name="group" disabled></select>
-        </div>
-        <div id="invite-fields"></div>
-        <label for="invite-send-email"><input id="invite-send-email" name="sendEmail" type="checkbox" checked> Per E-Mail versenden</label>
-        <button type="submit">Einladung senden</button>
-        <button type="button" id="invite-cancel" class="btn-ghost">Abbrechen</button>
-      </form>
-    </dialog>
-    <p id="message"></p>
-    <div id="invite-link-box" style="display:none;">
-      <label for="invite-link-text">Einladungslink</label>
-      <input id="invite-link-text" readonly>
-      <button type="button" id="invite-link-copy">Kopieren</button>
     </div>
-  </div></div>
-</div>
+  </div>
 
-<script type="module">
-import { api } from '/js/api.js';
-import { applyBranding } from '/js/branding.js';
-applyBranding();
-import { escapeHtml, attachBirthdateFormatter, ACCOUNT_FIELD_LABELS, renderEventOptions, renderAccountFieldInput } from '/js/formFields.js';
-import { renderNavLinks } from '/js/nav.js';
+  <script type="module">
+    import { api } from '/js/api.js';
+    import { applyBranding } from '/js/branding.js';
+    applyBranding();
+    import { escapeHtml, attachBirthdateFormatter, ACCOUNT_FIELD_LABELS, renderEventOptions, renderAccountFieldInput } from '/js/formFields.js';
+    import { renderNavLinks } from '/js/nav.js';
 
-const ALL_FIELD_KEYS = Object.keys(ACCOUNT_FIELD_LABELS);
+    const ALL_FIELD_KEYS = Object.keys(ACCOUNT_FIELD_LABELS);
 
-const listBody = document.querySelector('#member-list tbody');
-const detailDialog = document.getElementById('detail-dialog');
-const inviteDialog = document.getElementById('invite-dialog');
-const detailFields = document.getElementById('detail-fields');
-const detailTitle = document.getElementById('detail-title');
-const detailGroupWrap = document.getElementById('detail-group-wrap');
-const detailGroupSelect = document.getElementById('detail-group');
-const detailCharacters = document.getElementById('detail-characters');
-const inviteFields = document.getElementById('invite-fields');
-const inviteGroupWrap = document.getElementById('invite-group-wrap');
-const inviteGroupSelect = document.getElementById('invite-group');
-const inviteEventSelect = document.getElementById('invite-event');
-const message = document.getElementById('message');
-const inviteLinkBox = document.getElementById('invite-link-box');
-const inviteLinkText = document.getElementById('invite-link-text');
+    const listBody = document.querySelector('#member-list tbody');
+    const detailDialog = document.getElementById('detail-dialog');
+    const inviteDialog = document.getElementById('invite-dialog');
+    const detailFields = document.getElementById('detail-fields');
+    const detailTitle = document.getElementById('detail-title');
+    const detailGroupWrap = document.getElementById('detail-group-wrap');
+    const detailGroupSelect = document.getElementById('detail-group');
+    const detailCharacters = document.getElementById('detail-characters');
+    const inviteFields = document.getElementById('invite-fields');
+    const inviteGroupWrap = document.getElementById('invite-group-wrap');
+    const inviteGroupSelect = document.getElementById('invite-group');
+    const inviteEventSelect = document.getElementById('invite-event');
+    const message = document.getElementById('message');
+    const inviteLinkBox = document.getElementById('invite-link-box');
+    const inviteLinkText = document.getElementById('invite-link-text');
 
-function showInviteLink(link) {
-  inviteLinkText.value = link;
-  inviteLinkBox.style.display = '';
-}
+    function showInviteLink(link) {
+      inviteLinkText.value = link;
+      inviteLinkBox.style.display = '';
+    }
 
-document.getElementById('invite-link-copy').addEventListener('click', () => {
-  navigator.clipboard.writeText(inviteLinkText.value);
-});
+    document.getElementById('invite-link-copy').addEventListener('click', () => {
+      navigator.clipboard.writeText(inviteLinkText.value);
+    });
 
-let myAccountFields = [];
-let editingMemberId = null;
-let currentView = 'active';
-let myUserId = null;
+    let myAccountFields = [];
+    let editingMemberId = null;
+    let currentView = 'active';
+    let myUserId = null;
 
-// Invite form: only ever shows/submits fields the caller is permitted to
-// set on a brand-new member.
-function buildFieldInputs(container, values = {}) {
-  container.innerHTML = myAccountFields
-    .filter((key) => key !== 'group')
-    .map((key) => renderAccountFieldInput(key, ACCOUNT_FIELD_LABELS[key] ?? key, values[key]))
-    .join('');
-  const birthdateInput = container.querySelector('[data-field="birthdate"]');
-  if (birthdateInput) attachBirthdateFormatter(birthdateInput);
-}
+    // Invite form: only ever shows/submits fields the caller is permitted to
+    // set on a brand-new member.
+    function buildFieldInputs(container, values = {}) {
+      container.innerHTML = myAccountFields
+        .filter((key) => key !== 'group')
+        .map((key) => renderAccountFieldInput(key, ACCOUNT_FIELD_LABELS[key] ?? key, values[key]))
+        .join('');
+      const birthdateInput = container.querySelector('[data-field="birthdate"]');
+      if (birthdateInput) attachBirthdateFormatter(birthdateInput);
+    }
 
-// Member-detail view: GET /members/:id already returns every field's value
-// regardless of the viewer's own permissions (only PATCH enforces the
-// allowlist), so show every known field — editable when the caller may
-// change it, read-only text otherwise — instead of silently omitting it.
-function buildDetailFieldInputs(container, values = {}) {
-  const nameFieldsHtml = `
-    <label for="field-firstName">Vorname</label>
-    <input id="field-firstName" data-field="firstName" type="text" value="${escapeHtml(values.firstName ?? '')}">
-    <label for="field-lastName">Nachname</label>
-    <input id="field-lastName" data-field="lastName" type="text" value="${escapeHtml(values.lastName ?? '')}">
-    <label for="field-nickname">Rufname</label>
-    <input id="field-nickname" data-field="nickname" type="text" value="${escapeHtml(values.nickname ?? '')}">
+    // Member-detail view: GET /members/:id already returns every field's value
+    // regardless of the viewer's own permissions (only PATCH enforces the
+    // allowlist), so show every known field — editable when the caller may
+    // change it, read-only text otherwise — instead of silently omitting it.
+    function buildDetailFieldInputs(container, values = {}) {
+      const nameFieldsHtml = `
+    <div class="firstName-conainer">
+      <label for="field-firstName">Vorname</label>
+      <input id="field-firstName" data-field="firstName" type="text" value="${escapeHtml(values.firstName ?? '')}">
+    </div>
+    <div class="lastName-container">
+      <label for="field-lastName">Nachname</label>
+      <input id="field-lastName" data-field="lastName" type="text" value="${escapeHtml(values.lastName ?? '')}">
+    </div>
+    <div class="nickname-container">
+      <label for="field-nickname">Rufname</label>
+      <input id="field-nickname" data-field="nickname" type="text" value="${escapeHtml(values.nickname ?? '')}">
+    </div>
   `;
-  container.innerHTML = nameFieldsHtml + ALL_FIELD_KEYS.map((key) => {
-    const label = ACCOUNT_FIELD_LABELS[key] ?? key;
-    if (myAccountFields.includes(key)) {
-      const sealedBadge = ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>';
-      return renderAccountFieldInput(key, label, values[key], { sealedBadge });
+      container.innerHTML = nameFieldsHtml + ALL_FIELD_KEYS.map((key) => {
+        const label = ACCOUNT_FIELD_LABELS[key] ?? key;
+        if (myAccountFields.includes(key)) {
+          const sealedBadge = ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>';
+          return renderAccountFieldInput(key, label, values[key], { sealedBadge });
+        }
+        return `<label>${escapeHtml(label)}</label><p>${escapeHtml(values[key] ?? '–')}</p>`;
+      }).join('');
+      const birthdateInput = container.querySelector('[data-field="birthdate"]');
+      if (birthdateInput) attachBirthdateFormatter(birthdateInput);
     }
-    return `<label>${escapeHtml(label)}</label><p>${escapeHtml(values[key] ?? '–')}</p>`;
-  }).join('');
-  const birthdateInput = container.querySelector('[data-field="birthdate"]');
-  if (birthdateInput) attachBirthdateFormatter(birthdateInput);
-}
 
-async function loadGroupOptions(selectEl) {
-  const groups = await api.get('/groups');
-  selectEl.innerHTML = groups.map((g) => `<option value="${escapeHtml(g.key)}">${escapeHtml(g.name)}</option>`).join('');
-}
+    async function loadGroupOptions(selectEl) {
+      const groups = await api.get('/groups');
+      selectEl.innerHTML = groups.map((g) => `<option value="${escapeHtml(g.key)}">${escapeHtml(g.name)}</option>`).join('');
+    }
 
-async function loadEventOptions(selectEl) {
-  const events = await api.get('/events');
-  selectEl.innerHTML = renderEventOptions(events, '– keine –');
-}
+    async function loadEventOptions(selectEl) {
+      const events = await api.get('/events');
+      selectEl.innerHTML = renderEventOptions(events, '– keine –');
+    }
 
-async function loadMembers() {
-  const members = await api.get(`/members${currentView === 'deactivated' ? '?includeDeactivated=true' : ''}`);
-  const visible = currentView === 'deactivated'
-    ? members.filter((m) => m.status === 'deactivated')
-    : members.filter((m) => m.status !== 'deactivated');
+    async function loadMembers() {
+      const members = await api.get(`/members${currentView === 'deactivated' ? '?includeDeactivated=true' : ''}`);
+      const visible = currentView === 'deactivated'
+        ? members.filter((m) => m.status === 'deactivated')
+        : members.filter((m) => m.status !== 'deactivated');
 
-  listBody.innerHTML = visible.map((m) => {
-    let statusCell;
-    let actionsCell;
-    if (m.status === 'active') {
-      statusCell = `<span class="badge badge-active">Aktiv</span>`;
-      const deactivateBtn = m.id === myUserId
-        ? ''
-        : `<button type="button" class="btn-sm btn-ghost" data-deactivate="${m.id}">Deaktivieren</button>`;
-      actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn}`;
-    } else if (m.status === 'deactivated') {
-      statusCell = `<span class="badge badge-inactive">Deaktiviert</span>`;
-      actionsCell = `<button type="button" class="btn-sm btn-ghost" data-reactivate="${m.id}">Reaktivieren</button>`;
-    } else {
-      statusCell = `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`;
-      actionsCell = `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>
+      listBody.innerHTML = visible.map((m) => {
+        let statusCell;
+        let actionsCell;
+        if (m.status === 'active') {
+          statusCell = `<span class="badge badge-active">Aktiv</span>`;
+          const deactivateBtn = m.id === myUserId
+            ? ''
+            : `<button type="button" class="btn-sm btn-ghost" data-deactivate="${m.id}">Deaktivieren</button>`;
+          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn}`;
+        } else if (m.status === 'deactivated') {
+          statusCell = `<span class="badge badge-inactive">Deaktiviert</span>`;
+          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-reactivate="${m.id}">Reaktivieren</button>`;
+        } else {
+          statusCell = `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`;
+          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>
          <button type="button" class="btn-sm btn-ghost" data-cancel-invite="${m.id}">Absagen</button>`;
-    }
-    return `<tr>
+        }
+        return `<tr>
     <td>${escapeHtml(m.name)}</td>
     <td>${escapeHtml(m.email)}</td>
     <td>${escapeHtml(m.group?.name ?? '–')}</td>
     <td>${statusCell}</td>
     <td>${actionsCell}</td>
   </tr>`;
-  }).join('');
+      }).join('');
 
-  listBody.querySelectorAll('[data-edit]').forEach((button) => {
-    button.addEventListener('click', () => openDetail(button.dataset.edit));
-  });
-  listBody.querySelectorAll('[data-resend]').forEach((button) => {
-    button.addEventListener('click', () => resendInvitation(button.dataset.resend));
-  });
-  listBody.querySelectorAll('[data-cancel-invite]').forEach((button) => {
-    button.addEventListener('click', () => cancelInvite(button.dataset.cancelInvite));
-  });
-  listBody.querySelectorAll('[data-deactivate]').forEach((button) => {
-    button.addEventListener('click', () => deactivateMemberRow(button.dataset.deactivate));
-  });
-  listBody.querySelectorAll('[data-reactivate]').forEach((button) => {
-    button.addEventListener('click', () => reactivateMemberRow(button.dataset.reactivate));
-  });
-}
+      listBody.querySelectorAll('[data-edit]').forEach((button) => {
+        button.addEventListener('click', () => openDetail(button.dataset.edit));
+      });
+      listBody.querySelectorAll('[data-resend]').forEach((button) => {
+        button.addEventListener('click', () => resendInvitation(button.dataset.resend));
+      });
+      listBody.querySelectorAll('[data-cancel-invite]').forEach((button) => {
+        button.addEventListener('click', () => cancelInvite(button.dataset.cancelInvite));
+      });
+      listBody.querySelectorAll('[data-deactivate]').forEach((button) => {
+        button.addEventListener('click', () => deactivateMemberRow(button.dataset.deactivate));
+      });
+      listBody.querySelectorAll('[data-reactivate]').forEach((button) => {
+        button.addEventListener('click', () => reactivateMemberRow(button.dataset.reactivate));
+      });
+    }
 
-async function openDetail(memberId) {
-  const member = await api.get(`/members/${memberId}`);
-  editingMemberId = memberId;
-  detailTitle.textContent = `Mitglied bearbeiten: ${member.name}`;
-  buildDetailFieldInputs(detailFields, member);
+    async function openDetail(memberId) {
+      const member = await api.get(`/members/${memberId}`);
+      editingMemberId = memberId;
+      detailTitle.textContent = `Mitglied bearbeiten: ${member.name}`;
+      buildDetailFieldInputs(detailFields, member);
 
-  const charList = (member.characters ?? []).map((c) => `<li>${escapeHtml(c.name)} (${escapeHtml(c.eventName)})</li>`).join('');
-  detailCharacters.innerHTML = member.characters?.length
-    ? `<h3>Charaktere</h3><ul>${charList}</ul>`
-    : '';
+      const charList = (member.characters ?? []).map((c) => `<li>${escapeHtml(c.name)} (${escapeHtml(c.eventName)})</li>`).join('');
+      detailCharacters.innerHTML = member.characters?.length
+        ? `<h3>Charaktere</h3><ul>${charList}</ul>`
+        : '';
 
-  if (myAccountFields.includes('group')) {
-    detailGroupWrap.style.display = '';
+      if (myAccountFields.includes('group')) {
+        detailGroupWrap.style.display = '';
+        try {
+          await loadGroupOptions(detailGroupSelect);
+          detailGroupSelect.value = member.group.key;
+        } catch (err) {
+          // Same reasoning as the invite form's group selector: a non-admin
+          // group with 'group' access can't reach the admin-only /groups
+          // endpoint, so the select just stays empty in that case.
+        }
+      } else {
+        detailGroupWrap.style.display = 'none';
+      }
+
+      detailDialog.showModal();
+    }
+
+    document.getElementById('detail-cancel').addEventListener('click', () => {
+      editingMemberId = null;
+      detailDialog.close();
+    });
+
+    document.getElementById('detail-save').addEventListener('click', async () => {
+      message.textContent = '';
+      message.className = '';
+      const payload = {};
+      detailFields.querySelectorAll('[data-field]').forEach((input) => {
+        payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+      });
+      if (myAccountFields.includes('group') && detailGroupSelect.value) {
+        payload.group = detailGroupSelect.value;
+      }
+      try {
+        await api.patch(`/members/${editingMemberId}`, payload);
+        message.textContent = 'Gespeichert.';
+        message.className = 'success';
+        detailDialog.close();
+        await loadMembers();
+      } catch (err) {
+        message.textContent = err.message;
+        message.className = 'error';
+      }
+    });
+
+    async function resendInvitation(invitationId) {
+      message.textContent = '';
+      message.className = '';
+      try {
+        const result = await api.post(`/members/invitations/${invitationId}/resend`, {});
+        if (result.emailSent === false) {
+          message.textContent = 'Erneuter Versand fehlgeschlagen. Bitte SMTP-Einstellungen prüfen.';
+          message.className = 'error';
+        } else {
+          message.textContent = 'Einladung erneut verschickt.';
+          message.className = 'success';
+        }
+        showInviteLink(result.link);
+        await loadMembers();
+      } catch (err) {
+        message.textContent = err.message;
+        message.className = 'error';
+      }
+    }
+
+    async function cancelInvite(invitationId) {
+      message.textContent = '';
+      message.className = '';
+      try {
+        await api.post(`/members/invitations/${invitationId}/cancel`, {});
+        message.textContent = 'Einladung abgesagt.';
+        message.className = 'success';
+        await loadMembers();
+      } catch (err) {
+        message.textContent = err.message;
+        message.className = 'error';
+      }
+    }
+
+    async function deactivateMemberRow(id) {
+      if (!confirm('Mitglied wirklich deaktivieren? Der Login wird gesperrt und alle aktiven Sitzungen werden sofort beendet.')) return;
+      message.textContent = '';
+      message.className = '';
+      try {
+        await api.post(`/members/${id}/deactivate`, {});
+        message.textContent = 'Mitglied deaktiviert.';
+        message.className = 'success';
+        await loadMembers();
+      } catch (err) {
+        message.textContent = err.message;
+        message.className = 'error';
+      }
+    }
+
+    async function reactivateMemberRow(id) {
+      message.textContent = '';
+      message.className = '';
+      try {
+        await api.post(`/members/${id}/reactivate`, {});
+        message.textContent = 'Mitglied reaktiviert.';
+        message.className = 'success';
+        await loadMembers();
+      } catch (err) {
+        message.textContent = err.message;
+        message.className = 'error';
+      }
+    }
+
+    document.querySelectorAll('[data-view]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (currentView === btn.dataset.view) return;
+        currentView = btn.dataset.view;
+        document.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('active', b === btn));
+        loadMembers();
+      });
+    });
+
+    document.getElementById('invite-open').addEventListener('click', () => {
+      inviteLinkBox.style.display = 'none';
+      inviteDialog.showModal();
+    });
+    document.getElementById('invite-cancel').addEventListener('click', () => inviteDialog.close());
+
+    document.getElementById('invite-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      message.textContent = '';
+      message.className = '';
+      const formData = new FormData(event.target);
+      const payload = Object.fromEntries(formData);
+      if (!payload.eventId) delete payload.eventId;
+      payload.sendEmail = formData.has('sendEmail');
+      inviteFields.querySelectorAll('[data-field]').forEach((input) => {
+        payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+      });
+      try {
+        const result = await api.post('/members/invite', payload);
+        if (result.emailSent === false) {
+          message.textContent = 'Einladung erstellt, aber der E-Mail-Versand ist fehlgeschlagen. Bitte SMTP-Einstellungen prüfen oder über "Erneut senden" in der Mitgliederliste erneut versuchen.';
+          message.className = 'error';
+        } else if (result.emailSent === null) {
+          message.textContent = 'Einladung erstellt. Link unten kopieren und manuell teilen.';
+          message.className = 'success';
+        } else {
+          message.textContent = 'Einladung verschickt.';
+          message.className = 'success';
+        }
+        event.target.reset();
+        buildFieldInputs(inviteFields);
+        inviteDialog.close();
+        showInviteLink(result.link);
+        await loadMembers();
+      } catch (err) {
+        message.textContent = err.message;
+        message.className = 'error';
+      }
+    });
+
+    document.getElementById('logout-link').addEventListener('click', async (evt) => {
+      evt.preventDefault();
+      await api.post('/auth/logout', {});
+      window.location.href = '/login.html';
+    });
+
     try {
-      await loadGroupOptions(detailGroupSelect);
-      detailGroupSelect.value = member.group.key;
+      const account = await api.get('/account');
+      document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+      myAccountFields = account.accountFields ?? [];
+      myUserId = account.id;
+      buildFieldInputs(inviteFields);
+      await loadEventOptions(inviteEventSelect);
+      // The group select is only shown (and thus only ever sent) if the
+      // viewer's own group is actually permitted to set it — matching the
+      // backend's exact rule for POST /members/invite (a group without
+      // 'group' in its account_fields must not hand out a higher group to a
+      // brand-new invitee; omitting the field there defaults new invitees to
+      // 'sc' server-side).
+      if (myAccountFields.includes('group')) {
+        inviteGroupWrap.style.display = '';
+        inviteGroupSelect.disabled = false;
+        try {
+          await loadGroupOptions(inviteGroupSelect);
+        } catch (err) {
+          // Non-admin groups with 'group' access can't list groups (admin-only
+          // endpoint) — the invite form's group selector just stays empty in
+          // that case; this must not block the rest of the page.
+        }
+      }
+      // Left disabled (its default state in the markup above) when the viewer
+      // lacks 'group' permission — a disabled <select> is excluded from
+      // FormData entirely, so the field is genuinely omitted from the submit
+      // payload rather than sent as an empty string, letting the backend's
+      // default-to-'sc' path apply cleanly.
+      await loadMembers();
     } catch (err) {
-      // Same reasoning as the invite form's group selector: a non-admin
-      // group with 'group' access can't reach the admin-only /groups
-      // endpoint, so the select just stays empty in that case.
+      if (err.status === 401) window.location.href = '/login.html';
+      else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Orga.'; message.className = 'error'; }
     }
-  } else {
-    detailGroupWrap.style.display = 'none';
-  }
-
-  detailDialog.showModal();
-}
-
-document.getElementById('detail-cancel').addEventListener('click', () => {
-  editingMemberId = null;
-  detailDialog.close();
-});
-
-document.getElementById('detail-save').addEventListener('click', async () => {
-  message.textContent = '';
-  message.className = '';
-  const payload = {};
-  detailFields.querySelectorAll('[data-field]').forEach((input) => {
-    payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
-  });
-  if (myAccountFields.includes('group') && detailGroupSelect.value) {
-    payload.group = detailGroupSelect.value;
-  }
-  try {
-    await api.patch(`/members/${editingMemberId}`, payload);
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
-    detailDialog.close();
-    await loadMembers();
-  } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
-  }
-});
-
-async function resendInvitation(invitationId) {
-  message.textContent = '';
-  message.className = '';
-  try {
-    const result = await api.post(`/members/invitations/${invitationId}/resend`, {});
-    if (result.emailSent === false) {
-      message.textContent = 'Erneuter Versand fehlgeschlagen. Bitte SMTP-Einstellungen prüfen.';
-      message.className = 'error';
-    } else {
-      message.textContent = 'Einladung erneut verschickt.';
-      message.className = 'success';
-    }
-    showInviteLink(result.link);
-    await loadMembers();
-  } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
-  }
-}
-
-async function cancelInvite(invitationId) {
-  message.textContent = '';
-  message.className = '';
-  try {
-    await api.post(`/members/invitations/${invitationId}/cancel`, {});
-    message.textContent = 'Einladung abgesagt.';
-    message.className = 'success';
-    await loadMembers();
-  } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
-  }
-}
-
-async function deactivateMemberRow(id) {
-  if (!confirm('Mitglied wirklich deaktivieren? Der Login wird gesperrt und alle aktiven Sitzungen werden sofort beendet.')) return;
-  message.textContent = '';
-  message.className = '';
-  try {
-    await api.post(`/members/${id}/deactivate`, {});
-    message.textContent = 'Mitglied deaktiviert.';
-    message.className = 'success';
-    await loadMembers();
-  } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
-  }
-}
-
-async function reactivateMemberRow(id) {
-  message.textContent = '';
-  message.className = '';
-  try {
-    await api.post(`/members/${id}/reactivate`, {});
-    message.textContent = 'Mitglied reaktiviert.';
-    message.className = 'success';
-    await loadMembers();
-  } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
-  }
-}
-
-document.querySelectorAll('[data-view]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    if (currentView === btn.dataset.view) return;
-    currentView = btn.dataset.view;
-    document.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('active', b === btn));
-    loadMembers();
-  });
-});
-
-document.getElementById('invite-open').addEventListener('click', () => {
-  inviteLinkBox.style.display = 'none';
-  inviteDialog.showModal();
-});
-document.getElementById('invite-cancel').addEventListener('click', () => inviteDialog.close());
-
-document.getElementById('invite-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  message.textContent = '';
-  message.className = '';
-  const formData = new FormData(event.target);
-  const payload = Object.fromEntries(formData);
-  if (!payload.eventId) delete payload.eventId;
-  payload.sendEmail = formData.has('sendEmail');
-  inviteFields.querySelectorAll('[data-field]').forEach((input) => {
-    payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
-  });
-  try {
-    const result = await api.post('/members/invite', payload);
-    if (result.emailSent === false) {
-      message.textContent = 'Einladung erstellt, aber der E-Mail-Versand ist fehlgeschlagen. Bitte SMTP-Einstellungen prüfen oder über "Erneut senden" in der Mitgliederliste erneut versuchen.';
-      message.className = 'error';
-    } else if (result.emailSent === null) {
-      message.textContent = 'Einladung erstellt. Link unten kopieren und manuell teilen.';
-      message.className = 'success';
-    } else {
-      message.textContent = 'Einladung verschickt.';
-      message.className = 'success';
-    }
-    event.target.reset();
-    buildFieldInputs(inviteFields);
-    inviteDialog.close();
-    showInviteLink(result.link);
-    await loadMembers();
-  } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
-  }
-});
-
-document.getElementById('logout-link').addEventListener('click', async (evt) => {
-  evt.preventDefault();
-  await api.post('/auth/logout', {});
-  window.location.href = '/login.html';
-});
-
-try {
-  const account = await api.get('/account');
-  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
-  myAccountFields = account.accountFields ?? [];
-  myUserId = account.id;
-  buildFieldInputs(inviteFields);
-  await loadEventOptions(inviteEventSelect);
-  // The group select is only shown (and thus only ever sent) if the
-  // viewer's own group is actually permitted to set it — matching the
-  // backend's exact rule for POST /members/invite (a group without
-  // 'group' in its account_fields must not hand out a higher group to a
-  // brand-new invitee; omitting the field there defaults new invitees to
-  // 'sc' server-side).
-  if (myAccountFields.includes('group')) {
-    inviteGroupWrap.style.display = '';
-    inviteGroupSelect.disabled = false;
-    try {
-      await loadGroupOptions(inviteGroupSelect);
-    } catch (err) {
-      // Non-admin groups with 'group' access can't list groups (admin-only
-      // endpoint) — the invite form's group selector just stays empty in
-      // that case; this must not block the rest of the page.
-    }
-  }
-  // Left disabled (its default state in the markup above) when the viewer
-  // lacks 'group' permission — a disabled <select> is excluded from
-  // FormData entirely, so the field is genuinely omitted from the submit
-  // payload rather than sent as an empty string, letting the backend's
-  // default-to-'sc' path apply cleanly.
-  await loadMembers();
-} catch (err) {
-  if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Orga.'; message.className = 'error'; }
-}
-</script>
+  </script>
 </body>
+
 </html>
