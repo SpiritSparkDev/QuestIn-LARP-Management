@@ -63,12 +63,6 @@
           <label><input type="checkbox" value="group"> Gruppe</label>
         </div>
 
-        <h3>Darf Charakter-Klassen anlegen</h3>
-        <div class="checkbox-group" id="class-checkboxes">
-          <label><input type="checkbox" value="sc" checked> SC (inkl. GSC)</label>
-          <label><input type="checkbox" value="nsc"> NSC</label>
-        </div>
-
         <div class="checkbox-group">
           <label><input type="checkbox" id="can-override-checkin-status"> Darf Check-In-Status frei setzen und alle Charakterfelder sehen (Admin/Orga/SL-Funktion)</label>
         </div>
@@ -144,7 +138,6 @@ function startEdit(group) {
   keyInput.disabled = true;
   setCheckedValues('menu-checkboxes', group.visible_menus);
   setCheckedValues('field-checkboxes', group.account_fields);
-  setCheckedValues('class-checkboxes', group.character_classes);
   document.getElementById('can-edit-characters').checked = group.can_edit_characters;
   document.getElementById('can-override-checkin-status').checked = group.can_override_checkin_status;
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
@@ -178,7 +171,6 @@ form.addEventListener('submit', async (event) => {
     name: nameInput.value,
     visibleMenus: getCheckedValues('menu-checkboxes'),
     accountFields: getCheckedValues('field-checkboxes'),
-    characterClasses: getCheckedValues('class-checkboxes'),
     canEditCharacters: document.getElementById('can-edit-characters').checked,
     canOverrideCheckinStatus: document.getElementById('can-override-checkin-status').checked,
   };

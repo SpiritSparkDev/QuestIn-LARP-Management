@@ -28,7 +28,16 @@
       <tbody></tbody>
     </table>
     <p>
-      <button type="button" id="register-button">Für ausgewähltes Event anmelden</button>
+      <label for="register-con-role">Rolle</label>
+      <select id="register-con-role">
+        <option value="sc">SC</option>
+        <option value="nsc">NSC</option>
+        <option value="gsc">GSC</option>
+        <option value="helfer">Helfer</option>
+        <option value="orga" data-staff-only>Orga</option>
+        <option value="hilfs_orga" data-staff-only>Hilfs-Orga</option>
+      </select>
+      <button type="button" id="register-button">Anmelden</button>
     </p>
     <p id="registration-message"></p>
     <h2>Meine Charaktere</h2>
@@ -101,6 +110,7 @@ let events = [];
 let characters = [];
 let editingCharacterId = null;
 let canEditCharacters = false;
+let isModeratorOrAdmin = false;
 
 const registrationListBody = document.querySelector('#registration-list tbody');
 const registrationMessage = document.getElementById('registration-message');
@@ -133,13 +143,23 @@ async function unregister(eventId) {
   }
 }
 
-document.getElementById('register-button').addEventListener('click', async () => {
+const registerButton = document.getElementById('register-button');
+const registerConRoleSelect = document.getElementById('register-con-role');
+
+function updateRegisterButtonLabel() {
+  const event = events.find((e) => e.id === eventSelect.value);
+  registerButton.textContent = event ? `Anmelden für ${event.name}` : 'Anmelden';
+}
+
+eventSelect.addEventListener('change', updateRegisterButtonLabel);
+
+registerButton.addEventListener('click', async () => {
   registrationMessage.textContent = '';
   registrationMessage.className = '';
   const eventId = eventSelect.value;
   if (!eventId) return;
   try {
-    await api.post(`/events/${eventId}/register`);
+    await api.post(`/events/${eventId}/register`, { conRole: registerConRoleSelect.value });
     registrationMessage.textContent = 'Angemeldet.';
     registrationMessage.className = 'success';
     await loadRegistrations();
@@ -172,6 +192,7 @@ function populateEventOptions() {
   } else {
     dynamicFields.innerHTML = '';
   }
+  updateRegisterButtonLabel();
 }
 
 async function loadEvents() {
@@ -491,13 +512,13 @@ try {
   const account = await api.get('/account');
   canEditCharacters = account.canEditCharacters;
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
-  if (account.characterClasses?.includes('sc')) {
-    scFormSection.style.display = '';
-  }
-  if (account.characterClasses?.includes('nsc')) {
-    nscSchema = await api.get('/nsc-schema');
-    nscSection.style.display = '';
-    renderNscSchemaFields();
+  scFormSection.style.display = '';
+  nscSchema = await api.get('/nsc-schema');
+  nscSection.style.display = '';
+  renderNscSchemaFields();
+  isModeratorOrAdmin = account.group?.key === 'admin' || account.group?.key === 'moderator';
+  if (!isModeratorOrAdmin) {
+    document.querySelectorAll('#register-con-role option[data-staff-only]').forEach((opt) => opt.remove());
   }
   await loadEvents();
   await loadCharacters();

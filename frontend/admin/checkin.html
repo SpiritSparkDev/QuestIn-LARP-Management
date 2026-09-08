@@ -97,6 +97,7 @@ const statTotal = document.getElementById('stat-total');
 const statCheckedIn = document.getElementById('stat-checked-in');
 
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
+const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', gsc: 'GSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga' };
 let currentSearch = '';
 let canOverride = false;
 let canManageMembers = false;
@@ -150,7 +151,7 @@ function renderTableHead() {
   const itLabels = selectedColumns.it.map((key) => currentSchema.find((f) => f.key === key)?.label ?? key);
   const otLabels = selectedColumns.ot.map((key) => ACCOUNT_FIELD_LABELS[key] ?? key);
   const extraTh = [...itLabels, ...otLabels].map((label) => `<th>${escapeHtml(label)}</th>`).join('');
-  tableHeadRow.innerHTML = `<th>Name</th><th>Charaktere</th>${extraTh}<th>Status</th><th></th><th>Override</th>`;
+  tableHeadRow.innerHTML = `<th>Name</th><th>Charaktere</th><th>Rolle</th>${extraTh}<th>Status</th><th></th><th>Override</th>`;
 }
 
 function renderExtraCells(p) {
@@ -387,6 +388,15 @@ function renderOverrideCell(p) {
   return `<select data-override="${escapeHtml(p.userId)}" data-prev-status="${escapeHtml(p.status)}" aria-label="Status-Override">${options}</select>`;
 }
 
+function renderConRoleCell(p) {
+  const label = CON_ROLE_LABELS[p.conRole] ?? p.conRole ?? '–';
+  if (!canOverride || !p.userId || !['helfer', 'orga', 'hilfs_orga'].includes(p.conRole)) {
+    return escapeHtml(label);
+  }
+  const options = ['helfer', 'hilfs_orga', 'orga'].map((r) => `<option value="${r}" ${r === p.conRole ? 'selected' : ''}>${CON_ROLE_LABELS[r]}</option>`).join('');
+  return `<select data-con-role="${escapeHtml(p.userId)}" aria-label="Rolle ändern">${options}</select>`;
+}
+
 searchInput.addEventListener('input', () => {
   currentSearch = searchInput.value;
   applySearchFilter();
@@ -419,6 +429,7 @@ async function loadParticipants(eventId) {
   listBody.innerHTML = participants.map((p) => `<tr>
     <td>${escapeHtml(p.name)}</td>
     <td>${escapeHtml(p.characters.map((c) => c.name).join(', '))}</td>
+    <td>${renderConRoleCell(p)}</td>
     ${renderExtraCells(p)}
     <td><span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span></td>
     <td>${renderActionCell(p)}</td>
@@ -445,6 +456,9 @@ async function loadParticipants(eventId) {
   });
   listBody.querySelectorAll('[data-override]').forEach((select) => {
     select.addEventListener('change', () => overrideStatus(eventId, select.dataset.override, select.value, select.dataset.prevStatus));
+  });
+  listBody.querySelectorAll('[data-con-role]').forEach((select) => {
+    select.addEventListener('change', () => promoteConRole(eventId, select.dataset.conRole, select.value));
   });
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => openEditDialog(button.dataset.edit));
@@ -493,6 +507,19 @@ async function overrideStatus(eventId, userId, newStatus, previousStatus) {
   message.className = '';
   try {
     await api.put(`/events/${eventId}/checkin/${userId}`, { status: newStatus, previousStatus });
+    await loadParticipants(eventId);
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+    await loadParticipants(eventId);
+  }
+}
+
+async function promoteConRole(eventId, userId, conRole) {
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.put(`/events/${eventId}/registrations/${userId}/con-role`, { conRole });
     await loadParticipants(eventId);
   } catch (err) {
     message.textContent = err.message;
