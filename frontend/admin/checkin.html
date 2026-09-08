@@ -47,6 +47,13 @@
       <button type="button" id="scan-confirm">Einchecken</button>
       <button type="button" id="scan-cancel">Abbrechen</button>
     </dialog>
+    <dialog id="edit-dialog">
+      <h2 id="edit-dialog-title">Teilnehmer bearbeiten</h2>
+      <div id="edit-ot-fields"></div>
+      <div id="edit-characters"></div>
+      <button type="button" id="edit-save">Speichern</button>
+      <button type="button" id="edit-cancel" class="btn-ghost">Schließen</button>
+    </dialog>
     <details id="column-settings" class="card form-pad">
       <summary>Spalten</summary>
       <div>
@@ -75,7 +82,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS, STATUS_LABELS, renderEventOptions } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, renderField, collectFieldValues } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 import { parseScanCode } from '/js/qrCode.js';
 
@@ -97,6 +104,7 @@ let events = [];
 let myAccountFields = [];
 let currentSchema = [];
 let selectedColumns = { it: [], ot: [] };
+let participantsById = new Map();
 const STATUS_ORDER = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
 
 function loadSelectedColumns(eventId) {
@@ -278,6 +286,74 @@ document.getElementById('scan-cancel').addEventListener('click', () => {
   scanDialog.close();
 });
 
+const editDialog = document.getElementById('edit-dialog');
+const editOtFields = document.getElementById('edit-ot-fields');
+const editCharacters = document.getElementById('edit-characters');
+let editingUserId = null;
+
+function openEditDialog(userId) {
+  const p = participantsById.get(userId);
+  if (!p) return;
+  editingUserId = userId;
+  document.getElementById('edit-dialog-title').textContent = `Bearbeiten: ${p.name}`;
+
+  const otKeys = canManageMembers ? Object.keys(p.otFields ?? {}) : [];
+  editOtFields.innerHTML = otKeys.length > 0
+    ? `<h3>Konto-Felder</h3>` + otKeys.map((key) => renderAccountFieldInput(key, ACCOUNT_FIELD_LABELS[key] ?? key, p.otFields[key])).join('')
+    : '';
+
+  editCharacters.innerHTML = canOverride
+    ? (p.characters ?? []).map((c) => `
+      <form class="checkin-character-form" data-character-id="${escapeHtml(c.id)}">
+        <h3>${escapeHtml(c.name)}</h3>
+        ${currentSchema.map((field) => renderField(field, c.data?.[field.key], `char-${c.id}-`)).join('')}
+      </form>
+    `).join('')
+    : '';
+
+  editDialog.showModal();
+}
+
+document.getElementById('edit-cancel').addEventListener('click', () => {
+  editingUserId = null;
+  editDialog.close();
+});
+
+document.getElementById('edit-save').addEventListener('click', async () => {
+  message.textContent = '';
+  message.className = '';
+  const otPayload = {};
+  editOtFields.querySelectorAll('[data-field]').forEach((input) => {
+    otPayload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+  });
+  const characterForms = [...editCharacters.querySelectorAll('.checkin-character-form')];
+  let savedAnything = false;
+  try {
+    if (Object.keys(otPayload).length > 0) {
+      await api.patch(`/members/${editingUserId}`, otPayload);
+      savedAnything = true;
+    }
+    for (const form of characterForms) {
+      const data = collectFieldValues(form, currentSchema);
+      await api.put(`/characters/${form.dataset.characterId}`, { data });
+      savedAnything = true;
+    }
+    message.textContent = 'Gespeichert.';
+    message.className = 'success';
+    editDialog.close();
+    await loadParticipants(eventSelect.value);
+  } catch (err) {
+    message.textContent = savedAnything
+      ? `Teilweise gespeichert, dann Fehler: ${err.message}`
+      : err.message;
+    message.className = 'error';
+    if (savedAnything) {
+      editDialog.close();
+      await loadParticipants(eventSelect.value);
+    }
+  }
+});
+
 function setScanMode(mode) {
   localStorage.setItem('qrScanMode', mode);
   scanModeButtons.forEach((button) => button.classList.toggle('active', button.dataset.mode === mode));
@@ -329,11 +405,17 @@ function renderActionCell(p) {
   if ((p.status === 'pending' || p.status === 'confirmed') && canOverride) {
     parts.push(`<button type="button" class="btn btn-ghost" data-cancel="${p.userId}">Absagen</button>`);
   }
+  const canEditOt = canManageMembers && Object.keys(p.otFields ?? {}).length > 0;
+  const canEditCharacters = canOverride && (p.characters ?? []).length > 0;
+  if (canEditOt || canEditCharacters) {
+    parts.push(`<button type="button" class="btn-ghost" data-edit="${p.userId}">Bearbeiten</button>`);
+  }
   return parts.join(' ');
 }
 
 async function loadParticipants(eventId) {
   const participants = await api.get(`/events/${eventId}/participants`);
+  participantsById = new Map(participants.map((p) => [p.userId, p]));
   listBody.innerHTML = participants.map((p) => `<tr>
     <td>${escapeHtml(p.name)}</td>
     <td>${escapeHtml(p.characters.map((c) => c.name).join(', '))}</td>
@@ -363,6 +445,9 @@ async function loadParticipants(eventId) {
   });
   listBody.querySelectorAll('[data-override]').forEach((select) => {
     select.addEventListener('change', () => overrideStatus(eventId, select.dataset.override, select.value, select.dataset.prevStatus));
+  });
+  listBody.querySelectorAll('[data-edit]').forEach((button) => {
+    button.addEventListener('click', () => openEditDialog(button.dataset.edit));
   });
 
   applySearchFilter();

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeHtml, renderField, collectFieldValues } from '../../frontend/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, renderAccountFieldInput } from '../../frontend/js/formFields.js';
 
 test('escapeHtml escapes the five dangerous characters', () => {
   assert.equal(escapeHtml(`<script>&"'`), '&lt;script&gt;&amp;&quot;&#39;');
@@ -158,4 +158,22 @@ test('collectFieldValues reads a text field as a plain string via get', () => {
   const schema = [{ key: 'name', type: 'text' }];
   const result = collectFieldValues(form, schema);
   assert.equal(result.name, 'Isolde');
+});
+
+test('renderAccountFieldInput renders opt-out keys as checkboxes and others as text', () => {
+  const checkboxHtml = renderAccountFieldInput('photoOptOut', 'Keine Fotoveröffentlichung', 'Ja');
+  assert.match(checkboxHtml, /type="checkbox"/);
+  assert.match(checkboxHtml, / checked/);
+
+  const uncheckedHtml = renderAccountFieldInput('photoOptOut', 'Keine Fotoveröffentlichung', 'Nein');
+  assert.doesNotMatch(uncheckedHtml, / checked/);
+
+  const textHtml = renderAccountFieldInput('address', 'Adresse', 'Musterstr. 1');
+  assert.match(textHtml, /type="text"/);
+  assert.match(textHtml, /value="Musterstr\. 1"/);
+});
+
+test('renderAccountFieldInput appends the sealedBadge HTML after the label text when given', () => {
+  const html = renderAccountFieldInput('address', 'Adresse', '', { sealedBadge: '<span class="sealed">X</span>' });
+  assert.match(html, /Adresse<span class="sealed">X<\/span><\/label>/);
 });

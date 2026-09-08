@@ -25,6 +25,22 @@ export function isOptOutYes(value) {
   return typeof value === 'string' && value.trim().toLowerCase() === 'ja';
 }
 
+// Free text let a caller type anything besides Ja/Nein; these two are
+// rendered as checkboxes everywhere they're editable instead.
+export const OPT_OUT_KEYS = ['dataSharingOptOut', 'photoOptOut'];
+
+// Renders one OT (account) field as a labeled input: a checkbox for the two
+// Ja/Nein opt-out keys, a text input otherwise. `sealedBadge`, if given, is
+// raw HTML appended to the label (e.g. the lock-icon "Verschlüsselt" badge).
+export function renderAccountFieldInput(key, label, value, { sealedBadge = '' } = {}) {
+  const escapedLabel = escapeHtml(label);
+  if (OPT_OUT_KEYS.includes(key)) {
+    const checked = isOptOutYes(value) ? ' checked' : '';
+    return `<label for="field-${key}"><input id="field-${key}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}${sealedBadge}</label>`;
+  }
+  return `<label for="field-${key}">${escapedLabel}${sealedBadge}</label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(value ?? '')}">`;
+}
+
 // Formats a character (IT) custom-field value for display, e.g. as a
 // checkin-table cell or a browse-page tag. Returns undefined for values that
 // shouldn't be shown at all (empty/absent).
@@ -105,12 +121,12 @@ export function attachLiveValidation(formEl) {
   });
 }
 
-export function renderField(field, value) {
+export function renderField(field, value, idPrefix = '') {
   const val = escapeHtml(value);
   const label = escapeHtml(field.label ?? field.key) + (field.required ? ' *' : '');
   const key = escapeHtml(field.key);
   const required = field.required ? 'required' : '';
-  const id = `field-${key}`;
+  const id = `${idPrefix}field-${key}`;
 
   if (field.type === 'boolean') {
     const checked = value ? ' checked' : '';

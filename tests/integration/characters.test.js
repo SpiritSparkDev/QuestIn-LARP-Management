@@ -89,7 +89,7 @@ test('a participant only sees their own characters in the list', async () => {
   });
 });
 
-test('a participant cannot view or edit another participant\'s character; an admin can view but not edit it', async () => {
+test('a participant cannot view or edit another participant\'s character; an admin (canOverrideCheckinStatus) can view and edit it', async () => {
   await withTestServer(async (port) => {
     const owner = await makeUserAndSession();
     const stranger = await makeUserAndSession();
@@ -118,9 +118,12 @@ test('a participant cannot view or edit another participant\'s character; an adm
 
     const adminPut = await fetch(`http://localhost:${port}/characters/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ name: 'Hijacked' }),
+      body: JSON.stringify({ name: 'Admin-Edit' }),
     });
-    assert.equal(adminPut.status, 403);
+    assert.equal(adminPut.status, 200);
+    const adminUpdated = await adminPut.json();
+    assert.equal(adminUpdated.name, 'Admin-Edit');
+    assert.equal(adminUpdated.user_id, owner.userId);
 
     const ownerPut = await fetch(`http://localhost:${port}/characters/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
@@ -288,6 +291,49 @@ test('PUT on an nsc-class character validates against the current nsc_profile_sc
     });
     assert.equal(validPut.status, 200);
     assert.equal((await validPut.json()).name, 'Wache Zwei');
+  });
+});
+
+test('PUT /characters/:id allows a canOverrideCheckinStatus group to edit another user\'s character', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession('sc');
+    const sl = await makeUserAndSession('sl'); // sl defaults to canOverrideCheckinStatus: true
+    const eventId = await makeEvent([]);
+
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ eventId, name: 'Fremdcharakter', data: {} }),
+    });
+    const { id } = await createRes.json();
+
+    const updateRes = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: sl.cookie },
+      body: JSON.stringify({ name: 'Von SL bearbeitet' }),
+    });
+    assert.equal(updateRes.status, 200);
+    const updated = await updateRes.json();
+    assert.equal(updated.name, 'Von SL bearbeitet');
+    assert.equal(updated.user_id, owner.userId);
+  });
+});
+
+test('PUT /characters/:id still rejects a group WITHOUT canOverrideCheckinStatus editing another user\'s character', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession('sc');
+    const hilfsSl = await makeUserAndSession('hilfs_sl'); // hilfs_sl defaults to canOverrideCheckinStatus: false
+    const eventId = await makeEvent([]);
+
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ eventId, name: 'Fremdcharakter 2', data: {} }),
+    });
+    const { id } = await createRes.json();
+
+    const updateRes = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: hilfsSl.cookie },
+      body: JSON.stringify({ name: 'Hijacked' }),
+    });
+    assert.equal(updateRes.status, 403);
   });
 });
 

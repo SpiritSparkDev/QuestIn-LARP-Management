@@ -82,13 +82,15 @@ router.get('/characters/:id', requireAuth(async ({ params, user }) => {
 router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
   const character = await getCharacter(params.id);
   if (!character) return { status: 404, body: { error: 'character not found' } };
-  if (character.user_id !== user.id) {
+  const isOwner = character.user_id === user.id;
+  const isElevated = user.group.canOverrideCheckinStatus;
+  if (!isOwner && !isElevated) {
     return { status: 403, body: { error: 'forbidden' } };
   }
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const updated = await updateCharacter(params.id, user.id, body);
+    const updated = await updateCharacter(params.id, character.user_id, body);
     return { status: 200, body: updated };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
