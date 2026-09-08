@@ -270,11 +270,14 @@ export async function approveRegistration(eventId, userId) {
     err.code = 'REGISTRATION_NOT_FOUND';
     throw err;
   }
-  if (!CHARACTER_EXEMPT_CON_ROLES.includes(regRows[0].con_role)) {
-    const { rows: charRows } = await query(
-      'SELECT 1 FROM characters WHERE event_id = $1 AND user_id = $2 LIMIT 1',
-      [eventId, userId]
-    );
+  const conRole = regRows[0].con_role;
+  if (!CHARACTER_EXEMPT_CON_ROLES.includes(conRole)) {
+    // NSC characters are account-wide (event_id IS NULL by design, see
+    // characters/repository.js), so an nsc registration must be checked
+    // against the user's NSC characters rather than this event's characters.
+    const { rows: charRows } = conRole === 'nsc'
+      ? await query('SELECT 1 FROM characters WHERE user_id = $1 AND class = $2 LIMIT 1', [userId, 'nsc'])
+      : await query('SELECT 1 FROM characters WHERE event_id = $1 AND user_id = $2 LIMIT 1', [eventId, userId]);
     if (charRows.length === 0) {
       const err = new Error('cannot approve: no character assigned for this event');
       err.code = 'NO_CHARACTER';

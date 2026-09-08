@@ -375,6 +375,64 @@ test('approving a registration with con_role helfer succeeds without a character
   });
 });
 
+test('approving a registration with con_role sc without a character is rejected with 409', async () => {
+  await withTestServer(async (port) => {
+    const { rows } = await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Mod', 'Approve', (SELECT id FROM groups WHERE key = 'moderator'), true) RETURNING id",
+      [`mod-approve-${crypto.randomUUID()}@example.com`]
+    );
+    const modCookie = `session=${(await createSession(rows[0].id)).token}`;
+    const scUser = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: scUser.cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
+      body: JSON.stringify({ userId: scUser.userId }),
+    });
+    assert.equal(res.status, 409);
+  });
+});
+
+test('approving a registration with con_role nsc requires an NSC character (account-wide, not event-scoped)', async () => {
+  await withTestServer(async (port) => {
+    const { rows } = await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Mod', 'Approve', (SELECT id FROM groups WHERE key = 'moderator'), true) RETURNING id",
+      [`mod-approve-${crypto.randomUUID()}@example.com`]
+    );
+    const modCookie = `session=${(await createSession(rows[0].id)).token}`;
+    const nscUser = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+      body: JSON.stringify({ conRole: 'nsc' }),
+    });
+
+    const rejectRes = await fetch(`http://localhost:${port}/events/${eventId}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
+      body: JSON.stringify({ userId: nscUser.userId }),
+    });
+    assert.equal(rejectRes.status, 409);
+
+    // NSC characters are account-wide: event_id is always NULL for class 'nsc'.
+    await query(
+      "INSERT INTO characters (user_id, event_id, class, name, data) VALUES ($1, NULL, 'nsc', 'Narrator', '{}')",
+      [nscUser.userId]
+    );
+
+    const approveRes = await fetch(`http://localhost:${port}/events/${eventId}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
+      body: JSON.stringify({ userId: nscUser.userId }),
+    });
+    assert.equal(approveRes.status, 200);
+  });
+});
+
 test.after(async () => {
   await closePool();
 });

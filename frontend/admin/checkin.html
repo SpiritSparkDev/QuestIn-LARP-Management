@@ -254,7 +254,7 @@ async function handleScannedCode(rawCode) {
 function openScanDialog(eventId, lookup) {
   dialogOpenForEventId = eventId;
   document.getElementById('scan-name').textContent = lookup.name;
-  document.getElementById('scan-group').textContent = `Kategorie: ${lookup.group}`;
+  document.getElementById('scan-group').textContent = `Kategorie: ${CON_ROLE_LABELS[lookup.conRole] ?? lookup.conRole}`;
   document.getElementById('scan-status-line').textContent = `Status: ${STATUS_LABELS[lookup.status] ?? lookup.status}`;
   document.getElementById('scan-characters').textContent = lookup.characters.length > 0
     ? `Charaktere: ${lookup.characters.map((c) => c.name).join(', ')}`

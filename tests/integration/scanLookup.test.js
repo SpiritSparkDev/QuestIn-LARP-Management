@@ -54,6 +54,7 @@ test('GET .../scan-lookup resolves a valid, well-formed code to name/group/statu
     assert.equal(body.userId, scUserId);
     assert.equal(body.group, 'mitglied');
     assert.equal(body.status, 'pending');
+    assert.equal(body.conRole, 'sc');
     assert.deepEqual(body.characters.map((c) => c.name), ['Aldric']);
   });
 });
