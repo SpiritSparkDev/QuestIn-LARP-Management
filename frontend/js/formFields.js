@@ -32,6 +32,10 @@ export const OPT_OUT_KEYS = ['dataSharingOptOut', 'photoOptOut'];
 // Renders one OT (account) field as a labeled input: a checkbox for the two
 // Ja/Nein opt-out keys, a text input otherwise. `sealedBadge`, if given, is
 // raw HTML appended to the label (e.g. the lock-icon "Verschlüsselt" badge).
+// Each field is wrapped in its own `<div class="${key}-container">` -- this
+// wrapper carries no styling today and looks removable, but it's a
+// deliberate per-field CSS/JS hook the user added for upcoming UI work.
+// Do not delete it as "unused" or collapse it back to a bare label+input.
 export function renderAccountFieldInput(key, label, value, { sealedBadge = '' } = {}) {
   const escapedLabel = escapeHtml(label);
   if (OPT_OUT_KEYS.includes(key)) {
