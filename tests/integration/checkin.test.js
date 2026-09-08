@@ -458,7 +458,11 @@ test('a redeemed invitation with no registration yet still shows as "notified", 
     assert.ok(beforeRegisterList.find((p) => p.invitationId === invitation.id && p.status === 'notified'));
 
     const newUserCookie = `session=${(await createSession(newUserId)).token}`;
-    await fetch(`http://localhost:${port}/events/${eventId}/register`, { method: 'POST', headers: { Cookie: newUserCookie } });
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: newUserCookie },
+      body: JSON.stringify({ conRole: 'sc' }),
+    });
 
     const afterRegisterRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
     const afterRegisterList = await afterRegisterRes.json();

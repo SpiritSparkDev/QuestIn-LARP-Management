@@ -296,6 +296,58 @@ test('an event-scoped orga can promote another participant to hilfs_orga; a non-
   });
 });
 
+test('a bystander cannot use the promotion endpoint to rewrite another participant\'s con_role to a self-service value', async () => {
+  await withTestServer(async (port) => {
+    const target = await makeUserAndSession();
+    const bystander = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: target.cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
+    });
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: bystander.cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
+    });
+
+    // Bystander holds no staff role for this event, yet tries to flip the
+    // target's registration to another self-service value (e.g. demoting
+    // them to 'helfer'). This must be forbidden even though 'helfer' itself
+    // needs no grant permission for a user's OWN registration.
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${target.userId}/con-role`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: bystander.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    assert.equal(res.status, 403);
+
+    const { rows } = await query(
+      'SELECT con_role FROM registrations WHERE event_id = $1 AND user_id = $2',
+      [eventId, target.userId]
+    );
+    assert.equal(rows[0].con_role, 'sc');
+  });
+});
+
+test('a user can change their own registration\'s con_role to a self-service value via the promotion endpoint', async () => {
+  await withTestServer(async (port) => {
+    const { cookie, userId } = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/con-role`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'nsc' }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).con_role, 'nsc');
+  });
+});
+
 test('approving a registration with con_role helfer succeeds without a character', async () => {
   await withTestServer(async (port) => {
     const { query } = await import('../../backend/db.js');

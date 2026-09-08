@@ -68,7 +68,14 @@ export async function setConRole(eventId, userId, conRole, requestingUser) {
     err.code = 'INVALID_CON_ROLE';
     throw err;
   }
-  if (STAFF_CON_ROLES.includes(conRole) && !(await canGrantStaffConRole(eventId, requestingUser))) {
+  const isOwnRegistration = userId === requestingUser.id;
+  const staffGrantOk = await canGrantStaffConRole(eventId, requestingUser);
+  if (!isOwnRegistration && !staffGrantOk) {
+    const err = new Error('forbidden: only an existing orga/hilfs_orga for this event, or a moderator/admin, may change another user\'s con_role');
+    err.code = 'FORBIDDEN_CON_ROLE';
+    throw err;
+  }
+  if (STAFF_CON_ROLES.includes(conRole) && !staffGrantOk) {
     const err = new Error('forbidden: only an existing orga/hilfs_orga for this event, or a moderator/admin, may set this role');
     err.code = 'FORBIDDEN_CON_ROLE';
     throw err;
