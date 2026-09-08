@@ -73,7 +73,7 @@ router.post('/members/:id/reactivate', requireAuth(requireMenu('mitglieder')(asy
   return { status: 200, body: { reactivated: true } };
 })));
 
-const DEFAULT_INVITE_GROUP_KEY = 'sc';
+const DEFAULT_INVITE_GROUP_KEY = 'mitglied';
 
 router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ req, user }) => {
   const body = await readJsonBody(req);
@@ -89,11 +89,11 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
 
   // 'group' is gated exactly like every other account field, NOT treated
   // as always-allowed — a group without 'group' in its own account_fields
-  // (e.g. orga, by default) must not be able to hand out a HIGHER group
+  // (e.g. moderator, by default) must not be able to hand out a HIGHER group
   // (e.g. admin) to a brand-new invitee just because that account doesn't
-  // exist yet. If they omit it, invitees default to 'sc' silently; if they
-  // try to set it without the permission, that's the same 400 as any other
-  // disallowed field.
+  // exist yet. If they omit it, invitees default to 'mitglied' silently; if
+  // they try to set it without the permission, that's the same 400 as any
+  // other disallowed field.
   const fieldsToCheck = group !== undefined ? { ...rest, group } : rest;
   const disallowed = filterToAllowedFields(fieldsToCheck, user.group.accountFields);
   if (disallowed.length > 0) {

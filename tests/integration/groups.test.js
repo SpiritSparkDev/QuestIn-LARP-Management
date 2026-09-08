@@ -16,7 +16,7 @@ const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 const { createServer } = await import('../../backend/server.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Groups', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`groups-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
@@ -29,7 +29,7 @@ test('GET /groups rejects a non-admin group', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    const { cookie } = await makeUserAndSession('sc');
+    const { cookie } = await makeUserAndSession('mitglied');
     const res = await fetch(`http://localhost:${port}/groups`, { headers: { Cookie: cookie } });
     assert.equal(res.status, 403);
   } finally {
@@ -37,7 +37,7 @@ test('GET /groups rejects a non-admin group', async () => {
   }
 });
 
-test('GET /groups returns all 8 seeded groups for an admin', async () => {
+test('GET /groups returns all 3 seeded groups for an admin', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
@@ -46,7 +46,7 @@ test('GET /groups returns all 8 seeded groups for an admin', async () => {
     assert.equal(res.status, 200);
     const groups = await res.json();
     const keys = groups.map((g) => g.key);
-    const defaultKeys = ['admin', 'orga', 'plot_orga', 'sl', 'hilfs_sl', 'nsc', 'gsc', 'sc'];
+    const defaultKeys = ['admin', 'moderator', 'mitglied'];
     for (const key of defaultKeys) {
       assert.ok(keys.includes(key), `missing default group: ${key}`);
     }
@@ -180,52 +180,6 @@ test('PUT /groups/:id rejects editing the protected admin group', async () => {
       body: JSON.stringify({ visibleMenus: [] }),
     });
     assert.equal(res.status, 403);
-  } finally {
-    server.close();
-  }
-});
-
-test('POST /groups accepts and returns characterClasses; PUT /groups/:id updates them', async () => {
-  const server = createServer().listen(0);
-  try {
-    const { port } = server.address();
-    const admin = await makeUserAndSession('admin');
-
-    const createRes = await fetch(`http://localhost:${port}/groups`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ key: `test_class_${crypto.randomUUID().slice(0, 8)}`, name: 'Class Test', characterClasses: ['sc'] }),
-    });
-    assert.equal(createRes.status, 201);
-    const created = await createRes.json();
-    assert.deepEqual(created.character_classes, ['sc']);
-
-    const updateRes = await fetch(`http://localhost:${port}/groups/${created.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ characterClasses: ['sc', 'nsc'] }),
-    });
-    assert.equal(updateRes.status, 200);
-    const updated = await updateRes.json();
-    assert.deepEqual(updated.character_classes, ['sc', 'nsc']);
-
-    await query('DELETE FROM groups WHERE id = $1', [created.id]);
-  } finally {
-    server.close();
-  }
-});
-
-test('POST /groups rejects an invalid characterClasses value', async () => {
-  const server = createServer().listen(0);
-  try {
-    const { port } = server.address();
-    const admin = await makeUserAndSession('admin');
-    const res = await fetch(`http://localhost:${port}/groups`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ key: `test_bad_class_${crypto.randomUUID().slice(0, 8)}`, name: 'Bad Class Test', characterClasses: ['wizard'] }),
-    });
-    assert.equal(res.status, 400);
   } finally {
     server.close();
   }

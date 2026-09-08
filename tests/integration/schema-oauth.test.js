@@ -19,7 +19,7 @@ test('oauth_accounts table exists after migration', async () => {
 
 test('(provider, provider_user_id) is unique', async () => {
   const { rows: userRows } = await query(
-    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'OAuth', 'Uniq', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'OAuth', 'Uniq', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
     [`oauth-uniq-${Date.now()}@example.com`]
   );
   const userId = userRows[0].id;

@@ -20,7 +20,7 @@ const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 const { createServer } = await import('../../backend/server.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'NSC', 'Schema Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`nsc-schema-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
@@ -29,23 +29,11 @@ async function makeUserAndSession(groupKey = 'sc') {
   return { userId: rows[0].id, cookie: `session=${session.token}` };
 }
 
-test('GET /nsc-schema rejects a group that is neither admin nor nsc', async () => {
+test('GET /nsc-schema is reachable by any authenticated user and returns the seeded default fields', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    const { cookie } = await makeUserAndSession('sc');
-    const res = await fetch(`http://localhost:${port}/nsc-schema`, { headers: { Cookie: cookie } });
-    assert.equal(res.status, 403);
-  } finally {
-    server.close();
-  }
-});
-
-test('GET /nsc-schema is reachable by an nsc-group user and returns the seeded default fields', async () => {
-  const server = createServer().listen(0);
-  try {
-    const { port } = server.address();
-    const { cookie } = await makeUserAndSession('nsc');
+    const { cookie } = await makeUserAndSession('mitglied');
     const res = await fetch(`http://localhost:${port}/nsc-schema`, { headers: { Cookie: cookie } });
     assert.equal(res.status, 200);
     const schema = await res.json();
@@ -56,11 +44,22 @@ test('GET /nsc-schema is reachable by an nsc-group user and returns the seeded d
   }
 });
 
+test('GET /nsc-schema requires authentication', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const res = await fetch(`http://localhost:${port}/nsc-schema`);
+    assert.equal(res.status, 401);
+  } finally {
+    server.close();
+  }
+});
+
 test('PUT /nsc-schema rejects a non-admin group', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    const { cookie } = await makeUserAndSession('nsc');
+    const { cookie } = await makeUserAndSession('mitglied');
     const res = await fetch(`http://localhost:${port}/nsc-schema`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },

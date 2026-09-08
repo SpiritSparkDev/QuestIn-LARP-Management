@@ -19,7 +19,7 @@ const { createSession } = await import('../../backend/auth/sessions.js');
 
 async function makeUserAndSession() {
   const { rows } = await query(
-    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Reg', 'Test', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Reg', 'Test', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
     [`reg-${crypto.randomUUID()}@example.com`]
   );
   const session = await createSession(rows[0].id);
@@ -115,7 +115,7 @@ test('two concurrent approvals of the same registration: exactly one succeeds', 
   await withTestServer(async (port) => {
     const { userId, cookie } = await makeUserAndSession();
     const { rows: helperRows } = await query(
-      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Race', 'Helper', (SELECT id FROM groups WHERE key = 'sl'), true) RETURNING id",
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Race', 'Helper', (SELECT id FROM groups WHERE key = 'moderator'), true) RETURNING id",
       [`reg-helper-${crypto.randomUUID()}@example.com`]
     );
     const helperSession = await createSession(helperRows[0].id);

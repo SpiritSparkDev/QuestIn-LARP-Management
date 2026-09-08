@@ -9,8 +9,8 @@ import { GROUP_DEFAULTS } from './groupDefaults.js';
 export async function seedGroups() {
   for (const group of GROUP_DEFAULTS) {
     await query(
-      `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, character_classes, can_override_checkin_status, is_protected)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, is_protected)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (key) DO NOTHING`,
       [
         group.key,
@@ -18,7 +18,6 @@ export async function seedGroups() {
         JSON.stringify(group.visibleMenus),
         JSON.stringify(group.accountFields),
         group.canEditCharacters,
-        JSON.stringify(group.characterClasses),
         group.canOverrideCheckinStatus,
         group.isProtected,
       ]

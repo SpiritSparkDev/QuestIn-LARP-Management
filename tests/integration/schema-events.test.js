@@ -36,7 +36,7 @@ test('characters.user_id foreign key is enforced', async () => {
 
 test('characters.event_id foreign key is enforced', async () => {
   const { rows } = await query(
-    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'FK', 'Test', (SELECT id FROM groups WHERE key = 'sc')) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'FK', 'Test', (SELECT id FROM groups WHERE key = 'mitglied')) RETURNING id",
     [`fk-test-${Date.now()}@example.com`]
   );
   await assert.rejects(

@@ -16,7 +16,7 @@ await seedGroups();
 
 const { query, closePool } = await import('../../backend/db.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Events', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`events-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
@@ -29,7 +29,7 @@ async function makeUserAndSession(groupKey = 'sc') {
 test('admin can create an event; participant cannot', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
-    const participant = await makeUserAndSession('sc');
+    const participant = await makeUserAndSession('mitglied');
     const payload = {
       name: 'Sommercon 2027',
       eventDate: '2027-07-15',
@@ -58,7 +58,7 @@ test('admin can create an event; participant cannot', async () => {
 test('any authenticated user can list and get events; unknown id is 404', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
-    const participant = await makeUserAndSession('sc');
+    const participant = await makeUserAndSession('mitglied');
 
     const createRes = await fetch(`http://localhost:${port}/events`, {
       method: 'POST',
@@ -138,7 +138,7 @@ test('GET /events/:id with a malformed UUID returns 400, not 500', async () => {
 test('admin can activate an event; activating one deactivates all others; participant cannot activate', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
-    const participant = await makeUserAndSession('sc');
+    const participant = await makeUserAndSession('mitglied');
 
     async function createEvent(name) {
       const res = await fetch(`http://localhost:${port}/events`, {

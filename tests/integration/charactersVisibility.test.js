@@ -20,7 +20,7 @@ await seedNscProfileSchema();
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Char', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`chars-vis-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]

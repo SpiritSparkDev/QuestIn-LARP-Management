@@ -17,13 +17,35 @@ await seedGroups();
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Checkin', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`checkin-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
   );
   const session = await createSession(rows[0].id);
   return { userId: rows[0].id, cookie: `session=${session.token}` };
+}
+
+// The 3 seeded groups no longer have a "has checkin-menu access but lacks
+// some other specific permission" combination (moderator always has both
+// canOverrideCheckinStatus and full accountFields; mitglied has neither
+// menu access). A handful of permission-boundary tests below need exactly
+// that combination, so they build a throwaway group with the one relevant
+// permission tweaked, same as POST /groups lets an admin do at runtime.
+async function makeCustomGroupUserAndSession(overrides) {
+  const key = `checkin_custom_${crypto.randomUUID().slice(0, 8)}`;
+  await query(
+    `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      key, key,
+      JSON.stringify(overrides.visibleMenus ?? []),
+      JSON.stringify(overrides.accountFields ?? []),
+      overrides.canEditCharacters ?? false,
+      overrides.canOverrideCheckinStatus ?? false,
+    ]
+  );
+  return makeUserAndSession(key);
 }
 
 async function makeEvent(schema) {
@@ -36,7 +58,7 @@ async function makeEvent(schema) {
 
 test('a participant cannot list participants or check anyone in', async () => {
   await withTestServer(async (port) => {
-    const { cookie } = await makeUserAndSession('sc');
+    const { cookie } = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
 
     const listRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: cookie } });
@@ -58,8 +80,8 @@ test('a participant cannot list participants or check anyone in', async () => {
 
 test('checkin_helper sees the participant list with characters and no encrypted fields, then checks someone in and out', async () => {
   await withTestServer(async (port) => {
-    const helper = await makeUserAndSession('sl');
-    const attendee = await makeUserAndSession('sc');
+    const helper = await makeUserAndSession('moderator');
+    const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
 
     await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
@@ -106,7 +128,7 @@ test('checkin_helper sees the participant list with characters and no encrypted 
 
 test('GET /events/:id/participants for an unknown event returns 404', async () => {
   await withTestServer(async (port) => {
-    const helper = await makeUserAndSession('sl');
+    const helper = await makeUserAndSession('moderator');
 
     const res = await fetch(`http://localhost:${port}/events/${crypto.randomUUID()}/participants`, {
       headers: { Cookie: helper.cookie },
@@ -117,8 +139,8 @@ test('GET /events/:id/participants for an unknown event returns 404', async () =
 
 test('checking in a user with no registration for the event returns 404', async () => {
   await withTestServer(async (port) => {
-    const helper = await makeUserAndSession('sl');
-    const stranger = await makeUserAndSession('sc');
+    const helper = await makeUserAndSession('moderator');
+    const stranger = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
 
     const res = await fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
@@ -131,8 +153,8 @@ test('checking in a user with no registration for the event returns 404', async 
 
 test('two concurrent check-ins for the same attendee: exactly one succeeds', async () => {
   await withTestServer(async (port) => {
-    const helper = await makeUserAndSession('sl');
-    const attendee = await makeUserAndSession('sc');
+    const helper = await makeUserAndSession('moderator');
+    const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
 
     await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
@@ -153,10 +175,10 @@ test('two concurrent check-ins for the same attendee: exactly one succeeds', asy
 
 test('a user without canOverrideCheckinStatus cannot use the override endpoint', async () => {
   await withTestServer(async (port) => {
-    // hilfs_sl has 'checkin' in visibleMenus (so the request reaches the handler)
-    // but canOverrideCheckinStatus: false (so this test proves the override check
-    // itself rejects it, not the pre-existing requireMenu('checkin') gate).
-    const stranger = await makeUserAndSession('hilfs_sl');
+    // Needs 'checkin' in visibleMenus (so the request reaches the handler) but
+    // canOverrideCheckinStatus: false, so this test proves the override check
+    // itself rejects it, not the pre-existing requireMenu('checkin') gate.
+    const stranger = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
     const eventId = await makeEvent();
     await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [stranger.userId, eventId]);
 
@@ -170,7 +192,7 @@ test('a user without canOverrideCheckinStatus cannot use the override endpoint',
 
 test('a user without canOverrideCheckinStatus cannot use the approve endpoint', async () => {
   await withTestServer(async (port) => {
-    const stranger = await makeUserAndSession('hilfs_sl');
+    const stranger = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
     const eventId = await makeEvent();
     const res = await fetch(`http://localhost:${port}/events/${eventId}/approve`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: stranger.cookie },
@@ -182,7 +204,7 @@ test('a user without canOverrideCheckinStatus cannot use the approve endpoint', 
 
 test('a user without canOverrideCheckinStatus cannot use the cancel endpoint', async () => {
   await withTestServer(async (port) => {
-    const stranger = await makeUserAndSession('hilfs_sl');
+    const stranger = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
     const eventId = await makeEvent();
     const res = await fetch(`http://localhost:${port}/events/${eventId}/cancel`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: stranger.cookie },
@@ -195,7 +217,7 @@ test('a user without canOverrideCheckinStatus cannot use the cancel endpoint', a
 test('a user with canOverrideCheckinStatus can set a status directly, including a backward transition', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
-    const attendee = await makeUserAndSession('sc');
+    const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
     await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
 
@@ -223,9 +245,9 @@ test('a user with canOverrideCheckinStatus can set a status directly, including 
 
 test('overriding to checked_out preserves an already-set checked_in_at instead of overwriting it', async () => {
   await withTestServer(async (port) => {
-    const helper = await makeUserAndSession('sl');
+    const helper = await makeUserAndSession('moderator');
     const admin = await makeUserAndSession('admin');
-    const attendee = await makeUserAndSession('sc');
+    const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
     await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
 
@@ -253,7 +275,7 @@ test('overriding to checked_out preserves an already-set checked_in_at instead o
 test('the override endpoint rejects an invalid status value', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
-    const attendee = await makeUserAndSession('sc');
+    const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
     await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
 
@@ -268,7 +290,7 @@ test('the override endpoint rejects an invalid status value', async () => {
 test('the override endpoint returns 404 for a user with no registration for the event', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
-    const stranger = await makeUserAndSession('sc');
+    const stranger = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
 
     const res = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${stranger.userId}`, {
@@ -282,7 +304,7 @@ test('the override endpoint returns 404 for a user with no registration for the 
 test('two concurrent overrides on the same registration with the same previousStatus: exactly one succeeds', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
-    const attendee = await makeUserAndSession('sc');
+    const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
     await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
 
@@ -299,8 +321,8 @@ test('two concurrent overrides on the same registration with the same previousSt
 
 test('the normal checkin/checkout flow still works unchanged alongside the override endpoint', async () => {
   await withTestServer(async (port) => {
-    const helper = await makeUserAndSession('sl');
-    const attendee = await makeUserAndSession('sc');
+    const helper = await makeUserAndSession('moderator');
+    const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
     await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
 
@@ -316,7 +338,7 @@ test('the normal checkin/checkout flow still works unchanged alongside the overr
 test('overriding directly from pending to checked_out does not fabricate a checked_in_at timestamp', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
-    const attendee = await makeUserAndSession('sc');
+    const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
     await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
 
@@ -334,8 +356,11 @@ test('overriding directly from pending to checked_out does not fabricate a check
 test('participants list exposes only the OT fields the viewer\'s group is allowed to see', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
-    const helper = await makeUserAndSession('sl');
-    const attendee = await makeUserAndSession('sc');
+    // Every seeded group with checkin-menu access (moderator) also gets full
+    // accountFields by default, so a custom group is needed to exercise a
+    // checkin-capable viewer that is NOT allowed to see OT fields.
+    const helper = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], accountFields: [], canOverrideCheckinStatus: true });
+    const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
     await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
     const patchRes = await fetch(`http://localhost:${port}/members/${attendee.userId}`, {
@@ -349,8 +374,6 @@ test('participants list exposes only the OT fields the viewer\'s group is allowe
     assert.equal(adminEntry.otFields.phone, '0123456789');
     assert.equal(adminEntry.otFields.medicalNotes, 'Erdnussallergie');
 
-    // 'sl' has accountFields: [] (see db/groupDefaults.js), so it must not
-    // receive decrypted OT values even though it can run check-in.
     const helperList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
     const helperEntry = (await helperList.json()).find((p) => p.userId === attendee.userId);
     assert.deepEqual(helperEntry.otFields, {});
@@ -366,8 +389,8 @@ test('participants list filters character (IT) fields by canOverrideCheckinStatu
     ];
     const eventId = await makeEvent(schema);
     const admin = await makeUserAndSession('admin'); // canOverrideCheckinStatus: true
-    const hilfsSl = await makeUserAndSession('hilfs_sl'); // canOverrideCheckinStatus: false
-    const attendee = await makeUserAndSession('sc');
+    const hilfsSl = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
+    const attendee = await makeUserAndSession('mitglied');
     await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
     await query(
       "INSERT INTO characters (user_id, event_id, name, data) VALUES ($1, $2, 'Aldric', $3)",
@@ -388,13 +411,13 @@ test('participants list filters character (IT) fields by canOverrideCheckinStatu
 
 test('participants list includes an open, event-scoped invitation as a "notified" entry with no userId', async () => {
   await withTestServer(async (port) => {
-    const helper = await makeUserAndSession('sl');
+    const helper = await makeUserAndSession('moderator');
     const eventId = await makeEvent();
     const admin = await makeUserAndSession('admin');
 
     const inviteRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ email: `notified-${crypto.randomUUID()}@example.com`, firstName: 'Notified', lastName: 'Person', group: 'sc', eventId }),
+      body: JSON.stringify({ email: `notified-${crypto.randomUUID()}@example.com`, firstName: 'Notified', lastName: 'Person', group: 'mitglied', eventId }),
     });
     assert.equal(inviteRes.status, 201);
     const invitation = await inviteRes.json();
@@ -411,14 +434,14 @@ test('participants list includes an open, event-scoped invitation as a "notified
 
 test('a redeemed invitation with no registration yet still shows as "notified", and disappears once registered', async () => {
   await withTestServer(async (port) => {
-    const helper = await makeUserAndSession('sl');
+    const helper = await makeUserAndSession('moderator');
     const eventId = await makeEvent();
     const admin = await makeUserAndSession('admin');
     const email = `notified-redeemed-${crypto.randomUUID()}@example.com`;
 
     const inviteRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ email, firstName: 'Redeemed', lastName: 'Notified', group: 'sc', eventId }),
+      body: JSON.stringify({ email, firstName: 'Redeemed', lastName: 'Notified', group: 'mitglied', eventId }),
     });
     const invitation = await inviteRes.json();
     const { rows } = await query('SELECT token FROM invitations WHERE id = $1', [invitation.id]);
@@ -445,5 +468,12 @@ test('a redeemed invitation with no registration yet still shows as "notified", 
 });
 
 test.after(async () => {
+  // Users created in a checkin_custom_* group must be deleted before the
+  // group itself (users.group_id -> groups.id has no ON DELETE CASCADE),
+  // otherwise these throwaway groups would leak into every later test file
+  // sharing this DB and break assertions that expect exactly the 3 seeded
+  // groups.
+  await query("DELETE FROM users WHERE email LIKE 'checkin-checkin_custom_%'");
+  await query("DELETE FROM groups WHERE key LIKE 'checkin_custom_%'");
   await closePool();
 });

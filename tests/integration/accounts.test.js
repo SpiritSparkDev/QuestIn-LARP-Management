@@ -58,7 +58,7 @@ test('GET /account returns the logged-in user\'s account with null sensitive fie
     const body = await res.json();
     assert.equal(body.name, 'Account Test');
     assert.equal(body.address, null);
-    assert.deepEqual(body.group, { key: 'sc', name: 'SC' });
+    assert.deepEqual(body.group, { key: 'mitglied', name: 'Mitglied' });
     assert.ok(Array.isArray(body.menus));
     assert.equal(body.canEditCharacters, false);
   });
@@ -129,19 +129,6 @@ test('PATCH /account silently ignores an nscData field (no longer a recognized a
     const body = await res.json();
     assert.equal(body.name, 'Still Works');
     assert.equal(body.nscData, undefined);
-  } finally {
-    server.close();
-  }
-});
-
-test('GET /account includes characterClasses from the caller\'s group', async () => {
-  const server = createServer().listen(0);
-  try {
-    const { port } = server.address();
-    const { cookie } = await registerLoginAndGetCookie(port);
-    const res = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: cookie } });
-    const body = await res.json();
-    assert.deepEqual(body.characterClasses, ['sc']);
   } finally {
     server.close();
   }

@@ -15,7 +15,7 @@ const { createSession, getSession, destroySession } = await import('../../backen
 
 async function makeUser() {
   const { rows } = await query(
-    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'Test', '', (SELECT id FROM groups WHERE key = 'sc')) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'Test', '', (SELECT id FROM groups WHERE key = 'mitglied')) RETURNING id",
     [`session-test-${Date.now()}-${Math.random()}@example.com`]
   );
   return rows[0].id;

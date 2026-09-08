@@ -16,10 +16,6 @@ router.post('/characters', requireAuth(async ({ req, user }) => {
   if (!name) {
     return { status: 400, body: { error: 'name is required' } };
   }
-  if (!user.group.characterClasses.includes(characterClass)) {
-    return { status: 403, body: { error: 'forbidden' } };
-  }
-
   if (characterClass === 'sc') {
     if (!eventId) return { status: 400, body: { error: 'eventId is required' } };
     if (!user.group.canEditCharacters) {

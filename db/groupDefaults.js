@@ -3,42 +3,17 @@ export const GROUP_DEFAULTS = [
     key: 'admin', name: 'Admin',
     visibleMenus: ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'],
     accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut', 'group'],
-    canEditCharacters: true, characterClasses: ['sc'], canOverrideCheckinStatus: true, isProtected: true,
+    canEditCharacters: true, canOverrideCheckinStatus: true, isProtected: true,
   },
   {
-    key: 'orga', name: 'Orga',
+    key: 'moderator', name: 'Moderator',
     visibleMenus: ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'],
     accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut'],
-    canEditCharacters: true, characterClasses: ['sc'], canOverrideCheckinStatus: true, isProtected: false,
+    canEditCharacters: true, canOverrideCheckinStatus: true, isProtected: false,
   },
   {
-    key: 'plot_orga', name: 'Plot-Orga',
-    visibleMenus: ['konto', 'charaktere', 'events', 'checkin'],
-    accountFields: [], canEditCharacters: false, characterClasses: ['sc'], canOverrideCheckinStatus: false, isProtected: false,
-  },
-  {
-    key: 'sl', name: 'SL',
-    visibleMenus: ['konto', 'charaktere', 'checkin'],
-    accountFields: [], canEditCharacters: false, characterClasses: ['sc'], canOverrideCheckinStatus: true, isProtected: false,
-  },
-  {
-    key: 'hilfs_sl', name: 'Hilfs-SL',
-    visibleMenus: ['konto', 'charaktere', 'checkin'],
-    accountFields: [], canEditCharacters: false, characterClasses: ['sc'], canOverrideCheckinStatus: false, isProtected: false,
-  },
-  {
-    key: 'nsc', name: 'NSC',
+    key: 'mitglied', name: 'Mitglied',
     visibleMenus: ['konto', 'charaktere'],
-    accountFields: [], canEditCharacters: false, characterClasses: ['nsc'], canOverrideCheckinStatus: false, isProtected: false,
-  },
-  {
-    key: 'gsc', name: 'GSC',
-    visibleMenus: ['konto', 'charaktere'],
-    accountFields: [], canEditCharacters: false, characterClasses: ['sc'], canOverrideCheckinStatus: false, isProtected: false,
-  },
-  {
-    key: 'sc', name: 'SC',
-    visibleMenus: ['konto', 'charaktere'],
-    accountFields: [], canEditCharacters: false, characterClasses: ['sc'], canOverrideCheckinStatus: false, isProtected: false,
+    accountFields: [], canEditCharacters: false, canOverrideCheckinStatus: false, isProtected: false,
   },
 ];

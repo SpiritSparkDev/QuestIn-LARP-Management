@@ -45,6 +45,19 @@ test('migration 014 backfills group_id for a user with an existing role value, t
   // re-executes it against the just-restored pre-migration schema shape.
   await query(`DELETE FROM schema_migrations WHERE filename = '014_finalize_group_id.sql'`);
 
+  // Migration 014's own INSERT INTO groups statement still references the
+  // character_classes column (dropped by migration 027, already applied at
+  // this point since it ran the first time any test file in this shared DB
+  // called runMigrations()) — restore it first, same "put back the schema
+  // shape 014 expects" trick as the role column below, just for a column a
+  // *later* migration removed instead of one a *later* migration added.
+  const { rows: classesColumn } = await query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'groups' AND column_name = 'character_classes'`
+  );
+  if (classesColumn.length === 0) {
+    await query(`ALTER TABLE groups ADD COLUMN character_classes jsonb NOT NULL DEFAULT '[]'`);
+  }
+
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, role) VALUES ($1, 'Backfill', 'Test', 'checkin_helper') RETURNING id",
     [`backfill-${crypto.randomUUID()}@example.com`]
@@ -62,13 +75,24 @@ test('migration 014 backfills group_id for a user with an existing role value, t
     `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role'`
   );
   assert.equal(roleColumnAfter.length, 0);
+
+  // Migration 014's INSERT (ON CONFLICT DO NOTHING) just resurrected the 7
+  // legacy groups migration 027 already deleted, since they no longer exist
+  // to conflict on. On a real from-scratch migrate run 014 runs BEFORE 027
+  // deletes them, so this resurrection never happens there — undo it here so
+  // this test doesn't leak state that breaks the "exactly 3 groups" and "no
+  // character_classes column" invariants for every other test file sharing
+  // this DB.
+  await query('DELETE FROM users WHERE id = $1', [rows[0].id]);
+  await query(`DELETE FROM groups WHERE key IN ('orga', 'plot_orga', 'sl', 'hilfs_sl', 'nsc', 'gsc', 'sc')`);
+  await query('ALTER TABLE groups DROP COLUMN character_classes');
 });
 
 test('running twice does not duplicate groups or throw', async () => {
   await seedGroups();
   await seedGroups();
   const { rows } = await query('SELECT count(*)::int AS count FROM groups');
-  assert.equal(rows[0].count, 8);
+  assert.equal(rows[0].count, 3);
 });
 
 test('every seeded group matches GROUP_DEFAULTS field-for-field', async () => {
@@ -82,7 +106,6 @@ test('every seeded group matches GROUP_DEFAULTS field-for-field', async () => {
     assert.deepEqual(row.visible_menus, expected.visibleMenus);
     assert.deepEqual([...row.account_fields].sort(), [...expected.accountFields].sort());
     assert.equal(row.can_edit_characters, expected.canEditCharacters);
-    assert.deepEqual(row.character_classes, expected.characterClasses);
     assert.equal(row.can_override_checkin_status, expected.canOverrideCheckinStatus);
     assert.equal(row.is_protected, expected.isProtected);
   }

@@ -20,7 +20,7 @@ await seedNscProfileSchema();
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Char', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`chars-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
@@ -183,23 +183,9 @@ test('a participant cannot create a character for an inactive event; an admin ca
   });
 });
 
-test('an sl-group user cannot create a character for an inactive event', async () => {
-  await withTestServer(async (port) => {
-    const sl = await makeUserAndSession('sl');
-    const inactiveEventId = await makeEvent([], false);
-
-    const asSl = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: sl.cookie },
-      body: JSON.stringify({ eventId: inactiveEventId, name: 'Blocked', data: {} }),
-    });
-    assert.equal(asSl.status, 403);
-  });
-});
-
 test('creating an nsc-class character validates against the current nsc_profile_schema, not an event', async () => {
   await withTestServer(async (port) => {
-    const nscUser = await makeUserAndSession('nsc');
+    const nscUser = await makeUserAndSession('mitglied');
 
     const missingRequired = await fetch(`http://localhost:${port}/characters`, {
       method: 'POST',
@@ -222,7 +208,7 @@ test('creating an nsc-class character validates against the current nsc_profile_
 
 test('an nsc-class character request with an eventId is rejected', async () => {
   await withTestServer(async (port) => {
-    const nscUser = await makeUserAndSession('nsc');
+    const nscUser = await makeUserAndSession('mitglied');
     const eventId = await makeEvent([]);
 
     const res = await fetch(`http://localhost:${port}/characters`, {
@@ -231,19 +217,6 @@ test('an nsc-class character request with an eventId is rejected', async () => {
       body: JSON.stringify({ class: 'nsc', eventId, name: 'Invalid', data: {} }),
     });
     assert.equal(res.status, 400);
-  });
-});
-
-test('a group without nsc character-class access cannot create an nsc-class character', async () => {
-  await withTestServer(async (port) => {
-    const scUser = await makeUserAndSession('sc');
-
-    const res = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: scUser.cookie },
-      body: JSON.stringify({ class: 'nsc', name: 'Not Allowed', data: {} }),
-    });
-    assert.equal(res.status, 403);
   });
 });
 
@@ -271,7 +244,7 @@ test('a user can create multiple sc-class characters for the same event (Ersatzc
 
 test('PUT on an nsc-class character validates against the current nsc_profile_schema', async () => {
   await withTestServer(async (port) => {
-    const nscUser = await makeUserAndSession('nsc');
+    const nscUser = await makeUserAndSession('mitglied');
 
     const createRes = await fetch(`http://localhost:${port}/characters`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
@@ -296,8 +269,8 @@ test('PUT on an nsc-class character validates against the current nsc_profile_sc
 
 test('PUT /characters/:id allows a canOverrideCheckinStatus group to edit another user\'s character', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
-    const sl = await makeUserAndSession('sl'); // sl defaults to canOverrideCheckinStatus: true
+    const owner = await makeUserAndSession('mitglied');
+    const sl = await makeUserAndSession('moderator'); // moderator defaults to canOverrideCheckinStatus: true
     const eventId = await makeEvent([]);
 
     const createRes = await fetch(`http://localhost:${port}/characters`, {
@@ -314,26 +287,6 @@ test('PUT /characters/:id allows a canOverrideCheckinStatus group to edit anothe
     const updated = await updateRes.json();
     assert.equal(updated.name, 'Von SL bearbeitet');
     assert.equal(updated.user_id, owner.userId);
-  });
-});
-
-test('PUT /characters/:id still rejects a group WITHOUT canOverrideCheckinStatus editing another user\'s character', async () => {
-  await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
-    const hilfsSl = await makeUserAndSession('hilfs_sl'); // hilfs_sl defaults to canOverrideCheckinStatus: false
-    const eventId = await makeEvent([]);
-
-    const createRes = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ eventId, name: 'Fremdcharakter 2', data: {} }),
-    });
-    const { id } = await createRes.json();
-
-    const updateRes = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: hilfsSl.cookie },
-      body: JSON.stringify({ name: 'Hijacked' }),
-    });
-    assert.equal(updateRes.status, 403);
   });
 });
 

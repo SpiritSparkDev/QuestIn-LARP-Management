@@ -18,7 +18,7 @@ const { createSession } = await import('../../backend/auth/sessions.js');
 const { createServer } = await import('../../backend/server.js');
 const { getSmtpSettingsForSending } = await import('../../backend/smtpSettings/repository.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'SMTP', 'Settings Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`smtp-settings-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
@@ -101,7 +101,7 @@ test('GET/PUT/POST .../test on /admin/settings/smtp all reject a non-admin group
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    const { cookie } = await makeUserAndSession('sc');
+    const { cookie } = await makeUserAndSession('mitglied');
 
     const getRes = await fetch(`http://localhost:${port}/admin/settings/smtp`, { headers: { Cookie: cookie } });
     assert.equal(getRes.status, 403);

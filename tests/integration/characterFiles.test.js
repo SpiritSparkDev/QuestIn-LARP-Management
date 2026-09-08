@@ -17,7 +17,7 @@ await seedGroups();
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'File', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`char-files-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
@@ -38,7 +38,7 @@ const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 
 test('owner can upload, list, download, and delete their own file', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
     const characterId = await makeCharacter(owner.userId);
 
     const uploadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, {
@@ -70,8 +70,8 @@ test('owner can upload, list, download, and delete their own file', async () => 
 
 test('a private file is invisible (list) and unreachable (download) to a non-owner, non-elevated stranger', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
-    const stranger = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
+    const stranger = await makeUserAndSession('mitglied');
     const characterId = await makeCharacter(owner.userId);
 
     const uploadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, {
@@ -94,8 +94,8 @@ test('a private file is invisible (list) and unreachable (download) to a non-own
 
 test('a public file is visible and downloadable by anyone authenticated, but only deletable by owner/elevated', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
-    const stranger = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
+    const stranger = await makeUserAndSession('mitglied');
     const elevated = await makeUserAndSession('admin');
     const characterId = await makeCharacter(owner.userId);
 
@@ -122,7 +122,7 @@ test('a public file is visible and downloadable by anyone authenticated, but onl
 
 test('upload rejects missing GDPR consent, disallowed mime types, and oversized files', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
     const characterId = await makeCharacter(owner.userId);
     const base = { kind: 'image', filename: 'x.png', mimeType: 'image/png', dataBase64: TINY_PNG_BASE64 };
 
@@ -155,7 +155,7 @@ test('upload rejects a file that would exceed the per-character quota', async ()
       body: JSON.stringify({ quotaMbPerCharacter: 1 }),
     });
 
-    const owner = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
     const characterId = await makeCharacter(owner.userId);
     const almostOneMb = Buffer.alloc(900 * 1024).toString('base64');
 
@@ -180,7 +180,7 @@ test('upload rejects a file that would exceed the per-character quota', async ()
 
 test('a fileId that exists but under the wrong characterId in the URL 404s, not 200', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
     const characterId = await makeCharacter(owner.userId);
     const otherCharacterId = await makeCharacter(owner.userId);
 
@@ -202,7 +202,7 @@ test('upload against a broken external backend surfaces 502, not silently succee
        VALUES ('s3', 'nonexistent-bucket', 'us-east-1', 'http://127.0.0.1:1', 'x')`
     );
     try {
-      const owner = await makeUserAndSession('sc');
+      const owner = await makeUserAndSession('mitglied');
       const characterId = await makeCharacter(owner.userId);
       const uploadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
@@ -217,7 +217,7 @@ test('upload against a broken external backend surfaces 502, not silently succee
 
 test('a file already stored on "local" is still served correctly even while a different backend is active', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
     const characterId = await makeCharacter(owner.userId);
     const uploadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
@@ -243,7 +243,7 @@ test('a file already stored on "local" is still served correctly even while a di
 
 test('delete surfaces 502 if removal from an external backend fails, even though the DB row is already gone', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
     const characterId = await makeCharacter(owner.userId);
     await query(
       `INSERT INTO storage_settings (backend, s3_bucket, s3_region, s3_endpoint, s3_access_key_id)

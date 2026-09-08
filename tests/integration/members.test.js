@@ -17,7 +17,7 @@ const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 const { createServer } = await import('../../backend/server.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Members', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`members-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
@@ -30,7 +30,7 @@ test('GET /members rejects a group without the mitglieder menu', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    const { cookie } = await makeUserAndSession('sc');
+    const { cookie } = await makeUserAndSession('mitglied');
     const res = await fetch(`http://localhost:${port}/members`, { headers: { Cookie: cookie } });
     assert.equal(res.status, 403);
   } finally {
@@ -47,7 +47,7 @@ test('GET /members includes both active members and open invitations', async () 
     const inviteRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email: invitedEmail, firstName: 'Invited', lastName: 'Member', group: 'sc' }),
+      body: JSON.stringify({ email: invitedEmail, firstName: 'Invited', lastName: 'Member', group: 'mitglied' }),
     });
     assert.equal(inviteRes.status, 201);
 
@@ -66,7 +66,7 @@ test('GET /members/:id returns every field regardless of the viewer\'s own permi
   try {
     const { port } = server.address();
     const { cookie: adminCookie } = await makeUserAndSession('admin');
-    const { userId: targetId } = await makeUserAndSession('sc');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
 
     await fetch(`http://localhost:${port}/members/${targetId}`, {
       method: 'PATCH',
@@ -82,17 +82,17 @@ test('GET /members/:id returns every field regardless of the viewer\'s own permi
       [targetId, eventRows[0].id]
     );
 
-    // orga has the 'mitglieder' menu (so it passes requireMenu and can
+    // moderator has the 'mitglieder' menu (so it passes requireMenu and can
     // reach GET /members/:id) but, per defaults, lacks 'group' in its
     // account_fields — proving the response isn't filtered down to what
     // the VIEWER may edit, only what PATCH would let them change.
-    const { cookie: orgaCookie } = await makeUserAndSession('orga');
+    const { cookie: orgaCookie } = await makeUserAndSession('moderator');
     const res = await fetch(`http://localhost:${port}/members/${targetId}`, { headers: { Cookie: orgaCookie } });
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.medicalNotes, 'Testnotizen');
-    assert.equal(body.group.key, 'sc');
-    assert.equal(body.group.name, 'SC');
+    assert.equal(body.group.key, 'mitglied');
+    assert.equal(body.group.name, 'Mitglied');
     assert.ok(body.characters.some((c) => c.name === 'Detail Test Char' && c.eventName === 'Detail Test Event'));
 
     await query('DELETE FROM events WHERE id = $1', [eventRows[0].id]);
@@ -105,13 +105,13 @@ test('PATCH /members/:id rejects a field the caller group is not permitted to ed
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    // orga has 'mitglieder' access (so it passes requireMenu) but, per
+    // moderator has 'mitglieder' access (so it passes requireMenu) but, per
     // defaults, does NOT have 'group' in its account_fields — a real,
-    // meaningful case to test, not an arbitrary one: orga must not be
+    // meaningful case to test, not an arbitrary one: moderator must not be
     // able to reassign a member's group despite being able to reach this
     // endpoint at all.
-    const { cookie } = await makeUserAndSession('orga');
-    const { userId: targetId } = await makeUserAndSession('sc');
+    const { cookie } = await makeUserAndSession('moderator');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
     const res = await fetch(`http://localhost:${port}/members/${targetId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -128,7 +128,7 @@ test('PATCH /members/:id updates an allowed field for an admin caller', async ()
   try {
     const { port } = server.address();
     const { cookie } = await makeUserAndSession('admin');
-    const { userId: targetId } = await makeUserAndSession('sc');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
     const res = await fetch(`http://localhost:${port}/members/${targetId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -151,14 +151,14 @@ test('POST /members/invite allows multiple pending invitations to the same unreg
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'New', lastName: 'Member', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'New', lastName: 'Member', group: 'mitglied' }),
     });
     assert.equal(res.status, 201);
 
     const dupeRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Again', lastName: 'Member', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Again', lastName: 'Member', group: 'mitglied' }),
     });
     // First invite doesn't create a users row, so this checks the SECOND
     // invite to the same still-pending address is allowed (no uniqueness
@@ -177,13 +177,13 @@ test('POST /members/invite rejects an email that already belongs to a registered
     const email = `members-invite-existing-${crypto.randomUUID()}@example.com`;
     await query(
       "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Existing', 'Member', (SELECT id FROM groups WHERE key = $2), true)",
-      [email, 'sc']
+      [email, 'mitglied']
     );
 
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Duplicate', lastName: 'Member', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Duplicate', lastName: 'Member', group: 'mitglied' }),
     });
     assert.equal(res.status, 409);
   } finally {
@@ -191,7 +191,7 @@ test('POST /members/invite rejects an email that already belongs to a registered
   }
 });
 
-test('POST /members/invite defaults to the sc group when group is omitted', async () => {
+test('POST /members/invite defaults to the mitglied group when group is omitted', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
@@ -204,7 +204,7 @@ test('POST /members/invite defaults to the sc group when group is omitted', asyn
     });
     assert.equal(res.status, 201);
     const { rows } = await query('SELECT group_id FROM invitations WHERE email = $1', [email]);
-    const { rows: scGroup } = await query("SELECT id FROM groups WHERE key = 'sc'");
+    const { rows: scGroup } = await query("SELECT id FROM groups WHERE key = 'mitglied'");
     assert.equal(rows[0].group_id, scGroup[0].id);
   } finally {
     server.close();
@@ -215,11 +215,11 @@ test('POST /members/invite rejects an explicit group from a caller without the g
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    // orga has 'mitglieder' menu access (so it passes requireMenu) but,
+    // moderator has 'mitglieder' menu access (so it passes requireMenu) but,
     // per defaults, does NOT have 'group' in its account_fields — this is
     // exactly the case the fix guards: a group that can invite people but
     // must not be able to hand out a higher group than its own reach.
-    const { cookie } = await makeUserAndSession('orga');
+    const { cookie } = await makeUserAndSession('moderator');
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -254,7 +254,7 @@ test('POST /members/invite reports emailSent: false when SMTP is unreachable, bu
       const res = await fetch(`http://localhost:${port}/members/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: cookie },
-        body: JSON.stringify({ email, firstName: 'Mail', lastName: 'Fail', group: 'sc' }),
+        body: JSON.stringify({ email, firstName: 'Mail', lastName: 'Fail', group: 'mitglied' }),
       });
       assert.equal(res.status, 201);
       const body = await res.json();
@@ -277,7 +277,7 @@ test('POST /members/invitations/:id/resend issues a new token', async () => {
     const createRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Resend', lastName: 'Route', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Resend', lastName: 'Route', group: 'mitglied' }),
     });
     const created = await createRes.json();
     const resendRes = await fetch(`http://localhost:${port}/members/invitations/${created.id}/resend`, {
@@ -302,7 +302,7 @@ test('POST /members/invitations/:id/resend reports emailSent: false when SMTP is
     const createRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Resend', lastName: 'Fail', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Resend', lastName: 'Fail', group: 'mitglied' }),
     });
     const created = await createRes.json();
 
@@ -330,7 +330,7 @@ test('POST /members/invite ignores an attacker-supplied groupId that bypasses th
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    // orga lacks 'group' in its account_fields, so filterToAllowedFields
+    // moderator lacks 'group' in its account_fields, so filterToAllowedFields
     // blocks the 'group' key — but createInvitation is built from
     // { ...rest, groupId, invitedBy }, and 'groupId' (a different key
     // name) isn't in ACCOUNT_FIELD_KEYS at all, so before the fix a caller
@@ -339,7 +339,7 @@ test('POST /members/invite ignores an attacker-supplied groupId that bypasses th
     // object-spread order. Using the real admin group id (not a bogus
     // one) proves this is a valid-but-unauthorized override being
     // ignored, not just invalid-input rejection.
-    const { cookie } = await makeUserAndSession('orga');
+    const { cookie } = await makeUserAndSession('moderator');
     const { rows: adminGroup } = await query("SELECT id FROM groups WHERE key = 'admin'");
     const email = `invite-groupid-bypass-${crypto.randomUUID()}@example.com`;
     const res = await fetch(`http://localhost:${port}/members/invite`, {
@@ -349,7 +349,7 @@ test('POST /members/invite ignores an attacker-supplied groupId that bypasses th
     });
     assert.equal(res.status, 201);
     const { rows } = await query('SELECT group_id FROM invitations WHERE email = $1', [email]);
-    const { rows: scGroup } = await query("SELECT id FROM groups WHERE key = 'sc'");
+    const { rows: scGroup } = await query("SELECT id FROM groups WHERE key = 'mitglied'");
     assert.equal(rows[0].group_id, scGroup[0].id);
     assert.notEqual(rows[0].group_id, adminGroup[0].id);
   } finally {
@@ -370,14 +370,14 @@ test('POST /members/invite accepts an optional eventId and rejects an unknown on
     const badRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Event', lastName: 'Invite', group: 'sc', eventId: crypto.randomUUID() }),
+      body: JSON.stringify({ email, firstName: 'Event', lastName: 'Invite', group: 'mitglied', eventId: crypto.randomUUID() }),
     });
     assert.equal(badRes.status, 400);
 
     const okRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Event', lastName: 'Invite', group: 'sc', eventId: eventRows[0].id }),
+      body: JSON.stringify({ email, firstName: 'Event', lastName: 'Invite', group: 'mitglied', eventId: eventRows[0].id }),
     });
     assert.equal(okRes.status, 201);
     const { rows } = await query('SELECT event_id FROM invitations WHERE email = $1', [email]);
@@ -396,7 +396,7 @@ test('POST /members/invitations/:id/cancel cancels an open invitation and it dis
     const createRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Cancel', lastName: 'Route', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Cancel', lastName: 'Route', group: 'mitglied' }),
     });
     const created = await createRes.json();
 
@@ -427,7 +427,7 @@ test('POST /members/invite with sendEmail: false skips the mail send and returns
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'No', lastName: 'Email', group: 'sc', sendEmail: false }),
+      body: JSON.stringify({ email, firstName: 'No', lastName: 'Email', group: 'mitglied', sendEmail: false }),
     });
     assert.equal(res.status, 201);
     const body = await res.json();
@@ -449,7 +449,7 @@ test('POST /members/invite defaults sendEmail to true and still attempts to send
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Default', lastName: 'Send', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Default', lastName: 'Send', group: 'mitglied' }),
     });
     assert.equal(res.status, 201);
     const body = await res.json();
@@ -471,7 +471,7 @@ test('POST /members/invitations/:id/resend with sendEmail: false skips the mail 
     const createRes = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Resend', lastName: 'NoEmail', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Resend', lastName: 'NoEmail', group: 'mitglied' }),
     });
     const created = await createRes.json();
 
@@ -510,7 +510,7 @@ test('POST /members/invite uses the configured invitationTtlDays for expires_at,
     const res = await fetch(`http://localhost:${port}/members/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ email, firstName: 'Ttl', lastName: 'Check', group: 'sc' }),
+      body: JSON.stringify({ email, firstName: 'Ttl', lastName: 'Check', group: 'mitglied' }),
     });
     assert.equal(res.status, 201);
 
@@ -530,7 +530,7 @@ test('POST /members/:id/deactivate blocks login, kills sessions, and hides the m
   try {
     const { port } = server.address();
     const { cookie: adminCookie } = await makeUserAndSession('admin');
-    const { userId: targetId, cookie: targetCookie } = await makeUserAndSession('sc');
+    const { userId: targetId, cookie: targetCookie } = await makeUserAndSession('mitglied');
 
     const listBefore = await fetch(`http://localhost:${port}/members`, { headers: { Cookie: adminCookie } });
     const membersBefore = await listBefore.json();
@@ -597,7 +597,7 @@ test('POST /members/:id/deactivate is idempotent — a second call does not chan
   try {
     const { port } = server.address();
     const { cookie: adminCookie } = await makeUserAndSession('admin');
-    const { userId: targetId } = await makeUserAndSession('sc');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
 
     await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, { method: 'POST', headers: { Cookie: adminCookie } });
     const firstTimestamp = (await query('SELECT deactivated_at FROM users WHERE id = $1', [targetId])).rows[0].deactivated_at;
@@ -633,7 +633,7 @@ test('POST /members/:id/reactivate restores login and default-list visibility', 
   try {
     const { port } = server.address();
     const { cookie: adminCookie } = await makeUserAndSession('admin');
-    const { userId: targetId } = await makeUserAndSession('sc');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
 
     await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, { method: 'POST', headers: { Cookie: adminCookie } });
     const reactivateRes = await fetch(`http://localhost:${port}/members/${targetId}/reactivate`, {
@@ -656,8 +656,8 @@ test('POST /members/:id/deactivate and /reactivate are rejected for a group with
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
-    const { cookie: scCookie } = await makeUserAndSession('sc');
-    const { userId: targetId } = await makeUserAndSession('sc');
+    const { cookie: scCookie } = await makeUserAndSession('mitglied');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
 
     const deactivateRes = await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, {
       method: 'POST',

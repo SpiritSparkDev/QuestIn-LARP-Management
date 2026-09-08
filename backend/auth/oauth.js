@@ -194,7 +194,7 @@ export async function findOrCreateOAuthUser(providerName, providerUserId, email,
     const { firstName, lastName } = splitFullName(name || normalizedEmail);
     const { rows } = await query(
       `INSERT INTO users (email, password_hash, group_id, first_name, last_name, email_verified)
-       VALUES ($1, NULL, (SELECT id FROM groups WHERE key = 'sc'), $2, $3, $4) RETURNING id`,
+       VALUES ($1, NULL, (SELECT id FROM groups WHERE key = 'mitglied'), $2, $3, $4) RETURNING id`,
       [normalizedEmail, firstName, lastName, !!emailVerifiedByProvider]
     );
     userId = rows[0].id;

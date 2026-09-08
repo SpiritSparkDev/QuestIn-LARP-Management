@@ -35,7 +35,7 @@ async function makeEvent(code) {
 test('GET .../scan-lookup resolves a valid, well-formed code to name/group/status/characters', async () => {
   await withTestServer(async (port) => {
     const eventId = await makeEvent('P17/2027');
-    const scUserId = await makeUser('sc');
+    const scUserId = await makeUser('mitglied');
     const staffUserId = await makeUser('admin');
     await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [scUserId, eventId]);
     await query(
@@ -52,7 +52,7 @@ test('GET .../scan-lookup resolves a valid, well-formed code to name/group/statu
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.userId, scUserId);
-    assert.equal(body.group, 'sc');
+    assert.equal(body.group, 'mitglied');
     assert.equal(body.status, 'pending');
     assert.deepEqual(body.characters.map((c) => c.name), ['Aldric']);
   });
@@ -77,7 +77,7 @@ test('GET .../scan-lookup rejects a code whose eventCode belongs to a different 
   await withTestServer(async (port) => {
     const eventId = await makeEvent('P17/2027');
     const otherEventId = await makeEvent('OTHER/2027');
-    const scUserId = await makeUser('sc');
+    const scUserId = await makeUser('mitglied');
     await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [scUserId, otherEventId]);
     const staffUserId = await makeUser('admin');
     const cookie = `session=${(await createSession(staffUserId)).token}`;
@@ -108,7 +108,7 @@ test('GET .../scan-lookup returns 404 for a well-formed code with no matching re
 test('GET .../scan-lookup rejects a group without checkin menu access', async () => {
   await withTestServer(async (port) => {
     const eventId = await makeEvent('P17/2027');
-    const scUserId = await makeUser('sc');
+    const scUserId = await makeUser('mitglied');
     const cookie = `session=${(await createSession(scUserId)).token}`;
 
     const res = await fetch(`http://localhost:${port}/events/${eventId}/scan-lookup?code=P17/2027-sc-${scUserId}`, {

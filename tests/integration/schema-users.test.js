@@ -24,11 +24,11 @@ test('users/sessions/tokens tables exist after migration', async () => {
 test('users.email is unique', async () => {
   const email = `unique-${Date.now()}@example.com`;
   await query(
-    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'A', '', (SELECT id FROM groups WHERE key = 'sc'))",
+    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'A', '', (SELECT id FROM groups WHERE key = 'mitglied'))",
     [email]
   );
   await assert.rejects(
-    query("INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'B', '', (SELECT id FROM groups WHERE key = 'sc'))", [email]),
+    query("INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'B', '', (SELECT id FROM groups WHERE key = 'mitglied'))", [email]),
     /duplicate key value violates unique constraint/
   );
   await query('DELETE FROM users WHERE email = $1', [email]);
@@ -41,15 +41,18 @@ test('users.pronomen_enc column no longer exists after migration', async () => {
   assert.equal(rows.length, 0);
 });
 
-test('every group except nsc has "sc" in character_classes; nsc has "nsc" after migration', async () => {
-  const { rows } = await query('SELECT key, character_classes FROM groups WHERE key = ANY($1)', [SEEDED_GROUP_KEYS]);
-  for (const row of rows) {
-    if (row.key === 'nsc') {
-      assert.ok(row.character_classes.includes('nsc'), 'nsc group should include nsc');
-    } else {
-      assert.ok(row.character_classes.includes('sc'), `${row.key} should include sc`);
-    }
-  }
+test('exactly 3 groups exist after migration: admin, moderator, mitglied', async () => {
+  const { rows } = await query('SELECT key FROM groups ORDER BY key');
+  assert.deepEqual(rows.map((r) => r.key), ['admin', 'mitglied', 'moderator']);
+});
+
+test('registrations.con_role is backfilled and NOT NULL after migration', async () => {
+  const { rows } = await query(
+    `SELECT column_name, is_nullable FROM information_schema.columns
+     WHERE table_name = 'registrations' AND column_name = 'con_role'`
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].is_nullable, 'NO');
 });
 
 test('users.nsc_data column no longer exists after migration', async () => {
@@ -59,10 +62,10 @@ test('users.nsc_data column no longer exists after migration', async () => {
   assert.equal(rows.length, 0);
 });
 
-test('admin, orga, and sl groups have can_override_checkin_status=true after migration; others false', async () => {
+test('admin and moderator have can_override_checkin_status=true after migration; mitglied false', async () => {
   const { rows } = await query('SELECT key, can_override_checkin_status FROM groups WHERE key = ANY($1)', [SEEDED_GROUP_KEYS]);
   for (const row of rows) {
-    const expected = ['admin', 'orga', 'sl'].includes(row.key);
+    const expected = ['admin', 'moderator'].includes(row.key);
     assert.equal(row.can_override_checkin_status, expected, `${row.key} should have can_override_checkin_status=${expected}`);
   }
 });

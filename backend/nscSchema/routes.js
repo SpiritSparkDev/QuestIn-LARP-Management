@@ -5,10 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { validateSchemaShape } from '../events/schemaValidation.js';
 import { getNscProfileSchema, setNscProfileSchema } from './repository.js';
 
-router.get('/nsc-schema', requireAuth(async ({ user }) => {
-  if (user.group.key !== 'admin' && !user.group.characterClasses.includes('nsc')) {
-    return { status: 403, body: { error: 'forbidden' } };
-  }
+router.get('/nsc-schema', requireAuth(async () => {
   const schema = await getNscProfileSchema();
   return { status: 200, body: schema };
 }));

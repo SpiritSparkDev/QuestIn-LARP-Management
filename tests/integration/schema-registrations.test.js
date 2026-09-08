@@ -15,7 +15,7 @@ const { query, closePool } = await import('../../backend/db.js');
 
 async function makeUser() {
   const { rows } = await query(
-    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'Reg', 'Test', (SELECT id FROM groups WHERE key = 'sc')) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'Reg', 'Test', (SELECT id FROM groups WHERE key = 'mitglied')) RETURNING id",
     [`reg-schema-${crypto.randomUUID()}@example.com`]
   );
   return rows[0].id;

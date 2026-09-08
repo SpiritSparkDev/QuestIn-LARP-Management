@@ -21,7 +21,7 @@ const {
 
 test('a file stamped on a non-target backend is migrated: listing stops returning it, usage totals move', async () => {
   const { rows: userRows } = await query(
-    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Bookkeeping', 'Test', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Bookkeeping', 'Test', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
     [`storage-bookkeeping-${crypto.randomUUID()}@example.com`]
   );
   const { rows: charRows } = await query(

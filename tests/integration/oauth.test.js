@@ -96,7 +96,7 @@ test('findOrCreateOAuthUser returns the same user for a repeat login (no duplica
 test('findOrCreateOAuthUser links to an existing password-registered account by email', async () => {
   const email = `oauth-link-${crypto.randomUUID()}@example.com`;
   const { rows: existing } = await query(
-    "INSERT INTO users (email, password_hash, group_id, first_name, last_name, email_verified) VALUES ($1, 'irrelevant-hash', (SELECT id FROM groups WHERE key = 'sc'), 'Existing', 'User', true) RETURNING id",
+    "INSERT INTO users (email, password_hash, group_id, first_name, last_name, email_verified) VALUES ($1, 'irrelevant-hash', (SELECT id FROM groups WHERE key = 'mitglied'), 'Existing', 'User', true) RETURNING id",
     [email]
   );
   const userId = await findOrCreateOAuthUser('discord', `discord-${crypto.randomUUID()}`, email, 'Discord Name', true);
@@ -106,7 +106,7 @@ test('findOrCreateOAuthUser links to an existing password-registered account by 
 test('findOrCreateOAuthUser rejects linking when provider does not verify the email', async () => {
   const email = `oauth-unverified-${crypto.randomUUID()}@example.com`;
   const { rows: existing } = await query(
-    "INSERT INTO users (email, password_hash, group_id, first_name, last_name, email_verified) VALUES ($1, 'irrelevant-hash', (SELECT id FROM groups WHERE key = 'sc'), 'Existing', 'User', true) RETURNING id",
+    "INSERT INTO users (email, password_hash, group_id, first_name, last_name, email_verified) VALUES ($1, 'irrelevant-hash', (SELECT id FROM groups WHERE key = 'mitglied'), 'Existing', 'User', true) RETURNING id",
     [email]
   );
   await assert.rejects(
@@ -123,7 +123,7 @@ test('findOrCreateOAuthUser rejects linking when provider does not verify the em
 test('findOrCreateOAuthUser rejects a deactivated account already linked to this provider', async () => {
   const email = `oauth-deactivated-linked-${crypto.randomUUID()}@example.com`;
   const { rows } = await query(
-    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'OAuth', 'Deactivated', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'OAuth', 'Deactivated', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
     [email]
   );
   const userId = rows[0].id;
@@ -140,7 +140,7 @@ test('findOrCreateOAuthUser rejects a deactivated account already linked to this
 test('findOrCreateOAuthUser rejects linking a new provider to a deactivated existing account', async () => {
   const email = `oauth-deactivated-link-${crypto.randomUUID()}@example.com`;
   const { rows } = await query(
-    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'OAuth', 'Deactivated', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'OAuth', 'Deactivated', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
     [email]
   );
   await query('UPDATE users SET deactivated_at = now() WHERE id = $1', [rows[0].id]);

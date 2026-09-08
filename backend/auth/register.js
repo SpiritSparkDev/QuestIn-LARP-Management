@@ -38,7 +38,7 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
   try {
     const { rows } = await query(
       `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname)
-       VALUES ($1, $2, (SELECT id FROM groups WHERE key = 'sc'), $3, $4, $5) RETURNING id`,
+       VALUES ($1, $2, (SELECT id FROM groups WHERE key = 'mitglied'), $3, $4, $5) RETURNING id`,
       [email, passwordHash, firstName, lastName, nickname ?? null]
     );
     userId = rows[0].id;

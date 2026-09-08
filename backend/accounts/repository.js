@@ -15,7 +15,6 @@ function decryptAccount(row) {
     menus: row.visible_menus,
     canEditCharacters: row.can_edit_characters,
     accountFields: row.account_fields,
-    characterClasses: row.character_classes,
     canOverrideCheckinStatus: row.can_override_checkin_status,
     emailVerified: row.email_verified,
     ...decryptEncryptedAccountFields(row),
@@ -26,7 +25,7 @@ const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys,
   users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc,
   users.con_tage_enc, users.accommodation_enc, users.craft_offer_enc, users.travel_method_enc, users.data_sharing_opt_out_enc, users.photo_opt_out_enc,
-  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.character_classes, groups.can_override_checkin_status
+  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status
 `;
 
 const FROM_JOIN = `FROM users JOIN groups ON groups.id = users.group_id`;

@@ -26,7 +26,7 @@ async function makeAdmin() {
 }
 
 async function scGroupId() {
-  const { rows } = await query("SELECT id FROM groups WHERE key = 'sc'");
+  const { rows } = await query("SELECT id FROM groups WHERE key = 'mitglied'");
   return rows[0].id;
 }
 

@@ -18,7 +18,7 @@ const { requireAuth } = await import('../../backend/middleware/authenticate.js')
 const { requireMenu } = await import('../../backend/middleware/authorize.js');
 const { createServer } = await import('../../backend/server.js');
 
-async function makeUser(groupKey = 'sc') {
+async function makeUser(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'Mid', 'Test', (SELECT id FROM groups WHERE key = $2)) RETURNING id",
     [`mid-${Date.now()}-${Math.random()}@example.com`, groupKey]
@@ -45,11 +45,11 @@ test('requireAuth attaches the user (with group) and calls the handler for a val
   const result = await handler({ req: { headers: { cookie: `session=${session.token}` } } });
   assert.equal(result.status, 200);
   assert.equal(result.body.userId, userId);
-  assert.equal(result.body.groupKey, 'sc');
+  assert.equal(result.body.groupKey, 'mitglied');
 });
 
 test('requireMenu rejects a user whose group cannot see the menu', async () => {
-  const userId = await makeUser('sc');
+  const userId = await makeUser('mitglied');
   const session = await createSession(userId);
   const handler = requireAuth(requireMenu('mitglieder')(async () => ({ status: 200, body: {} })));
   const result = await handler({ req: { headers: { cookie: `session=${session.token}` } } });
@@ -70,7 +70,7 @@ test('requireAuth rejects a request from a deactivated account even with a still
   try {
     const { port } = server.address();
     const { rows } = await query(
-      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Deactivated', 'Test', (SELECT id FROM groups WHERE key = 'sc'), true) RETURNING id",
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Deactivated', 'Test', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
       [`deactivated-mw-${crypto.randomUUID()}@example.com`]
     );
     const userId = rows[0].id;

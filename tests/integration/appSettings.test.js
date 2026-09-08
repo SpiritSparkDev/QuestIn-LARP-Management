@@ -64,7 +64,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
 test('PUT /app-settings rejects a non-admin group and an unauthenticated request', async () => {
   await withTestServer(async (port) => {
-    const cookie = await makeUserAndSession('sc');
+    const cookie = await makeUserAndSession('mitglied');
     const asMember = await fetch(`http://localhost:${port}/app-settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -200,7 +200,7 @@ test('PUT/GET/DELETE /app-settings/logo round-trips, validates, and clears', asy
 
 test('PUT /app-settings/logo rejects a non-admin group and an unauthenticated request', async () => {
   await withTestServer(async (port) => {
-    const memberCookie = await makeUserAndSession('sc');
+    const memberCookie = await makeUserAndSession('mitglied');
     const asMember = await fetch(`http://localhost:${port}/app-settings/logo`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: memberCookie },
       body: JSON.stringify({ dataBase64: 'x', mimeType: 'image/png' }),

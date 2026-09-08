@@ -16,7 +16,7 @@ await seedGroups();
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
-async function makeUserAndSession(groupKey = 'sc') {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Storage', 'Settings Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
     [`storage-settings-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
@@ -58,7 +58,7 @@ test('PUT then GET /admin/settings/storage never returns plaintext secrets', asy
 
 test('GET/PUT/test/usage/migrate on /admin/settings/storage all reject a non-admin group', async () => {
   await withTestServer(async (port) => {
-    const { cookie } = await makeUserAndSession('sc');
+    const { cookie } = await makeUserAndSession('mitglied');
     const calls = [
       ['GET', '/admin/settings/storage', undefined],
       ['PUT', '/admin/settings/storage', JSON.stringify({ backend: 'local' })],
@@ -94,7 +94,7 @@ test('test-connection succeeds for the local backend and fails for an unreachabl
 
 test('usage aggregates size_bytes per backend', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
     const characterId = await makeCharacter(owner.userId);
     await query(
       `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, storage_backend)
@@ -110,7 +110,7 @@ test('usage aggregates size_bytes per backend', async () => {
 
 test('migrate reports a broken file as failed instead of crashing or silently dropping it', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('sc');
+    const owner = await makeUserAndSession('mitglied');
     const characterId = await makeCharacter(owner.userId);
     const { rows } = await query(
       `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, storage_backend)
