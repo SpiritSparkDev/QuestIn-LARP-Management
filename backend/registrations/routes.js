@@ -5,6 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import {
   registerForEvent,
+  setConRole,
   unregisterFromEvent,
   listParticipantsForEvent,
   listRegistrationsForUser,
@@ -29,13 +30,17 @@ function parseScanCode(code) {
   return { eventCode, groupKey, userId };
 }
 
-router.post('/events/:id/register', requireAuth(async ({ params, user }) => {
+router.post('/events/:id/register', requireAuth(async ({ req, params, user }) => {
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await registerForEvent(user.id, params.id);
+    const registration = await registerForEvent(user.id, params.id, body.conRole, user);
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
     if (err.code === 'ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
+    if (err.code === 'INVALID_CON_ROLE') return { status: 400, body: { error: err.message } };
+    if (err.code === 'FORBIDDEN_CON_ROLE') return { status: 403, body: { error: err.message } };
     throw err;
   }
 }));
@@ -162,3 +167,17 @@ router.put('/events/:id/checkin/:userId', requireAuth(requireMenu('checkin')(asy
     throw err;
   }
 })));
+
+router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ req, params, user }) => {
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  try {
+    const registration = await setConRole(params.id, params.userId, body.conRole, user);
+    return { status: 200, body: registration };
+  } catch (err) {
+    if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
+    if (err.code === 'INVALID_CON_ROLE') return { status: 400, body: { error: err.message } };
+    if (err.code === 'FORBIDDEN_CON_ROLE') return { status: 403, body: { error: err.message } };
+    throw err;
+  }
+}));

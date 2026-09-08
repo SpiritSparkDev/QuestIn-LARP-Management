@@ -47,14 +47,16 @@ test('a participant can register and unregister for an event', async () => {
     const eventId = await makeEvent();
 
     const registerRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
-      method: 'POST', headers: { Cookie: cookie },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
     });
     assert.equal(registerRes.status, 201);
     const registration = await registerRes.json();
     assert.equal(registration.status, 'pending');
 
     const dupRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
-      method: 'POST', headers: { Cookie: cookie },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
     });
     assert.equal(dupRes.status, 409);
 
@@ -76,7 +78,8 @@ test('registering for an unknown event returns 404', async () => {
     const { cookie } = await makeUserAndSession();
 
     const res = await fetch(`http://localhost:${port}/events/${crypto.randomUUID()}/register`, {
-      method: 'POST', headers: { Cookie: cookie },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
     });
     assert.equal(res.status, 404);
   });
@@ -123,7 +126,8 @@ test('two concurrent approvals of the same registration: exactly one succeeds', 
     const eventId = await makeEvent();
 
     const registerRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
-      method: 'POST', headers: { Cookie: cookie },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
     });
     assert.equal(registerRes.status, 201);
     await query(
@@ -157,13 +161,16 @@ test('GET /registrations lists only the calling participant\'s registrations', a
     const eventId2 = await makeEventNamed('Reg Test Con B', '2027-08-03');
 
     await fetch(`http://localhost:${port}/events/${eventId1}/register`, {
-      method: 'POST', headers: { Cookie: a.cookie },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: a.cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
     });
     await fetch(`http://localhost:${port}/events/${eventId2}/register`, {
-      method: 'POST', headers: { Cookie: a.cookie },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: a.cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
     });
     await fetch(`http://localhost:${port}/events/${eventId1}/register`, {
-      method: 'POST', headers: { Cookie: b.cookie },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: b.cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
     });
 
     const res = await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: a.cookie } });
@@ -180,6 +187,139 @@ test('GET /registrations lists only the calling participant\'s registrations', a
       assert.ok(r.eventDate);
       assert.equal(r.status, 'pending');
     }
+  });
+});
+
+test('a participant can self-register with a self-service con_role (sc/nsc/gsc/helfer)', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.conRole ?? body.con_role, 'helfer');
+  });
+});
+
+test('a plain member cannot self-register with con_role orga', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'orga' }),
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
+test('a moderator can self-register with con_role orga', async () => {
+  await withTestServer(async (port) => {
+    const { query } = await import('../../backend/db.js');
+    const { createSession } = await import('../../backend/auth/sessions.js');
+    const crypto = await import('node:crypto');
+    const { rows } = await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Mod', 'Test', (SELECT id FROM groups WHERE key = 'moderator'), true) RETURNING id",
+      [`mod-${crypto.randomUUID()}@example.com`]
+    );
+    const session = await createSession(rows[0].id);
+    const cookie = `session=${session.token}`;
+    const eventId = await makeEvent();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'orga' }),
+    });
+    assert.equal(res.status, 201);
+  });
+});
+
+test('an event-scoped orga can promote another participant to hilfs_orga; a non-orga participant cannot', async () => {
+  await withTestServer(async (port) => {
+    const { query } = await import('../../backend/db.js');
+    const { createSession } = await import('../../backend/auth/sessions.js');
+    const crypto = await import('node:crypto');
+
+    async function makeMitglied() {
+      const { rows } = await query(
+        "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'M', 'T', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
+        [`mitglied-${crypto.randomUUID()}@example.com`]
+      );
+      const session = await createSession(rows[0].id);
+      return { userId: rows[0].id, cookie: `session=${session.token}` };
+    }
+
+    const orga = await makeMitglied();
+    const target = await makeMitglied();
+    const bystander = await makeMitglied();
+    const eventId = await makeEvent();
+
+    // orga can't self-register as orga (no one holds that role for this event yet) -
+    // register as a self-service role, then force-promote via direct SQL to bootstrap.
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: orga.cookie },
+      body: JSON.stringify({ conRole: 'sc' }),
+    });
+    await query(
+      "UPDATE registrations SET con_role = 'orga' WHERE event_id = $1 AND user_id = $2",
+      [eventId, orga.userId]
+    );
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: target.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: bystander.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const promoted = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${target.userId}/con-role`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: orga.cookie },
+      body: JSON.stringify({ conRole: 'hilfs_orga' }),
+    });
+    assert.equal(promoted.status, 200);
+    assert.equal((await promoted.json()).con_role, 'hilfs_orga');
+
+    const denied = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${target.userId}/con-role`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: bystander.cookie },
+      body: JSON.stringify({ conRole: 'orga' }),
+    });
+    assert.equal(denied.status, 403);
+  });
+});
+
+test('approving a registration with con_role helfer succeeds without a character', async () => {
+  await withTestServer(async (port) => {
+    const { query } = await import('../../backend/db.js');
+    const { createSession } = await import('../../backend/auth/sessions.js');
+    const crypto = await import('node:crypto');
+    const { rows } = await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Mod', 'Approve', (SELECT id FROM groups WHERE key = 'moderator'), true) RETURNING id",
+      [`mod-approve-${crypto.randomUUID()}@example.com`]
+    );
+    const modSession = await createSession(rows[0].id);
+    const modCookie = `session=${modSession.token}`;
+    const helferUser = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helferUser.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
+      body: JSON.stringify({ userId: helferUser.userId }),
+    });
+    assert.equal(res.status, 200);
   });
 });
 
