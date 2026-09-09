@@ -20,7 +20,7 @@ async function resolveSmtpConfig() {
   };
 }
 
-async function getTransporterAndFrom() {
+export async function getTransporterAndFrom() {
   const { host, port, username, password, from } = await resolveSmtpConfig();
   const transporter = host
     ? nodemailer.createTransport({
@@ -72,8 +72,7 @@ export async function sendInvitationEmail(to, token) {
   });
 }
 
-export async function sendRegistrationOtFieldsChangedEmail(to, { userName, eventName }) {
-  const { transporter, from } = await getTransporterAndFrom();
+export async function sendRegistrationOtFieldsChangedEmail(to, { userName, eventName }, { transporter, from }) {
   return transporter.sendMail({
     to,
     from,

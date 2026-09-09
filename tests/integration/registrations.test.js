@@ -41,6 +41,31 @@ async function makeEventNamed(name, eventDate) {
   return rows[0].id;
 }
 
+// The 3 seeded groups have no "mitglieder-menu access but restricted
+// accountFields" combination (moderator/admin both get full accountFields by
+// default) -- Finding-3-style tests need exactly that, same throwaway-group
+// approach as tests/integration/checkin.test.js's makeCustomGroupUserAndSession.
+async function makeCustomGroupUserAndSession(overrides) {
+  const key = `reg_custom_${crypto.randomUUID().slice(0, 8)}`;
+  await query(
+    `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      key, key,
+      JSON.stringify(overrides.visibleMenus ?? []),
+      JSON.stringify(overrides.accountFields ?? []),
+      overrides.canEditCharacters ?? false,
+      overrides.canOverrideCheckinStatus ?? false,
+    ]
+  );
+  const { rows } = await query(
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Reg', 'Custom', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    [`reg-custom-${crypto.randomUUID()}@example.com`, key]
+  );
+  const session = await createSession(rows[0].id);
+  return { userId: rows[0].id, cookie: `session=${session.token}` };
+}
+
 async function makeCharacter(port, cookie, characterClass = 'sc', name = 'Test Char') {
   const res = await fetch(`http://localhost:${port}/characters`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -575,6 +600,53 @@ test('PUT .../ot-fields on an unknown registration returns 404', async () => {
   });
 });
 
+test('PUT .../ot-fields rejects a non-owner staff call that sets a field outside their group.accountFields', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    const eventId = await makeEvent();
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const staff = await makeCustomGroupUserAndSession({ visibleMenus: ['mitglieder'], accountFields: ['conTage'] });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${owner.userId}/ot-fields`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: staff.cookie },
+      body: JSON.stringify({ conTage: '5', accommodation: 'Hütte' }),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /accommodation/);
+  });
+});
+
+test('PUT .../ot-fields for a non-owner staff call filters the response to only their group.accountFields', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    const eventId = await makeEvent();
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const staff = await makeCustomGroupUserAndSession({ visibleMenus: ['mitglieder'], accountFields: ['conTage'] });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${owner.userId}/ot-fields`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: staff.cookie },
+      body: JSON.stringify({ conTage: '5' }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.conTage, '5');
+    assert.equal('accommodation' in body, false);
+    assert.equal('craftOffer' in body, false);
+    assert.equal('travelMethod' in body, false);
+    assert.equal('dataSharingOptOut' in body, false);
+    assert.equal('photoOptOut' in body, false);
+  });
+});
+
 test('resolveOtFieldsChangeRecipients returns event orga/hilfs_orga plus system admin/moderator, not a plain bystander', async () => {
   await withTestServer(async (port) => {
     const { resolveOtFieldsChangeRecipients } = await import('../../backend/registrations/repository.js');
@@ -614,5 +686,12 @@ test('resolveOtFieldsChangeRecipients returns event orga/hilfs_orga plus system 
 });
 
 test.after(async () => {
+  // Users created in a reg_custom_* group must be deleted before the group
+  // itself (users.group_id -> groups.id has no ON DELETE CASCADE), otherwise
+  // these throwaway groups would leak into later test files sharing this DB
+  // and break assertions that expect exactly the 3 seeded groups -- same
+  // cleanup checkin.test.js does for its own checkin_custom_* groups.
+  await query("DELETE FROM users WHERE email LIKE 'reg-custom-%'");
+  await query("DELETE FROM groups WHERE key LIKE 'reg_custom_%'");
   await closePool();
 });

@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
+import { REGISTRATION_FIELD_KEYS } from '../registrationFields.js';
 import {
   registerForEvent,
   setConRole,
@@ -201,6 +202,19 @@ router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ r
   if (!isOwner && !isStaff) return { status: 403, body: { error: 'forbidden' } };
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+
+  // group.accountFields gates which of the 6 fields staff may edit/see about
+  // ANOTHER participant -- mirrors PATCH /members/:id's filterToAllowedFields.
+  // The owner editing their own registration is never gated by this list (it
+  // exists to restrict what staff may do to OTHERS, not self-service), same
+  // as PATCH /account has no such restriction.
+  if (!isOwner) {
+    const disallowed = Object.keys(body).filter((key) => REGISTRATION_FIELD_KEYS.includes(key) && !user.group.accountFields.includes(key));
+    if (disallowed.length > 0) {
+      return { status: 400, body: { error: `not permitted to edit: ${disallowed.join(', ')}` } };
+    }
+  }
+
   let registration;
   try {
     registration = await updateRegistrationOtFields(params.id, params.userId, body);
@@ -208,6 +222,15 @@ router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ r
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
     throw err;
   }
-  await notifyRegistrationOtFieldsChanged(params.id, params.userId);
+  // Fire-and-forget: notifyRegistrationOtFieldsChanged never throws (own
+  // top-level try/catch), and awaiting it here would block the response on
+  // sending N emails.
+  notifyRegistrationOtFieldsChanged(params.id, params.userId);
+
+  if (!isOwner) {
+    for (const key of REGISTRATION_FIELD_KEYS) {
+      if (!user.group.accountFields.includes(key)) delete registration[key];
+    }
+  }
   return { status: 200, body: registration };
 }));

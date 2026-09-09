@@ -82,7 +82,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS, REGISTRATION_FIELD_LABELS, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, renderField, collectFieldValues } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS, REGISTRATION_FIELD_LABELS, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, renderField, collectFieldValues, isOptOutYes, OPT_OUT_KEYS } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 import { parseScanCode } from '/js/qrCode.js';
 
@@ -324,12 +324,21 @@ document.getElementById('edit-cancel').addEventListener('click', () => {
 document.getElementById('edit-save').addEventListener('click', async () => {
   message.textContent = '';
   message.className = '';
+  const original = participantsById.get(editingUserId)?.otFields ?? {};
   const accountPayload = {};
   const registrationPayload = {};
   editOtFields.querySelectorAll('[data-field]').forEach((input) => {
+    const key = input.dataset.field;
+    const originalValue = original[key] ?? '';
+    // Only send a field whose value actually changed -- an edit-save that
+    // touched nothing OT-related (e.g. only a character field) must not
+    // trigger PATCH /members or PUT .../ot-fields, since either one mails
+    // every event orga/hilfs_orga plus every admin/moderator on success.
+    const changed = OPT_OUT_KEYS.includes(key) ? isOptOutYes(originalValue) !== input.checked : originalValue !== input.value;
+    if (!changed) return;
     const value = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
-    if (input.dataset.field in ACCOUNT_FIELD_LABELS) accountPayload[input.dataset.field] = value;
-    else registrationPayload[input.dataset.field] = value;
+    if (key in ACCOUNT_FIELD_LABELS) accountPayload[key] = value;
+    else registrationPayload[key] = value;
   });
   const characterForms = [...editCharacters.querySelectorAll('.checkin-character-form')];
   let savedAnything = false;

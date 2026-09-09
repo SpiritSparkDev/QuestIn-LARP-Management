@@ -7,7 +7,7 @@ import { ENCRYPTED_ACCOUNT_FIELD_COLUMNS } from '../accountFields.js';
 import { filterCharacterFields } from '../characters/visibility.js';
 import { listOpenInvitationsForEvent } from '../invitations/repository.js';
 import { ENCRYPTED_REGISTRATION_FIELD_COLUMNS, decryptEncryptedRegistrationFields, encryptRegistrationFieldValues } from '../registrationFields.js';
-import { sendRegistrationOtFieldsChangedEmail } from '../auth/mailer.js';
+import { sendRegistrationOtFieldsChangedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
 const SELF_SERVICE_CON_ROLES = ['sc', 'nsc', 'gsc', 'helfer'];
@@ -443,9 +443,14 @@ export async function notifyRegistrationOtFieldsChanged(eventId, userId) {
       : 'Unbekannt';
     const eventName = event?.name ?? 'Unbekanntes Event';
     const recipients = await resolveOtFieldsChangeRecipients(eventId);
+    // Build one transporter/from pair for the whole recipient loop instead of
+    // per-recipient -- getTransporterAndFrom() re-reads SMTP settings and
+    // opens a fresh nodemailer connection each time it's called, which would
+    // otherwise serialize into N connect/greet/socket-timeout waits.
+    const transport = await getTransporterAndFrom();
     for (const to of recipients) {
       try {
-        await sendRegistrationOtFieldsChangedEmail(to, { userName, eventName });
+        await sendRegistrationOtFieldsChangedEmail(to, { userName, eventName }, transport);
       } catch (err) {
         logger.error('failed to send OT-fields-changed notification', { error: err.message, to, eventId, userId });
       }

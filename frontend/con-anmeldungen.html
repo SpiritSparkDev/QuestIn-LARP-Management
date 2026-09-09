@@ -74,7 +74,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, renderField, collectFieldValues, attachLiveValidation, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, REGISTRATION_FIELD_LABELS } from '/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, attachLiveValidation, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, REGISTRATION_FIELD_LABELS, isOptOutYes, OPT_OUT_KEYS } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', gsc: 'GSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga' };
@@ -193,12 +193,24 @@ document.getElementById('edit-ot-cancel').addEventListener('click', () => {
 });
 
 document.getElementById('edit-ot-save').addEventListener('click', async () => {
+  const registration = currentRegistrations.find((r) => r.eventId === editingEventId);
   const payload = {};
   editOtFieldsContainer.querySelectorAll('[data-field]').forEach((input) => {
-    payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+    const key = input.dataset.field;
+    const originalValue = registration?.[key] ?? '';
+    // Only send a field that actually changed -- a save that touched nothing
+    // must not PUT .../ot-fields, since a successful call mails every event
+    // orga/hilfs_orga plus every admin/moderator.
+    const changed = OPT_OUT_KEYS.includes(key) ? isOptOutYes(originalValue) !== input.checked : originalValue !== input.value;
+    if (!changed) return;
+    payload[key] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
   });
   message.textContent = '';
   message.className = '';
+  if (Object.keys(payload).length === 0) {
+    editOtDialog.close();
+    return;
+  }
   try {
     await api.put(`/events/${editingEventId}/registrations/${currentUserId}/ot-fields`, payload);
     editOtDialog.close();
