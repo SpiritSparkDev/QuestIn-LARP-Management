@@ -432,21 +432,25 @@ export async function resolveOtFieldsChangeRecipients(eventId) {
 // a successful field save into a 500. Each recipient gets its own
 // try/catch so one bad address doesn't stop the rest.
 export async function notifyRegistrationOtFieldsChanged(eventId, userId) {
-  const event = await getEvent(eventId);
-  const { rows: userRows } = await query(
-    'SELECT first_name, last_name, nickname FROM users WHERE id = $1',
-    [userId]
-  );
-  const userName = userRows[0]
-    ? displayName({ firstName: userRows[0].first_name, lastName: userRows[0].last_name, nickname: userRows[0].nickname })
-    : 'Unbekannt';
-  const eventName = event?.name ?? 'Unbekanntes Event';
-  const recipients = await resolveOtFieldsChangeRecipients(eventId);
-  for (const to of recipients) {
-    try {
-      await sendRegistrationOtFieldsChangedEmail(to, { userName, eventName });
-    } catch (err) {
-      logger.error('failed to send OT-fields-changed notification', { error: err.message, to, eventId, userId });
+  try {
+    const event = await getEvent(eventId);
+    const { rows: userRows } = await query(
+      'SELECT first_name, last_name, nickname FROM users WHERE id = $1',
+      [userId]
+    );
+    const userName = userRows[0]
+      ? displayName({ firstName: userRows[0].first_name, lastName: userRows[0].last_name, nickname: userRows[0].nickname })
+      : 'Unbekannt';
+    const eventName = event?.name ?? 'Unbekanntes Event';
+    const recipients = await resolveOtFieldsChangeRecipients(eventId);
+    for (const to of recipients) {
+      try {
+        await sendRegistrationOtFieldsChangedEmail(to, { userName, eventName });
+      } catch (err) {
+        logger.error('failed to send OT-fields-changed notification', { error: err.message, to, eventId, userId });
+      }
     }
+  } catch (err) {
+    logger.error('failed to prepare OT-fields-changed notification', { error: err.message, eventId, userId });
   }
 }
