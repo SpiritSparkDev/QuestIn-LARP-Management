@@ -71,3 +71,13 @@ export async function sendInvitationEmail(to, token) {
     text: `Du wurdest eingeladen. Setze dein Passwort, um loszulegen: ${url}`,
   });
 }
+
+export async function sendRegistrationOtFieldsChangedEmail(to, { userName, eventName }) {
+  const { transporter, from } = await getTransporterAndFrom();
+  return transporter.sendMail({
+    to,
+    from,
+    subject: `Anmeldungsdaten geändert: ${eventName}`,
+    text: `${userName} hat die Con-Tage/Unterbringung/Handwerk/Anreise/Opt-Out-Angaben der eigenen Anmeldung für "${eventName}" nachträglich geändert.`,
+  });
+}

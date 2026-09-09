@@ -15,6 +15,8 @@ import {
   cancelRegistration,
   setStatus,
   getScanLookup,
+  updateRegistrationOtFields,
+  notifyRegistrationOtFieldsChanged,
 } from './repository.js';
 
 function parseScanCode(code) {
@@ -34,7 +36,7 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, user);
+    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.otFields, user);
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
@@ -191,4 +193,21 @@ router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ re
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
     throw err;
   }
+}));
+
+router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ req, params, user }) => {
+  const isOwner = params.userId === user.id;
+  const isStaff = user.group.visibleMenus.includes('mitglieder');
+  if (!isOwner && !isStaff) return { status: 403, body: { error: 'forbidden' } };
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  let registration;
+  try {
+    registration = await updateRegistrationOtFields(params.id, params.userId, body);
+  } catch (err) {
+    if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
+    throw err;
+  }
+  await notifyRegistrationOtFieldsChanged(params.id, params.userId);
+  return { status: 200, body: registration };
 }));

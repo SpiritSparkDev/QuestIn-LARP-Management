@@ -440,6 +440,24 @@ test('participants list filters character (IT) fields by canOverrideCheckinStatu
   });
 });
 
+test('participants list exposes registration-scoped OT fields (conTage etc.) the same way as account-scoped ones', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const attendee = await makeUserAndSession('mitglied');
+    const eventId = await makeEvent();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: attendee.cookie },
+      body: JSON.stringify({ conRole: 'helfer', otFields: { conTage: '4', accommodation: 'IT-Zelt' } }),
+    });
+
+    const adminList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: admin.cookie } });
+    const entry = (await adminList.json()).find((p) => p.userId === attendee.userId);
+    assert.equal(entry.otFields.conTage, '4');
+    assert.equal(entry.otFields.accommodation, 'IT-Zelt');
+  });
+});
+
 test('participants list includes an open, event-scoped invitation as a "notified" entry with no userId', async () => {
   await withTestServer(async (port) => {
     const helper = await makeUserAndSession('moderator');

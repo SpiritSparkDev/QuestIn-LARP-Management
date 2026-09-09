@@ -6,6 +6,9 @@ import { decryptField } from '../crypto/fieldCrypto.js';
 import { ENCRYPTED_ACCOUNT_FIELD_COLUMNS } from '../accountFields.js';
 import { filterCharacterFields } from '../characters/visibility.js';
 import { listOpenInvitationsForEvent } from '../invitations/repository.js';
+import { ENCRYPTED_REGISTRATION_FIELD_COLUMNS, decryptEncryptedRegistrationFields, encryptRegistrationFieldValues } from '../registrationFields.js';
+import { sendRegistrationOtFieldsChangedEmail } from '../auth/mailer.js';
+import { logger } from '../logger.js';
 
 const SELF_SERVICE_CON_ROLES = ['sc', 'nsc', 'gsc', 'helfer'];
 const STAFF_CON_ROLES = ['orga', 'hilfs_orga'];
@@ -65,7 +68,7 @@ async function resolveCharacterId(userId, conRole, characterId) {
   return characterId;
 }
 
-export async function registerForEvent(userId, eventId, conRole, characterId, requestingUser) {
+export async function registerForEvent(userId, eventId, conRole, characterId, otFields, requestingUser) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -98,10 +101,10 @@ export async function registerForEvent(userId, eventId, conRole, characterId, re
 
   try {
     const { rows } = await query(
-      `INSERT INTO registrations (user_id, event_id, con_role, character_id)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO registrations (user_id, event_id, con_role, character_id, con_tage_enc, accommodation_enc, craft_offer_enc, travel_method_enc, data_sharing_opt_out_enc, photo_opt_out_enc)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING user_id, event_id, status, con_role, character_id, checked_in_at, checked_out_at`,
-      [userId, eventId, conRole, resolvedCharacterId]
+      [userId, eventId, conRole, resolvedCharacterId, ...encryptRegistrationFieldValues(otFields ?? {})]
     );
     return rows[0];
   } catch (err) {
@@ -177,10 +180,12 @@ export async function unregisterFromEvent(userId, eventId) {
 
 export async function listParticipantsForEvent(eventId, { schema = [], viewer } = {}) {
   const otKeys = (viewer?.group?.accountFields ?? []).filter((key) => key in ENCRYPTED_ACCOUNT_FIELD_COLUMNS);
+  const registrationOtKeys = (viewer?.group?.accountFields ?? []).filter((key) => key in ENCRYPTED_REGISTRATION_FIELD_COLUMNS);
   const otColumnsSql = otKeys.map((key) => `, u.${ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]}`).join('');
+  const registrationOtColumnsSql = registrationOtKeys.map((key) => `, r.${ENCRYPTED_REGISTRATION_FIELD_COLUMNS[key]}`).join('');
 
   const { rows: registrations } = await query(
-    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.checked_in_at, r.checked_out_at${otColumnsSql}
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.checked_in_at, r.checked_out_at${otColumnsSql}${registrationOtColumnsSql}
      FROM registrations r
      JOIN users u ON u.id = r.user_id
      WHERE r.event_id = $1
@@ -214,7 +219,10 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,
     characters: charactersByUser.get(r.user_id) ?? [],
-    otFields: Object.fromEntries(otKeys.map((key) => [key, decryptField(r[ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]])])),
+    otFields: {
+      ...Object.fromEntries(otKeys.map((key) => [key, decryptField(r[ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]])])),
+      ...Object.fromEntries(registrationOtKeys.map((key) => [key, decryptField(r[ENCRYPTED_REGISTRATION_FIELD_COLUMNS[key]])])),
+    },
   }));
 
   const notified = (await listOpenInvitationsForEvent(eventId)).map((inv) => ({
@@ -261,7 +269,8 @@ export async function getScanLookup(eventId, userId) {
 
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
-    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.checked_in_at, r.checked_out_at
+    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.checked_in_at, r.checked_out_at,
+            r.con_tage_enc, r.accommodation_enc, r.craft_offer_enc, r.travel_method_enc, r.data_sharing_opt_out_enc, r.photo_opt_out_enc
      FROM registrations r
      JOIN events e ON e.id = r.event_id
      WHERE r.user_id = $1
@@ -277,6 +286,7 @@ export async function listRegistrationsForUser(userId) {
     characterId: r.character_id,
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,
+    ...decryptEncryptedRegistrationFields(r),
   }));
 }
 
@@ -364,4 +374,79 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
     throw err;
   }
   return rows[0];
+}
+
+export async function updateRegistrationOtFields(eventId, userId, otFields) {
+  const { rows } = await query(
+    `UPDATE registrations SET
+       con_tage_enc = COALESCE($3, con_tage_enc),
+       accommodation_enc = COALESCE($4, accommodation_enc),
+       craft_offer_enc = COALESCE($5, craft_offer_enc),
+       travel_method_enc = COALESCE($6, travel_method_enc),
+       data_sharing_opt_out_enc = COALESCE($7, data_sharing_opt_out_enc),
+       photo_opt_out_enc = COALESCE($8, photo_opt_out_enc)
+     WHERE event_id = $1 AND user_id = $2
+     RETURNING user_id, event_id, status, con_role, character_id, checked_in_at, checked_out_at,
+               con_tage_enc, accommodation_enc, craft_offer_enc, travel_method_enc, data_sharing_opt_out_enc, photo_opt_out_enc`,
+    [eventId, userId, ...encryptRegistrationFieldValues(otFields ?? {})]
+  );
+  if (rows.length === 0) {
+    const err = new Error('registration not found');
+    err.code = 'REGISTRATION_NOT_FOUND';
+    throw err;
+  }
+  const r = rows[0];
+  return {
+    userId: r.user_id,
+    eventId: r.event_id,
+    status: r.status,
+    conRole: r.con_role,
+    characterId: r.character_id,
+    checkedInAt: r.checked_in_at,
+    checkedOutAt: r.checked_out_at,
+    ...decryptEncryptedRegistrationFields(r),
+  };
+}
+
+// Recipients for the "a registration's OT fields changed" notification:
+// every user holding an orga/hilfs_orga registration for THIS event, plus
+// every system admin/moderator, regardless of event. A plain UNION (not a
+// JOIN + OR) so each half stays simple to read and test independently.
+export async function resolveOtFieldsChangeRecipients(eventId) {
+  const { rows } = await query(
+    `SELECT email FROM (
+       SELECT u.email FROM users u
+       JOIN registrations r ON r.user_id = u.id
+       WHERE r.event_id = $1 AND r.con_role IN ('orga', 'hilfs_orga')
+       UNION
+       SELECT u.email FROM users u
+       JOIN groups g ON g.id = u.group_id
+       WHERE g.key IN ('admin', 'moderator')
+     ) recipients`,
+    [eventId]
+  );
+  return rows.map((r) => r.email);
+}
+
+// Never throws -- a delivery failure to one or all recipients must not turn
+// a successful field save into a 500. Each recipient gets its own
+// try/catch so one bad address doesn't stop the rest.
+export async function notifyRegistrationOtFieldsChanged(eventId, userId) {
+  const event = await getEvent(eventId);
+  const { rows: userRows } = await query(
+    'SELECT first_name, last_name, nickname FROM users WHERE id = $1',
+    [userId]
+  );
+  const userName = userRows[0]
+    ? displayName({ firstName: userRows[0].first_name, lastName: userRows[0].last_name, nickname: userRows[0].nickname })
+    : 'Unbekannt';
+  const eventName = event?.name ?? 'Unbekanntes Event';
+  const recipients = await resolveOtFieldsChangeRecipients(eventId);
+  for (const to of recipients) {
+    try {
+      await sendRegistrationOtFieldsChangedEmail(to, { userName, eventName });
+    } catch (err) {
+      logger.error('failed to send OT-fields-changed notification', { error: err.message, to, eventId, userId });
+    }
+  }
 }

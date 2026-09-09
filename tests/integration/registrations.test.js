@@ -474,6 +474,145 @@ test('a non-privileged user cannot register with a self-service con_role for an 
   });
 });
 
+test('registering with otFields stores them, returned decrypted via GET /registrations', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer', otFields: { conTage: '3', accommodation: 'OT-Zelt', dataSharingOptOut: 'Ja' } }),
+    });
+    assert.equal(res.status, 201);
+
+    const list = await (await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: cookie } })).json();
+    const registration = list.find((r) => r.eventId === eventId);
+    assert.equal(registration.conTage, '3');
+    assert.equal(registration.accommodation, 'OT-Zelt');
+    assert.equal(registration.dataSharingOptOut, 'Ja');
+    assert.equal(registration.craftOffer, null);
+  });
+});
+
+test('PUT .../ot-fields updates fields for the registration owner and does not touch con_role/character', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer', otFields: { conTage: '1' } }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/ot-fields`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conTage: '5', travelMethod: 'Bahn' }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.conTage, '5');
+    assert.equal(body.travelMethod, 'Bahn');
+    assert.equal(body.conRole, 'helfer');
+  });
+});
+
+test('PUT .../ot-fields is forbidden for a non-owner without mitglieder menu access', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    const stranger = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${owner.userId}/ot-fields`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: stranger.cookie },
+      body: JSON.stringify({ conTage: '9' }),
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
+test('PUT .../ot-fields allows staff with mitglieder menu access to edit another user\'s registration', async () => {
+  await withTestServer(async (port) => {
+    const { query } = await import('../../backend/db.js');
+    const { createSession } = await import('../../backend/auth/sessions.js');
+    const crypto = await import('node:crypto');
+    const owner = await makeUserAndSession();
+    const eventId = await makeEvent();
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const { rows } = await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Mod', 'Staff', (SELECT id FROM groups WHERE key = 'moderator'), true) RETURNING id",
+      [`mod-otfields-${crypto.randomUUID()}@example.com`]
+    );
+    const modCookie = `session=${(await createSession(rows[0].id)).token}`;
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${owner.userId}/ot-fields`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
+      body: JSON.stringify({ accommodation: 'Hütte' }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).accommodation, 'Hütte');
+  });
+});
+
+test('PUT .../ot-fields on an unknown registration returns 404', async () => {
+  await withTestServer(async (port) => {
+    const { cookie, userId } = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/ot-fields`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conTage: '1' }),
+    });
+    assert.equal(res.status, 404);
+  });
+});
+
+test('resolveOtFieldsChangeRecipients returns event orga/hilfs_orga plus system admin/moderator, not a plain bystander', async () => {
+  await withTestServer(async (port) => {
+    const { resolveOtFieldsChangeRecipients } = await import('../../backend/registrations/repository.js');
+    const { query } = await import('../../backend/db.js');
+    const { createSession } = await import('../../backend/auth/sessions.js');
+    const crypto = await import('node:crypto');
+    const eventId = await makeEvent();
+
+    async function makeUserWithGroup(groupKey, email) {
+      const { rows } = await query(
+        "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'R', 'T', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+        [email, groupKey]
+      );
+      const session = await createSession(rows[0].id);
+      return { userId: rows[0].id, cookie: `session=${session.token}`, email };
+    }
+
+    const orga = await makeUserWithGroup('mitglied', `orga-recip-${crypto.randomUUID()}@example.com`);
+    const admin = await makeUserWithGroup('admin', `admin-recip-${crypto.randomUUID()}@example.com`);
+    const bystander = await makeUserWithGroup('mitglied', `bystander-recip-${crypto.randomUUID()}@example.com`);
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: orga.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    await query("UPDATE registrations SET con_role = 'orga' WHERE event_id = $1 AND user_id = $2", [eventId, orga.userId]);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: bystander.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const recipients = await resolveOtFieldsChangeRecipients(eventId);
+    assert.ok(recipients.includes(orga.email));
+    assert.ok(recipients.includes(admin.email));
+    assert.equal(recipients.includes(bystander.email), false);
+  });
+});
+
 test.after(async () => {
   await closePool();
 });
