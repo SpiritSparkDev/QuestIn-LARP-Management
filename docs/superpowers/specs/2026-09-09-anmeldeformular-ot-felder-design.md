@@ -158,15 +158,19 @@ Empfänger-Auflösung (neue Funktion, z. B. in
 jede E-Mail einzeln verschickt, jede in eigenem try/catch (ein
 Zustellungsfehler blockiert weder die Speicherung noch die übrigen Mails).
 
-### 5.4 Sichtbarkeit in Check-In/Teilnehmerliste
+### 5.4 Sichtbarkeit in der Teilnehmerliste
 
-`listParticipantsForEvent`/`getScanLookup`: die 6 Felder werden wie die
-bisherigen `otFields` behandelt, aber aus `registrations` statt `users`
-gelesen, weiterhin gefiltert über `viewer.group.accountFields` — die
-Feld-Keys (`conTage` etc.) bleiben identisch, nur `ENCRYPTED_ACCOUNT_FIELD_COLUMNS`
-wird für diesen Zweck durch `ENCRYPTED_REGISTRATION_FIELD_COLUMNS` ersetzt
-(zwei Spaltenquellen, eine gemeinsame Berechtigungsliste
-`group.accountFields`, kein neues Berechtigungs-Konzept).
+`listParticipantsForEvent`s `otFields` bekommt eine zweite Quelle dazu: neben
+den bestehenden `u.*_enc`-Spalten (users, über `ENCRYPTED_ACCOUNT_FIELD_COLUMNS`)
+werden jetzt auch `r.*_enc`-Spalten (registrations, über die neue
+`ENCRYPTED_REGISTRATION_FIELD_COLUMNS`) gelesen und ins selbe `otFields`-Objekt
+gemergt — weiterhin gefiltert über `viewer.group.accountFields`, keine
+Spaltennamen-Kollision (beide Maps haben disjunkte Spaltennamen). Die
+Feld-Keys (`conTage` etc.) bleiben identisch, nur die Quelltabelle wechselt.
+
+`getScanLookup` (QR-Scan-Check-In-Lookup) liefert heute schon keine
+OT-Felder, für keine Kategorie — das bleibt unverändert, Teil 3 fügt dort
+nichts hinzu.
 
 ### 5.5 Weitere Backend-Konsumenten der gedropften Spalten
 
@@ -259,7 +263,8 @@ Quellen mischt (8 Konto- + 6 Anmeldungs-Felder):
 
 ## 7. Fehlerbehandlung
 
-- Bearbeiten einer fremden Registrierung → 403.
+- Bearbeiten einer fremden Registrierung durch einen Nutzer ohne
+  `'mitglieder'`-Menüzugriff → 403.
 - Bearbeiten einer nicht existierenden Registrierung → 404
   `REGISTRATION_NOT_FOUND`.
 - E-Mail-Versand-Fehler beim Notify → geloggt, blockiert weder Speicherung
@@ -270,10 +275,11 @@ Quellen mischt (8 Konto- + 6 Anmeldungs-Felder):
 ## 8. Tests
 
 - Migration + jeder Backend-Konsument (`registerForEvent`,
-  `updateRegistrationOtFields`, `listParticipantsForEvent`,
-  `getScanLookup`) — analog Teil 1/Teil 2.
-- Neue Route: Owner darf bearbeiten, Fremder bekommt 403, unbekannte
-  Registrierung 404.
+  `updateRegistrationOtFields`, `listParticipantsForEvent`) — analog
+  Teil 1/Teil 2.
+- Neue Route: Owner darf bearbeiten, Staff (`'mitglieder'`-Menüzugriff)
+  darf fremde Registrierung bearbeiten, Nicht-Owner ohne diesen Zugriff
+  bekommt 403, unbekannte Registrierung 404.
 - Ersteinreichung (`POST /events/:id/register` mit `otFields`) löst keinen
   Mailer-Aufruf aus; `PUT .../ot-fields` löst genau einen Aufruf pro
   aufgelöstem Empfänger aus (Empfänger-Auflösungsfunktion ist pur genug für
