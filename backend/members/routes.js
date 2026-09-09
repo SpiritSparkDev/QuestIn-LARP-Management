@@ -131,12 +131,6 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     emergencyContactFirstName: rest.emergencyContactFirstName,
     emergencyContactPhone: rest.emergencyContactPhone,
     medicalNotes: rest.medicalNotes,
-    conTage: rest.conTage,
-    accommodation: rest.accommodation,
-    craftOffer: rest.craftOffer,
-    travelMethod: rest.travelMethod,
-    dataSharingOptOut: rest.dataSharingOptOut,
-    photoOptOut: rest.photoOptOut,
     ttlDays: invitationTtlDays,
   });
 

@@ -2,7 +2,7 @@ import { encryptField, decryptField } from './crypto/fieldCrypto.js';
 
 export const ACCOUNT_FIELD_KEYS = [
   'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone',
-  'medicalNotes', 'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut', 'group',
+  'medicalNotes', 'group',
 ];
 
 // Encrypted-at-rest member (OT) fields, mapped to their column. 'group' is
@@ -15,12 +15,6 @@ export const ENCRYPTED_ACCOUNT_FIELD_COLUMNS = {
   emergencyContactFirstName: 'emergency_contact_first_name_enc',
   emergencyContactPhone: 'emergency_contact_phone_enc',
   medicalNotes: 'medical_notes_enc',
-  conTage: 'con_tage_enc',
-  accommodation: 'accommodation_enc',
-  craftOffer: 'craft_offer_enc',
-  travelMethod: 'travel_method_enc',
-  dataSharingOptOut: 'data_sharing_opt_out_enc',
-  photoOptOut: 'photo_opt_out_enc',
 };
 
 const ENCRYPTED_FIELD_KEYS = Object.keys(ENCRYPTED_ACCOUNT_FIELD_COLUMNS);
@@ -35,7 +29,7 @@ export function decryptEncryptedAccountFields(row) {
   return result;
 }
 
-// Encrypts whichever of the 13 OT fields are present in `fields`, always in
+// Encrypts whichever of the 7 OT fields are present in `fields`, always in
 // ENCRYPTED_ACCOUNT_FIELD_COLUMNS order -- callers append the result to their
 // own COALESCE UPDATE param list, after their entity-specific columns.
 export function encryptAccountFieldValues(fields) {

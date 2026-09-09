@@ -5,7 +5,6 @@ import { decryptEncryptedAccountFields, encryptAccountFieldValues } from '../acc
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.deactivated_at,
   users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc,
-  users.con_tage_enc, users.accommodation_enc, users.craft_offer_enc, users.travel_method_enc, users.data_sharing_opt_out_enc, users.photo_opt_out_enc,
   groups.id AS group_id, groups.key AS group_key, groups.name AS group_name
 `;
 
@@ -69,13 +68,7 @@ export async function updateMember(id, fields) {
        emergency_contact_last_name_enc = COALESCE($9, emergency_contact_last_name_enc),
        emergency_contact_first_name_enc = COALESCE($10, emergency_contact_first_name_enc),
        emergency_contact_phone_enc = COALESCE($11, emergency_contact_phone_enc),
-       medical_notes_enc = COALESCE($12, medical_notes_enc),
-       con_tage_enc = COALESCE($13, con_tage_enc),
-       accommodation_enc = COALESCE($14, accommodation_enc),
-       craft_offer_enc = COALESCE($15, craft_offer_enc),
-       travel_method_enc = COALESCE($16, travel_method_enc),
-       data_sharing_opt_out_enc = COALESCE($17, data_sharing_opt_out_enc),
-       photo_opt_out_enc = COALESCE($18, photo_opt_out_enc)
+       medical_notes_enc = COALESCE($12, medical_notes_enc)
      WHERE id = $1
      RETURNING id`,
     [
