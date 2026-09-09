@@ -113,18 +113,26 @@ Vorausfüllen, ohne einen zweiten Roundtrip pro Registrierung.
 
 ### 5.2 Neue Route: Anmeldung nachträglich bearbeiten
 
-`PUT /events/:id/registrations/:userId/ot-fields`, `requireAuth`, nur wenn
-`userId === requestingUser.id` (kein Fremdzugriff, anders als die
-con-role-Promotion-Route — hier gibt es keine Orga-Override-Berechtigung).
+`PUT /events/:id/registrations/:userId/ot-fields`, `requireAuth`. Erlaubt
+für den Owner selbst ODER für Staff mit `'mitglieder'` im eigenen
+`group.visibleMenus` (dieselbe Berechtigung, die heute schon
+`PATCH /members/:id` gated) — nötig, damit `admin/checkin.html`s
+bestehender "Bearbeiten"-Dialog (Orga/Admin pflegt OT-Felder eines
+Teilnehmers direkt am Check-In-Tisch) für diese 6 Felder funktionsfähig
+bleibt. Jeder erfolgreiche Aufruf löst die Benachrichtigung aus, auch wenn
+Staff im Auftrag des Teilnehmers ändert (keine Sonderbehandlung — einfache,
+einheitliche Regel).
 
 ```javascript
 router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ req, params, user }) => {
-  if (params.userId !== user.id) return { status: 403, body: { error: 'forbidden' } };
+  const isOwner = params.userId === user.id;
+  const isStaff = user.group.visibleMenus.includes('mitglieder');
+  if (!isOwner && !isStaff) return { status: 403, body: { error: 'forbidden' } };
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await updateRegistrationOtFields(params.id, user.id, body);
-    await notifyRegistrationOtFieldsChanged(params.id, user.id); // fire-and-forget, try/catch innen
+    const registration = await updateRegistrationOtFields(params.id, params.userId, body);
+    await notifyRegistrationOtFieldsChanged(params.id, params.userId); // fire-and-forget, try/catch innen
     return { status: 200, body: registration };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
@@ -160,6 +168,33 @@ wird für diesen Zweck durch `ENCRYPTED_REGISTRATION_FIELD_COLUMNS` ersetzt
 (zwei Spaltenquellen, eine gemeinsame Berechtigungsliste
 `group.accountFields`, kein neues Berechtigungs-Konzept).
 
+### 5.5 Weitere Backend-Konsumenten der gedropften Spalten
+
+Der Spalten-Drop auf `users`/`invitations` (4.1) bricht jede Datei, die
+diese 6 Spalten noch direkt referenziert — alle folgenden müssen im selben
+Task wie die Migration angepasst werden (gleiche Regel wie Teil 1/Teil 2:
+Spalten-Drop und jeder betroffene Konsument gehören in denselben Task):
+
+- `backend/accounts/repository.js`: `SELECT_COLUMNS` verliert die 6
+  `*_enc`-Spalten, `updateAccount`s UPDATE-Statement verliert die 6
+  `COALESCE(...)`-Zeilen (Parameter $13-$18 entfallen, `encryptAccountFieldValues(fields)`
+  liefert nach 4.2 ohnehin nur noch 8 Werte).
+- `backend/members/repository.js`: identische Anpassung an
+  `SELECT_COLUMNS` und `updateMember`s UPDATE-Statement.
+- `backend/members/routes.js`: der Invite-Handler (`POST /members/invite`)
+  verliert die 6 `rest.conTage`…`rest.photoOptOut`-Zeilen beim Aufruf von
+  `createInvitation(...)`.
+- `backend/invitations/repository.js`: `SELECT_COLUMNS`,
+  `decryptInvitation`, `createInvitation`s Parameterliste/INSERT/Werte-Array
+  verlieren die 6 Felder komplett.
+- `backend/auth/invite.js`: das `INSERT INTO users (...)` beim Einlösen
+  einer Einladung verliert die 6 Spalten inklusive ihrer
+  `(SELECT ..._enc FROM invitations WHERE id = $7)`-Subqueries.
+- `db/groupDefaults.js`: `accountFields`-Arrays der 3 Gruppen verlieren die
+  6 Keys (sie ziehen stattdessen automatisch in die Sichtbarkeits-Prüfung
+  für die neuen registrations-Felder ein, da dieselbe Permission-Liste
+  wiederverwendet wird, 5.4).
+
 ## 6. Frontend
 
 ### 6.1 `frontend/con-anmeldungen.html`
@@ -183,15 +218,35 @@ Die 6 Felder (Zeilen `conTage`…`photoOptOut`) inklusive Labels komplett
 entfernt, `data.dataSharingOptOut`/`photoOptOut`-Zeilen aus dem
 Submit-Handler entfernt.
 
-### 6.3 `frontend/admin/members.html`
+### 6.3 `frontend/js/formFields.js` + `frontend/admin/members.html`
 
-Vorbefüllungsfelder für die 6 Keys im Invite-Dialog entfernt (kein
-Account-Ziel mehr, ergeben keinen Sinn).
+`ACCOUNT_FIELD_LABELS` schrumpft auf die 8 echten Kontofelder (mirrors
+`accountFields.js` 4.2). Eine neue `REGISTRATION_FIELD_LABELS`-Konstante
+(6 Keys) wird ergänzt, für `con-anmeldungen.html` (6.1). `members.html`
+baut sein Invite- und Member-Edit-Formular generisch aus
+`Object.keys(ACCOUNT_FIELD_LABELS)` (`ALL_FIELD_KEYS`, Zeile 115) — durch
+das Schrumpfen der Konstante verschwinden die 6 Felder dort automatisch,
+keine eigenen `members.html`-Codeänderungen nötig.
 
 ### 6.4 `frontend/admin/checkin.html`
 
-Keine strukturelle Änderung nötig — die Teilnehmerliste zeigt weiterhin ein
-`otFields`-Objekt mit denselben 6 Keys, jetzt aus `registrations` befüllt.
+Zwei echte Änderungen nötig, weil `p.otFields` jetzt Keys aus zwei
+Quellen mischt (8 Konto- + 6 Anmeldungs-Felder):
+
+- Spalten-Auswahl/-Header (Zeile 128/152) läuft heute über
+  `Object.keys(ACCOUNT_FIELD_LABELS)` — muss auf eine kombinierte Map
+  (`{ ...ACCOUNT_FIELD_LABELS, ...REGISTRATION_FIELD_LABELS }`) umgestellt
+  werden, sonst verschwinden die 6 Felder aus der Teilnehmerliste.
+- Der "Bearbeiten"-Dialog (Zeile 323-336) baut aktuell EIN `otPayload` aus
+  allen `data-field`-Inputs und schickt es in einem `PATCH
+  /members/:id`-Aufruf. Das payload muss nach Feld-Herkunft aufgeteilt
+  werden: Keys aus `ACCOUNT_FIELD_LABELS` weiterhin per `PATCH
+  /members/:id`, Keys aus `REGISTRATION_FIELD_LABELS` per neuem `PUT
+  /events/:eventId/registrations/:userId/ot-fields` (Event-Kontext kommt
+  aus der aktuell gewählten `eventSelect.value` — das Bearbeiten-Dialog
+  ist ohnehin nur innerhalb eines gewählten Events offen). Beide Aufrufe
+  laufen wie bisher nacheinander im selben try/catch mit
+  `savedAnything`-Teilerfolgs-Tracking.
 
 ## 7. Fehlerbehandlung
 
