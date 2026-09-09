@@ -82,7 +82,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, renderField, collectFieldValues } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS, REGISTRATION_FIELD_LABELS, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, renderField, collectFieldValues } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 import { parseScanCode } from '/js/qrCode.js';
 
@@ -98,6 +98,7 @@ const statCheckedIn = document.getElementById('stat-checked-in');
 
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
 const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', gsc: 'GSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga' };
+const OT_FIELD_LABELS = { ...ACCOUNT_FIELD_LABELS, ...REGISTRATION_FIELD_LABELS };
 let currentSearch = '';
 let canOverride = false;
 let canManageMembers = false;
@@ -125,9 +126,9 @@ function renderColumnCheckboxes() {
   itColumnCheckboxes.innerHTML = currentSchema.map((field) => `
     <label><input type="checkbox" data-it-column="${escapeHtml(field.key)}" ${selectedColumns.it.includes(field.key) ? 'checked' : ''}> ${escapeHtml(field.label ?? field.key)}</label>
   `).join('');
-  const otKeys = Object.keys(ACCOUNT_FIELD_LABELS).filter((key) => myAccountFields.includes(key));
+  const otKeys = Object.keys(OT_FIELD_LABELS).filter((key) => myAccountFields.includes(key));
   otColumnCheckboxes.innerHTML = otKeys.map((key) => `
-    <label><input type="checkbox" data-ot-column="${escapeHtml(key)}" ${selectedColumns.ot.includes(key) ? 'checked' : ''}> ${escapeHtml(ACCOUNT_FIELD_LABELS[key])}</label>
+    <label><input type="checkbox" data-ot-column="${escapeHtml(key)}" ${selectedColumns.ot.includes(key) ? 'checked' : ''}> ${escapeHtml(OT_FIELD_LABELS[key])}</label>
   `).join('');
 
   itColumnCheckboxes.querySelectorAll('[data-it-column]').forEach((cb) => {
@@ -149,7 +150,7 @@ function toggleColumn(group, key, checked) {
 
 function renderTableHead() {
   const itLabels = selectedColumns.it.map((key) => currentSchema.find((f) => f.key === key)?.label ?? key);
-  const otLabels = selectedColumns.ot.map((key) => ACCOUNT_FIELD_LABELS[key] ?? key);
+  const otLabels = selectedColumns.ot.map((key) => OT_FIELD_LABELS[key] ?? key);
   const extraTh = [...itLabels, ...otLabels].map((label) => `<th>${escapeHtml(label)}</th>`).join('');
   tableHeadRow.innerHTML = `<th>Name</th><th>Charaktere</th><th>Rolle</th>${extraTh}<th>Status</th><th></th><th>Override</th>`;
 }
@@ -300,7 +301,7 @@ function openEditDialog(userId) {
 
   const otKeys = canManageMembers ? Object.keys(p.otFields ?? {}) : [];
   editOtFields.innerHTML = otKeys.length > 0
-    ? `<h3>Konto-Felder</h3>` + otKeys.map((key) => renderAccountFieldInput(key, ACCOUNT_FIELD_LABELS[key] ?? key, p.otFields[key])).join('')
+    ? `<h3>Konto-Felder</h3>` + otKeys.map((key) => renderAccountFieldInput(key, OT_FIELD_LABELS[key] ?? key, p.otFields[key])).join('')
     : '';
 
   editCharacters.innerHTML = canOverride
@@ -323,15 +324,22 @@ document.getElementById('edit-cancel').addEventListener('click', () => {
 document.getElementById('edit-save').addEventListener('click', async () => {
   message.textContent = '';
   message.className = '';
-  const otPayload = {};
+  const accountPayload = {};
+  const registrationPayload = {};
   editOtFields.querySelectorAll('[data-field]').forEach((input) => {
-    otPayload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+    const value = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+    if (input.dataset.field in ACCOUNT_FIELD_LABELS) accountPayload[input.dataset.field] = value;
+    else registrationPayload[input.dataset.field] = value;
   });
   const characterForms = [...editCharacters.querySelectorAll('.checkin-character-form')];
   let savedAnything = false;
   try {
-    if (Object.keys(otPayload).length > 0) {
-      await api.patch(`/members/${editingUserId}`, otPayload);
+    if (Object.keys(accountPayload).length > 0) {
+      await api.patch(`/members/${editingUserId}`, accountPayload);
+      savedAnything = true;
+    }
+    if (Object.keys(registrationPayload).length > 0) {
+      await api.put(`/events/${eventSelect.value}/registrations/${editingUserId}/ot-fields`, registrationPayload);
       savedAnything = true;
     }
     for (const form of characterForms) {

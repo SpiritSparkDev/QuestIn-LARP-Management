@@ -4,6 +4,12 @@ export const ACCOUNT_FIELD_LABELS = {
   address: 'Adresse', birthdate: 'Geburtsdatum', phone: 'Telefon',
   emergencyContactLastName: 'Notfallkontakt: Name', emergencyContactFirstName: 'Notfallkontakt: Vorname', emergencyContactPhone: 'Notfallkontakt: Telefonnummer',
   medicalNotes: 'Gesundheitshinweise',
+};
+
+// OT fields scoped to a single Con-Anmeldung instead of the account (moved
+// there in Teil 3 of the user-testing feedback package) -- the same
+// group.accountFields permission list gates visibility of these too.
+export const REGISTRATION_FIELD_LABELS = {
   conTage: 'Con-Tage des Spielers',
   accommodation: 'Unterbringung (Hütte/IT-Zelt/OT-Zelt, Anzahl, qm)',
   craftOffer: 'Angebotenes Handwerk',

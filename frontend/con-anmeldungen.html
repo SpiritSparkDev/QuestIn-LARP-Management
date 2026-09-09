@@ -28,6 +28,16 @@
       <tbody></tbody>
     </table>
 
+    <dialog id="edit-ot-dialog">
+      <h3>Anmeldungsdaten bearbeiten</h3>
+      <p class="lede">Diese Änderung benachrichtigt die Orga und Admin dieses Events per E-Mail.</p>
+      <div id="edit-ot-fields"></div>
+      <div class="dialog-actions">
+        <button type="button" id="edit-ot-save">Speichern</button>
+        <button type="button" id="edit-ot-cancel" class="btn-ghost">Abbrechen</button>
+      </div>
+    </dialog>
+
     <h2>Neu anmelden</h2>
     <form id="registration-form">
       <label for="event-select">Event</label>
@@ -51,6 +61,9 @@
 
       <div id="dynamic-fields"></div>
 
+      <h3>Weitere Angaben zu dieser Anmeldung</h3>
+      <div id="ot-fields"></div>
+
       <button type="submit" id="register-button">Anmelden</button>
     </form>
     <p id="message"></p>
@@ -61,7 +74,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, renderField, collectFieldValues, attachLiveValidation, STATUS_LABELS, renderEventOptions } from '/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, attachLiveValidation, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, REGISTRATION_FIELD_LABELS } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', gsc: 'GSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga' };
@@ -77,11 +90,28 @@ const noCharacterHint = document.getElementById('no-character-hint');
 const dynamicFields = document.getElementById('dynamic-fields');
 const registerButton = document.getElementById('register-button');
 const message = document.getElementById('message');
+const otFieldsContainer = document.getElementById('ot-fields');
 
 let events = [];
 let characters = [];
 let canEditCharacters = false;
 let isModeratorOrAdmin = false;
+let currentUserId = null;
+
+function renderOtFields(values = {}) {
+  otFieldsContainer.innerHTML = Object.entries(REGISTRATION_FIELD_LABELS)
+    .map(([key, label]) => renderAccountFieldInput(key, label, values[key]))
+    .join('');
+  attachLiveValidation(otFieldsContainer);
+}
+
+function collectOtFields() {
+  const result = {};
+  otFieldsContainer.querySelectorAll('[data-field]').forEach((input) => {
+    result[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+  });
+  return result;
+}
 
 function updateRegisterButtonLabel() {
   const event = events.find((e) => e.id === eventSelect.value);
@@ -141,20 +171,67 @@ async function loadCharacters() {
   populateCharacterOptions();
 }
 
+let currentRegistrations = [];
+const editOtDialog = document.getElementById('edit-ot-dialog');
+const editOtFieldsContainer = document.getElementById('edit-ot-fields');
+let editingEventId = null;
+
+function openEditOtDialog(eventId) {
+  const registration = currentRegistrations.find((r) => r.eventId === eventId);
+  if (!registration) return;
+  editingEventId = eventId;
+  editOtFieldsContainer.innerHTML = Object.entries(REGISTRATION_FIELD_LABELS)
+    .map(([key, label]) => renderAccountFieldInput(key, label, registration[key]))
+    .join('');
+  attachLiveValidation(editOtFieldsContainer);
+  editOtDialog.showModal();
+}
+
+document.getElementById('edit-ot-cancel').addEventListener('click', () => {
+  editingEventId = null;
+  editOtDialog.close();
+});
+
+document.getElementById('edit-ot-save').addEventListener('click', async () => {
+  const payload = {};
+  editOtFieldsContainer.querySelectorAll('[data-field]').forEach((input) => {
+    payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+  });
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.put(`/events/${editingEventId}/registrations/${currentUserId}/ot-fields`, payload);
+    editOtDialog.close();
+    message.textContent = 'Gespeichert.';
+    message.className = 'success';
+    await loadRegistrations();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+});
+
 async function loadRegistrations() {
   const registrations = await api.get('/registrations');
+  currentRegistrations = registrations;
   registrationListBody.innerHTML = registrations.map((r) => {
     const label = STATUS_LABELS[r.status] ?? r.status;
     return `<tr>
     <td>${escapeHtml(r.eventName)}</td>
     <td>${escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole)}</td>
     <td><span class="ribbon status-${escapeHtml(r.status)}">${escapeHtml(label)}</span></td>
-    <td>${r.status === 'pending' ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ''}</td>
+    <td>
+      <button type="button" data-edit-ot="${r.eventId}">Bearbeiten</button>
+      ${r.status === 'pending' ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ''}
+    </td>
   </tr>`;
   }).join('');
 
   registrationListBody.querySelectorAll('[data-unregister]').forEach((button) => {
     button.addEventListener('click', () => unregister(button.dataset.unregister));
+  });
+  registrationListBody.querySelectorAll('[data-edit-ot]').forEach((button) => {
+    button.addEventListener('click', () => openEditOtDialog(button.dataset.editOt));
   });
 }
 
@@ -186,9 +263,10 @@ registrationForm.addEventListener('submit', async (event) => {
       const data = collectFieldValues(registrationForm, schema);
       await api.put(`/characters/${characterId}`, { eventId, data });
     }
-    await api.post(`/events/${eventId}/register`, { conRole, characterId });
+    await api.post(`/events/${eventId}/register`, { conRole, characterId, otFields: collectOtFields() });
     message.textContent = 'Angemeldet.';
     message.className = 'success';
+    renderOtFields();
     await loadRegistrations();
   } catch (err) {
     message.textContent = err.status === 400 && err.body?.details
@@ -206,12 +284,14 @@ document.getElementById('logout-link').addEventListener('click', async () => {
 
 try {
   const account = await api.get('/account');
+  currentUserId = account.id;
   canEditCharacters = account.canEditCharacters;
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   isModeratorOrAdmin = account.group?.key === 'admin' || account.group?.key === 'moderator';
   if (!isModeratorOrAdmin) {
     document.querySelectorAll('#con-role-select option[data-staff-only]').forEach((opt) => opt.remove());
   }
+  renderOtFields();
   await loadEvents();
   await loadCharacters();
   await loadRegistrations();
