@@ -114,7 +114,13 @@ test('every seeded group matches GROUP_DEFAULTS field-for-field', async () => {
     const row = rows.find((r) => r.key === expected.key);
     assert.ok(row, `missing group: ${expected.key}`);
     assert.equal(row.name, expected.name);
-    assert.deepEqual(row.visible_menus, expected.visibleMenus);
+    // Order-insensitive, same as account_fields below: a retroactive-grant
+    // migration (e.g. 029, matching 009/024's pattern for account_fields)
+    // appends a menu key via `visible_menus || '[...]'` to a group already
+    // created by an older migration's own hardcoded INSERT (014/027) --
+    // that lands the key at the end of the array, not wherever
+    // GROUP_DEFAULTS currently lists it.
+    assert.deepEqual([...row.visible_menus].sort(), [...expected.visibleMenus].sort());
     assert.deepEqual([...row.account_fields].sort(), [...expected.accountFields].sort());
     assert.equal(row.can_edit_characters, expected.canEditCharacters);
     assert.equal(row.can_override_checkin_status, expected.canOverrideCheckinStatus);

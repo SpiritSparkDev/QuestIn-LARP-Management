@@ -22,38 +22,14 @@
       </button>
     </div>
     <h1>Meine Charaktere</h1>
-    <h2>Meine Anmeldungen</h2>
-    <table id="registration-list">
-      <thead><tr><th>Event</th><th>Status</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <p>
-      <label for="register-con-role">Rolle</label>
-      <select id="register-con-role">
-        <option value="sc">SC</option>
-        <option value="nsc">NSC</option>
-        <option value="gsc">GSC</option>
-        <option value="helfer">Helfer</option>
-        <option value="orga" data-staff-only>Orga</option>
-        <option value="hilfs_orga" data-staff-only>Hilfs-Orga</option>
-      </select>
-      <button type="button" id="register-button">Anmelden</button>
-    </p>
-    <p id="registration-message"></p>
-    <h2>Meine Charaktere</h2>
     <p><a href="/characters-browse.html">Charaktere anderer Spieler durchsuchen</a></p>
     <div id="character-list" class="char-grid"></div>
 
     <div id="sc-form-section" style="display:none;">
       <h2 id="form-title">Neuen Charakter anlegen</h2>
       <form id="character-form">
-        <label for="event-select">Event</label>
-        <select id="event-select" name="eventId" required></select>
         <label for="character-name">Charaktername</label>
         <input id="character-name" name="name" type="text" required>
-        <label for="copy-from-select">Von bestehendem Charakter übernehmen (optional)</label>
-        <select id="copy-from-select"><option value="">– keinen übernehmen –</option></select>
-        <div id="dynamic-fields"></div>
         <button type="submit">Speichern</button>
       </form>
       <p id="message"></p>
@@ -80,18 +56,15 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, renderField, collectFieldValues, attachLiveValidation, STATUS_LABELS, renderEventOptions } from '/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, attachLiveValidation } from '/js/formFields.js';
 import { renderNavLinks } from '/js/nav.js';
 
 const scFormSection = document.getElementById('sc-form-section');
-const eventSelect = document.getElementById('event-select');
-const dynamicFields = document.getElementById('dynamic-fields');
 const form = document.getElementById('character-form');
 attachLiveValidation(form);
 const message = document.getElementById('message');
 const listBody = document.getElementById('character-list');
 const formTitle = document.getElementById('form-title');
-const copyFromSelect = document.getElementById('copy-from-select');
 
 let nscSchema = [];
 let nscCharacters = [];
@@ -106,107 +79,8 @@ const nscFormTitle = document.getElementById('nsc-form-title');
 const nscDynamicFields = document.getElementById('nsc-dynamic-fields');
 const nscCancelButton = document.getElementById('nsc-cancel-edit');
 
-let events = [];
 let characters = [];
 let editingCharacterId = null;
-let canEditCharacters = false;
-let isModeratorOrAdmin = false;
-
-const registrationListBody = document.querySelector('#registration-list tbody');
-const registrationMessage = document.getElementById('registration-message');
-
-async function loadRegistrations() {
-  const registrations = await api.get('/registrations');
-  registrationListBody.innerHTML = registrations.map((r) => {
-    const label = STATUS_LABELS[r.status] ?? r.status;
-    return `<tr>
-    <td>${escapeHtml(r.eventName)}</td>
-    <td><span class="ribbon status-${escapeHtml(r.status)}">${escapeHtml(label)}</span></td>
-    <td>${r.status === 'pending' ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ''}</td>
-  </tr>`;
-  }).join('');
-
-  registrationListBody.querySelectorAll('[data-unregister]').forEach((button) => {
-    button.addEventListener('click', () => unregister(button.dataset.unregister));
-  });
-}
-
-async function unregister(eventId) {
-  registrationMessage.textContent = '';
-  registrationMessage.className = '';
-  try {
-    await api.delete(`/events/${eventId}/register`);
-    await loadRegistrations();
-  } catch (err) {
-    registrationMessage.textContent = err.message;
-    registrationMessage.className = 'error';
-  }
-}
-
-const registerButton = document.getElementById('register-button');
-const registerConRoleSelect = document.getElementById('register-con-role');
-
-function updateRegisterButtonLabel() {
-  const event = events.find((e) => e.id === eventSelect.value);
-  registerButton.textContent = event ? `Anmelden für ${event.name}` : 'Anmelden';
-}
-
-eventSelect.addEventListener('change', updateRegisterButtonLabel);
-
-registerButton.addEventListener('click', async () => {
-  registrationMessage.textContent = '';
-  registrationMessage.className = '';
-  const eventId = eventSelect.value;
-  if (!eventId) return;
-  try {
-    await api.post(`/events/${eventId}/register`, { conRole: registerConRoleSelect.value });
-    registrationMessage.textContent = 'Angemeldet.';
-    registrationMessage.className = 'success';
-    await loadRegistrations();
-  } catch (err) {
-    registrationMessage.textContent = err.message;
-    registrationMessage.className = 'error';
-  }
-});
-
-function renderSchemaFields(schema, data = {}) {
-  dynamicFields.innerHTML = schema.map((field) => renderField(field, data[field.key])).join('');
-  // Dynamic fields are (re-)created here on every event switch / edit / copy,
-  // after attachLiveValidation(form) already ran once over the (then-empty)
-  // #dynamic-fields container -- re-attach to the fresh nodes each time.
-  attachLiveValidation(dynamicFields);
-}
-
-eventSelect.addEventListener('change', () => {
-  const event = events.find((e) => e.id === eventSelect.value);
-  renderSchemaFields(event ? event.character_form_schema : []);
-});
-
-// Only groups with can_edit_characters (currently admin/orga) keep the full
-// event list (e.g. to fix up past data); everyone else only sees active events.
-function populateEventOptions() {
-  const visibleEvents = canEditCharacters ? events : events.filter((e) => e.is_active);
-  eventSelect.innerHTML = renderEventOptions(visibleEvents);
-  if (visibleEvents.length > 0) {
-    renderSchemaFields(visibleEvents[0].character_form_schema);
-  } else {
-    dynamicFields.innerHTML = '';
-  }
-  updateRegisterButtonLabel();
-}
-
-async function loadEvents() {
-  events = await api.get('/events');
-  populateEventOptions();
-}
-
-copyFromSelect.addEventListener('change', () => {
-  const source = characters.find((c) => c.id === copyFromSelect.value);
-  if (!source) return;
-  form.elements.name.value = source.name;
-  const targetEvent = events.find((e) => e.id === eventSelect.value);
-  renderSchemaFields(targetEvent ? targetEvent.character_form_schema : [], source.data);
-});
 
 const FILE_MIME_ALLOWLIST = { image: ['image/jpeg', 'image/png', 'image/webp'], document: ['application/pdf'] };
 
@@ -319,12 +193,10 @@ function tagValueForField(field, rawValue) {
 }
 
 function tagsForCharacter(c) {
-  const event = events.find((e) => e.id === c.event_id);
-  const schema = event ? event.character_form_schema : [];
-  return schema
-    .map((field) => ({ field, value: tagValueForField(field, c.data[field.key]) }))
+  return Object.entries(c.data ?? {})
+    .map(([key, value]) => ({ key, value: tagValueForField({ type: typeof value === 'boolean' ? 'boolean' : Array.isArray(value) ? 'multiselect' : 'text' }, value) }))
     .filter(({ value }) => value !== undefined)
-    .map(({ field, value }) => `<span class="tag">${escapeHtml(field.label)}: ${escapeHtml(value)}</span>`)
+    .map(({ key, value }) => `<span class="tag">${escapeHtml(key)}: ${escapeHtml(value)}</span>`)
     .join('');
 }
 
@@ -403,23 +275,13 @@ nscForm.addEventListener('submit', async (event) => {
   }
 });
 
-function populateCopyFromOptions() {
-  const scCharacters = characters.filter((c) => c.class !== 'nsc');
-  copyFromSelect.innerHTML = '<option value="">– keinen übernehmen –</option>' + scCharacters.map((c) => {
-    const event = events.find((e) => e.id === c.event_id);
-    return `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(event ? event.name : c.event_id)})</option>`;
-  }).join('');
-}
-
 async function loadCharacters() {
   characters = await api.get('/characters');
   const scCharacters = characters.filter((c) => c.class !== 'nsc');
   listBody.innerHTML = scCharacters.map((c) => {
-    const event = events.find((e) => e.id === c.event_id);
     const tagsHtml = tagsForCharacter(c);
     return `<div class="char-card">
       <h3>${escapeHtml(c.name)}</h3>
-      <div class="char-meta">${escapeHtml(event ? event.name : c.event_id)}</div>
       <div class="char-tags">${tagsHtml}</div>
       <button type="button" data-edit="${c.id}" class="btn-ghost" style="margin-top:14px;">Bearbeiten</button>
       <div class="char-files" data-files-for="${c.id}">
@@ -433,8 +295,6 @@ async function loadCharacters() {
   });
   scCharacters.forEach((c) => loadFilesInto(c.id));
 
-  populateCopyFromOptions();
-
   if (nscSection.style.display !== 'none') {
     nscCharacters = characters.filter((c) => c.class === 'nsc');
     renderNscList();
@@ -446,49 +306,27 @@ function startEdit(characterId) {
   if (!character) return;
   editingCharacterId = characterId;
   formTitle.textContent = `Charakter bearbeiten: ${character.name}`;
-  const event = events.find((e) => e.id === character.event_id);
-  // The character's own event may not be in the (possibly filtered) dropdown
-  // — e.g. a past/inactive event for a participant — so add it if missing,
-  // purely so the disabled select displays the right name.
-  if (event && !eventSelect.querySelector(`option[value="${event.id}"]`)) {
-    const opt = document.createElement('option');
-    opt.value = event.id;
-    opt.textContent = `${event.name} (${event.event_date})`;
-    eventSelect.appendChild(opt);
-  }
-  eventSelect.value = character.event_id;
-  eventSelect.disabled = true;
-  copyFromSelect.value = '';
-  copyFromSelect.disabled = true;
   form.elements.name.value = character.name;
-  renderSchemaFields(event ? event.character_form_schema : [], character.data);
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
 }
 
 function resetForm() {
   editingCharacterId = null;
   formTitle.textContent = 'Neuen Charakter anlegen';
-  eventSelect.disabled = false;
-  copyFromSelect.disabled = false;
-  copyFromSelect.value = '';
   form.reset();
   form.querySelector('button[type="submit"]').textContent = 'Speichern';
-  populateEventOptions();
 }
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   message.textContent = '';
   message.className = '';
-  const eventId = eventSelect.value;
   const name = form.elements.name.value;
-  const schema = events.find((e) => e.id === eventId)?.character_form_schema ?? [];
-  const rest = collectFieldValues(form, schema);
   try {
     if (editingCharacterId) {
-      await api.put(`/characters/${editingCharacterId}`, { name, data: rest });
+      await api.put(`/characters/${editingCharacterId}`, { name });
     } else {
-      await api.post('/characters', { class: 'sc', eventId, name, data: rest });
+      await api.post('/characters', { class: 'sc', name });
     }
     message.textContent = 'Gespeichert.';
     message.className = 'success';
@@ -510,19 +348,12 @@ document.getElementById('logout-link').addEventListener('click', async () => {
 
 try {
   const account = await api.get('/account');
-  canEditCharacters = account.canEditCharacters;
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   scFormSection.style.display = '';
   nscSchema = await api.get('/nsc-schema');
   nscSection.style.display = '';
   renderNscSchemaFields();
-  isModeratorOrAdmin = account.group?.key === 'admin' || account.group?.key === 'moderator';
-  if (!isModeratorOrAdmin) {
-    document.querySelectorAll('#register-con-role option[data-staff-only]').forEach((opt) => opt.remove());
-  }
-  await loadEvents();
   await loadCharacters();
-  await loadRegistrations();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
 }

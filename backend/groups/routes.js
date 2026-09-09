@@ -5,7 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { listGroups, getGroup, createGroup, updateGroup } from './repository.js';
 import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
 
-const MENU_KEYS = ['konto', 'charaktere', 'mitglieder', 'events', 'checkin'];
+const MENU_KEYS = ['konto', 'charaktere', 'con-anmeldungen', 'mitglieder', 'events', 'checkin'];
 const KEY_PATTERN = /^[a-z0-9_]+$/;
 
 function isValidMenuList(value) {
