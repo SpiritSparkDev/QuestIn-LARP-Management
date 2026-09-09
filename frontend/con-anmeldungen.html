@@ -100,7 +100,7 @@ let currentUserId = null;
 
 function renderOtFields(values = {}) {
   otFieldsContainer.innerHTML = Object.entries(REGISTRATION_FIELD_LABELS)
-    .map(([key, label]) => renderAccountFieldInput(key, label, values[key]))
+    .map(([key, label]) => renderAccountFieldInput(key, label, values[key], { idPrefix: 'register-' }))
     .join('');
   attachLiveValidation(otFieldsContainer);
 }
@@ -181,7 +181,7 @@ function openEditOtDialog(eventId) {
   if (!registration) return;
   editingEventId = eventId;
   editOtFieldsContainer.innerHTML = Object.entries(REGISTRATION_FIELD_LABELS)
-    .map(([key, label]) => renderAccountFieldInput(key, label, registration[key]))
+    .map(([key, label]) => renderAccountFieldInput(key, label, registration[key], { idPrefix: 'edit-' }))
     .join('');
   attachLiveValidation(editOtFieldsContainer);
   editOtDialog.showModal();

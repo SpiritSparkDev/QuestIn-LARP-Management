@@ -42,13 +42,14 @@ export const OPT_OUT_KEYS = ['dataSharingOptOut', 'photoOptOut'];
 // wrapper carries no styling today and looks removable, but it's a
 // deliberate per-field CSS/JS hook the user added for upcoming UI work.
 // Do not delete it as "unused" or collapse it back to a bare label+input.
-export function renderAccountFieldInput(key, label, value, { sealedBadge = '' } = {}) {
+export function renderAccountFieldInput(key, label, value, { sealedBadge = '', idPrefix = '' } = {}) {
   const escapedLabel = escapeHtml(label);
+  const id = `${idPrefix}field-${key}`;
   if (OPT_OUT_KEYS.includes(key)) {
     const checked = isOptOutYes(value) ? ' checked' : '';
-    return `<div class="${key}-container"><label for="field-${key}"><input id="field-${key}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}${sealedBadge}</label></div>`;
+    return `<div class="${key}-container"><label for="${id}"><input id="${id}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}${sealedBadge}</label></div>`;
   }
-  return `<div class="${key}-container"><label for="field-${key}">${escapedLabel}${sealedBadge}</label><input id="field-${key}" data-field="${key}" type="text" value="${escapeHtml(value ?? '')}"></div>`;
+  return `<div class="${key}-container"><label for="${id}">${escapedLabel}${sealedBadge}</label><input id="${id}" data-field="${key}" type="text" value="${escapeHtml(value ?? '')}"></div>`;
 }
 
 // Formats a character (IT) custom-field value for display, e.g. as a

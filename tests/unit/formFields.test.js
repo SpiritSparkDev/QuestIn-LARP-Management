@@ -177,3 +177,13 @@ test('renderAccountFieldInput appends the sealedBadge HTML after the label text 
   const html = renderAccountFieldInput('address', 'Adresse', '', { sealedBadge: '<span class="sealed">X</span>' });
   assert.match(html, /Adresse<span class="sealed">X<\/span><\/label>/);
 });
+
+test('renderAccountFieldInput namespaces id/for with idPrefix, defaulting to unprefixed', () => {
+  const plain = renderAccountFieldInput('address', 'Adresse', '');
+  assert.match(plain, /id="field-address"/);
+  assert.match(plain, /for="field-address"/);
+
+  const prefixed = renderAccountFieldInput('address', 'Adresse', '', { idPrefix: 'edit-' });
+  assert.match(prefixed, /id="edit-field-address"/);
+  assert.match(prefixed, /for="edit-field-address"/);
+});
