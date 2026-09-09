@@ -43,17 +43,37 @@ async function makeEvent(schema = VISIBILITY_SCHEMA, isActive = true) {
   return rows[0].id;
 }
 
+// Creates an sc-class character, registers it for eventId, and writes `data`
+// through PUT with eventId -- the character only shows up in
+// /events/:eventId/characters/public once it's actually registered (the
+// endpoint joins through registrations.character_id, not a direct column).
+async function makeRegisteredCharacter(port, cookie, eventId, name, data) {
+  const createRes = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ name }),
+  });
+  const { id } = await createRes.json();
+
+  await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ conRole: 'sc', characterId: id }),
+  });
+
+  await fetch(`http://localhost:${port}/characters/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ eventId, data }),
+  });
+
+  return id;
+}
+
 test('owner sees a non-public field; a different non-elevated user does not', async () => {
   await withTestServer(async (port) => {
     const owner = await makeUserAndSession();
     const stranger = await makeUserAndSession();
     const eventId = await makeEvent();
 
-    const createRes = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ eventId, name: 'Aldric', data: { fraction: 'Nordmark', secretNote: 'Doppelagent' } }),
-    });
-    const { id } = await createRes.json();
+    const id = await makeRegisteredCharacter(port, owner.cookie, eventId, 'Aldric', { fraction: 'Nordmark', secretNote: 'Doppelagent' });
 
     const ownerView = await (await fetch(`http://localhost:${port}/events/${eventId}/characters/public`, {
       headers: { Cookie: owner.cookie },
@@ -75,11 +95,7 @@ test('a public field is visible to a different non-elevated user', async () => {
     const stranger = await makeUserAndSession();
     const eventId = await makeEvent();
 
-    const createRes = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ eventId, name: 'Bera', data: { fraction: 'Suedmark', secretNote: 'Verboten' } }),
-    });
-    const { id } = await createRes.json();
+    const id = await makeRegisteredCharacter(port, owner.cookie, eventId, 'Bera', { fraction: 'Suedmark', secretNote: 'Verboten' });
 
     const strangerView = await (await fetch(`http://localhost:${port}/events/${eventId}/characters/public`, {
       headers: { Cookie: stranger.cookie },
@@ -95,11 +111,7 @@ test('an elevated-group user sees all fields of all characters for the event', a
     const admin = await makeUserAndSession('admin');
     const eventId = await makeEvent();
 
-    const createRes = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ eventId, name: 'Corvin', data: { fraction: 'Ostmark', secretNote: 'Top Secret' } }),
-    });
-    const { id } = await createRes.json();
+    const id = await makeRegisteredCharacter(port, owner.cookie, eventId, 'Corvin', { fraction: 'Ostmark', secretNote: 'Top Secret' });
 
     const adminView = await (await fetch(`http://localhost:${port}/events/${eventId}/characters/public`, {
       headers: { Cookie: admin.cookie },
@@ -128,17 +140,8 @@ test('characters from multiple different users are each independently filtered p
     const viewer = await makeUserAndSession();
     const eventId = await makeEvent();
 
-    const aliceCreate = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: alice.cookie },
-      body: JSON.stringify({ eventId, name: 'Alice Char', data: { fraction: 'Nordmark', secretNote: 'Alice Secret' } }),
-    });
-    const { id: aliceId } = await aliceCreate.json();
-
-    const bobCreate = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: bob.cookie },
-      body: JSON.stringify({ eventId, name: 'Bob Char', data: { fraction: 'Suedmark', secretNote: 'Bob Secret' } }),
-    });
-    const { id: bobId } = await bobCreate.json();
+    const aliceId = await makeRegisteredCharacter(port, alice.cookie, eventId, 'Alice Char', { fraction: 'Nordmark', secretNote: 'Alice Secret' });
+    const bobId = await makeRegisteredCharacter(port, bob.cookie, eventId, 'Bob Char', { fraction: 'Suedmark', secretNote: 'Bob Secret' });
 
     const viewerView = await (await fetch(`http://localhost:${port}/events/${eventId}/characters/public`, {
       headers: { Cookie: viewer.cookie },
@@ -171,17 +174,15 @@ test('GET /characters/:id filters non-public fields for a non-owner, non-elevate
     const stranger = await makeUserAndSession();
     const eventId = await makeEvent();
 
-    const createRes = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ eventId, name: 'Delwyn', data: { fraction: 'Westmark', secretNote: 'Verraeter' } }),
-    });
-    const { id } = await createRes.json();
+    const id = await makeRegisteredCharacter(port, owner.cookie, eventId, 'Delwyn', { fraction: 'Westmark', secretNote: 'Verraeter' });
 
     const strangerGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: stranger.cookie } });
     assert.equal(strangerGet.status, 200);
     const strangerBody = await strangerGet.json();
-    assert.deepEqual(Object.keys(strangerBody.data).sort(), ['fraction']);
-    assert.equal(strangerBody.data.fraction, 'Westmark');
+    // GET /characters/:id (not the per-event /public list) has no single
+    // event context to resolve a schema against anymore -- a stranger only
+    // ever sees the name, regardless of any field's `public` flag.
+    assert.deepEqual(strangerBody.data, {});
 
     const missingGet = await fetch(`http://localhost:${port}/characters/${crypto.randomUUID()}`, { headers: { Cookie: stranger.cookie } });
     assert.equal(missingGet.status, 404);

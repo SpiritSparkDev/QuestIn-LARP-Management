@@ -28,6 +28,14 @@ async function makeEvent() {
   return rows[0].id;
 }
 
+async function makeCharacter(userId) {
+  const { rows } = await query(
+    "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Test Char', '{}') RETURNING id",
+    [userId]
+  );
+  return rows[0].id;
+}
+
 test('registrations table exists after migration', async () => {
   const { rows } = await query("SELECT to_regclass('registrations') AS exists");
   assert.ok(rows[0].exists);
@@ -36,9 +44,10 @@ test('registrations table exists after migration', async () => {
 test('a user can register for an event at most once (primary key enforced)', async () => {
   const userId = await makeUser();
   const eventId = await makeEvent();
-  await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [userId, eventId]);
+  const characterId = await makeCharacter(userId);
+  await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [userId, eventId, characterId]);
   await assert.rejects(
-    query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [userId, eventId]),
+    query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [userId, eventId, characterId]),
     /duplicate key value violates/
   );
 });
@@ -46,12 +55,31 @@ test('a user can register for an event at most once (primary key enforced)', asy
 test('status must be one of the allowed values', async () => {
   const userId = await makeUser();
   const eventId = await makeEvent();
+  const characterId = await makeCharacter(userId);
   await assert.rejects(
     query(
-      "INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'not-a-real-status')",
-      [userId, eventId]
+      "INSERT INTO registrations (user_id, event_id, status, character_id) VALUES ($1, $2, 'not-a-real-status', $3)",
+      [userId, eventId, characterId]
     ),
     /violates check constraint/
+  );
+});
+
+test('registrations_character_con_role_check rejects an sc registration with no character_id', async () => {
+  const { query } = await import('../../backend/db.js');
+  const { rows: userRows } = await query(
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'C', 'T', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
+    [`schema-reg-${crypto.randomUUID()}@example.com`]
+  );
+  const { rows: eventRows } = await query(
+    "INSERT INTO events (name, event_date) VALUES ('Schema Con', '2027-01-01') RETURNING id"
+  );
+  await assert.rejects(
+    query(
+      "INSERT INTO registrations (user_id, event_id, con_role) VALUES ($1, $2, 'sc')",
+      [userRows[0].id, eventRows[0].id]
+    ),
+    /registrations_character_con_role_check/
   );
 });
 

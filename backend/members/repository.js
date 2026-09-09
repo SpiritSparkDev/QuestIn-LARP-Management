@@ -40,9 +40,15 @@ export async function getMember(id) {
   );
   if (rows.length === 0) return null;
   const member = decryptMember(rows[0]);
+  // A character no longer carries its own event_id (account-wide, can be
+  // registered for many events) -- "its" event(s) only exist via
+  // registrations.character_id, so this lists one row per registration
+  // rather than one row per character.
   const { rows: characterRows } = await query(
-    `SELECT characters.id, characters.name, characters.event_id, events.name AS event_name
-     FROM characters JOIN events ON events.id = characters.event_id
+    `SELECT characters.id, characters.name, registrations.event_id, events.name AS event_name
+     FROM characters
+     JOIN registrations ON registrations.character_id = characters.id
+     JOIN events ON events.id = registrations.event_id
      WHERE characters.user_id = $1 ORDER BY events.event_date DESC`,
     [id]
   );

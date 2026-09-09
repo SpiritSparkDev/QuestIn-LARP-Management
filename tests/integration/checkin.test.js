@@ -50,8 +50,20 @@ async function makeCustomGroupUserAndSession(overrides) {
 
 async function makeEvent(schema) {
   const { rows } = await query(
-    'INSERT INTO events (name, event_date, character_form_schema) VALUES ($1, $2, $3) RETURNING id',
+    'INSERT INTO events (name, event_date, character_form_schema, is_active) VALUES ($1, $2, $3, true) RETURNING id',
     ['Checkin Test Con', '2027-09-01', JSON.stringify(schema ?? [])]
+  );
+  return rows[0].id;
+}
+
+// registrations.character_id is required whenever con_role is 'sc' (the
+// default con_role every raw INSERT below relies on) -- create the
+// character first and link it in the same INSERT, or the CHECK constraint
+// registrations_character_con_role_check rejects the row.
+async function makeCharacter(userId, name = 'Test Char', data = '{}') {
+  const { rows } = await query(
+    "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', $2, $3) RETURNING id",
+    [userId, name, data]
   );
   return rows[0].id;
 }
@@ -84,10 +96,10 @@ test('checkin_helper sees the participant list with characters and no encrypted 
     const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
 
-    await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
+    const characterId = await makeCharacter(attendee.userId, 'Aldric');
     await query(
-      "INSERT INTO characters (user_id, event_id, name, data) VALUES ($1, $2, 'Aldric', '{}')",
-      [attendee.userId, eventId]
+      "INSERT INTO registrations (user_id, event_id, status, character_id) VALUES ($1, $2, 'confirmed', $3)",
+      [attendee.userId, eventId, characterId]
     );
 
     const listRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
@@ -157,7 +169,11 @@ test('two concurrent check-ins for the same attendee: exactly one succeeds', asy
     const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
 
-    await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
+    const characterId = await makeCharacter(attendee.userId);
+    await query(
+      "INSERT INTO registrations (user_id, event_id, status, character_id) VALUES ($1, $2, 'confirmed', $3)",
+      [attendee.userId, eventId, characterId]
+    );
 
     const doCheckin = () => fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
@@ -180,7 +196,8 @@ test('a user without canOverrideCheckinStatus cannot use the override endpoint',
     // itself rejects it, not the pre-existing requireMenu('checkin') gate.
     const stranger = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
     const eventId = await makeEvent();
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [stranger.userId, eventId]);
+    const characterId = await makeCharacter(stranger.userId);
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [stranger.userId, eventId, characterId]);
 
     const res = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${stranger.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: stranger.cookie },
@@ -219,7 +236,8 @@ test('a user with canOverrideCheckinStatus can set a status directly, including 
     const admin = await makeUserAndSession('admin');
     const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    const characterId = await makeCharacter(attendee.userId);
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [attendee.userId, eventId, characterId]);
 
     const toCheckedOut = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
@@ -249,7 +267,11 @@ test('overriding to checked_out preserves an already-set checked_in_at instead o
     const admin = await makeUserAndSession('admin');
     const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
-    await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
+    const characterId = await makeCharacter(attendee.userId);
+    await query(
+      "INSERT INTO registrations (user_id, event_id, status, character_id) VALUES ($1, $2, 'confirmed', $3)",
+      [attendee.userId, eventId, characterId]
+    );
 
     const checkinRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
@@ -277,7 +299,8 @@ test('the override endpoint rejects an invalid status value', async () => {
     const admin = await makeUserAndSession('admin');
     const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    const characterId = await makeCharacter(attendee.userId);
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [attendee.userId, eventId, characterId]);
 
     const res = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
@@ -306,7 +329,8 @@ test('two concurrent overrides on the same registration with the same previousSt
     const admin = await makeUserAndSession('admin');
     const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    const characterId = await makeCharacter(attendee.userId);
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [attendee.userId, eventId, characterId]);
 
     const doOverride = (status) => fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
@@ -324,7 +348,11 @@ test('the normal checkin/checkout flow still works unchanged alongside the overr
     const helper = await makeUserAndSession('moderator');
     const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
-    await query("INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'confirmed')", [attendee.userId, eventId]);
+    const characterId = await makeCharacter(attendee.userId);
+    await query(
+      "INSERT INTO registrations (user_id, event_id, status, character_id) VALUES ($1, $2, 'confirmed', $3)",
+      [attendee.userId, eventId, characterId]
+    );
 
     const checkinRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
@@ -340,7 +368,8 @@ test('overriding directly from pending to checked_out does not fabricate a check
     const admin = await makeUserAndSession('admin');
     const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    const characterId = await makeCharacter(attendee.userId);
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [attendee.userId, eventId, characterId]);
 
     const overrideRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${attendee.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
@@ -362,7 +391,8 @@ test('participants list exposes only the OT fields the viewer\'s group is allowe
     const helper = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], accountFields: [], canOverrideCheckinStatus: true });
     const attendee = await makeUserAndSession('mitglied');
     const eventId = await makeEvent();
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
+    const characterId = await makeCharacter(attendee.userId);
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [attendee.userId, eventId, characterId]);
     const patchRes = await fetch(`http://localhost:${port}/members/${attendee.userId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
       body: JSON.stringify({ phone: '0123456789', medicalNotes: 'Erdnussallergie' }),
@@ -391,11 +421,12 @@ test('participants list filters character (IT) fields by canOverrideCheckinStatu
     const admin = await makeUserAndSession('admin'); // canOverrideCheckinStatus: true
     const hilfsSl = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
     const attendee = await makeUserAndSession('mitglied');
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [attendee.userId, eventId]);
-    await query(
-      "INSERT INTO characters (user_id, event_id, name, data) VALUES ($1, $2, 'Aldric', $3)",
-      [attendee.userId, eventId, JSON.stringify({ faction: 'Nordbund', secretGoal: 'Den Thron stürzen' })]
+    const characterId = await makeCharacter(
+      attendee.userId,
+      'Aldric',
+      JSON.stringify({ faction: 'Nordbund', secretGoal: 'Den Thron stürzen' })
     );
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [attendee.userId, eventId, characterId]);
 
     const adminList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: admin.cookie } });
     const adminChar = (await adminList.json()).find((p) => p.userId === attendee.userId).characters[0];
@@ -458,10 +489,12 @@ test('a redeemed invitation with no registration yet still shows as "notified", 
     assert.ok(beforeRegisterList.find((p) => p.invitationId === invitation.id && p.status === 'notified'));
 
     const newUserCookie = `session=${(await createSession(newUserId)).token}`;
+    // conRole 'helfer' needs no characterId -- role choice is irrelevant to
+    // this test, which only checks the notified -> registered transition.
     await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: newUserCookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'helfer' }),
     });
 
     const afterRegisterRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });

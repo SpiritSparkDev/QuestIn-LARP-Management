@@ -25,7 +25,7 @@ test('a file stamped on a non-target backend is migrated: listing stops returnin
     [`storage-bookkeeping-${crypto.randomUUID()}@example.com`]
   );
   const { rows: charRows } = await query(
-    "INSERT INTO characters (user_id, event_id, class, name, data) VALUES ($1, NULL, 'nsc', 'Bookkeeping Test Char', '{}') RETURNING id",
+    "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'nsc', 'Bookkeeping Test Char', '{}') RETURNING id",
     [userRows[0].id]
   );
   const characterId = charRows[0].id;

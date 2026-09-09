@@ -28,27 +28,37 @@ async function makeUserAndSession() {
 
 async function makeEvent() {
   const { rows } = await query(
-    "INSERT INTO events (name, event_date) VALUES ('Reg Test Con', '2027-08-01') RETURNING id"
+    "INSERT INTO events (name, event_date, is_active) VALUES ('Reg Test Con', '2027-08-01', true) RETURNING id"
   );
   return rows[0].id;
 }
 
 async function makeEventNamed(name, eventDate) {
   const { rows } = await query(
-    'INSERT INTO events (name, event_date) VALUES ($1, $2) RETURNING id',
+    'INSERT INTO events (name, event_date, is_active) VALUES ($1, $2, true) RETURNING id',
     [name, eventDate]
   );
   return rows[0].id;
+}
+
+async function makeCharacter(port, cookie, characterClass = 'sc', name = 'Test Char') {
+  const res = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ class: characterClass, name }),
+  });
+  const { id } = await res.json();
+  return id;
 }
 
 test('a participant can register and unregister for an event', async () => {
   await withTestServer(async (port) => {
     const { userId, cookie } = await makeUserAndSession();
     const eventId = await makeEvent();
+    const characterId = await makeCharacter(port, cookie);
 
     const registerRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId }),
     });
     assert.equal(registerRes.status, 201);
     const registration = await registerRes.json();
@@ -56,7 +66,7 @@ test('a participant can register and unregister for an event', async () => {
 
     const dupRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId }),
     });
     assert.equal(dupRes.status, 409);
 
@@ -101,10 +111,11 @@ test('a checked-in participant cannot unregister', async () => {
   await withTestServer(async (port) => {
     const { userId, cookie } = await makeUserAndSession();
     const eventId = await makeEvent();
+    const characterId = await makeCharacter(port, cookie);
 
     await query(
-      "INSERT INTO registrations (user_id, event_id, status) VALUES ($1, $2, 'checked_in')",
-      [userId, eventId]
+      "INSERT INTO registrations (user_id, event_id, status, character_id) VALUES ($1, $2, 'checked_in', $3)",
+      [userId, eventId, characterId]
     );
 
     const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
@@ -124,16 +135,13 @@ test('two concurrent approvals of the same registration: exactly one succeeds', 
     const helperSession = await createSession(helperRows[0].id);
     const helperCookie = `session=${helperSession.token}`;
     const eventId = await makeEvent();
+    const characterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
 
     const registerRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId }),
     });
     assert.equal(registerRes.status, 201);
-    await query(
-      "INSERT INTO characters (user_id, event_id, name, data) VALUES ($1, $2, 'Aldric', '{}')",
-      [userId, eventId]
-    );
 
     const doApprove = () => fetch(`http://localhost:${port}/events/${eventId}/approve`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helperCookie },
@@ -159,18 +167,20 @@ test('GET /registrations lists only the calling participant\'s registrations', a
     const b = await makeUserAndSession();
     const eventId1 = await makeEventNamed('Reg Test Con A', '2027-08-02');
     const eventId2 = await makeEventNamed('Reg Test Con B', '2027-08-03');
+    const aCharacterId = await makeCharacter(port, a.cookie);
+    const bCharacterId = await makeCharacter(port, b.cookie);
 
     await fetch(`http://localhost:${port}/events/${eventId1}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: a.cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId: aCharacterId }),
     });
     await fetch(`http://localhost:${port}/events/${eventId2}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: a.cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId: aCharacterId }),
     });
     await fetch(`http://localhost:${port}/events/${eventId1}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: b.cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId: bCharacterId }),
     });
 
     const res = await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: a.cookie } });
@@ -261,15 +271,16 @@ test('an event-scoped orga can promote another participant to hilfs_orga; a non-
     const target = await makeMitglied();
     const bystander = await makeMitglied();
     const eventId = await makeEvent();
+    const orgaCharacterId = await makeCharacter(port, orga.cookie);
 
     // orga can't self-register as orga (no one holds that role for this event yet) -
     // register as a self-service role, then force-promote via direct SQL to bootstrap.
     await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: orga.cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId: orgaCharacterId }),
     });
     await query(
-      "UPDATE registrations SET con_role = 'orga' WHERE event_id = $1 AND user_id = $2",
+      "UPDATE registrations SET con_role = 'orga', character_id = NULL WHERE event_id = $1 AND user_id = $2",
       [eventId, orga.userId]
     );
     await fetch(`http://localhost:${port}/events/${eventId}/register`, {
@@ -301,14 +312,16 @@ test('a bystander cannot use the promotion endpoint to rewrite another participa
     const target = await makeUserAndSession();
     const bystander = await makeUserAndSession();
     const eventId = await makeEvent();
+    const targetCharacterId = await makeCharacter(port, target.cookie);
+    const bystanderCharacterId = await makeCharacter(port, bystander.cookie);
 
     await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: target.cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId: targetCharacterId }),
     });
     await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: bystander.cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId: bystanderCharacterId }),
     });
 
     // Bystander holds no staff role for this event, yet tries to flip the
@@ -333,15 +346,17 @@ test('a user can change their own registration\'s con_role to a self-service val
   await withTestServer(async (port) => {
     const { cookie, userId } = await makeUserAndSession();
     const eventId = await makeEvent();
+    const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
+    const nscCharacterId = await makeCharacter(port, cookie, 'nsc', 'Wache Eins');
 
     await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'sc' }),
+      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId }),
     });
 
     const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/con-role`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'nsc' }),
+      body: JSON.stringify({ conRole: 'nsc', characterId: nscCharacterId }),
     });
     assert.equal(res.status, 200);
     assert.equal((await res.json()).con_role, 'nsc');
@@ -375,61 +390,87 @@ test('approving a registration with con_role helfer succeeds without a character
   });
 });
 
-test('approving a registration with con_role sc without a character is rejected with 409', async () => {
+test('registering with con_role sc and no characterId is rejected', async () => {
   await withTestServer(async (port) => {
-    const { rows } = await query(
-      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Mod', 'Approve', (SELECT id FROM groups WHERE key = 'moderator'), true) RETURNING id",
-      [`mod-approve-${crypto.randomUUID()}@example.com`]
-    );
-    const modCookie = `session=${(await createSession(rows[0].id)).token}`;
-    const scUser = await makeUserAndSession();
+    const { cookie } = await makeUserAndSession();
     const eventId = await makeEvent();
-
-    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: scUser.cookie },
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({ conRole: 'sc' }),
     });
-
-    const res = await fetch(`http://localhost:${port}/events/${eventId}/approve`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
-      body: JSON.stringify({ userId: scUser.userId }),
-    });
-    assert.equal(res.status, 409);
+    assert.equal(res.status, 400);
   });
 });
 
-test('approving a registration with con_role nsc requires an NSC character (account-wide, not event-scoped)', async () => {
+test('registering with con_role sc and someone else\'s characterId is rejected', async () => {
   await withTestServer(async (port) => {
-    const { rows } = await query(
-      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Mod', 'Approve', (SELECT id FROM groups WHERE key = 'moderator'), true) RETURNING id",
-      [`mod-approve-${crypto.randomUUID()}@example.com`]
-    );
-    const modCookie = `session=${(await createSession(rows[0].id)).token}`;
-    const nscUser = await makeUserAndSession();
+    const owner = await makeUserAndSession();
+    const stranger = await makeUserAndSession();
     const eventId = await makeEvent();
-
-    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-      body: JSON.stringify({ conRole: 'nsc' }),
+    const charRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ name: 'Aldric' }),
     });
+    const { id: characterId } = await charRes.json();
 
-    const rejectRes = await fetch(`http://localhost:${port}/events/${eventId}/approve`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
-      body: JSON.stringify({ userId: nscUser.userId }),
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: stranger.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId }),
     });
-    assert.equal(rejectRes.status, 409);
+    assert.equal(res.status, 403);
+  });
+});
 
-    // NSC characters are account-wide: event_id is always NULL for class 'nsc'.
-    await query(
-      "INSERT INTO characters (user_id, event_id, class, name, data) VALUES ($1, NULL, 'nsc', 'Narrator', '{}')",
-      [nscUser.userId]
+test('registering with con_role nsc and an sc-class character is rejected (class mismatch)', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const charRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ name: 'Aldric' }),
+    });
+    const { id: characterId } = await charRes.json();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'nsc', characterId }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+test('registering with con_role helfer and a characterId set is rejected', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const charRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ name: 'Aldric' }),
+    });
+    const { id: characterId } = await charRes.json();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer', characterId }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+test('a non-privileged user cannot register with a self-service con_role for an inactive event', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const { query } = await import('../../backend/db.js');
+    const { rows } = await query(
+      "INSERT INTO events (name, event_date, is_active) VALUES ('Inactive Con', '2027-01-01', false) RETURNING id"
     );
+    const eventId = rows[0].id;
 
-    const approveRes = await fetch(`http://localhost:${port}/events/${eventId}/approve`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
-      body: JSON.stringify({ userId: nscUser.userId }),
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
     });
-    assert.equal(approveRes.status, 200);
+    assert.equal(res.status, 403);
   });
 });
 

@@ -12,6 +12,8 @@ const STAFF_CON_ROLES = ['orga', 'hilfs_orga'];
 const ALL_CON_ROLES = [...SELF_SERVICE_CON_ROLES, ...STAFF_CON_ROLES];
 // Roles that don't play a character on-site, so approval doesn't require one assigned.
 const CHARACTER_EXEMPT_CON_ROLES = [...STAFF_CON_ROLES, 'helfer'];
+// Roles whose registration must reference a specific character.
+const CHARACTER_REQUIRED_CON_ROLES = ['sc', 'gsc', 'nsc'];
 
 // Orga/Hilfs-Orga may only be granted by someone who is already orga/hilfs_orga
 // for THIS SAME event, or who holds system role moderator/admin.
@@ -24,7 +26,46 @@ async function canGrantStaffConRole(eventId, requestingUser) {
   return rows.length > 0;
 }
 
-export async function registerForEvent(userId, eventId, conRole, requestingUser) {
+// Validates characterId against con_role: CHARACTER_REQUIRED_CON_ROLES must
+// have one that exists, belongs to userId, and has the matching class
+// (sc/gsc -> 'sc', nsc -> 'nsc'); every other con_role must NOT have one.
+// Returns the characterId to store (always null for non-character roles).
+async function resolveCharacterId(userId, conRole, characterId) {
+  if (!CHARACTER_REQUIRED_CON_ROLES.includes(conRole)) {
+    if (characterId) {
+      const err = new Error(`characterId must not be set for con_role "${conRole}"`);
+      err.code = 'CHARACTER_NOT_ALLOWED';
+      throw err;
+    }
+    return null;
+  }
+  if (!characterId) {
+    const err = new Error(`characterId is required for con_role "${conRole}"`);
+    err.code = 'CHARACTER_REQUIRED';
+    throw err;
+  }
+  const { rows } = await query('SELECT user_id, class FROM characters WHERE id = $1', [characterId]);
+  if (rows.length === 0) {
+    const err = new Error('character not found');
+    err.code = 'CHARACTER_NOT_FOUND';
+    throw err;
+  }
+  const character = rows[0];
+  if (character.user_id !== userId) {
+    const err = new Error('character does not belong to this user');
+    err.code = 'CHARACTER_FORBIDDEN';
+    throw err;
+  }
+  const expectedClass = conRole === 'nsc' ? 'nsc' : 'sc';
+  if (character.class !== expectedClass) {
+    const err = new Error(`con_role "${conRole}" requires a character of class "${expectedClass}"`);
+    err.code = 'CHARACTER_CLASS_MISMATCH';
+    throw err;
+  }
+  return characterId;
+}
+
+export async function registerForEvent(userId, eventId, conRole, characterId, requestingUser) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -44,12 +85,23 @@ export async function registerForEvent(userId, eventId, conRole, requestingUser)
     throw err;
   }
 
+  // Generalizes the old sc-character-creation active-event gate to every
+  // self-service con_role, now that character creation itself has no event
+  // context at all to gate on.
+  if (SELF_SERVICE_CON_ROLES.includes(conRole) && !requestingUser.group.canEditCharacters && !event.is_active) {
+    const err = new Error('registration is only open for the currently active event');
+    err.code = 'EVENT_NOT_ACTIVE';
+    throw err;
+  }
+
+  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId);
+
   try {
     const { rows } = await query(
-      `INSERT INTO registrations (user_id, event_id, con_role)
-       VALUES ($1, $2, $3)
-       RETURNING user_id, event_id, status, con_role, checked_in_at, checked_out_at`,
-      [userId, eventId, conRole]
+      `INSERT INTO registrations (user_id, event_id, con_role, character_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING user_id, event_id, status, con_role, character_id, checked_in_at, checked_out_at`,
+      [userId, eventId, conRole, resolvedCharacterId]
     );
     return rows[0];
   } catch (err) {
@@ -62,7 +114,7 @@ export async function registerForEvent(userId, eventId, conRole, requestingUser)
   }
 }
 
-export async function setConRole(eventId, userId, conRole, requestingUser) {
+export async function setConRole(eventId, userId, conRole, characterId, requestingUser) {
   if (!ALL_CON_ROLES.includes(conRole)) {
     const err = new Error(`conRole must be one of: ${ALL_CON_ROLES.join(', ')}`);
     err.code = 'INVALID_CON_ROLE';
@@ -80,11 +132,19 @@ export async function setConRole(eventId, userId, conRole, requestingUser) {
     err.code = 'FORBIDDEN_CON_ROLE';
     throw err;
   }
+
+  // con_role can change across the character/no-character boundary (e.g. a
+  // helfer promoted to orga keeps character_id NULL; but nothing stops a
+  // future caller from also changing a helfer to sc here) -- always resolve
+  // characterId the same way registerForEvent does, so this can never write
+  // a row that violates registrations_character_con_role_check.
+  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId);
+
   const { rows } = await query(
-    `UPDATE registrations SET con_role = $3
+    `UPDATE registrations SET con_role = $3, character_id = $4
      WHERE event_id = $1 AND user_id = $2
-     RETURNING user_id, event_id, status, con_role, checked_in_at, checked_out_at`,
-    [eventId, userId, conRole]
+     RETURNING user_id, event_id, status, con_role, character_id, checked_in_at, checked_out_at`,
+    [eventId, userId, conRole, resolvedCharacterId]
   );
   if (rows.length === 0) {
     const err = new Error('registration not found');
@@ -115,11 +175,6 @@ export async function unregisterFromEvent(userId, eventId) {
   }
 }
 
-// `schema` (the event's character_form_schema) and `viewer` (the requesting
-// user) gate what gets returned: OT fields are limited to the viewer's own
-// group.accountFields (the same rule members.html enforces for editing), and
-// character data is filtered through filterCharacterFields — full data only
-// for the owner or for canOverrideCheckinStatus staff, public-only otherwise.
 export async function listParticipantsForEvent(eventId, { schema = [], viewer } = {}) {
   const otKeys = (viewer?.group?.accountFields ?? []).filter((key) => key in ENCRYPTED_ACCOUNT_FIELD_COLUMNS);
   const otColumnsSql = otKeys.map((key) => `, u.${ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]}`).join('');
@@ -133,7 +188,10 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     [eventId]
   );
   const { rows: characters } = await query(
-    'SELECT id, user_id, name, data FROM characters WHERE event_id = $1',
+    `SELECT c.id, c.user_id, c.name, c.data
+     FROM characters c
+     JOIN registrations r ON r.character_id = c.id
+     WHERE r.event_id = $1`,
     [eventId]
   );
 
@@ -185,7 +243,10 @@ export async function getScanLookup(eventId, userId) {
   if (rows.length === 0) return null;
   const r = rows[0];
   const { rows: characters } = await query(
-    'SELECT id, name FROM characters WHERE event_id = $1 AND user_id = $2',
+    `SELECT c.id, c.name
+     FROM characters c
+     JOIN registrations r ON r.character_id = c.id
+     WHERE r.event_id = $1 AND r.user_id = $2`,
     [eventId, userId]
   );
   return {
@@ -200,7 +261,7 @@ export async function getScanLookup(eventId, userId) {
 
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
-    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.checked_in_at, r.checked_out_at
+    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.checked_in_at, r.checked_out_at
      FROM registrations r
      JOIN events e ON e.id = r.event_id
      WHERE r.user_id = $1
@@ -212,6 +273,8 @@ export async function listRegistrationsForUser(userId) {
     eventName: r.event_name,
     eventDate: r.event_date,
     status: r.status,
+    conRole: r.con_role,
+    characterId: r.character_id,
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,
   }));
@@ -232,10 +295,6 @@ async function transitionStatus(eventId, userId, action) {
 
   const currentStatus = rows[0].status;
   const nextStatus = applyTransition(currentStatus, action);
-  // Only checkin/checkout stamp a timestamp column; approve/cancel touch
-  // only `status`. A binary ternary here (as the pre-existing code had)
-  // would silently stamp checked_out_at on every non-checkin action once
-  // more than two actions exist -- this map makes "no timestamp" explicit.
   const timestampColumn = TIMESTAMP_COLUMNS[action];
   const setClause = timestampColumn ? `status = $4, ${timestampColumn} = now()` : 'status = $4';
   const { rows: updated } = await query(
@@ -260,30 +319,11 @@ export async function checkOut(eventId, userId) {
   return transitionStatus(eventId, userId, 'checkout');
 }
 
+// The character-existence check from Teil 1 is gone: the
+// registrations_character_con_role_check CHECK constraint now guarantees
+// every sc/gsc/nsc registration already has a character_id at INSERT time,
+// so there's nothing left to verify here.
 export async function approveRegistration(eventId, userId) {
-  const { rows: regRows } = await query(
-    'SELECT con_role FROM registrations WHERE event_id = $1 AND user_id = $2',
-    [eventId, userId]
-  );
-  if (regRows.length === 0) {
-    const err = new Error('registration not found');
-    err.code = 'REGISTRATION_NOT_FOUND';
-    throw err;
-  }
-  const conRole = regRows[0].con_role;
-  if (!CHARACTER_EXEMPT_CON_ROLES.includes(conRole)) {
-    // NSC characters are account-wide (event_id IS NULL by design, see
-    // characters/repository.js), so an nsc registration must be checked
-    // against the user's NSC characters rather than this event's characters.
-    const { rows: charRows } = conRole === 'nsc'
-      ? await query('SELECT 1 FROM characters WHERE user_id = $1 AND class = $2 LIMIT 1', [userId, 'nsc'])
-      : await query('SELECT 1 FROM characters WHERE event_id = $1 AND user_id = $2 LIMIT 1', [eventId, userId]);
-    if (charRows.length === 0) {
-      const err = new Error('cannot approve: no character assigned for this event');
-      err.code = 'NO_CHARACTER';
-      throw err;
-    }
-  }
   return transitionStatus(eventId, userId, 'approve');
 }
 

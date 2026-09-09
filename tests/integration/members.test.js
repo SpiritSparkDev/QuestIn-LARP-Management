@@ -77,9 +77,13 @@ test('GET /members/:id returns every field regardless of the viewer\'s own permi
     const { rows: eventRows } = await query(
       "INSERT INTO events (name, event_date) VALUES ('Detail Test Event', '2026-01-01') RETURNING id"
     );
+    const { rows: charRows } = await query(
+      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Detail Test Char', '{}') RETURNING id",
+      [targetId]
+    );
     await query(
-      "INSERT INTO characters (user_id, event_id, name) VALUES ($1, $2, 'Detail Test Char')",
-      [targetId, eventRows[0].id]
+      "INSERT INTO registrations (user_id, event_id, con_role, character_id) VALUES ($1, $2, 'sc', $3)",
+      [targetId, eventRows[0].id, charRows[0].id]
     );
 
     // moderator has the 'mitglieder' menu (so it passes requireMenu and can

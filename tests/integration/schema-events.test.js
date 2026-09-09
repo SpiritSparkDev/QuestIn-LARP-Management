@@ -21,32 +21,32 @@ test('events and characters tables exist after migration', async () => {
 });
 
 test('characters.user_id foreign key is enforced', async () => {
-  const { rows } = await query(
-    "INSERT INTO events (name, event_date) VALUES ('FK Test', '2027-01-01') RETURNING id"
-  );
   await assert.rejects(
     query(
-      'INSERT INTO characters (user_id, event_id, name) VALUES ($1, $2, $3)',
-      [crypto.randomUUID(), rows[0].id, 'Ghost']
+      'INSERT INTO characters (user_id, name) VALUES ($1, $2)',
+      [crypto.randomUUID(), 'Ghost']
     ),
     /violates foreign key constraint/
   );
-  await query('DELETE FROM events WHERE id = $1', [rows[0].id]);
 });
 
-test('characters.event_id foreign key is enforced', async () => {
+test('registrations.character_id foreign key is enforced', async () => {
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'FK', 'Test', (SELECT id FROM groups WHERE key = 'mitglied')) RETURNING id",
     [`fk-test-${Date.now()}@example.com`]
   );
+  const { rows: eventRows } = await query(
+    "INSERT INTO events (name, event_date) VALUES ('FK Test Event', '2027-01-01') RETURNING id"
+  );
   await assert.rejects(
     query(
-      'INSERT INTO characters (user_id, event_id, name) VALUES ($1, $2, $3)',
-      [rows[0].id, crypto.randomUUID(), 'Ghost']
+      "INSERT INTO registrations (user_id, event_id, con_role, character_id) VALUES ($1, $2, 'sc', $3)",
+      [rows[0].id, eventRows[0].id, crypto.randomUUID()]
     ),
     /violates foreign key constraint/
   );
   await query('DELETE FROM users WHERE id = $1', [rows[0].id]);
+  await query('DELETE FROM events WHERE id = $1', [eventRows[0].id]);
 });
 
 test.after(async () => {

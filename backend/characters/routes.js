@@ -9,31 +9,18 @@ import { getNscProfileSchema } from '../nscSchema/repository.js';
 router.post('/characters', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { class: characterClass = 'sc', eventId, name, data } = body;
+  const { class: characterClass = 'sc', name, data } = body;
   if (characterClass !== 'sc' && characterClass !== 'nsc') {
     return { status: 400, body: { error: 'class must be "sc" or "nsc"' } };
   }
   if (!name) {
     return { status: 400, body: { error: 'name is required' } };
   }
-  if (characterClass === 'sc') {
-    if (!eventId) return { status: 400, body: { error: 'eventId is required' } };
-    if (!user.group.canEditCharacters) {
-      const event = await getEvent(eventId);
-      if (!event) return { status: 404, body: { error: 'event not found' } };
-      if (!event.is_active) {
-        return { status: 403, body: { error: 'characters can only be created for the currently active event' } };
-      }
-    }
-  } else if (eventId) {
-    return { status: 400, body: { error: 'eventId must not be set for nsc-class characters' } };
-  }
 
   try {
-    const character = await createCharacter(user.id, { characterClass, eventId, name, data });
+    const character = await createCharacter(user.id, { characterClass, name, data });
     return { status: 201, body: character };
   } catch (err) {
-    if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
     if (err.code === 'INVALID_CHARACTER_DATA') {
       return { status: 400, body: { error: 'invalid character data', details: err.details } };
     }
@@ -69,9 +56,14 @@ router.get('/characters/:id', requireAuth(async ({ params, user }) => {
     return { status: 200, body: character };
   }
 
-  const schema = character.class === 'nsc'
-    ? await getNscProfileSchema()
-    : (await getEvent(character.event_id))?.character_form_schema ?? [];
+  // A stranger viewing an sc-class character by id (not through the
+  // per-event /events/:eventId/characters/public list) has no single event
+  // context to resolve "which schema's public fields" against anymore --
+  // an sc character can be registered for many events with different
+  // schemas. Default to showing nothing but the name (empty schema means
+  // filterCharacterFields' publicKeys set is empty), same safe-default
+  // this endpoint already used for the class it doesn't own a schema for.
+  const schema = character.class === 'nsc' ? await getNscProfileSchema() : [];
   return { status: 200, body: { ...character, data: filterCharacterFields(character, schema, user) } };
 }));
 
@@ -90,6 +82,7 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
     return { status: 200, body: updated };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
+    if (err.code === 'EVENT_ID_REQUIRED') return { status: 400, body: { error: err.message } };
     if (err.code === 'INVALID_CHARACTER_DATA') {
       return { status: 400, body: { error: 'invalid character data', details: err.details } };
     }

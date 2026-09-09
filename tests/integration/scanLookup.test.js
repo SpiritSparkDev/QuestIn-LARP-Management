@@ -32,16 +32,25 @@ async function makeEvent(code) {
   return rows[0].id;
 }
 
+// registrations.character_id is required whenever con_role is 'sc' (the
+// default con_role every raw INSERT below relies on) -- create the
+// character first and link it in the same INSERT, or the CHECK constraint
+// registrations_character_con_role_check rejects the row.
+async function makeCharacter(userId, name = 'Test Char') {
+  const { rows } = await query(
+    "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', $2, '{}') RETURNING id",
+    [userId, name]
+  );
+  return rows[0].id;
+}
+
 test('GET .../scan-lookup resolves a valid, well-formed code to name/group/status/characters', async () => {
   await withTestServer(async (port) => {
     const eventId = await makeEvent('P17/2027');
     const scUserId = await makeUser('mitglied');
     const staffUserId = await makeUser('admin');
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [scUserId, eventId]);
-    await query(
-      "INSERT INTO characters (user_id, event_id, class, name, data) VALUES ($1, $2, 'sc', 'Aldric', '{}')",
-      [scUserId, eventId]
-    );
+    const characterId = await makeCharacter(scUserId, 'Aldric');
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [scUserId, eventId, characterId]);
     const session = await createSession(staffUserId);
     const cookie = `session=${session.token}`;
 
@@ -79,7 +88,8 @@ test('GET .../scan-lookup rejects a code whose eventCode belongs to a different 
     const eventId = await makeEvent('P17/2027');
     const otherEventId = await makeEvent('OTHER/2027');
     const scUserId = await makeUser('mitglied');
-    await query('INSERT INTO registrations (user_id, event_id) VALUES ($1, $2)', [scUserId, otherEventId]);
+    const characterId = await makeCharacter(scUserId);
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [scUserId, otherEventId, characterId]);
     const staffUserId = await makeUser('admin');
     const cookie = `session=${(await createSession(staffUserId)).token}`;
 
