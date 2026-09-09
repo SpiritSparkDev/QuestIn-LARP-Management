@@ -191,9 +191,18 @@ Spalten-Drop und jeder betroffene Konsument gehören in denselben Task):
   einer Einladung verliert die 6 Spalten inklusive ihrer
   `(SELECT ..._enc FROM invitations WHERE id = $7)`-Subqueries.
 - `db/groupDefaults.js`: `accountFields`-Arrays der 3 Gruppen verlieren die
-  6 Keys (sie ziehen stattdessen automatisch in die Sichtbarkeits-Prüfung
-  für die neuen registrations-Felder ein, da dieselbe Permission-Liste
-  wiederverwendet wird, 5.4).
+  6 Keys **nicht** — dieselbe `accountFields`-Liste bleibt laut 5.4 die
+  Berechtigung für die registrations-Felder, `admin`/`moderator` behalten
+  sie also unverändert in ihrem `accountFields`-Array.
+- `backend/groups/routes.js`s `isValidFieldList`-Validator (`POST`/`PUT
+  /groups`) prüft `accountFields`-Werte aktuell gegen `ACCOUNT_FIELD_KEYS`
+  — nach 4.2 nur noch 8 Keys. Da `accountFields` weiterhin auch die 6
+  registrations-Felder gated (5.4), muss der Validator gegen
+  `[...ACCOUNT_FIELD_KEYS, ...REGISTRATION_FIELD_KEYS]` prüfen, sonst
+  lehnt die API einen an sich gültigen Wert wie `conTage` ab. (Nur die
+  API-Validierung — `frontend/admin/groups.html`s Checkbox-Liste bot diese
+  6 Felder nie zum An-/Abwählen an, das bleibt unverändert, kein
+  Teil-3-Scope.)
 
 ## 6. Frontend
 
