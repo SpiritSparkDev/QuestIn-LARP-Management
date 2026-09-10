@@ -113,7 +113,54 @@
         <p id="registration-message"></p>
       </div>
 
-      <div class="tab-panel" id="charaktere-subtab" hidden></div>
+      <div class="tab-panel" id="charaktere-subtab" hidden>
+        <h2>Meine Charaktere</h2>
+        <p><a href="/characters-browse.html">Charaktere anderer Spieler durchsuchen</a></p>
+
+        <div class="tabs" id="char-class-tabs">
+          <button type="button" class="tab-btn active" data-tab="sc-tab">Charaktere</button>
+          <button type="button" class="tab-btn" data-tab="nsc-tab" id="nsc-tab-btn" style="display:none;">NSC-Charaktere</button>
+        </div>
+
+        <div class="tab-panel" id="sc-tab">
+          <div id="character-list" class="char-grid"></div>
+
+          <div id="sc-form-section" style="display:none;">
+            <h3 id="form-title">Neuen Charakter anlegen</h3>
+            <form id="character-form">
+              <label for="character-name">Charaktername</label>
+              <input id="character-name" name="name" type="text" required>
+              <button type="submit">Speichern</button>
+            </form>
+            <p id="character-message"></p>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="nsc-tab" hidden>
+          <div id="nsc-section" style="display:none;">
+            <div id="nsc-character-list" class="char-grid"></div>
+
+            <div class="tabs tabs--sub" id="nsc-form-tabs">
+              <button type="button" class="tab-btn active" data-tab="nsc-form-general">Allgemein</button>
+              <button type="button" class="tab-btn" data-tab="nsc-form-details">Merkmale</button>
+            </div>
+
+            <form id="nsc-character-form">
+              <div class="tab-panel" id="nsc-form-general">
+                <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
+                <label for="nsc-character-name">Charaktername</label>
+                <input id="nsc-character-name" name="name" type="text" required>
+              </div>
+              <div class="tab-panel" id="nsc-form-details" hidden>
+                <div id="nsc-dynamic-fields"></div>
+              </div>
+              <button type="submit">Speichern</button>
+              <button type="button" id="nsc-cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
+            </form>
+            <p id="nsc-message"></p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -140,6 +187,8 @@ function initTabs(tabsEl) {
 
 initTabs(document.getElementById('page-tabs'));
 initTabs(document.getElementById('veranstaltung-subtabs'));
+initTabs(document.getElementById('char-class-tabs'));
+initTabs(document.getElementById('nsc-form-tabs'));
 
 const accountForm = document.getElementById('account-form');
 attachLiveValidation(accountForm);
@@ -317,6 +366,7 @@ async function loadEvents() {
 async function loadCharacters() {
   characters = await api.get('/characters');
   populateCharacterOptions();
+  renderCharacterList();
 }
 
 let currentRegistrations = [];
@@ -437,6 +487,287 @@ registrationForm.addEventListener('submit', async (event) => {
   }
 });
 
+const scFormSection = document.getElementById('sc-form-section');
+const characterForm = document.getElementById('character-form');
+attachLiveValidation(characterForm);
+const characterMessage = document.getElementById('character-message');
+const characterListBody = document.getElementById('character-list');
+const characterFormTitle = document.getElementById('form-title');
+
+let nscSchema = [];
+let nscCharacters = [];
+let editingNscCharacterId = null;
+
+const nscSection = document.getElementById('nsc-section');
+const nscListBody = document.getElementById('nsc-character-list');
+const nscForm = document.getElementById('nsc-character-form');
+attachLiveValidation(nscForm);
+const nscMessage = document.getElementById('nsc-message');
+const nscFormTitle = document.getElementById('nsc-form-title');
+const nscDynamicFields = document.getElementById('nsc-dynamic-fields');
+const nscCancelButton = document.getElementById('nsc-cancel-edit');
+const nscTabButton = document.getElementById('nsc-tab-btn');
+
+let editingCharacterId = null;
+
+const FILE_MIME_ALLOWLIST = { image: ['image/jpeg', 'image/png', 'image/webp'], document: ['application/pdf'] };
+
+function kindForMimeType(mimeType) {
+  if (FILE_MIME_ALLOWLIST.image.includes(mimeType)) return 'image';
+  if (FILE_MIME_ALLOWLIST.document.includes(mimeType)) return 'document';
+  return null;
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderFileList(characterId, files) {
+  const items = files.map((f) => {
+    const url = `/characters/${characterId}/files/${f.id}`;
+    const preview = f.kind === 'image'
+      ? `<a href="${url}" target="_blank"><img src="${url}" alt="${escapeHtml(f.original_filename)}" style="max-width:80px;max-height:80px;"></a>`
+      : `<a href="${url}" target="_blank">${escapeHtml(f.original_filename)}</a>`;
+    return `<div class="file-item">
+      ${preview}
+      <span class="tag">${f.is_public ? 'Öffentlich' : 'Privat'}</span>
+      <button type="button" data-delete-file="${f.id}" data-delete-character="${characterId}" class="btn-ghost">Löschen</button>
+    </div>`;
+  }).join('');
+
+  return `${items}
+    <form data-upload-form="${characterId}" class="file-upload-form">
+      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+      <label><input type="checkbox" required> Ich habe den Hinweis gelesen</label>
+      <label><input type="checkbox"> Öffentlich sichtbar</label>
+      <button type="submit">Hochladen</button>
+      <p class="upload-status"></p>
+    </form>
+    <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an dieser Datei besitzt und einverstanden bist, dass sie im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>`;
+}
+
+async function loadFilesInto(characterId) {
+  const container = document.querySelector(`[data-files-for="${characterId}"]`);
+  if (!container) return;
+  try {
+    const files = await api.get(`/characters/${characterId}/files`);
+    container.innerHTML = renderFileList(characterId, files);
+    wireFileSection(characterId, container);
+  } catch (err) {
+    container.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function wireFileSection(characterId, container) {
+  container.querySelectorAll('[data-delete-file]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!confirm('Datei wirklich löschen?')) return;
+      try {
+        await api.delete(`/characters/${button.dataset.deleteCharacter}/files/${button.dataset.deleteFile}`);
+        await loadFilesInto(characterId);
+      } catch (err) {
+        container.querySelector('.upload-status').textContent = err.message;
+      }
+    });
+  });
+
+  const uploadForm = container.querySelector(`[data-upload-form="${characterId}"]`);
+  const fileInput = uploadForm.querySelector('input[type="file"]');
+  const consentCheckbox = uploadForm.querySelector('input[type="checkbox"][required]');
+  const publicCheckbox = uploadForm.querySelectorAll('input[type="checkbox"]')[1];
+  const status = uploadForm.querySelector('.upload-status');
+  const submitButton = uploadForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  consentCheckbox.addEventListener('change', () => { submitButton.disabled = !consentCheckbox.checked; });
+
+  uploadForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    status.textContent = '';
+    const file = fileInput.files[0];
+    if (!file) return;
+    const kind = kindForMimeType(file.type);
+    if (!kind) {
+      status.textContent = 'Nicht unterstützter Dateityp.';
+      return;
+    }
+    try {
+      const dataBase64 = await readFileAsBase64(file);
+      await api.post(`/characters/${characterId}/files`, {
+        kind, filename: file.name, mimeType: file.type, dataBase64,
+        isPublic: publicCheckbox.checked, gdprConsent: consentCheckbox.checked,
+      });
+      await loadFilesInto(characterId);
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  });
+}
+
+function tagValueForField(field, rawValue) {
+  if (field.type === 'multiselect') {
+    return Array.isArray(rawValue) && rawValue.length > 0 ? rawValue.join(', ') : undefined;
+  }
+  if (field.type === 'boolean') {
+    return rawValue ? 'Ja' : undefined;
+  }
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return undefined;
+  }
+  return rawValue;
+}
+
+function tagsForCharacter(c) {
+  return Object.entries(c.data ?? {})
+    .map(([key, value]) => ({ key, value: tagValueForField({ type: typeof value === 'boolean' ? 'boolean' : Array.isArray(value) ? 'multiselect' : 'text' }, value) }))
+    .filter(({ value }) => value !== undefined)
+    .map(({ key, value }) => `<span class="tag">${escapeHtml(key)}: ${escapeHtml(value)}</span>`)
+    .join('');
+}
+
+function renderNscSchemaFields(data = {}) {
+  nscDynamicFields.innerHTML = nscSchema.map((field) => renderField(field, data[field.key])).join('');
+  attachLiveValidation(nscDynamicFields);
+}
+
+function tagsForNscCharacter(c) {
+  return nscSchema
+    .map((field) => ({ field, value: tagValueForField(field, c.data[field.key]) }))
+    .filter(({ value }) => value !== undefined)
+    .map(({ field, value }) => `<span class="tag">${escapeHtml(field.label || field.key)}: ${escapeHtml(value)}</span>`)
+    .join('');
+}
+
+function renderNscList() {
+  nscListBody.innerHTML = nscCharacters.map((c) => `<div class="char-card">
+      <h3>${escapeHtml(c.name)}</h3>
+      <div class="char-tags">${tagsForNscCharacter(c)}</div>
+      <button type="button" data-nsc-edit="${c.id}" class="btn-ghost" style="margin-top:14px;">Bearbeiten</button>
+      <div class="char-files" data-files-for="${c.id}">
+        <p class="sub">Dateien werden geladen …</p>
+      </div>
+    </div>`).join('');
+
+  nscListBody.querySelectorAll('[data-nsc-edit]').forEach((button) => {
+    button.addEventListener('click', () => startNscEdit(button.dataset.nscEdit));
+  });
+  nscCharacters.forEach((c) => loadFilesInto(c.id));
+}
+
+function startNscEdit(characterId) {
+  const character = nscCharacters.find((c) => c.id === characterId);
+  if (!character) return;
+  editingNscCharacterId = characterId;
+  nscFormTitle.textContent = `NSC-Charakter bearbeiten: ${character.name}`;
+  nscForm.elements.name.value = character.name;
+  renderNscSchemaFields(character.data);
+  nscForm.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
+  nscCancelButton.style.display = '';
+}
+
+function resetNscForm() {
+  editingNscCharacterId = null;
+  nscFormTitle.textContent = 'Neuen NSC-Charakter anlegen';
+  nscForm.reset();
+  renderNscSchemaFields();
+  nscForm.querySelector('button[type="submit"]').textContent = 'Speichern';
+  nscCancelButton.style.display = 'none';
+}
+
+nscCancelButton.addEventListener('click', resetNscForm);
+
+nscForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  nscMessage.textContent = '';
+  nscMessage.className = '';
+  const name = nscForm.elements.name.value;
+  const data = collectFieldValues(nscForm, nscSchema);
+  try {
+    if (editingNscCharacterId) {
+      await api.put(`/characters/${editingNscCharacterId}`, { name, data });
+    } else {
+      await api.post('/characters', { class: 'nsc', name, data });
+    }
+    nscMessage.textContent = 'Gespeichert.';
+    nscMessage.className = 'success';
+    resetNscForm();
+    await loadCharacters();
+  } catch (err) {
+    nscMessage.textContent = err.status === 400 && err.body?.details
+      ? err.body.details.join(', ')
+      : err.message;
+    nscMessage.className = 'error';
+  }
+});
+
+function renderCharacterList() {
+  const scCharacters = characters.filter((c) => c.class !== 'nsc');
+  characterListBody.innerHTML = scCharacters.map((c) => {
+    const tagsHtml = tagsForCharacter(c);
+    return `<div class="char-card">
+      <h3>${escapeHtml(c.name)}</h3>
+      <div class="char-tags">${tagsHtml}</div>
+      <button type="button" data-edit="${c.id}" class="btn-ghost" style="margin-top:14px;">Bearbeiten</button>
+      <div class="char-files" data-files-for="${c.id}">
+        <p class="sub">Dateien werden geladen …</p>
+      </div>
+    </div>`;
+  }).join('');
+
+  characterListBody.querySelectorAll('[data-edit]').forEach((button) => {
+    button.addEventListener('click', () => startEdit(button.dataset.edit));
+  });
+  scCharacters.forEach((c) => loadFilesInto(c.id));
+
+  if (nscSection.style.display !== 'none') {
+    nscCharacters = characters.filter((c) => c.class === 'nsc');
+    renderNscList();
+  }
+}
+
+function startEdit(characterId) {
+  const character = characters.find((c) => c.id === characterId);
+  if (!character) return;
+  editingCharacterId = characterId;
+  characterFormTitle.textContent = `Charakter bearbeiten: ${character.name}`;
+  characterForm.elements.name.value = character.name;
+  characterForm.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
+}
+
+function resetCharacterForm() {
+  editingCharacterId = null;
+  characterFormTitle.textContent = 'Neuen Charakter anlegen';
+  characterForm.reset();
+  characterForm.querySelector('button[type="submit"]').textContent = 'Speichern';
+}
+
+characterForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  characterMessage.textContent = '';
+  characterMessage.className = '';
+  const name = characterForm.elements.name.value;
+  try {
+    if (editingCharacterId) {
+      await api.put(`/characters/${editingCharacterId}`, { name });
+    } else {
+      await api.post('/characters', { class: 'sc', name });
+    }
+    characterMessage.textContent = 'Gespeichert.';
+    characterMessage.className = 'success';
+    resetCharacterForm();
+    await loadCharacters();
+  } catch (err) {
+    characterMessage.textContent = err.status === 400 && err.body?.details
+      ? err.body.details.join(', ')
+      : err.message;
+    characterMessage.className = 'error';
+  }
+});
+
 try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
@@ -454,6 +785,13 @@ try {
     document.querySelectorAll('#con-role-select option[data-staff-only]').forEach((opt) => opt.remove());
   }
   renderOtFields();
+
+  scFormSection.style.display = '';
+  nscSchema = await api.get('/nsc-schema');
+  nscSection.style.display = '';
+  nscTabButton.style.display = '';
+  renderNscSchemaFields();
+
   await loadEvents();
   await loadCharacters();
   await loadRegistrations();
