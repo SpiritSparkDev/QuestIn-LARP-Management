@@ -59,7 +59,62 @@
       <p id="account-message"></p>
     </div>
 
-    <div class="tab-panel" id="veranstaltung-tab" hidden></div>
+    <div class="tab-panel" id="veranstaltung-tab" hidden>
+      <div class="tabs tabs--sub" id="veranstaltung-subtabs">
+        <button type="button" class="tab-btn active" data-tab="anmelden-subtab">Anmelden</button>
+        <button type="button" class="tab-btn" data-tab="charaktere-subtab">Charaktere</button>
+      </div>
+
+      <div class="tab-panel" id="anmelden-subtab">
+        <h2>Meine Anmeldungen</h2>
+        <table id="registration-list">
+          <thead><tr><th>Event</th><th>Rolle</th><th>Status</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+
+        <dialog id="edit-ot-dialog">
+          <h3>Anmeldungsdaten bearbeiten</h3>
+          <p class="lede">Diese Änderung benachrichtigt die Orga und Admin dieses Events per E-Mail.</p>
+          <div id="edit-ot-fields"></div>
+          <div class="dialog-actions">
+            <button type="button" id="edit-ot-save">Speichern</button>
+            <button type="button" id="edit-ot-cancel" class="btn-ghost">Abbrechen</button>
+          </div>
+        </dialog>
+
+        <h2>Neu anmelden</h2>
+        <form id="registration-form">
+          <label for="event-select">Event</label>
+          <select id="event-select" required></select>
+
+          <label for="con-role-select">Rolle</label>
+          <select id="con-role-select">
+            <option value="sc">SC</option>
+            <option value="nsc">NSC</option>
+            <option value="gsc">GSC</option>
+            <option value="helfer">Helfer</option>
+            <option value="orga" data-staff-only>Orga</option>
+            <option value="hilfs_orga" data-staff-only>Hilfs-Orga</option>
+          </select>
+
+          <div id="character-select-wrap">
+            <label for="character-select">Charakter</label>
+            <select id="character-select"></select>
+            <p id="no-character-hint" style="display:none;">Du hast noch keinen passenden Charakter. <button type="button" id="no-character-hint-btn" class="btn-ghost">Charakter anlegen</button></p>
+          </div>
+
+          <div id="dynamic-fields"></div>
+
+          <h3>Weitere Angaben zu dieser Anmeldung</h3>
+          <div id="ot-fields"></div>
+
+          <button type="submit" id="register-button">Anmelden</button>
+        </form>
+        <p id="registration-message"></p>
+      </div>
+
+      <div class="tab-panel" id="charaktere-subtab" hidden></div>
+    </div>
   </div>
 </div>
 
@@ -68,7 +123,7 @@ import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { renderNavLinks } from '/js/nav.js';
-import { attachBirthdateFormatter, attachLiveValidation } from '/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, attachLiveValidation, attachBirthdateFormatter, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, REGISTRATION_FIELD_LABELS, isOptOutYes, OPT_OUT_KEYS } from '/js/formFields.js';
 import { buildScanCode } from '/js/qrCode.js';
 
 function initTabs(tabsEl) {
@@ -84,6 +139,7 @@ function initTabs(tabsEl) {
 }
 
 initTabs(document.getElementById('page-tabs'));
+initTabs(document.getElementById('veranstaltung-subtabs'));
 
 const accountForm = document.getElementById('account-form');
 attachLiveValidation(accountForm);
@@ -165,6 +221,222 @@ accountForm.addEventListener('submit', async (event) => {
   }
 });
 
+const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', gsc: 'GSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga' };
+
+const registrationListBody = document.querySelector('#registration-list tbody');
+const registrationForm = document.getElementById('registration-form');
+attachLiveValidation(registrationForm);
+const eventSelect = document.getElementById('event-select');
+const conRoleSelect = document.getElementById('con-role-select');
+const characterSelectWrap = document.getElementById('character-select-wrap');
+const characterSelect = document.getElementById('character-select');
+const noCharacterHint = document.getElementById('no-character-hint');
+const dynamicFields = document.getElementById('dynamic-fields');
+const registerButton = document.getElementById('register-button');
+const registrationMessage = document.getElementById('registration-message');
+const otFieldsContainer = document.getElementById('ot-fields');
+
+let events = [];
+let characters = [];
+let canEditCharacters = false;
+let isModeratorOrAdmin = false;
+let currentUserId = null;
+
+function renderOtFields(values = {}) {
+  otFieldsContainer.innerHTML = Object.entries(REGISTRATION_FIELD_LABELS)
+    .map(([key, label]) => renderAccountFieldInput(key, label, values[key], { idPrefix: 'register-' }))
+    .join('');
+  attachLiveValidation(otFieldsContainer);
+}
+
+function collectOtFields() {
+  const result = {};
+  otFieldsContainer.querySelectorAll('[data-field]').forEach((input) => {
+    result[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+  });
+  return result;
+}
+
+function updateRegisterButtonLabel() {
+  const event = events.find((e) => e.id === eventSelect.value);
+  registerButton.textContent = event ? `Anmelden für ${event.name}` : 'Anmelden';
+}
+
+function classForConRole(conRole) {
+  return conRole === 'nsc' ? 'nsc' : 'sc';
+}
+
+function populateCharacterOptions() {
+  const conRole = conRoleSelect.value;
+  const needsCharacter = ['sc', 'gsc', 'nsc'].includes(conRole);
+  characterSelectWrap.style.display = needsCharacter ? '' : 'none';
+  if (!needsCharacter) {
+    dynamicFields.innerHTML = '';
+    return;
+  }
+  const expectedClass = classForConRole(conRole);
+  const matching = characters.filter((c) => c.class === expectedClass);
+  characterSelect.innerHTML = matching.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+  noCharacterHint.style.display = matching.length === 0 ? '' : 'none';
+  renderDynamicFieldsForSelection();
+}
+
+function renderDynamicFieldsForSelection() {
+  const event = events.find((e) => e.id === eventSelect.value);
+  const character = characters.find((c) => c.id === characterSelect.value);
+  const schema = event ? event.character_form_schema : [];
+  const data = character ? character.data : {};
+  dynamicFields.innerHTML = ['sc', 'gsc'].includes(conRoleSelect.value)
+    ? schema.map((field) => renderField(field, data[field.key])).join('')
+    : '';
+  attachLiveValidation(dynamicFields);
+}
+
+conRoleSelect.addEventListener('change', populateCharacterOptions);
+characterSelect.addEventListener('change', renderDynamicFieldsForSelection);
+eventSelect.addEventListener('change', () => {
+  updateRegisterButtonLabel();
+  renderDynamicFieldsForSelection();
+});
+
+document.getElementById('no-character-hint-btn').addEventListener('click', () => {
+  document.querySelector('#veranstaltung-subtabs [data-tab="charaktere-subtab"]').click();
+});
+
+function populateEventOptions() {
+  const visibleEvents = canEditCharacters ? events : events.filter((e) => e.is_active);
+  eventSelect.innerHTML = renderEventOptions(visibleEvents);
+  updateRegisterButtonLabel();
+}
+
+async function loadEvents() {
+  events = await api.get('/events');
+  populateEventOptions();
+}
+
+async function loadCharacters() {
+  characters = await api.get('/characters');
+  populateCharacterOptions();
+}
+
+let currentRegistrations = [];
+const editOtDialog = document.getElementById('edit-ot-dialog');
+const editOtFieldsContainer = document.getElementById('edit-ot-fields');
+let editingEventId = null;
+
+function openEditOtDialog(eventId) {
+  const registration = currentRegistrations.find((r) => r.eventId === eventId);
+  if (!registration) return;
+  editingEventId = eventId;
+  editOtFieldsContainer.innerHTML = Object.entries(REGISTRATION_FIELD_LABELS)
+    .map(([key, label]) => renderAccountFieldInput(key, label, registration[key], { idPrefix: 'edit-' }))
+    .join('');
+  attachLiveValidation(editOtFieldsContainer);
+  editOtDialog.showModal();
+}
+
+document.getElementById('edit-ot-cancel').addEventListener('click', () => {
+  editingEventId = null;
+  editOtDialog.close();
+});
+
+document.getElementById('edit-ot-save').addEventListener('click', async () => {
+  const registration = currentRegistrations.find((r) => r.eventId === editingEventId);
+  const payload = {};
+  editOtFieldsContainer.querySelectorAll('[data-field]').forEach((input) => {
+    const key = input.dataset.field;
+    const originalValue = registration?.[key] ?? '';
+    // Only send a field that actually changed -- a save that touched nothing
+    // must not PUT .../ot-fields, since a successful call mails every event
+    // orga/hilfs_orga plus every admin/moderator.
+    const changed = OPT_OUT_KEYS.includes(key) ? isOptOutYes(originalValue) !== input.checked : originalValue !== input.value;
+    if (!changed) return;
+    payload[key] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
+  });
+  registrationMessage.textContent = '';
+  registrationMessage.className = '';
+  if (Object.keys(payload).length === 0) {
+    editOtDialog.close();
+    return;
+  }
+  try {
+    await api.put(`/events/${editingEventId}/registrations/${currentUserId}/ot-fields`, payload);
+    editOtDialog.close();
+    registrationMessage.textContent = 'Gespeichert.';
+    registrationMessage.className = 'success';
+    await loadRegistrations();
+  } catch (err) {
+    registrationMessage.textContent = err.message;
+    registrationMessage.className = 'error';
+  }
+});
+
+async function loadRegistrations() {
+  const registrations = await api.get('/registrations');
+  currentRegistrations = registrations;
+  registrationListBody.innerHTML = registrations.map((r) => {
+    const label = STATUS_LABELS[r.status] ?? r.status;
+    return `<tr>
+    <td>${escapeHtml(r.eventName)}</td>
+    <td>${escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole)}</td>
+    <td><span class="ribbon status-${escapeHtml(r.status)}">${escapeHtml(label)}</span></td>
+    <td>
+      <button type="button" data-edit-ot="${r.eventId}">Bearbeiten</button>
+      ${r.status === 'pending' ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ''}
+    </td>
+  </tr>`;
+  }).join('');
+
+  registrationListBody.querySelectorAll('[data-unregister]').forEach((button) => {
+    button.addEventListener('click', () => unregister(button.dataset.unregister));
+  });
+  registrationListBody.querySelectorAll('[data-edit-ot]').forEach((button) => {
+    button.addEventListener('click', () => openEditOtDialog(button.dataset.editOt));
+  });
+}
+
+async function unregister(eventId) {
+  if (!confirm('Wirklich von diesem Event abmelden?')) return;
+  registrationMessage.textContent = '';
+  registrationMessage.className = '';
+  try {
+    await api.delete(`/events/${eventId}/register`);
+    await loadRegistrations();
+  } catch (err) {
+    registrationMessage.textContent = err.message;
+    registrationMessage.className = 'error';
+  }
+}
+
+registrationForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  registrationMessage.textContent = '';
+  registrationMessage.className = '';
+  const eventId = eventSelect.value;
+  const conRole = conRoleSelect.value;
+  const needsCharacter = ['sc', 'gsc', 'nsc'].includes(conRole);
+  const characterId = needsCharacter ? characterSelect.value : undefined;
+  if (needsCharacter && !characterId) return;
+
+  try {
+    if (['sc', 'gsc'].includes(conRole)) {
+      const schema = events.find((e) => e.id === eventId)?.character_form_schema ?? [];
+      const data = collectFieldValues(registrationForm, schema);
+      await api.put(`/characters/${characterId}`, { eventId, data });
+    }
+    await api.post(`/events/${eventId}/register`, { conRole, characterId, otFields: collectOtFields() });
+    registrationMessage.textContent = 'Angemeldet.';
+    registrationMessage.className = 'success';
+    renderOtFields();
+    await loadRegistrations();
+  } catch (err) {
+    registrationMessage.textContent = err.status === 400 && err.body?.details
+      ? err.body.details.join(', ')
+      : err.message;
+    registrationMessage.className = 'error';
+  }
+});
+
 try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
@@ -174,6 +446,17 @@ try {
   }
   accountFormControls.forEach((el) => { el.disabled = false; });
   await loadQrCode(account);
+
+  currentUserId = account.id;
+  canEditCharacters = account.canEditCharacters;
+  isModeratorOrAdmin = account.group?.key === 'admin' || account.group?.key === 'moderator';
+  if (!isModeratorOrAdmin) {
+    document.querySelectorAll('#con-role-select option[data-staff-only]').forEach((opt) => opt.remove());
+  }
+  renderOtFields();
+  await loadEvents();
+  await loadCharacters();
+  await loadRegistrations();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
 }
