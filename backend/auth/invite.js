@@ -15,12 +15,12 @@ router.post('/auth/invite/redeem', async ({ req }) => {
     return { status: 400, body: { error: 'token and password are required' } };
   }
   if (!isValidPassword(password)) {
-    return { status: 400, body: { error: 'password must be at least 8 characters' } };
+    return { status: 400, body: { error: 'Passwort muss mindestens 8 Zeichen lang sein.' } };
   }
 
   const invitation = await getInvitationByToken(token);
   if (!invitation || invitation.redeemedAt || invitation.cancelledAt || new Date(invitation.expiresAt) < new Date()) {
-    return { status: 400, body: { error: 'invalid or expired invitation' } };
+    return { status: 400, body: { error: 'Ungültiger oder abgelaufener Link.' } };
   }
 
   const passwordHash = await hashPassword(password);
@@ -51,7 +51,7 @@ router.post('/auth/invite/redeem', async ({ req }) => {
     });
   } catch (err) {
     if (err.code === 'ALREADY_REDEEMED') {
-      return { status: 400, body: { error: 'invalid or expired invitation' } };
+      return { status: 400, body: { error: 'Ungültiger oder abgelaufener Link.' } };
     }
     throw err;
   }

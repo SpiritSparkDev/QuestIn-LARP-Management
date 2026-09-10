@@ -9,7 +9,7 @@ const TRANSITIONS = {
 export function applyTransition(currentStatus, action) {
   const next = TRANSITIONS[currentStatus]?.[action];
   if (!next) {
-    const err = new Error(`invalid transition: cannot ${action} from status "${currentStatus}"`);
+    const err = new Error(`Ungültiger Übergang: "${action}" nicht möglich von Status "${currentStatus}".`);
     err.code = 'INVALID_TRANSITION';
     throw err;
   }

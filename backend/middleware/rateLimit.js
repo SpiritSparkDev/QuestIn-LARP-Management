@@ -42,7 +42,7 @@ export function rateLimit({ keyPrefix, maxAttempts, windowMs }) {
     // X-Forwarded-For hops, not a naive "trust the header" read.
     const ip = ctx.req.socket.remoteAddress || 'unknown';
     if (isRateLimited(`${keyPrefix}:${ip}`, maxAttempts, windowMs)) {
-      return { status: 429, body: { error: 'too many requests, please try again later' } };
+      return { status: 429, body: { error: 'Zu viele Anfragen. Bitte später erneut versuchen.' } };
     }
     return handler(ctx);
   };

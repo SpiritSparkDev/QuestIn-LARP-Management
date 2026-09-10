@@ -36,14 +36,14 @@ async function canGrantStaffConRole(eventId, requestingUser) {
 async function resolveCharacterId(userId, conRole, characterId) {
   if (!CHARACTER_REQUIRED_CON_ROLES.includes(conRole)) {
     if (characterId) {
-      const err = new Error(`characterId must not be set for con_role "${conRole}"`);
+      const err = new Error(`Für die Rolle "${conRole}" darf kein Charakter angegeben werden.`);
       err.code = 'CHARACTER_NOT_ALLOWED';
       throw err;
     }
     return null;
   }
   if (!characterId) {
-    const err = new Error(`characterId is required for con_role "${conRole}"`);
+    const err = new Error(`Für die Rolle "${conRole}" ist ein Charakter erforderlich.`);
     err.code = 'CHARACTER_REQUIRED';
     throw err;
   }
@@ -61,7 +61,7 @@ async function resolveCharacterId(userId, conRole, characterId) {
   }
   const expectedClass = conRole === 'nsc' ? 'nsc' : 'sc';
   if (character.class !== expectedClass) {
-    const err = new Error(`con_role "${conRole}" requires a character of class "${expectedClass}"`);
+    const err = new Error(`Rolle "${conRole}" erfordert einen Charakter der Klasse "${expectedClass}".`);
     err.code = 'CHARACTER_CLASS_MISMATCH';
     throw err;
   }
@@ -92,7 +92,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ot
   // self-service con_role, now that character creation itself has no event
   // context at all to gate on.
   if (SELF_SERVICE_CON_ROLES.includes(conRole) && !requestingUser.group.canEditCharacters && !event.is_active) {
-    const err = new Error('registration is only open for the currently active event');
+    const err = new Error('Anmeldung ist nur für das aktuell aktive Event möglich.');
     err.code = 'EVENT_NOT_ACTIVE';
     throw err;
   }
@@ -109,7 +109,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ot
     return rows[0];
   } catch (err) {
     if (err.code === '23505') {
-      const dup = new Error('already registered for this event');
+      const dup = new Error('Bereits für dieses Event angemeldet.');
       dup.code = 'ALREADY_REGISTERED';
       throw dup;
     }
@@ -172,7 +172,7 @@ export async function unregisterFromEvent(userId, eventId) {
       err.code = 'REGISTRATION_NOT_FOUND';
       throw err;
     }
-    const err = new Error('cannot unregister after check-in');
+    const err = new Error('Abmelden nach Check-In nicht mehr möglich.');
     err.code = 'CANNOT_UNREGISTER';
     throw err;
   }
@@ -314,7 +314,7 @@ async function transitionStatus(eventId, userId, action) {
     [eventId, userId, currentStatus, nextStatus]
   );
   if (updated.length === 0) {
-    const err = new Error('invalid transition: registration status changed concurrently');
+    const err = new Error('Ungültiger Übergang: Anmeldestatus wurde zwischenzeitlich geändert.');
     err.code = 'INVALID_TRANSITION';
     throw err;
   }
@@ -369,7 +369,7 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
       err.code = 'REGISTRATION_NOT_FOUND';
       throw err;
     }
-    const err = new Error('status changed concurrently');
+    const err = new Error('Status wurde zwischenzeitlich geändert.');
     err.code = 'STATUS_CONFLICT';
     throw err;
   }

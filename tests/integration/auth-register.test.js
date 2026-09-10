@@ -217,7 +217,7 @@ test('POST /auth/register is rate-limited per IP after 10 attempts in the window
     }
     assert.equal(lastRes.status, 429);
     const body = await lastRes.json();
-    assert.equal(body.error, 'too many requests, please try again later');
+    assert.equal(body.error, 'Zu viele Anfragen. Bitte später erneut versuchen.');
   } finally {
     server.close();
   }
@@ -240,7 +240,7 @@ test('POST /auth/verify/resend is rate-limited per IP after 10 attempts in the w
     }
     assert.equal(lastRes.status, 429);
     const body = await lastRes.json();
-    assert.equal(body.error, 'too many requests, please try again later');
+    assert.equal(body.error, 'Zu viele Anfragen. Bitte später erneut versuchen.');
   } finally {
     server.close();
   }

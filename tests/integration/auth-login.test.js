@@ -116,7 +116,7 @@ test('POST /auth/login rejects a correct password for a deactivated account', as
     });
     assert.equal(res.status, 403);
     const body = await res.json();
-    assert.match(body.error, /deactivated/);
+    assert.match(body.error, /deaktiviert/);
   });
 });
 
@@ -171,7 +171,7 @@ test('POST /auth/login is rate-limited per email after 5 attempts in the window,
     }
     assert.equal(lastRes.status, 429);
     const body = await lastRes.json();
-    assert.equal(body.error, 'too many login attempts, please try again later');
+    assert.equal(body.error, 'Zu viele Versuche. Bitte später erneut versuchen.');
   } finally {
     server.close();
   }
@@ -196,7 +196,7 @@ test('POST /auth/login is rate-limited per IP after 10 attempts in the window, e
     }
     assert.equal(lastRes.status, 429);
     const body = await lastRes.json();
-    assert.equal(body.error, 'too many requests, please try again later');
+    assert.equal(body.error, 'Zu viele Anfragen. Bitte später erneut versuchen.');
   } finally {
     server.close();
   }

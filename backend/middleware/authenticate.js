@@ -6,10 +6,10 @@ export function requireAuth(handler) {
   return async (ctx) => {
     const cookies = parseCookies(ctx.req.headers.cookie);
     const token = cookies[SESSION_COOKIE_NAME];
-    if (!token) return { status: 401, body: { error: 'not authenticated' } };
+    if (!token) return { status: 401, body: { error: 'Nicht angemeldet.' } };
 
     const session = await getSession(token);
-    if (!session) return { status: 401, body: { error: 'not authenticated' } };
+    if (!session) return { status: 401, body: { error: 'Nicht angemeldet.' } };
 
     const { rows } = await query(
       `SELECT users.id, users.email, users.deactivated_at,
@@ -21,8 +21,8 @@ export function requireAuth(handler) {
        WHERE users.id = $1`,
       [session.userId]
     );
-    if (rows.length === 0) return { status: 401, body: { error: 'not authenticated' } };
-    if (rows[0].deactivated_at) return { status: 401, body: { error: 'account deactivated' } };
+    if (rows.length === 0) return { status: 401, body: { error: 'Nicht angemeldet.' } };
+    if (rows[0].deactivated_at) return { status: 401, body: { error: 'Konto deaktiviert.' } };
 
     const row = rows[0];
     const user = {

@@ -38,7 +38,7 @@ test('rateLimit middleware calls the handler when under the limit, and returns 4
   assert.equal(second.status, 200);
   const third = await wrapped(ctx);
   assert.equal(third.status, 429);
-  assert.equal(third.body.error, 'too many requests, please try again later');
+  assert.equal(third.body.error, 'Zu viele Anfragen. Bitte später erneut versuchen.');
 });
 
 test('rateLimit middleware tracks different IPs independently', async () => {

@@ -22,15 +22,15 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
     return { status: 400, body: { error: 'email, password, firstName, and lastName are required' } };
   }
   if (!isValidPassword(password)) {
-    return { status: 400, body: { error: 'password must be at least 8 characters' } };
+    return { status: 400, body: { error: 'Passwort muss mindestens 8 Zeichen lang sein.' } };
   }
   if (!isValidEmail(email)) {
-    return { status: 400, body: { error: 'invalid email format' } };
+    return { status: 400, body: { error: 'Ungültiges E-Mail-Format.' } };
   }
 
   const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
   if (existing.rows.length > 0) {
-    return { status: 409, body: { error: 'email already registered' } };
+    return { status: 409, body: { error: 'Diese E-Mail-Adresse ist bereits registriert.' } };
   }
 
   const passwordHash = await hashPassword(password);
@@ -44,7 +44,7 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
     userId = rows[0].id;
   } catch (err) {
     if (err.code === '23505') {
-      return { status: 409, body: { error: 'email already registered' } };
+      return { status: 409, body: { error: 'Diese E-Mail-Adresse ist bereits registriert.' } };
     }
     throw err;
   }
@@ -101,7 +101,7 @@ router.get('/auth/verify', async ({ req }) => {
     [token]
   );
   if (rows.length === 0 || new Date(rows[0].expires_at) < new Date()) {
-    return { status: 400, body: { error: 'invalid or expired token' } };
+    return { status: 400, body: { error: 'Ungültiger oder abgelaufener Link.' } };
   }
 
   await query('UPDATE users SET email_verified = true WHERE id = $1', [rows[0].user_id]);

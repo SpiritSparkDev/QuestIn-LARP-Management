@@ -149,7 +149,7 @@ test('POST /auth/password-reset/request is rate-limited per IP after 10 attempts
     }
     assert.equal(lastRes.status, 429);
     const body = await lastRes.json();
-    assert.equal(body.error, 'too many requests, please try again later');
+    assert.equal(body.error, 'Zu viele Anfragen. Bitte später erneut versuchen.');
   } finally {
     server.close();
   }

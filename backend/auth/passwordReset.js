@@ -44,7 +44,7 @@ router.post('/auth/password-reset/confirm', rateLimit(RESET_RATE_LIMIT)(async ({
     return { status: 400, body: { error: 'token and password are required' } };
   }
   if (!isValidPassword(password)) {
-    return { status: 400, body: { error: 'password must be at least 8 characters' } };
+    return { status: 400, body: { error: 'Passwort muss mindestens 8 Zeichen lang sein.' } };
   }
 
   const { rows } = await query(
@@ -52,7 +52,7 @@ router.post('/auth/password-reset/confirm', rateLimit(RESET_RATE_LIMIT)(async ({
     [token]
   );
   if (rows.length === 0 || new Date(rows[0].expires_at) < new Date()) {
-    return { status: 400, body: { error: 'invalid or expired token' } };
+    return { status: 400, body: { error: 'Ungültiger oder abgelaufener Link.' } };
   }
 
   const passwordHash = await hashPassword(password);

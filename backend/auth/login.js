@@ -21,7 +21,7 @@ router.post('/auth/login', rateLimit(LOGIN_IP_RATE_LIMIT)(async ({ req }) => {
   }
 
   if (isRateLimited(`login-email:${email}`, LOGIN_EMAIL_MAX_ATTEMPTS, LOGIN_EMAIL_WINDOW_MS)) {
-    return { status: 429, body: { error: 'too many login attempts, please try again later' } };
+    return { status: 429, body: { error: 'Zu viele Versuche. Bitte später erneut versuchen.' } };
   }
 
   const { rows } = await query(
@@ -29,19 +29,19 @@ router.post('/auth/login', rateLimit(LOGIN_IP_RATE_LIMIT)(async ({ req }) => {
     [email]
   );
   if (rows.length === 0 || !rows[0].password_hash) {
-    return { status: 401, body: { error: 'invalid credentials' } };
+    return { status: 401, body: { error: 'E-Mail oder Passwort falsch.' } };
   }
 
   const user = rows[0];
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) {
-    return { status: 401, body: { error: 'invalid credentials' } };
+    return { status: 401, body: { error: 'E-Mail oder Passwort falsch.' } };
   }
   if (user.deactivated_at) {
-    return { status: 403, body: { error: 'account deactivated' } };
+    return { status: 403, body: { error: 'Konto deaktiviert.' } };
   }
   if (!user.email_verified) {
-    return { status: 403, body: { error: 'email not verified' } };
+    return { status: 403, body: { error: 'E-Mail-Adresse noch nicht bestätigt.' } };
   }
 
   const session = await createSession(user.id);
