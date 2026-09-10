@@ -23,31 +23,49 @@
     </div>
     <h1>Meine Charaktere</h1>
     <p><a href="/characters-browse.html">Charaktere anderer Spieler durchsuchen</a></p>
-    <div id="character-list" class="char-grid"></div>
 
-    <div id="sc-form-section" style="display:none;">
-      <h2 id="form-title">Neuen Charakter anlegen</h2>
-      <form id="character-form">
-        <label for="character-name">Charaktername</label>
-        <input id="character-name" name="name" type="text" required>
-        <button type="submit">Speichern</button>
-      </form>
-      <p id="message"></p>
+    <div class="tabs" id="main-tabs">
+      <button type="button" class="tab-btn active" data-tab="sc-tab">Charaktere</button>
+      <button type="button" class="tab-btn" data-tab="nsc-tab" id="nsc-tab-btn" style="display:none;">NSC-Charaktere</button>
     </div>
 
-    <div id="nsc-section" style="display:none;">
-      <h2>Meine NSC-Charaktere</h2>
-      <div id="nsc-character-list" class="char-grid"></div>
+    <div class="tab-panel" id="sc-tab">
+      <div id="character-list" class="char-grid"></div>
 
-      <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
-      <form id="nsc-character-form">
-        <label for="nsc-character-name">Charaktername</label>
-        <input id="nsc-character-name" name="name" type="text" required>
-        <div id="nsc-dynamic-fields"></div>
-        <button type="submit">Speichern</button>
-        <button type="button" id="nsc-cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
-      </form>
-      <p id="nsc-message"></p>
+      <div id="sc-form-section" style="display:none;">
+        <h2 id="form-title">Neuen Charakter anlegen</h2>
+        <form id="character-form">
+          <label for="character-name">Charaktername</label>
+          <input id="character-name" name="name" type="text" required>
+          <button type="submit">Speichern</button>
+        </form>
+        <p id="message"></p>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="nsc-tab" hidden>
+      <div id="nsc-section" style="display:none;">
+        <div id="nsc-character-list" class="char-grid"></div>
+
+        <div class="tabs tabs--sub" id="nsc-form-tabs">
+          <button type="button" class="tab-btn active" data-tab="nsc-form-general">Allgemein</button>
+          <button type="button" class="tab-btn" data-tab="nsc-form-details">Merkmale</button>
+        </div>
+
+        <form id="nsc-character-form">
+          <div class="tab-panel" id="nsc-form-general">
+            <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
+            <label for="nsc-character-name">Charaktername</label>
+            <input id="nsc-character-name" name="name" type="text" required>
+          </div>
+          <div class="tab-panel" id="nsc-form-details" hidden>
+            <div id="nsc-dynamic-fields"></div>
+          </div>
+          <button type="submit">Speichern</button>
+          <button type="button" id="nsc-cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
+        </form>
+        <p id="nsc-message"></p>
+      </div>
     </div>
   </div>
 </div>
@@ -78,6 +96,22 @@ const nscMessage = document.getElementById('nsc-message');
 const nscFormTitle = document.getElementById('nsc-form-title');
 const nscDynamicFields = document.getElementById('nsc-dynamic-fields');
 const nscCancelButton = document.getElementById('nsc-cancel-edit');
+const nscTabButton = document.getElementById('nsc-tab-btn');
+
+function initTabs(tabsEl) {
+  const buttons = [...tabsEl.querySelectorAll('.tab-btn')];
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      buttons.forEach((b) => {
+        b.classList.toggle('active', b === btn);
+        document.getElementById(b.dataset.tab).hidden = b !== btn;
+      });
+    });
+  });
+}
+
+initTabs(document.getElementById('main-tabs'));
+initTabs(document.getElementById('nsc-form-tabs'));
 
 let characters = [];
 let editingCharacterId = null;
@@ -352,6 +386,7 @@ try {
   scFormSection.style.display = '';
   nscSchema = await api.get('/nsc-schema');
   nscSection.style.display = '';
+  nscTabButton.style.display = '';
   renderNscSchemaFields();
   await loadCharacters();
 } catch (err) {
