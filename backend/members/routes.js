@@ -1,15 +1,18 @@
+import crypto from 'node:crypto';
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { listMembers, getMember, updateMember, deactivateMember, reactivateMember } from './repository.js';
+import { listMembers, getMember, updateMember, deactivateMember, reactivateMember, deleteMember } from './repository.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
-import { sendInvitationEmail, baseUrl } from '../auth/mailer.js';
+import { sendInvitationEmail, sendVerificationEmail, baseUrl } from '../auth/mailer.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { logger } from '../logger.js';
 import { query } from '../db.js';
 import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
 import { isValidEmail } from '../validation.js';
+
+const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 function filterToAllowedFields(body, allowedFields) {
   const disallowed = Object.keys(body).filter((key) => ACCOUNT_FIELD_KEYS.includes(key) && !allowedFields.includes(key));
@@ -71,6 +74,48 @@ router.post('/members/:id/reactivate', requireAuth(requireMenu('mitglieder')(asy
   const reactivated = await reactivateMember(params.id);
   if (!reactivated) return { status: 404, body: { error: 'member not found' } };
   return { status: 200, body: { reactivated: true } };
+})));
+
+router.delete('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ params, user }) => {
+  if (params.id.toLowerCase() === user.id.toLowerCase()) {
+    return { status: 400, body: { error: 'cannot delete your own account' } };
+  }
+  const member = await getMember(params.id);
+  if (!member) return { status: 404, body: { error: 'member not found' } };
+  if (member.status !== 'deactivated') {
+    return { status: 400, body: { error: 'only deactivated members can be deleted' } };
+  }
+  try {
+    await deleteMember(params.id);
+  } catch (err) {
+    if (err.code === '23503') {
+      return { status: 409, body: { error: 'member is still referenced (invitations sent or files uploaded) and cannot be deleted' } };
+    }
+    throw err;
+  }
+  return { status: 200, body: { deleted: true } };
+})));
+
+router.post('/members/:id/resend-verification', requireAuth(requireMenu('mitglieder')(async ({ params, requestId }) => {
+  const member = await getMember(params.id);
+  if (!member) return { status: 404, body: { error: 'member not found' } };
+  if (member.emailVerified) return { status: 400, body: { error: 'email already verified' } };
+
+  await query('DELETE FROM email_verification_tokens WHERE user_id = $1', [params.id]);
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
+  await query(
+    'INSERT INTO email_verification_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)',
+    [token, params.id, expiresAt]
+  );
+
+  try {
+    await sendVerificationEmail(member.email, token);
+  } catch (err) {
+    logger.error('failed to resend verification email', { requestId, userId: params.id, email: member.email, error: err.message });
+    return { status: 502, body: { error: 'failed to send email' } };
+  }
+  return { status: 200, body: { sent: true } };
 })));
 
 const DEFAULT_INVITE_GROUP_KEY = 'mitglied';

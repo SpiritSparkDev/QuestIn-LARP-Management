@@ -679,6 +679,125 @@ test('POST /members/:id/deactivate and /reactivate are rejected for a group with
   }
 });
 
+test('DELETE /members/:id rejects deleting a still-active member', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
+    const res = await fetch(`http://localhost:${port}/members/${targetId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test('DELETE /members/:id rejects deleting your own account', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { userId: adminId, cookie: adminCookie } = await makeUserAndSession('admin');
+    await fetch(`http://localhost:${port}/members/${adminId}/deactivate`, { method: 'POST', headers: { Cookie: adminCookie } });
+    const res = await fetch(`http://localhost:${port}/members/${adminId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test('DELETE /members/:id removes a deactivated member', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
+
+    await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, { method: 'POST', headers: { Cookie: adminCookie } });
+    const res = await fetch(`http://localhost:${port}/members/${targetId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 200);
+
+    const { rows } = await query('SELECT id FROM users WHERE id = $1', [targetId]);
+    assert.equal(rows.length, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test('DELETE /members/:id returns 409 when the member is still referenced (e.g. as an invitation\'s inviter)', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: inviterId, cookie: inviterCookie } = await makeUserAndSession('admin');
+
+    const inviteRes = await fetch(`http://localhost:${port}/members/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: inviterCookie },
+      body: JSON.stringify({ email: `invited-by-${crypto.randomUUID()}@example.com`, firstName: 'Invited', lastName: 'Member', group: 'mitglied' }),
+    });
+    assert.equal(inviteRes.status, 201);
+
+    await fetch(`http://localhost:${port}/members/${inviterId}/deactivate`, { method: 'POST', headers: { Cookie: adminCookie } });
+    const res = await fetch(`http://localhost:${port}/members/${inviterId}`, {
+      method: 'DELETE',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 409);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/resend-verification reissues the verification token for an unverified member', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { rows } = await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Members', 'Unverified', (SELECT id FROM groups WHERE key = 'mitglied'), false) RETURNING id",
+      [`members-unverified-${crypto.randomUUID()}@example.com`]
+    );
+    const targetId = rows[0].id;
+
+    const res = await fetch(`http://localhost:${port}/members/${targetId}/resend-verification`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 200);
+
+    const { rows: tokenRows } = await query('SELECT token FROM email_verification_tokens WHERE user_id = $1', [targetId]);
+    assert.equal(tokenRows.length, 1);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/resend-verification rejects a member whose email is already verified', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
+
+    const res = await fetch(`http://localhost:${port}/members/${targetId}/resend-verification`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM invitations");
   await query("DELETE FROM users WHERE email LIKE 'members-%'");

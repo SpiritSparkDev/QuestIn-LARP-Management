@@ -205,15 +205,19 @@
       listBody.innerHTML = visible.map((m) => {
         let statusCell;
         let actionsCell;
+        const resendVerifyBtn = m.status !== 'invited' && !m.emailVerified
+          ? `<button type="button" class="btn-sm btn-ghost" data-resend-verify="${m.id}">Bestätigungsmail erneut senden</button>`
+          : '';
         if (m.status === 'active') {
           statusCell = `<span class="badge badge-active">Aktiv</span>`;
           const deactivateBtn = m.id === myUserId
             ? ''
             : `<button type="button" class="btn-sm btn-ghost" data-deactivate="${m.id}">Deaktivieren</button>`;
-          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn}`;
+          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn} ${resendVerifyBtn}`;
         } else if (m.status === 'deactivated') {
           statusCell = `<span class="badge badge-inactive">Deaktiviert</span>`;
-          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-reactivate="${m.id}">Reaktivieren</button>`;
+          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-reactivate="${m.id}">Reaktivieren</button>
+         <button type="button" class="btn-sm btn-ghost" data-delete="${m.id}">Löschen</button> ${resendVerifyBtn}`;
         } else {
           statusCell = `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`;
           actionsCell = `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>
@@ -242,6 +246,12 @@
       });
       listBody.querySelectorAll('[data-reactivate]').forEach((button) => {
         button.addEventListener('click', () => reactivateMemberRow(button.dataset.reactivate));
+      });
+      listBody.querySelectorAll('[data-delete]').forEach((button) => {
+        button.addEventListener('click', () => deleteMemberRow(button.dataset.delete));
+      });
+      listBody.querySelectorAll('[data-resend-verify]').forEach((button) => {
+        button.addEventListener('click', () => resendVerification(button.dataset.resendVerify));
       });
     }
 
@@ -357,6 +367,34 @@
         message.textContent = 'Mitglied reaktiviert.';
         message.className = 'success';
         await loadMembers();
+      } catch (err) {
+        message.textContent = err.message;
+        message.className = 'error';
+      }
+    }
+
+    async function deleteMemberRow(id) {
+      if (!confirm('Mitglied wirklich endgültig löschen? Das kann nicht rückgängig gemacht werden.')) return;
+      message.textContent = '';
+      message.className = '';
+      try {
+        await api.delete(`/members/${id}`);
+        message.textContent = 'Mitglied gelöscht.';
+        message.className = 'success';
+        await loadMembers();
+      } catch (err) {
+        message.textContent = err.message;
+        message.className = 'error';
+      }
+    }
+
+    async function resendVerification(id) {
+      message.textContent = '';
+      message.className = '';
+      try {
+        await api.post(`/members/${id}/resend-verification`, {});
+        message.textContent = 'Bestätigungsmail erneut verschickt.';
+        message.className = 'success';
       } catch (err) {
         message.textContent = err.message;
         message.className = 'error';
