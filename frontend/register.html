@@ -26,10 +26,13 @@
       <input id="email" name="email" type="email" required>
       <label for="password">Passwort</label>
       <input id="password" name="password" type="password" minlength="8" required>
+      <label for="passwordConfirm">Passwort wiederholen</label>
+      <input id="passwordConfirm" type="password" minlength="8" required>
+      <label><input type="checkbox" id="password-toggle"> Passwort anzeigen</label>
       <button type="submit">Registrieren</button>
     </form>
     <p id="message"></p>
-    <p class="text-center" style="margin-top:28px;"><a href="/login.html" class="btn-ghost">Bereits registriert? Login</a></p>
+    <p class="text-center" style="margin-top:28px;"><a href="/login.html" class="btn-ghost">Bereits registriert? Anmelden</a></p>
   </div>
 </div>
 <script type="module">
@@ -39,11 +42,24 @@ applyBranding();
 
 const form = document.getElementById('register-form');
 const message = document.getElementById('message');
+const passwordInput = document.getElementById('password');
+const passwordConfirmInput = document.getElementById('passwordConfirm');
+
+document.getElementById('password-toggle').addEventListener('change', (event) => {
+  const type = event.target.checked ? 'text' : 'password';
+  passwordInput.type = type;
+  passwordConfirmInput.type = type;
+});
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   message.textContent = '';
   message.className = '';
+  if (passwordInput.value !== passwordConfirmInput.value) {
+    message.textContent = 'Die Passwörter stimmen nicht überein.';
+    message.className = 'error';
+    return;
+  }
   const data = Object.fromEntries(new FormData(form));
   try {
     await api.post('/auth/register', data);
