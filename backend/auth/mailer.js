@@ -77,6 +77,6 @@ export async function sendRegistrationOtFieldsChangedEmail(to, { userName, event
     to,
     from,
     subject: `Anmeldungsdaten geändert: ${eventName}`,
-    text: `${userName} hat die Con-Tage/Unterbringung/Handwerk/Anreise/Opt-Out-Angaben der eigenen Anmeldung für "${eventName}" nachträglich geändert.`,
+    text: `Die Con-Tage/Unterbringung/Handwerk/Anreise/Opt-Out-Angaben der Anmeldung von ${userName} für "${eventName}" wurden nachträglich geändert.`,
   });
 }
