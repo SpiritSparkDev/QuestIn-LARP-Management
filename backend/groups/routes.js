@@ -6,7 +6,7 @@ import { listGroups, getGroup, createGroup, updateGroup, deleteGroup } from './r
 import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
 import { REGISTRATION_FIELD_KEYS } from '../registrationFields.js';
 
-const MENU_KEYS = ['konto', 'charaktere', 'con-anmeldungen', 'mitglieder', 'events', 'checkin'];
+const MENU_KEYS = ['konto', 'mitglieder', 'events', 'checkin'];
 const KEY_PATTERN = /^[a-z0-9_]+$/;
 const ALLOWED_ACCOUNT_FIELD_KEYS = [...ACCOUNT_FIELD_KEYS, ...REGISTRATION_FIELD_KEYS];
 

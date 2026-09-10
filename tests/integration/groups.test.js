@@ -114,6 +114,22 @@ test('POST /groups rejects an invalid menu key', async () => {
   }
 });
 
+test('POST /groups rejects the retired charaktere/con-anmeldungen menu keys', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ key: `retired_${Date.now()}`, name: 'Retired', visibleMenus: ['charaktere'] }),
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
 test('PUT /groups/:id updates a non-protected group', async () => {
   const server = createServer().listen(0);
   try {
