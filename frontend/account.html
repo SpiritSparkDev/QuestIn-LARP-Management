@@ -203,11 +203,10 @@ document.getElementById('logout-link').addEventListener('click', async () => {
   window.location.href = '/login.html';
 });
 
-async function loadQrCode(account) {
+async function loadQrCode(account, qrEvents, qrRegistrations) {
   const qrSection = document.getElementById('qr-section');
   const qrHint = document.getElementById('qr-hint');
   try {
-    const [qrEvents, qrRegistrations] = await Promise.all([api.get('/events'), api.get('/registrations')]);
     const activeEvent = qrEvents.find((e) => e.is_active);
     if (!activeEvent) {
       qrSection.style.display = '';
@@ -336,7 +335,7 @@ function renderDynamicFieldsForSelection() {
   const schema = event ? event.character_form_schema : [];
   const data = character ? character.data : {};
   dynamicFields.innerHTML = ['sc', 'gsc'].includes(conRoleSelect.value)
-    ? schema.map((field) => renderField(field, data[field.key])).join('')
+    ? schema.map((field) => renderField(field, data[field.key], 'reg-')).join('')
     : '';
   attachLiveValidation(dynamicFields);
 }
@@ -630,7 +629,7 @@ function tagsForCharacter(c) {
 }
 
 function renderNscSchemaFields(data = {}) {
-  nscDynamicFields.innerHTML = nscSchema.map((field) => renderField(field, data[field.key])).join('');
+  nscDynamicFields.innerHTML = nscSchema.map((field) => renderField(field, data[field.key], 'nsc-')).join('');
   attachLiveValidation(nscDynamicFields);
 }
 
@@ -776,7 +775,6 @@ try {
     accountForm.elements[field].value = account[field] ?? '';
   }
   accountFormControls.forEach((el) => { el.disabled = false; });
-  await loadQrCode(account);
 
   currentUserId = account.id;
   canEditCharacters = account.canEditCharacters;
@@ -787,14 +785,21 @@ try {
   renderOtFields();
 
   scFormSection.style.display = '';
-  nscSchema = await api.get('/nsc-schema');
-  nscSection.style.display = '';
-  nscTabButton.style.display = '';
-  renderNscSchemaFields();
+  try {
+    nscSchema = await api.get('/nsc-schema');
+    nscSection.style.display = '';
+    nscTabButton.style.display = '';
+    renderNscSchemaFields();
+  } catch {
+    // NSC schema is optional-ish for this bootstrap: leave the NSC tab button
+    // hidden (its pre-fetch default state) rather than aborting the rest of
+    // the Veranstaltung tab's data load over an NSC-schema-only failure.
+  }
 
   await loadEvents();
   await loadCharacters();
   await loadRegistrations();
+  await loadQrCode(account, events, currentRegistrations);
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
 }
