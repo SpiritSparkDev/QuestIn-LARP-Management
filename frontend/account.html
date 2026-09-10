@@ -22,36 +22,47 @@
         <span class="material-symbols-outlined" aria-hidden="true">logout</span> Logout
       </button>
     </div>
-    <h1>Mein Konto</h1>
-    <form id="account-form">
-      <div class="field-grid">
-        <div><label for="firstName">Vorname *</label><input id="firstName" name="firstName" type="text" required></div>
-        <div><label for="lastName">Nachname *</label><input id="lastName" name="lastName" type="text" required></div>
-        <div><label for="nickname">Rufname</label><input id="nickname" name="nickname" type="text"></div>
-      </div>
-      <div class="field-grid">
-        <div><label for="address">Adresse <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="address" name="address" type="text"></div>
-        <div><label for="birthdate">Geburtsdatum <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="birthdate" name="birthdate" type="text" placeholder="TT.MM.JJJJ"></div>
-        <div><label for="phone">Telefon <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="phone" name="phone" type="text"></div>
-      </div>
-      <div class="field-grid">
-        <div><label for="emergencyContactLastName">Notfallkontakt: Name <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="emergencyContactLastName" name="emergencyContactLastName" type="text"></div>
-        <div><label for="emergencyContactFirstName">Notfallkontakt: Vorname <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="emergencyContactFirstName" name="emergencyContactFirstName" type="text"></div>
-        <div><label for="emergencyContactPhone">Notfallkontakt: Telefonnummer <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="emergencyContactPhone" name="emergencyContactPhone" type="text"></div>
-      </div>
-      <label for="medicalNotes">Gesundheitshinweise / Allergien <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label>
-      <textarea id="medicalNotes" name="medicalNotes"></textarea>
-      <button type="submit">Speichern</button>
-    </form>
-    <div id="qr-section" style="display:none;">
-      <hr class="rule">
-      <h2>Mein QR-Code</h2>
-      <p class="lede" id="qr-hint"></p>
-      <canvas id="qr-canvas"></canvas>
+
+    <div class="tabs" id="page-tabs">
+      <button type="button" class="tab-btn active" data-tab="konto-tab">Konto</button>
+      <button type="button" class="tab-btn" data-tab="veranstaltung-tab">Veranstaltung</button>
     </div>
-    <p id="message"></p>
+
+    <div class="tab-panel" id="konto-tab">
+      <h1>Mein Konto</h1>
+      <form id="account-form">
+        <div class="field-grid">
+          <div><label for="firstName">Vorname *</label><input id="firstName" name="firstName" type="text" required></div>
+          <div><label for="lastName">Nachname *</label><input id="lastName" name="lastName" type="text" required></div>
+          <div><label for="nickname">Rufname</label><input id="nickname" name="nickname" type="text"></div>
+        </div>
+        <div class="field-grid">
+          <div><label for="address">Adresse <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="address" name="address" type="text"></div>
+          <div><label for="birthdate">Geburtsdatum <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="birthdate" name="birthdate" type="text" placeholder="TT.MM.JJJJ"></div>
+          <div><label for="phone">Telefon <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="phone" name="phone" type="text"></div>
+        </div>
+        <div class="field-grid">
+          <div><label for="emergencyContactLastName">Notfallkontakt: Name <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="emergencyContactLastName" name="emergencyContactLastName" type="text"></div>
+          <div><label for="emergencyContactFirstName">Notfallkontakt: Vorname <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="emergencyContactFirstName" name="emergencyContactFirstName" type="text"></div>
+          <div><label for="emergencyContactPhone">Notfallkontakt: Telefonnummer <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label><input id="emergencyContactPhone" name="emergencyContactPhone" type="text"></div>
+        </div>
+        <label for="medicalNotes">Gesundheitshinweise / Allergien <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span> Verschlüsselt</span></label>
+        <textarea id="medicalNotes" name="medicalNotes"></textarea>
+        <button type="submit">Speichern</button>
+      </form>
+      <div id="qr-section" style="display:none;">
+        <hr class="rule">
+        <h2>Mein QR-Code</h2>
+        <p class="lede" id="qr-hint"></p>
+        <canvas id="qr-canvas"></canvas>
+      </div>
+      <p id="account-message"></p>
+    </div>
+
+    <div class="tab-panel" id="veranstaltung-tab" hidden></div>
   </div>
 </div>
+
 <script type="module">
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
@@ -60,12 +71,26 @@ import { renderNavLinks } from '/js/nav.js';
 import { attachBirthdateFormatter, attachLiveValidation } from '/js/formFields.js';
 import { buildScanCode } from '/js/qrCode.js';
 
-const form = document.getElementById('account-form');
-const message = document.getElementById('message');
-const formControls = form.querySelectorAll('input, textarea, button');
-formControls.forEach((el) => { el.disabled = true; });
+function initTabs(tabsEl) {
+  const buttons = [...tabsEl.querySelectorAll('.tab-btn')];
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      buttons.forEach((b) => {
+        b.classList.toggle('active', b === btn);
+        document.getElementById(b.dataset.tab).hidden = b !== btn;
+      });
+    });
+  });
+}
+
+initTabs(document.getElementById('page-tabs'));
+
+const accountForm = document.getElementById('account-form');
+attachLiveValidation(accountForm);
+const accountMessage = document.getElementById('account-message');
+const accountFormControls = accountForm.querySelectorAll('input, textarea, button');
+accountFormControls.forEach((el) => { el.disabled = true; });
 attachBirthdateFormatter(document.getElementById('birthdate'));
-attachLiveValidation(form);
 
 document.getElementById('logout-link').addEventListener('click', async () => {
   if (!confirm('Wirklich abmelden?')) return;
@@ -77,8 +102,8 @@ async function loadQrCode(account) {
   const qrSection = document.getElementById('qr-section');
   const qrHint = document.getElementById('qr-hint');
   try {
-    const [events, registrations] = await Promise.all([api.get('/events'), api.get('/registrations')]);
-    const activeEvent = events.find((e) => e.is_active);
+    const [qrEvents, qrRegistrations] = await Promise.all([api.get('/events'), api.get('/registrations')]);
+    const activeEvent = qrEvents.find((e) => e.is_active);
     if (!activeEvent) {
       qrSection.style.display = '';
       qrHint.textContent = 'Aktuell ist kein Event für die Anmeldung geöffnet.';
@@ -89,7 +114,7 @@ async function loadQrCode(account) {
       qrHint.textContent = 'Für dieses Event ist noch kein QR-Code eingerichtet.';
       return;
     }
-    const registration = registrations.find((r) => r.eventId === activeEvent.id);
+    const registration = qrRegistrations.find((r) => r.eventId === activeEvent.id);
     if (!registration) {
       qrSection.style.display = '';
       qrHint.textContent = `Du bist für "${activeEvent.name}" nicht angemeldet.`;
@@ -125,41 +150,33 @@ async function loadQrCode(account) {
   }
 }
 
-async function loadAccount() {
-  try {
-    const account = await api.get('/account');
-    document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
-    for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes']) {
-      form.elements[field].value = account[field] ?? '';
-    }
-    formControls.forEach((el) => { el.disabled = false; });
-    await loadQrCode(account);
-  } catch (err) {
-    if (err.status === 401) {
-      window.location.href = '/login.html';
-      return;
-    }
-    message.textContent = err.message;
-    message.className = 'error';
-  }
-}
-
-form.addEventListener('submit', async (event) => {
+accountForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = '';
-  const data = Object.fromEntries(new FormData(form));
+  accountMessage.textContent = '';
+  accountMessage.className = '';
+  const data = Object.fromEntries(new FormData(accountForm));
   try {
     await api.patch('/account', data);
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
+    accountMessage.textContent = 'Gespeichert.';
+    accountMessage.className = 'success';
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    accountMessage.textContent = err.message;
+    accountMessage.className = 'error';
   }
 });
 
-loadAccount();
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+
+  for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes']) {
+    accountForm.elements[field].value = account[field] ?? '';
+  }
+  accountFormControls.forEach((el) => { el.disabled = false; });
+  await loadQrCode(account);
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+}
 </script>
 </body>
 </html>
