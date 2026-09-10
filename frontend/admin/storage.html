@@ -190,11 +190,14 @@ document.getElementById('test-connection').addEventListener('click', async () =>
   }
 });
 
-document.getElementById('migrate-button').addEventListener('click', async () => {
+document.getElementById('migrate-button').addEventListener('click', async (evt) => {
+  if (!confirm('Alle Dateien wirklich zum konfigurierten Backend migrieren?')) return;
+  const button = evt.currentTarget;
   const spinner = document.getElementById('migrate-spinner');
   const result = document.getElementById('migrate-result');
   result.textContent = '';
   spinner.hidden = false;
+  button.disabled = true;
   try {
     const { migrated, failed } = await api.post('/admin/settings/storage/migrate', {});
     result.textContent = failed.length === 0
@@ -205,11 +208,13 @@ document.getElementById('migrate-button').addEventListener('click', async () => 
     result.textContent = err.message;
   } finally {
     spinner.hidden = true;
+    button.disabled = false;
   }
 });
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
   await api.post('/auth/logout', {});
   window.location.href = '/login.html';
 });

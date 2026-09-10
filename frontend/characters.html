@@ -172,6 +172,7 @@ async function loadFilesInto(characterId) {
 function wireFileSection(characterId, container) {
   container.querySelectorAll('[data-delete-file]').forEach((button) => {
     button.addEventListener('click', async () => {
+      if (!confirm('Datei wirklich löschen?')) return;
       try {
         await api.delete(`/characters/${button.dataset.deleteCharacter}/files/${button.dataset.deleteFile}`);
         await loadFilesInto(characterId);

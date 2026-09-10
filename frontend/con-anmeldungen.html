@@ -248,6 +248,7 @@ async function loadRegistrations() {
 }
 
 async function unregister(eventId) {
+  if (!confirm('Wirklich von diesem Event abmelden?')) return;
   message.textContent = '';
   message.className = '';
   try {

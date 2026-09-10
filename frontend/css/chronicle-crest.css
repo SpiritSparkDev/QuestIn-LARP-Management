@@ -477,6 +477,14 @@ table {
   margin-bottom: 8px;
 }
 
+@media (max-width: 560px) {
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
 th {
   text-align: left;
   font-size: 11px;

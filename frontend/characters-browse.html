@@ -77,6 +77,7 @@ eventSelect.addEventListener('change', loadCharacters);
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
   await api.post('/auth/logout', {});
   window.location.href = '/login.html';
 });

@@ -342,16 +342,20 @@ document.getElementById('edit-save').addEventListener('click', async () => {
   });
   const characterForms = [...editCharacters.querySelectorAll('.checkin-character-form')];
   let savedAnything = false;
+  let currentStep = '';
   try {
     if (Object.keys(accountPayload).length > 0) {
+      currentStep = 'Konto-Feldern';
       await api.patch(`/members/${editingUserId}`, accountPayload);
       savedAnything = true;
     }
     if (Object.keys(registrationPayload).length > 0) {
+      currentStep = 'Anmeldungsfeldern';
       await api.put(`/events/${eventSelect.value}/registrations/${editingUserId}/ot-fields`, registrationPayload);
       savedAnything = true;
     }
     for (const form of characterForms) {
+      currentStep = 'Charakterfeldern';
       const data = collectFieldValues(form, currentSchema);
       await api.put(`/characters/${form.dataset.characterId}`, { data });
       savedAnything = true;
@@ -362,7 +366,7 @@ document.getElementById('edit-save').addEventListener('click', async () => {
     await loadParticipants(eventSelect.value);
   } catch (err) {
     message.textContent = savedAnything
-      ? `Teilweise gespeichert, dann Fehler: ${err.message}`
+      ? `Teilweise gespeichert, dann Fehler bei ${currentStep}: ${err.message}`
       : err.message;
     message.className = 'error';
     if (savedAnything) {
@@ -441,6 +445,7 @@ function renderActionCell(p) {
 }
 
 async function loadParticipants(eventId) {
+  listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
   const participants = await api.get(`/events/${eventId}/participants`);
   participantsById = new Map(participants.map((p) => [p.userId, p]));
   listBody.innerHTML = participants.map((p) => `<tr>
@@ -533,6 +538,10 @@ async function overrideStatus(eventId, userId, newStatus, previousStatus) {
 }
 
 async function promoteConRole(eventId, userId, conRole) {
+  if (!confirm(`Rolle wirklich zu "${CON_ROLE_LABELS[conRole]}" ändern?`)) {
+    await loadParticipants(eventId);
+    return;
+  }
   message.textContent = '';
   message.className = '';
   try {
@@ -552,6 +561,7 @@ eventSelect.addEventListener('change', () => {
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
   await api.post('/auth/logout', {});
   window.location.href = '/login.html';
 });

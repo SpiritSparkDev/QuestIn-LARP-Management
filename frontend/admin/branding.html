@@ -130,6 +130,7 @@ document.getElementById('logo-upload-btn').addEventListener('click', async () =>
 });
 
 document.getElementById('logo-remove-btn').addEventListener('click', async () => {
+  if (!confirm('Logo wirklich entfernen?')) return;
   message.textContent = '';
   message.className = '';
   try {
@@ -164,6 +165,7 @@ form.addEventListener('submit', async (event) => {
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
   await api.post('/auth/logout', {});
   window.location.href = '/login.html';
 });

@@ -20,10 +20,12 @@
     <h1>Events verwalten</h1>
     <p class="sub">Lege Events an und bestimme, für welches Event sich Teilnehmende aktuell anmelden können.</p>
     <div class="card">
+      <div class="table-scroll">
       <table id="event-list">
         <thead><tr><th>Name</th><th>Datum</th><th>Status</th><th></th><th></th></tr></thead>
         <tbody></tbody>
       </table>
+      </div>
     </div>
 
     <div class="card form-pad">
@@ -41,6 +43,7 @@
         <button type="button" id="add-field">Feld hinzufügen</button>
         <button type="button" id="load-template">Standard-Vorlage laden</button>
         <button type="submit">Speichern</button>
+        <button type="button" id="event-cancel-edit" class="btn-ghost">Abbrechen</button>
       </form>
     </div>
     <p id="message"></p>
@@ -89,6 +92,7 @@ function addSchemaRow(field = { key: '', label: '', type: 'text', required: fals
 }
 
 document.getElementById('add-field').addEventListener('click', () => addSchemaRow());
+document.getElementById('event-cancel-edit').addEventListener('click', () => resetForm());
 
 document.getElementById('load-template').addEventListener('click', () => {
   schemaRows.innerHTML = '';
@@ -116,6 +120,7 @@ function collectSchema() {
 }
 
 async function loadEvents() {
+  listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
   const events = await api.get('/events');
   listBody.innerHTML = events.map((e) => `<tr>
     <td>${escapeHtml(e.name)}</td>
@@ -196,6 +201,7 @@ form.addEventListener('submit', async (event) => {
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
   await api.post('/auth/logout', {});
   window.location.href = '/login.html';
 });

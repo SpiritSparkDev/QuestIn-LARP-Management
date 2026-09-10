@@ -31,6 +31,8 @@
           <button type="button" class="toggle-btn" data-view="deactivated">Deaktivierte Mitglieder</button>
         </div>
         <div class="card" style="margin-top:16px;">
+          <div class="toolbar"><input class="search" id="member-search" placeholder="Suche nach Name, E-Mail oder Gruppe …"></div>
+          <div class="table-scroll">
           <table id="member-list">
             <thead>
               <tr>
@@ -43,6 +45,7 @@
             </thead>
             <tbody></tbody>
           </table>
+          </div>
         </div>
 
         <dialog id="detail-dialog">
@@ -109,7 +112,7 @@
     import { api } from '/js/api.js';
     import { applyBranding } from '/js/branding.js';
     applyBranding();
-    import { escapeHtml, attachBirthdateFormatter, ACCOUNT_FIELD_LABELS, renderEventOptions, renderAccountFieldInput } from '/js/formFields.js';
+    import { escapeHtml, attachBirthdateFormatter, attachLiveValidation, ACCOUNT_FIELD_LABELS, renderEventOptions, renderAccountFieldInput } from '/js/formFields.js';
     import { renderNavLinks } from '/js/nav.js';
 
     const ALL_FIELD_KEYS = Object.keys(ACCOUNT_FIELD_LABELS);
@@ -129,14 +132,37 @@
     const message = document.getElementById('message');
     const inviteLinkBox = document.getElementById('invite-link-box');
     const inviteLinkText = document.getElementById('invite-link-text');
+    const searchInput = document.getElementById('member-search');
+    let currentSearch = '';
+
+    function applySearchFilter() {
+      const term = currentSearch.trim().toLowerCase();
+      listBody.querySelectorAll('tr').forEach((row) => {
+        const text = `${row.cells[0].textContent} ${row.cells[1].textContent} ${row.cells[2].textContent}`.toLowerCase();
+        row.style.display = !term || text.includes(term) ? '' : 'none';
+      });
+    }
+
+    searchInput.addEventListener('input', () => {
+      currentSearch = searchInput.value;
+      applySearchFilter();
+    });
 
     function showInviteLink(link) {
       inviteLinkText.value = link;
       inviteLinkBox.style.display = '';
     }
 
-    document.getElementById('invite-link-copy').addEventListener('click', () => {
-      navigator.clipboard.writeText(inviteLinkText.value);
+    document.getElementById('invite-link-copy').addEventListener('click', async (evt) => {
+      const button = evt.currentTarget;
+      const originalText = button.textContent;
+      try {
+        await navigator.clipboard.writeText(inviteLinkText.value);
+        button.textContent = 'Kopiert!';
+      } catch {
+        button.textContent = 'Kopieren fehlgeschlagen';
+      }
+      setTimeout(() => { button.textContent = originalText; }, 2000);
     });
 
     let myAccountFields = [];
@@ -153,6 +179,7 @@
         .join('');
       const birthdateInput = container.querySelector('[data-field="birthdate"]');
       if (birthdateInput) attachBirthdateFormatter(birthdateInput);
+      attachLiveValidation(container);
     }
 
     // Member-detail view: GET /members/:id already returns every field's value
@@ -184,6 +211,7 @@
       }).join('');
       const birthdateInput = container.querySelector('[data-field="birthdate"]');
       if (birthdateInput) attachBirthdateFormatter(birthdateInput);
+      attachLiveValidation(container);
     }
 
     async function loadGroupOptions(selectEl) {
@@ -197,6 +225,7 @@
     }
 
     async function loadMembers() {
+      listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
       const members = await api.get(`/members${currentView === 'deactivated' ? '?includeDeactivated=true' : ''}`);
       const visible = currentView === 'deactivated'
         ? members.filter((m) => m.status === 'deactivated')
@@ -253,6 +282,7 @@
       listBody.querySelectorAll('[data-resend-verify]').forEach((button) => {
         button.addEventListener('click', () => resendVerification(button.dataset.resendVerify));
       });
+      applySearchFilter();
     }
 
     async function openDetail(memberId) {
@@ -288,7 +318,9 @@
       detailDialog.close();
     });
 
-    document.getElementById('detail-save').addEventListener('click', async () => {
+    document.getElementById('detail-save').addEventListener('click', async (evt) => {
+      const saveButton = evt.currentTarget;
+      saveButton.disabled = true;
       message.textContent = '';
       message.className = '';
       const payload = {};
@@ -307,6 +339,8 @@
       } catch (err) {
         message.textContent = err.message;
         message.className = 'error';
+      } finally {
+        saveButton.disabled = false;
       }
     });
 
@@ -414,12 +448,17 @@
       inviteLinkBox.style.display = 'none';
       inviteDialog.showModal();
     });
-    document.getElementById('invite-cancel').addEventListener('click', () => inviteDialog.close());
+    document.getElementById('invite-cancel').addEventListener('click', () => {
+      document.getElementById('invite-form').reset();
+      inviteDialog.close();
+    });
 
     document.getElementById('invite-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       message.textContent = '';
       message.className = '';
+      const submitButton = event.target.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
       const formData = new FormData(event.target);
       const payload = Object.fromEntries(formData);
       if (!payload.eventId) delete payload.eventId;
@@ -447,11 +486,14 @@
       } catch (err) {
         message.textContent = err.message;
         message.className = 'error';
+      } finally {
+        submitButton.disabled = false;
       }
     });
 
     document.getElementById('logout-link').addEventListener('click', async (evt) => {
       evt.preventDefault();
+      if (!confirm('Wirklich abmelden?')) return;
       await api.post('/auth/logout', {});
       window.location.href = '/login.html';
     });
