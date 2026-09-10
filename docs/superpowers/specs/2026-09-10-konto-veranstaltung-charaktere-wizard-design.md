@@ -62,7 +62,7 @@ Menüpunkt.
   jede bestehende Gruppe, die heute `charaktere` oder
   `con-anmeldungen` sieht, hat auch `konto`, siehe Grep-Befund unten,
   also kein Gruppen verliert dadurch Zugriff).
-- Neue Migration (`db/migrations/030_...sql`): für alle Zeilen in
+- Neue Migration (`db/migrations/031_...sql`): für alle Zeilen in
   `groups` `visible_menus` auf `visible_menus - 'charaktere' -
   'con-anmeldungen'` setzen (jsonb `-` Operator entfernt ein Element).
   Kein Rollback-Risiko — Menüpunkte werden nur entfernt, `konto` bleibt
@@ -70,10 +70,9 @@ Menüpunkt.
 - `frontend/admin/groups.html`: die beiden Checkboxen für
   `charaktere`/`con-anmeldungen` (Zeilen 50–51) entfernt.
 
-**Verifiziert:** jede der aktuell 9 Default-Gruppen
-(`db/groupDefaults.js`, `db/migrations/014_finalize_group_id.sql`,
-`db/migrations/027_system_con_rollen.sql`) die `charaktere` oder
-`con-anmeldungen` führt, führt auch `konto`. Für individuell in
+**Verifiziert:** alle 3 aktuell in `db/groupDefaults.js` geseedeten
+Gruppen (`admin`, `moderator`, `mitglied`), die `charaktere` oder
+`con-anmeldungen` führen, führen auch `konto`. Für individuell in
 Produktion angelegte/bearbeitete Gruppen gilt das nicht automatisch —
 Rollout-Hinweis in Abschnitt 8.
 
