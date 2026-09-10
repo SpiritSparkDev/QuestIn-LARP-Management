@@ -214,7 +214,92 @@ test('POST /groups accepts and returns canOverrideCheckinStatus; PUT /groups/:id
   }
 });
 
+test('DELETE /groups/:id removes an unused, non-protected group', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const createRes = await fetch(`http://localhost:${port}/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ key: `deletable_${Date.now()}`, name: 'Deletable' }),
+    });
+    const created = await createRes.json();
+
+    const deleteRes = await fetch(`http://localhost:${port}/groups/${created.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: cookie },
+    });
+    assert.equal(deleteRes.status, 200);
+
+    const { rows } = await query('SELECT id FROM groups WHERE id = $1', [created.id]);
+    assert.equal(rows.length, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test('DELETE /groups/:id rejects deleting the protected admin group', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const { rows } = await query("SELECT id FROM groups WHERE key = 'admin'");
+    const res = await fetch(`http://localhost:${port}/groups/${rows[0].id}`, {
+      method: 'DELETE',
+      headers: { Cookie: cookie },
+    });
+    assert.equal(res.status, 403);
+  } finally {
+    server.close();
+  }
+});
+
+test('DELETE /groups/:id returns 409 when a member still belongs to the group', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const createRes = await fetch(`http://localhost:${port}/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ key: `inuse_${Date.now()}`, name: 'In Use' }),
+    });
+    const created = await createRes.json();
+    await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'InUse', 'Test', $2, true)",
+      [`groups-inuse-${crypto.randomUUID()}@example.com`, created.id]
+    );
+
+    const res = await fetch(`http://localhost:${port}/groups/${created.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: cookie },
+    });
+    assert.equal(res.status, 409);
+
+    await query('DELETE FROM users WHERE group_id = $1', [created.id]);
+    await query('DELETE FROM groups WHERE id = $1', [created.id]);
+  } finally {
+    server.close();
+  }
+});
+
+test('DELETE /groups/:id returns 404 for an unknown group', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/groups/${crypto.randomUUID()}`, {
+      method: 'DELETE',
+      headers: { Cookie: cookie },
+    });
+    assert.equal(res.status, 404);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
-  await query("DELETE FROM groups WHERE key ~ '^(custom|dup|editable|renamed)_[0-9]+$'");
+  await query("DELETE FROM groups WHERE key ~ '^(custom|dup|editable|renamed|deletable|inuse)_[0-9]+$'");
   await closePool();
 });

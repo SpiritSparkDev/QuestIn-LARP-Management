@@ -2,7 +2,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { listGroups, getGroup, createGroup, updateGroup } from './repository.js';
+import { listGroups, getGroup, createGroup, updateGroup, deleteGroup } from './repository.js';
 import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
 import { REGISTRATION_FIELD_KEYS } from '../registrationFields.js';
 
@@ -65,4 +65,21 @@ router.put('/groups/:id', requireAuth(requireAdminGroup(async ({ req, params }) 
   }
   const group = await updateGroup(params.id, { name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus });
   return { status: 200, body: group };
+})));
+
+router.delete('/groups/:id', requireAuth(requireAdminGroup(async ({ params }) => {
+  const existing = await getGroup(params.id);
+  if (!existing) return { status: 404, body: { error: 'group not found' } };
+  if (existing.is_protected) {
+    return { status: 403, body: { error: "the admin group cannot be deleted" } };
+  }
+  try {
+    await deleteGroup(params.id);
+  } catch (err) {
+    if (err.code === '23503') {
+      return { status: 409, body: { error: 'Gruppe wird noch von Mitgliedern verwendet und kann nicht gelöscht werden.' } };
+    }
+    throw err;
+  }
+  return { status: 200, body: { deleted: true } };
 })));

@@ -22,6 +22,11 @@ export async function createGroup({ key, name, visibleMenus, accountFields, canE
   return rows[0];
 }
 
+export async function deleteGroup(id) {
+  const { rows } = await query('DELETE FROM groups WHERE id = $1 RETURNING id', [id]);
+  return rows[0] ?? null;
+}
+
 export async function updateGroup(id, { name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus }) {
   const { rows } = await query(
     `UPDATE groups SET

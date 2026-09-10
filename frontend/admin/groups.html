@@ -20,10 +20,12 @@
     <h1>Gruppen verwalten</h1>
     <p class="sub">Lege fest, welche Menüs und Felder jede Gruppe sehen bzw. bearbeiten darf.</p>
     <div class="card">
+      <div class="table-scroll">
       <table id="group-list">
         <thead><tr><th>Name</th><th>Schlüssel</th><th>Menüs</th><th>Charaktere bearbeiten</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
+      </div>
     </div>
 
     <button type="button" id="open-create">Neue Gruppe anlegen</button>
@@ -118,6 +120,7 @@ function setCheckedValues(containerId, values) {
 }
 
 async function loadGroups() {
+  listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
   const groups = await api.get('/groups');
   listBody.innerHTML = groups.map((g) => `<tr>
     <td>${escapeHtml(g.name)}</td>
@@ -126,7 +129,7 @@ async function loadGroups() {
     <td>${g.can_edit_characters ? 'Ja' : 'Nein'}</td>
     <td>${g.is_protected
       ? '<span class="badge badge-inactive">Geschützt</span>'
-      : `<button type="button" class="btn-sm btn-ghost" data-edit="${g.id}">Bearbeiten</button>`}</td>
+      : `<button type="button" class="btn-sm btn-ghost" data-edit="${g.id}">Bearbeiten</button> <button type="button" class="btn-sm btn-ghost" data-delete="${g.id}">Löschen</button>`}</td>
   </tr>`).join('');
 
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
@@ -135,6 +138,24 @@ async function loadGroups() {
       startEdit(group);
     });
   });
+  listBody.querySelectorAll('[data-delete]').forEach((button) => {
+    button.addEventListener('click', () => deleteGroupRow(button.dataset.delete));
+  });
+}
+
+async function deleteGroupRow(id) {
+  if (!confirm('Gruppe wirklich löschen? Das kann nicht rückgängig gemacht werden.')) return;
+  message.textContent = '';
+  message.className = '';
+  try {
+    await api.delete(`/groups/${id}`);
+    message.textContent = 'Gruppe gelöscht.';
+    message.className = 'success';
+    await loadGroups();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
 }
 
 function startEdit(group) {
@@ -200,6 +221,7 @@ form.addEventListener('submit', async (event) => {
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
   await api.post('/auth/logout', {});
   window.location.href = '/login.html';
 });
