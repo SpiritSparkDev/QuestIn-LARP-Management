@@ -1,7 +1,5 @@
 const MENU_LINKS = [
   { key: 'konto', label: 'Konto', href: '/account.html' },
-  { key: 'charaktere', label: 'Charaktere', href: '/characters.html' },
-  { key: 'con-anmeldungen', label: 'Con-Anmeldungen', href: '/con-anmeldungen.html' },
   { key: 'mitglieder', label: 'Mitglieder', href: '/admin/members.html' },
   { key: 'events', label: 'Events', href: '/admin/events.html' },
   { key: 'checkin', label: 'Check-In', href: '/admin/checkin.html' },
