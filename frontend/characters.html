@@ -243,7 +243,7 @@ function tagsForNscCharacter(c) {
   return nscSchema
     .map((field) => ({ field, value: tagValueForField(field, c.data[field.key]) }))
     .filter(({ value }) => value !== undefined)
-    .map(({ field, value }) => `<span class="tag">${escapeHtml(field.label)}: ${escapeHtml(value)}</span>`)
+    .map(({ field, value }) => `<span class="tag">${escapeHtml(field.label || field.key)}: ${escapeHtml(value)}</span>`)
     .join('');
 }
 

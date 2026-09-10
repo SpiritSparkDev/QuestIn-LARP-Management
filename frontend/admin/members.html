@@ -161,7 +161,7 @@
     // change it, read-only text otherwise — instead of silently omitting it.
     function buildDetailFieldInputs(container, values = {}) {
       const nameFieldsHtml = `
-    <div class="firstName-conainer">
+    <div class="firstName-container">
       <label for="field-firstName">Vorname</label>
       <input id="field-firstName" data-field="firstName" type="text" value="${escapeHtml(values.firstName ?? '')}">
     </div>
@@ -488,7 +488,7 @@
       await loadMembers();
     } catch (err) {
       if (err.status === 401) window.location.href = '/login.html';
-      else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Orga.'; message.className = 'error'; }
+      else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Moderator.'; message.className = 'error'; }
     }
   </script>
 </body>

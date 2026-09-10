@@ -301,7 +301,7 @@ function openEditDialog(userId) {
 
   const otKeys = canManageMembers ? Object.keys(p.otFields ?? {}) : [];
   editOtFields.innerHTML = otKeys.length > 0
-    ? `<h3>Konto-Felder</h3>` + otKeys.map((key) => renderAccountFieldInput(key, OT_FIELD_LABELS[key] ?? key, p.otFields[key])).join('')
+    ? `<h3>Weitere Felder</h3>` + otKeys.map((key) => renderAccountFieldInput(key, OT_FIELD_LABELS[key] ?? key, p.otFields[key])).join('')
     : '';
 
   editCharacters.innerHTML = canOverride
@@ -596,7 +596,7 @@ try {
   }
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins/Check-In-Helfer.'; message.className = 'error'; }
+  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Moderator.'; message.className = 'error'; }
 }
 </script>
 </body>

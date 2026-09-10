@@ -206,7 +206,7 @@ try {
   await loadEvents();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins.'; message.className = 'error'; }
+  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Moderator.'; message.className = 'error'; }
 }
 </script>
 </body>

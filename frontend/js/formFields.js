@@ -21,7 +21,7 @@ export const REGISTRATION_FIELD_LABELS = {
 // Registration/participant status, keyed by the status column's DB value.
 export const STATUS_LABELS = {
   notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet',
-  checked_in: 'Eingechecked', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt',
+  checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt',
 };
 
 // True if a Ja/Nein opt-out field's raw stored value means "yes" (checked).
