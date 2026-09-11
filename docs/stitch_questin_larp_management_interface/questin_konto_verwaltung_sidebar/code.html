@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+
+<html lang="de"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Konto &amp; Teilnehmerdaten | QuestIn</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;0,700;1,400&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary-container": "#e08850",
+            "outline-variant": "#d8d0c8",
+            "secondary-fixed": "#eae2da",
+            "surface-container-lowest": "#ffffff",
+            "tertiary-fixed-dim": "#e8a0a0",
+            "primary-fixed-dim": "#f0a878",
+            "surface-bright": "#faf5ee",
+            "surface-container-low": "#f6f0e8",
+            "tertiary-fixed": "#fce0e0",
+            "on-primary-fixed-variant": "#8a4518",
+            "on-secondary": "#ffffff",
+            "on-surface": "#3a302a",
+            "inverse-on-surface": "#faf5ee",
+            "on-secondary-container": "#605850",
+            "error-container": "#fce4e0",
+            "secondary-container": "#eae2da",
+            "primary-fixed": "#fbe8d8",
+            "outline": "#9a9088",
+            "on-secondary-fixed-variant": "#504840",
+            "background": "#faf5ee",
+            "tertiary-container": "#d47070",
+            "on-surface-variant": "#605850",
+            "secondary-fixed-dim": "#cec6be",
+            "on-error-container": "#7a1a10",
+            "surface": "#faf5ee",
+            "on-primary": "#ffffff",
+            "surface-container": "#f2ece4",
+            "on-tertiary-fixed": "#2e1515",
+            "surface-dim": "#dcd6cc",
+            "error": "#c0392b",
+            "tertiary": "#8c3c3c",
+            "on-background": "#3a302a",
+            "surface-tint": "#c2652a",
+            "on-primary-fixed": "#401a08",
+            "surface-container-highest": "#e6e0d6",
+            "on-primary-container": "#fbe8d8",
+            "on-secondary-fixed": "#2a2420",
+            "on-tertiary": "#ffffff",
+            "inverse-surface": "#3a302a",
+            "on-tertiary-container": "#3a2020",
+            "inverse-primary": "#f0a878",
+            "primary": "#c2652a",
+            "surface-container-high": "#ece6dc",
+            "on-error": "#ffffff",
+            "on-tertiary-fixed-variant": "#6e3030",
+            "secondary": "#78706a",
+            "surface-variant": "#ece6dc"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            headline: ["EB Garamond", "serif"],
+            display: ["EB Garamond", "serif"],
+            body: ["Manrope", "sans-serif"],
+            label: ["Manrope", "sans-serif"]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body antialiased min-h-screen flex selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- SIDEBAR NAVIGATION -->
+<aside class="w-64 shrink-0 bg-surface-container-lowest border-r border-outline-variant/60 min-h-screen flex flex-col justify-between p-6 sticky top-0 h-screen z-30">
+<div>
+<!-- Logo -->
+<a class="block focus:outline-none" href="#">
+<img alt="QuestIn Logo" class="h-8 w-auto object-contain mb-8" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBkOM50R5kHe3thYFYchYWX4reJ8JdPx7pNBHT4Cm8z359fyBsKaqFZVnwgiMmO6uHv5Vf7p1mRXB_wp81NgWK29F2W3MXG8NpPZ90YpvkbsCZ6GVOWWV1f_2kgAoiNYDrC0LqB2s3oHhLosHB0IMY0EOzU3Xi9hoepG_vA79hJOnbRcbQg3ujhZVG-e6HxEh-g8-3d93VImYXoROxoACbQRKRf3Isj-L2ixFelsr_18Ieu4l6rU0EUwPE-gLevgWmxrg"/>
+</a>
+<!-- Navigation Links -->
+<nav class="space-y-1.5">
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-semibold bg-primary-fixed/60 text-primary border-r-2 border-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">manage_accounts</span>
+<span>Konto</span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">shield</span>
+<span>Charaktere</span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">confirmation_number</span>
+<span>Tickets</span>
+</a>
+</nav>
+</div>
+<!-- Bottom Sidebar: Event Context + User Profile -->
+<div class="pt-6 border-t border-outline-variant/50 space-y-4">
+<!-- Active Event Badge -->
+<div class="px-3 py-2 rounded-lg bg-surface-container-low/70 border border-outline-variant/40">
+<div class="flex items-center gap-2 text-xs text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-primary shrink-0"></span>
+<span class="truncate font-medium">Mythos von Eldoria 2025</span>
+</div>
+</div>
+<!-- User Profile & Action -->
+<div class="flex items-center justify-between gap-3 pt-1">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-xs font-semibold text-on-surface shrink-0">
+          AS
+        </div>
+<div class="min-w-0">
+<p class="text-xs font-semibold text-on-surface truncate">Alexander von Steinberg</p>
+<p class="text-[11px] text-on-surface-variant truncate">Teilnehmer</p>
+</div>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors p-1" title="Abmelden / Einstellungen" type="button">
+<span class="material-symbols-outlined text-[18px]">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- MAIN CONTENT WRAPPER -->
+<div class="flex-1 flex flex-col min-w-0">
+<main class="flex-1 max-w-4xl w-full mx-auto px-8 md:px-12 py-10 md:py-14">
+<!-- Intro / Title -->
+<div class="mb-10 max-w-2xl">
+<h1 class="font-headline text-3xl md:text-4xl text-on-surface font-semibold tracking-tight">Konto &amp; Teilnehmerdaten</h1>
+<p class="text-on-surface-variant text-sm md:text-base mt-2 leading-relaxed">
+        Verwalte deine persönlichen Angaben, medizinischen Notfallhinweise und verknüpften Charaktere für bevorstehende Veranstaltungen.
+      </p>
+</div>
+<form class="space-y-10" onsubmit="event.preventDefault();">
+<!-- BEREICH 1: PERSÖNLICHE DATEN -->
+<section class="bg-surface-container-lowest border border-outline-variant/60 rounded-xl p-6 md:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+<div class="mb-6 pb-4 border-b border-outline-variant/40">
+<h2 class="font-headline text-2xl text-on-surface font-medium">Persönliche Daten</h2>
+<p class="text-xs md:text-sm text-on-surface-variant mt-1">Stammdaten zur eindeutigen Zuordnung deines Teilnehmer-Accounts.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-2" for="vorname">Vorname</label>
+<input class="w-full px-3.5 py-2.5 bg-surface-container-low border border-outline-variant/80 rounded-lg text-on-surface text-sm focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition" id="vorname" type="text" value="Alexander"/>
+</div>
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-2" for="nachname">Nachname</label>
+<input class="w-full px-3.5 py-2.5 bg-surface-container-low border border-outline-variant/80 rounded-lg text-on-surface text-sm focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition" id="nachname" type="text" value="von Steinberg"/>
+</div>
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-2" for="email">E-Mail-Adresse</label>
+<input class="w-full px-3.5 py-2.5 bg-surface-container-low border border-outline-variant/80 rounded-lg text-on-surface text-sm focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition" id="email" type="email" value="alexander.steinberg@larp-chronik.de"/>
+</div>
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-2" for="telefon">Telefonnummer (Vor-Ort-Erreichbarkeit)</label>
+<input class="w-full px-3.5 py-2.5 bg-surface-container-low border border-outline-variant/80 rounded-lg text-on-surface text-sm focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition" id="telefon" type="tel" value="+49 171 9482015"/>
+</div>
+<div class="md:col-span-2">
+<label class="block text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-2" for="notfall_kontakt">Notfallkontakt Telefon (Name &amp; Rufnummer)</label>
+<input class="w-full px-3.5 py-2.5 bg-surface-container-low border border-outline-variant/80 rounded-lg text-on-surface text-sm focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition" id="notfall_kontakt" type="text" value="Dr. Elena von Steinberg (+49 170 5521908)"/>
+</div>
+</div>
+</section>
+<!-- BEREICH 2: EVENT & NOTFALL -->
+<section class="bg-surface-container-lowest border border-outline-variant/60 rounded-xl p-6 md:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+<div class="mb-6 pb-4 border-b border-outline-variant/40">
+<h2 class="font-headline text-2xl text-on-surface font-medium">Event &amp; Notfall</h2>
+<p class="text-xs md:text-sm text-on-surface-variant mt-1">Wichtige Angaben für Sanitäter und Logistik vor Ort.</p>
+</div>
+<div class="space-y-5">
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-2" for="zeltplatz">Zeltplatz / Lager</label>
+<input class="w-full px-3.5 py-2.5 bg-surface-container-low border border-outline-variant/80 rounded-lg text-on-surface text-sm focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition" id="zeltplatz" type="text" value="Lager des Silberquells (Parzelle C-12)"/>
+</div>
+<div>
+<label class="block text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-2" for="allergien">Wichtige Allergien / Dauermedikation</label>
+<textarea class="w-full px-3.5 py-2.5 bg-surface-container-low border border-outline-variant/80 rounded-lg text-on-surface text-sm focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition resize-none" id="allergien" rows="3">Starke Erdnussallergie (EpiPen in Gürteltasche). Asthma-Inhalator bei hoher körperlicher Belastung.</textarea>
+<p class="text-xs text-secondary mt-1.5">Diese Information ist vertraulich und dient ausschließlich Ersthelfern im Ernstfall.</p>
+</div>
+</div>
+</section>
+<!-- BEREICH 3: GESPEICHERTE CHARAKTERE -->
+<section class="bg-surface-container-lowest border border-outline-variant/60 rounded-xl p-6 md:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+<div class="flex items-center justify-between mb-6 pb-4 border-b border-outline-variant/40">
+<div>
+<h2 class="font-headline text-2xl text-on-surface font-medium">Gespeicherte Charaktere</h2>
+<p class="text-xs md:text-sm text-on-surface-variant mt-1">Deine Rollen für anstehende und vergangene Abenteuer.</p>
+</div>
+<button class="text-xs font-medium text-primary hover:text-on-primary-fixed-variant flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Neuer Charakter</span>
+</button>
+</div>
+<div class="space-y-3">
+<!-- Charakter 1 -->
+<div class="flex items-center justify-between p-4 bg-surface-container-low/60 border border-outline-variant/60 rounded-lg hover:border-outline transition">
+<div class="flex items-center gap-3.5">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">shield</span>
+</div>
+<div>
+<h3 class="text-sm font-semibold text-on-surface">Sir Galahad von Falkenstein</h3>
+<p class="text-xs text-on-surface-variant">Paladin der Weißen Flamme • SC</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-xs text-primary font-medium bg-primary-fixed/60 px-2.5 py-1 rounded">Aktiv</span>
+<button class="text-xs font-medium text-on-surface-variant hover:text-on-surface" type="button">Bearbeiten</button>
+</div>
+</div>
+<!-- Charakter 2 -->
+<div class="flex items-center justify-between p-4 bg-surface-container-low/30 border border-outline-variant/40 rounded-lg hover:border-outline transition">
+<div class="flex items-center gap-3.5">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[22px]">face</span>
+</div>
+<div>
+<h3 class="text-sm font-semibold text-on-surface">Morwen die Schattenweberin</h3>
+<p class="text-xs text-on-surface-variant">Schurkin &amp; Informationshändlerin</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-xs text-secondary bg-secondary-container/50 px-2.5 py-1 rounded">Archiviert</span>
+<button class="text-xs font-medium text-on-surface-variant hover:text-on-surface" type="button">Reaktivieren</button>
+</div>
+</div>
+</div>
+</section>
+<!-- SPEICHERN ACTION BAR -->
+<div class="flex items-center justify-end gap-4 pt-4 pb-12">
+<button class="px-5 py-2.5 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors" type="button">
+          Abbrechen
+        </button>
+<button class="bg-primary hover:bg-surface-tint text-on-primary font-medium text-sm px-6 py-2.5 rounded-lg shadow-sm active:scale-[0.99] transition-all" type="submit">
+          Änderungen speichern
+        </button>
+</div>
+</form>
+</main>
+<!-- MINIMAL FOOTER -->
+<footer class="border-t border-outline-variant/40 bg-surface-container-lowest/60 py-6 text-center text-xs text-on-surface-variant mt-auto">
+<div class="max-w-4xl mx-auto px-8 md:px-12 flex flex-col sm:row items-center justify-between gap-2">
+<span>© 2025 QuestIn LARP Management</span>
+<div class="flex gap-4">
+<a class="hover:underline" href="#">Datenschutz</a>
+<a class="hover:underline" href="#">Impressum</a>
+<a class="hover:underline" href="#">Hilfe</a>
+</div>
+</div>
+</footer>
+</div>
+</body></html>

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+
+<html lang="de"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QuestIn – Charakter anlegen</title>
+<!-- Google Fonts: EB Garamond & Manrope -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;family=Manrope:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS via CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config based on Sahara Theme -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "primary-container": "#e08850",
+            "outline-variant": "#d8d0c8",
+            "secondary-fixed": "#eae2da",
+            "surface-container-lowest": "#ffffff",
+            "tertiary-fixed-dim": "#e8a0a0",
+            "primary-fixed-dim": "#f0a878",
+            "surface-bright": "#faf5ee",
+            "surface-container-low": "#f6f0e8",
+            "tertiary-fixed": "#fce0e0",
+            "on-primary-fixed-variant": "#8a4518",
+            "on-secondary": "#ffffff",
+            "on-surface": "#3a302a",
+            "inverse-on-surface": "#faf5ee",
+            "on-secondary-container": "#605850",
+            "error-container": "#fce4e0",
+            "secondary-container": "#eae2da",
+            "primary-fixed": "#fbe8d8",
+            "outline": "#9a9088",
+            "on-secondary-fixed-variant": "#504840",
+            "background": "#faf5ee",
+            "tertiary-container": "#d47070",
+            "on-surface-variant": "#605850",
+            "secondary-fixed-dim": "#cec6be",
+            "on-error-container": "#7a1a10",
+            "surface": "#faf5ee",
+            "on-primary": "#ffffff",
+            "surface-container": "#f2ece4",
+            "on-tertiary-fixed": "#2e1515",
+            "surface-dim": "#dcd6cc",
+            "error": "#c0392b",
+            "tertiary": "#8c3c3c",
+            "on-background": "#3a302a",
+            "surface-tint": "#c2652a",
+            "on-primary-fixed": "#401a08",
+            "surface-container-highest": "#e6e0d6",
+            "on-primary-container": "#fbe8d8",
+            "on-secondary-fixed": "#2a2420",
+            "on-tertiary": "#ffffff",
+            "inverse-surface": "#3a302a",
+            "on-tertiary-container": "#3a2020",
+            "inverse-primary": "#f0a878",
+            "primary": "#c2652a",
+            "surface-container-high": "#ece6dc",
+            "on-error": "#ffffff",
+            "on-tertiary-fixed-variant": "#6e3030",
+            "secondary": "#78706a",
+            "surface-variant": "#ece6dc"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "fontFamily": {
+            "headline": ["EB Garamond", "serif"],
+            "display": ["EB Garamond", "serif"],
+            "body": ["Manrope", "sans-serif"],
+            "label": ["Manrope", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body min-h-screen flex antialiased selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- ================= SIDEBAR NAVIGATION ================= -->
+<aside class="w-64 bg-surface-container-lowest border-r border-outline-variant/70 flex flex-col justify-between shrink-0 min-h-screen sticky top-0 h-screen overflow-y-auto">
+<div class="p-6">
+<!-- Logo -->
+<a class="block focus:outline-none" href="#">
+<img alt="QuestIn Logo" class="h-8 w-auto object-contain mb-8" src="https://lh3.googleusercontent.com/aida-public/AB6AXuArQmsAkLXZjKTr7Za4P3i4z3j2POlsO7mLz9ZXfViJcbKShRiafAVu7657M-nxCSi0l2FIiQ7Ky0gb63uRGJJC87xzf36jeEt2mRppLCMSgTRt2UZcQuJarbl_GkihkksxehFrOHOIuB1w671HjBIy90c28fRFN9GhIdwjAR62P_d4gaNhLRcjtlWUPywK5muZugPY663ves98Byf2c8LvlKkhJfBoZic9qj49bs1cSjtkfgx8ntSY_CzKTxEKcrjfNw"/>
+</a>
+<!-- Nav Items -->
+<nav class="space-y-1.5">
+<!-- Konto -->
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">account_circle</span>
+<span>Konto</span>
+</a>
+<!-- Charaktere (Aktiv mit Submenü) -->
+<div class="space-y-1">
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-semibold bg-primary-fixed/50 text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">shield_person</span>
+<span>Charaktere</span>
+</a>
+<div class="pl-7 pr-2 py-1 space-y-1 border-l-2 border-primary/30 ml-4">
+<a class="block px-3 py-1.5 rounded-md text-xs font-medium text-secondary hover:text-on-surface transition-colors" href="#">
+            Alle Charaktere
+          </a>
+<a class="block px-3 py-1.5 rounded-md text-xs font-semibold text-primary bg-surface-container-low transition-colors" href="#">
+            Neuer Charakter
+          </a>
+</div>
+</div>
+<!-- Tickets -->
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">confirmation_number</span>
+<span>Tickets</span>
+</a>
+</nav>
+</div>
+<!-- Sidebar Footer: Hilfe / Nutzerprofil -->
+<div class="p-4 border-t border-outline-variant/60 space-y-3 bg-surface-container-lowest">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">help_outline</span>
+<span>Hilfe &amp; Support</span>
+</a>
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-container-low/50">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary font-semibold text-xs flex items-center justify-center shrink-0">
+        FG
+      </div>
+<div class="flex-1 min-w-0">
+<p class="text-xs font-semibold text-on-surface truncate">Falko G.</p>
+<p class="text-[10px] text-secondary truncate">Spieler-ID: #8492</p>
+</div>
+<button class="text-secondary hover:text-on-surface transition-colors" title="Abmelden">
+<span class="material-symbols-outlined text-base">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- ================= MAIN CONTENT AREA ================= -->
+<div class="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+<!-- Top Bar / Context Header -->
+<header class="bg-surface-container-lowest/80 backdrop-blur-sm border-b border-outline-variant sticky top-0 z-30">
+<div class="max-w-5xl mx-auto px-8 h-16 flex items-center justify-between">
+<!-- Breadcrumb / Context Navigation -->
+<div class="flex items-center gap-2 text-sm text-secondary">
+<a class="hover:text-primary transition-colors" href="#">Charaktere</a>
+<span class="text-outline-variant">/</span>
+<span class="text-on-surface font-medium">Neuen Charakter anlegen</span>
+</div>
+<!-- Quick Back Action -->
+<a class="text-secondary hover:text-on-surface text-sm flex items-center gap-1.5 transition-colors" href="#">
+<span class="material-symbols-outlined text-base">arrow_back</span>
+<span>Zurück zur Übersicht</span>
+</a>
+</div>
+</header>
+<!-- Page Content -->
+<main class="flex-1 max-w-4xl w-full mx-auto px-8 py-10">
+<!-- Page Header Title -->
+<div class="mb-10 text-left">
+<p class="text-xs uppercase tracking-widest text-primary font-semibold mb-1">Dossier-Erstellung</p>
+<h1 class="text-3xl sm:text-4xl font-headline font-semibold text-on-surface">Charakter anlegen</h1>
+<p class="text-secondary text-sm mt-2 max-w-xl">
+        Erfassen Sie die wesentlichen Kerndaten Ihres Helden für die bevorstehende Kampagne. Alle Angaben können später aktualisiert werden.
+      </p>
+</div>
+<!-- The Clean Form -->
+<form class="space-y-10" onsubmit="event.preventDefault();">
+<!-- ================= 1. GRUNDDATEN ================= -->
+<section class="bg-surface-container-lowest border border-outline-variant/80 rounded-xl p-8 shadow-sm">
+<div class="flex items-center gap-3 pb-5 border-b border-outline-variant/60 mb-6">
+<span class="material-symbols-outlined text-primary text-xl">badge</span>
+<div>
+<h2 class="text-xl font-headline font-semibold text-on-surface">1. Grunddaten</h2>
+<p class="text-xs text-secondary">Identität und Rolle Ihres Charakters</p>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Charaktername -->
+<div class="md:col-span-2">
+<label class="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1.5" for="char-name">
+              Charaktername
+            </label>
+<input class="w-full bg-surface-container-low/50 border border-outline-variant rounded-lg px-4 py-2.5 text-on-surface text-sm placeholder:text-outline focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" id="char-name" placeholder="z.B. Sir Galahad von Falkenstein" type="text"/>
+</div>
+<!-- Volk / Herkunft -->
+<div>
+<label class="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1.5" for="char-race">
+              Volk / Herkunft
+            </label>
+<input class="w-full bg-surface-container-low/50 border border-outline-variant rounded-lg px-4 py-2.5 text-on-surface text-sm placeholder:text-outline focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" id="char-race" placeholder="z.B. Mensch (Nordlande), Hochelf" type="text"/>
+</div>
+<!-- Klasse / Rolle -->
+<div>
+<label class="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1.5" for="char-role">
+              Klasse / Rolle
+            </label>
+<select class="w-full bg-surface-container-low/50 border border-outline-variant rounded-lg px-4 py-2.5 text-on-surface text-sm focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer" id="char-role">
+<option disabled="" selected="" value="">Bitte Rolle wählen...</option>
+<option value="krieger">Krieger / Paladin</option>
+<option value="magier">Magier / Gelehrter</option>
+<option value="heiler">Heiler / Kleriker</option>
+<option value="schurke">Schurke / Späher</option>
+<option value="handwerker">Handwerker / Alchemist</option>
+<option value="bard">Barde / Diplomat</option>
+</select>
+</div>
+<!-- Stufe / Erfahrungsstufe -->
+<div class="md:col-span-1">
+<label class="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1.5" for="char-level">
+              Stufe / Erfahrungsstufe
+            </label>
+<input class="w-full bg-surface-container-low/50 border border-outline-variant rounded-lg px-4 py-2.5 text-on-surface text-sm placeholder:text-outline focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" id="char-level" max="20" min="1" placeholder="1" type="number" value="1"/>
+</div>
+</div>
+</section>
+<!-- ================= 2. ATTRIBUTE & WERTE ================= -->
+<section class="bg-surface-container-lowest border border-outline-variant/80 rounded-xl p-8 shadow-sm">
+<div class="flex items-center gap-3 pb-5 border-b border-outline-variant/60 mb-6">
+<span class="material-symbols-outlined text-primary text-xl">vital_signs</span>
+<div>
+<h2 class="text-xl font-headline font-semibold text-on-surface">2. Attribute &amp; Werte</h2>
+<p class="text-xs text-secondary">Grundlegende Status- und Schutzwerte nach Regelwerk</p>
+</div>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<!-- Lebenspunkte -->
+<div class="bg-surface-container-low/40 rounded-lg p-3.5 border border-outline-variant/50 flex flex-col justify-between">
+<label class="text-xs font-semibold text-on-surface-variant mb-1 flex items-center gap-1.5" for="attr-lp">
+<span class="material-symbols-outlined text-sm text-primary">favorite</span>
+              Lebenspunkte (LP)
+            </label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded-md px-3 py-2 text-on-surface text-base font-semibold focus:border-primary focus:ring-1 focus:ring-primary outline-none text-center transition-all" id="attr-lp" placeholder="10" type="number" value="10"/>
+</div>
+<!-- Rüstungsschutz -->
+<div class="bg-surface-container-low/40 rounded-lg p-3.5 border border-outline-variant/50 flex flex-col justify-between">
+<label class="text-xs font-semibold text-on-surface-variant mb-1 flex items-center gap-1.5" for="attr-rs">
+<span class="material-symbols-outlined text-sm text-secondary">shield</span>
+              Rüstungsschutz (RS)
+            </label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded-md px-3 py-2 text-on-surface text-base font-semibold focus:border-primary focus:ring-1 focus:ring-primary outline-none text-center transition-all" id="attr-rs" placeholder="0" type="number" value="2"/>
+</div>
+<!-- Willenskraft -->
+<div class="bg-surface-container-low/40 rounded-lg p-3.5 border border-outline-variant/50 flex flex-col justify-between">
+<label class="text-xs font-semibold text-on-surface-variant mb-1 flex items-center gap-1.5" for="attr-wk">
+<span class="material-symbols-outlined text-sm text-secondary">psychology</span>
+              Willenskraft (WK)
+            </label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded-md px-3 py-2 text-on-surface text-base font-semibold focus:border-primary focus:ring-1 focus:ring-primary outline-none text-center transition-all" id="attr-wk" placeholder="5" type="number" value="5"/>
+</div>
+<!-- Manapunkte -->
+<div class="bg-surface-container-low/40 rounded-lg p-3.5 border border-outline-variant/50 flex flex-col justify-between">
+<label class="text-xs font-semibold text-on-surface-variant mb-1 flex items-center gap-1.5" for="attr-mp">
+<span class="material-symbols-outlined text-sm text-primary-container">auto_awesome</span>
+              Manapunkte (AP)
+            </label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded-md px-3 py-2 text-on-surface text-base font-semibold focus:border-primary focus:ring-1 focus:ring-primary outline-none text-center transition-all" id="attr-mp" placeholder="0" type="number" value="0"/>
+</div>
+</div>
+</section>
+<!-- ================= 3. FÄHIGKEITEN & AUSRÜSTUNG ================= -->
+<section class="bg-surface-container-lowest border border-outline-variant/80 rounded-xl p-8 shadow-sm">
+<div class="flex items-center gap-3 pb-5 border-b border-outline-variant/60 mb-6">
+<span class="material-symbols-outlined text-primary text-xl">swords</span>
+<div>
+<h2 class="text-xl font-headline font-semibold text-on-surface">3. Fähigkeiten &amp; Ausrüstung</h2>
+<p class="text-xs text-secondary">Gelernte Talente sowie mitgeführte LARP-Waffen zur Abnahme</p>
+</div>
+</div>
+<div class="space-y-6">
+<!-- Ausgewählte Fertigkeiten -->
+<div>
+<label class="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1.5" for="char-skills">
+              Ausgewählte Fertigkeiten &amp; Talente
+            </label>
+<textarea class="w-full bg-surface-container-low/50 border border-outline-variant rounded-lg px-4 py-2.5 text-on-surface text-sm placeholder:text-outline focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-y" id="char-skills" placeholder="z.B. Schwertkampf I, Wundversorgung, Schildwall, Rüstungsgewöhnung (kommagetrennt oder zeilenweise)" rows="3"></textarea>
+<span class="text-[11px] text-secondary mt-1 block">Nennen Sie hier Sonderfertigkeiten, Zauberformeln oder Kampfstile.</span>
+</div>
+<!-- Bewaffnung / Waffencheck-Deklaration -->
+<div>
+<label class="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1.5" for="char-weapons">
+              Bewaffnung &amp; Waffencheck-Deklaration
+            </label>
+<input class="w-full bg-surface-container-low/50 border border-outline-variant rounded-lg px-4 py-2.5 text-on-surface text-sm placeholder:text-outline focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" id="char-weapons" placeholder="z.B. 1x Polsterschwert 100cm (Wyvern), 1x Rundschild (kernlos)" type="text"/>
+<span class="text-[11px] text-secondary mt-1 block">Wird beim OT-Check-In vor Ort mit der TÜV-Plakette abgeglichen.</span>
+</div>
+</div>
+</section>
+<!-- ================= 4. HINTERGRUND & NOTIZEN ================= -->
+<section class="bg-surface-container-lowest border border-outline-variant/80 rounded-xl p-8 shadow-sm">
+<div class="flex items-center gap-3 pb-5 border-b border-outline-variant/60 mb-6">
+<span class="material-symbols-outlined text-primary text-xl">history_edu</span>
+<div>
+<h2 class="text-xl font-headline font-semibold text-on-surface">4. Hintergrund &amp; Notizen</h2>
+<p class="text-xs text-secondary">Hintergrundgeschichte, Motivation und Eide für die Spielleitung</p>
+</div>
+</div>
+<div>
+<label class="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-1.5" for="char-background">
+            Charakter-Hintergrund &amp; Notiz an die Spielleitung
+          </label>
+<textarea class="w-full bg-surface-container-low/50 border border-outline-variant rounded-lg px-4 py-2.5 text-on-surface text-sm placeholder:text-outline focus:bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-y" id="char-background" placeholder="Beschreiben Sie kurz die Herkunft, geleistete Schwüre, persönliche Ziele oder Plot-Aufhänger, die für NSCs und Spielleiter relevant sind..." rows="5"></textarea>
+</div>
+</section>
+<!-- ================= 5. BUTTONS ================= -->
+<div class="pt-4 pb-12 flex items-center justify-end gap-4 border-t border-outline-variant/60">
+<button class="px-5 py-2.5 rounded-lg border border-outline-variant text-on-surface-variant hover:text-on-surface hover:bg-surface-container text-sm font-semibold transition-all" type="button">
+          Abbrechen
+        </button>
+<button class="px-6 py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-semibold text-sm shadow-sm transition-all flex items-center gap-2" type="submit">
+<span class="material-symbols-outlined text-lg">check</span>
+<span>Charakter speichern</span>
+</button>
+</div>
+</form>
+</main>
+</div>
+</body></html>
