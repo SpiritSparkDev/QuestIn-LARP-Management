@@ -6,27 +6,31 @@
 <title>Mein Konto – Pakyrion</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
-<link rel="stylesheet" href="/css/chronicle-crest.css">
+<link rel="stylesheet" href="/css/sahara.css">
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1/qrcode.min.js"></script>
 </head>
 <body>
-<div class="shell">
-  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
-  <p class="brand-sub">QuestIn LARP Management</p>
-  <div class="folio folio--wide">
-    <nav class="app-nav" id="nav-links"></nav>
-    <div class="header-actions">
-      <button type="button" id="logout-link" class="btn-danger">
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="brand-seal"></div>
+      <div class="sidebar-brand">Pakyrion<span>LARP Management</span></div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div class="sidebar-event-badge" id="sidebar-event-badge"></div>
+      <div id="sidebar-user-info"></div>
+      <button type="button" id="logout-link">
         <span class="material-symbols-outlined" aria-hidden="true">logout</span> Logout
       </button>
     </div>
-
-    <div class="tabs" id="page-tabs">
-      <button type="button" class="tab-btn active" data-tab="konto-tab">Konto</button>
-      <button type="button" class="tab-btn" data-tab="veranstaltung-tab">Veranstaltung</button>
-    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
 
     <div class="tab-panel" id="konto-tab">
       <h1>Mein Konto</h1>
@@ -60,11 +64,6 @@
     </div>
 
     <div class="tab-panel" id="veranstaltung-tab" hidden>
-      <div class="tabs tabs--sub" id="veranstaltung-subtabs">
-        <button type="button" class="tab-btn active" data-tab="anmelden-subtab">Anmelden</button>
-        <button type="button" class="tab-btn" data-tab="charaktere-subtab">Charaktere</button>
-      </div>
-
       <div class="tab-panel" id="anmelden-subtab">
         <h2>Meine Anmeldungen</h2>
         <table id="registration-list">
@@ -174,14 +173,14 @@
         </div>
       </div>
     </div>
-  </div>
+  </div></div>
 </div>
 
 <script type="module">
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { renderNavLinks } from '/js/nav.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 import { escapeHtml, renderField, collectFieldValues, attachLiveValidation, attachBirthdateFormatter, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, REGISTRATION_FIELD_LABELS, isOptOutYes, OPT_OUT_KEYS } from '/js/formFields.js';
 import { buildScanCode } from '/js/qrCode.js';
 
@@ -197,10 +196,71 @@ function initTabs(tabsEl) {
   });
 }
 
-initTabs(document.getElementById('page-tabs'));
-initTabs(document.getElementById('veranstaltung-subtabs'));
 initTabs(document.getElementById('char-class-tabs'));
 initTabs(document.getElementById('nsc-form-tabs'));
+initSidebarToggle();
+
+const veranstaltungSubnav = document.createElement('div');
+veranstaltungSubnav.className = 'sidebar-nav-nested';
+veranstaltungSubnav.id = 'veranstaltung-subnav';
+veranstaltungSubnav.hidden = true;
+veranstaltungSubnav.innerHTML = `
+  <button type="button" class="sidebar-nav-item active" data-tab="anmelden-subtab">Anmelden</button>
+  <button type="button" class="sidebar-nav-item" data-tab="charaktere-subtab">Charaktere</button>
+`;
+
+function buildSidebarTopTabs() {
+  const nav = document.getElementById('nav-links');
+  // renderNavLinks() already rendered a real "Konto" link (href="/account.html",
+  // from the 'konto' menu key -- account.html is the only page where that key's
+  // target IS this page, so it's the one page where this generic link would be
+  // redundant with the tab-button below). Remove it before adding the richer
+  // tab-driven replacement, so "Konto" doesn't appear twice.
+  nav.querySelector('a[href="/account.html"]')?.remove();
+
+  const kontoBtn = document.createElement('button');
+  kontoBtn.type = 'button';
+  kontoBtn.className = 'sidebar-nav-item active';
+  kontoBtn.dataset.tab = 'konto-tab';
+  kontoBtn.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">manage_accounts</span><span>Konto</span>';
+
+  const veranstaltungBtn = document.createElement('button');
+  veranstaltungBtn.type = 'button';
+  veranstaltungBtn.className = 'sidebar-nav-item';
+  veranstaltungBtn.dataset.tab = 'veranstaltung-tab';
+  veranstaltungBtn.innerHTML = '<span class="material-symbols-outlined" aria-hidden="true">event</span><span>Veranstaltung</span>';
+
+  nav.prepend(veranstaltungSubnav);
+  nav.prepend(veranstaltungBtn);
+  nav.prepend(kontoBtn);
+
+  // Deliberately NOT reusing the shared initTabs() helper here: it selects
+  // by `.tab-btn`, a class with its own horizontal-underline-tab CSS that
+  // would fight `.sidebar-nav-item`'s look if applied to the same button
+  // (same selector specificity, source order would decide the winner --
+  // fragile). Both toggle groups below use the identical active/hidden
+  // mechanics as initTabs, just spelled out against `.sidebar-nav-item`.
+  const topButtons = [kontoBtn, veranstaltungBtn];
+  topButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      topButtons.forEach((b) => {
+        b.classList.toggle('active', b === btn);
+        document.getElementById(b.dataset.tab).hidden = b !== btn;
+      });
+      veranstaltungSubnav.hidden = btn !== veranstaltungBtn;
+    });
+  });
+
+  const subButtons = [...veranstaltungSubnav.querySelectorAll('.sidebar-nav-item')];
+  subButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      subButtons.forEach((b) => {
+        b.classList.toggle('active', b === btn);
+        document.getElementById(b.dataset.tab).hidden = b !== btn;
+      });
+    });
+  });
+}
 
 const accountForm = document.getElementById('account-form');
 attachLiveValidation(accountForm);
@@ -264,6 +324,12 @@ async function loadQrCode(account, qrEvents, qrRegistrations) {
     // error out the rest of the account page.
     qrSection.style.display = 'none';
   }
+}
+
+function renderEventBadge(qrEvents) {
+  const badge = document.getElementById('sidebar-event-badge');
+  const activeEvent = qrEvents.find((e) => e.is_active);
+  badge.textContent = activeEvent ? activeEvent.name : '';
 }
 
 accountForm.addEventListener('submit', async (event) => {
@@ -344,7 +410,8 @@ conRoleSelect.addEventListener('change', populateCharacterOptions);
 eventSelect.addEventListener('change', updateRegisterButtonLabel);
 
 document.getElementById('no-character-hint-btn').addEventListener('click', () => {
-  document.querySelector('#veranstaltung-subtabs [data-tab="charaktere-subtab"]').click();
+  document.querySelector('#nav-links [data-tab="veranstaltung-tab"]').click();
+  document.querySelector('#veranstaltung-subnav [data-tab="charaktere-subtab"]').click();
 });
 
 function populateEventOptions() {
@@ -424,7 +491,7 @@ async function loadRegistrations() {
     return `<tr>
     <td>${escapeHtml(r.eventName)}</td>
     <td>${escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole)}</td>
-    <td><span class="ribbon status-${escapeHtml(r.status)}">${escapeHtml(label)}</span></td>
+    <td><span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(label)}</span></td>
     <td>
       <button type="button" data-edit-ot="${r.eventId}">Bearbeiten</button>
       ${r.status === 'pending' ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ''}
@@ -824,6 +891,8 @@ characterForm.addEventListener('submit', async (event) => {
 try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  buildSidebarTopTabs();
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
 
   for (const field of ['firstName', 'lastName', 'nickname', 'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes']) {
     accountForm.elements[field].value = account[field] ?? '';
@@ -856,6 +925,7 @@ try {
   await loadCharacters();
   await loadRegistrations();
   await loadQrCode(account, events, currentRegistrations);
+  renderEventBadge(events);
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
 }
