@@ -6,16 +6,25 @@
 <title>Einstellungen – Pakyrion Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/everest-registry.css">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/sahara.css">
 </head>
 <body>
 <div class="app">
-  <aside class="sidebar">
-    <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+    </div>
     <nav id="nav-links"></nav>
-    <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
   </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
   <div class="main"><div class="content">
     <h1>Einstellungen</h1>
     <p class="sub">SMTP-Zugangsdaten für den E-Mail-Versand (Registrierung, Passwort-Reset, Einladungen).</p>
@@ -80,7 +89,8 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { renderNavLinks } from '/js/nav.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+initSidebarToggle();
 
 const form = document.getElementById('smtp-form');
 const message = document.getElementById('message');
@@ -192,6 +202,7 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
   renderHotkeyInputs();
   await loadSettings();
