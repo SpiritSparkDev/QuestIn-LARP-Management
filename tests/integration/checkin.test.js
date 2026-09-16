@@ -48,10 +48,9 @@ async function makeCustomGroupUserAndSession(overrides) {
   return makeUserAndSession(key);
 }
 
-async function makeEvent(schema) {
+async function makeEvent() {
   const { rows } = await query(
-    'INSERT INTO events (name, event_date, character_form_schema, is_active) VALUES ($1, $2, $3, true) RETURNING id',
-    ['Checkin Test Con', '2027-09-01', JSON.stringify(schema ?? [])]
+    "INSERT INTO events (name, event_date, is_active) VALUES ('Checkin Test Con', '2027-09-01', true) RETURNING id"
   );
   return rows[0].id;
 }
@@ -417,26 +416,31 @@ test('participants list filters character (IT) fields by canOverrideCheckinStatu
       { key: 'faction', label: 'Fraktion', type: 'text', public: true },
       { key: 'secretGoal', label: 'Geheimes Ziel', type: 'text', public: false },
     ];
-    const eventId = await makeEvent(schema);
-    const admin = await makeUserAndSession('admin'); // canOverrideCheckinStatus: true
-    const hilfsSl = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
-    const attendee = await makeUserAndSession('mitglied');
-    const characterId = await makeCharacter(
-      attendee.userId,
-      'Aldric',
-      JSON.stringify({ faction: 'Nordbund', secretGoal: 'Den Thron stürzen' })
-    );
-    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [attendee.userId, eventId, characterId]);
+    await query('UPDATE sc_character_schema SET schema = $1', [JSON.stringify(schema)]);
+    try {
+      const eventId = await makeEvent();
+      const admin = await makeUserAndSession('admin'); // canOverrideCheckinStatus: true
+      const hilfsSl = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
+      const attendee = await makeUserAndSession('mitglied');
+      const characterId = await makeCharacter(
+        attendee.userId,
+        'Aldric',
+        JSON.stringify({ faction: 'Nordbund', secretGoal: 'Den Thron stürzen' })
+      );
+      await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [attendee.userId, eventId, characterId]);
 
-    const adminList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: admin.cookie } });
-    const adminChar = (await adminList.json()).find((p) => p.userId === attendee.userId).characters[0];
-    assert.equal(adminChar.data.faction, 'Nordbund');
-    assert.equal(adminChar.data.secretGoal, 'Den Thron stürzen');
+      const adminList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: admin.cookie } });
+      const adminChar = (await adminList.json()).find((p) => p.userId === attendee.userId).characters[0];
+      assert.equal(adminChar.data.faction, 'Nordbund');
+      assert.equal(adminChar.data.secretGoal, 'Den Thron stürzen');
 
-    const hilfsSlList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: hilfsSl.cookie } });
-    const hilfsSlChar = (await hilfsSlList.json()).find((p) => p.userId === attendee.userId).characters[0];
-    assert.equal(hilfsSlChar.data.faction, 'Nordbund');
-    assert.equal('secretGoal' in hilfsSlChar.data, false);
+      const hilfsSlList = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: hilfsSl.cookie } });
+      const hilfsSlChar = (await hilfsSlList.json()).find((p) => p.userId === attendee.userId).characters[0];
+      assert.equal(hilfsSlChar.data.faction, 'Nordbund');
+      assert.equal('secretGoal' in hilfsSlChar.data, false);
+    } finally {
+      await query('UPDATE sc_character_schema SET schema = $1', [JSON.stringify([])]);
+    }
   });
 });
 

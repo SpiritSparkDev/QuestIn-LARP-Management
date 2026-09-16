@@ -33,7 +33,6 @@ test('admin can create an event; participant cannot', async () => {
     const payload = {
       name: 'Sommercon 2027',
       eventDate: '2027-07-15',
-      characterFormSchema: [{ key: 'fraction', label: 'Fraktion', type: 'text', required: true }],
     };
 
     const asAdmin = await fetch(`http://localhost:${port}/events`, {
@@ -63,7 +62,7 @@ test('any authenticated user can list and get events; unknown id is 404', async 
     const createRes = await fetch(`http://localhost:${port}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ name: 'Wintercon', eventDate: '2027-01-10', characterFormSchema: [] }),
+      body: JSON.stringify({ name: 'Wintercon', eventDate: '2027-01-10' }),
     });
     const { id } = await createRes.json();
 
@@ -80,47 +79,25 @@ test('any authenticated user can list and get events; unknown id is 404', async 
   });
 });
 
-test('admin can update an event\'s character form schema', async () => {
+test('admin can update an event\'s name', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
 
     const createRes = await fetch(`http://localhost:${port}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ name: 'Frühlingscon', eventDate: '2027-04-01', characterFormSchema: [] }),
+      body: JSON.stringify({ name: 'Frühlingscon', eventDate: '2027-04-01' }),
     });
     const { id } = await createRes.json();
 
-    const newSchema = [{ key: 'weapon', label: 'Waffe', type: 'text', required: false }];
     const updateRes = await fetch(`http://localhost:${port}/events/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ characterFormSchema: newSchema }),
+      body: JSON.stringify({ name: 'Frühlingscon (Update)' }),
     });
     assert.equal(updateRes.status, 200);
     const updated = await updateRes.json();
-    assert.deepEqual(updated.character_form_schema, newSchema);
-    assert.equal(updated.name, 'Frühlingscon');
-  });
-});
-
-test('admin creating an event with a malformed characterFormSchema gets 400', async () => {
-  await withTestServer(async (port) => {
-    const admin = await makeUserAndSession('admin');
-
-    const notAnArray = await fetch(`http://localhost:${port}/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ name: 'Bad Schema Con', eventDate: '2027-08-01', characterFormSchema: { not: 'an array' } }),
-    });
-    assert.equal(notAnArray.status, 400);
-
-    const missingKey = await fetch(`http://localhost:${port}/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ name: 'Bad Schema Con 2', eventDate: '2027-08-01', characterFormSchema: [{ label: 'no key' }] }),
-    });
-    assert.equal(missingKey.status, 400);
+    assert.equal(updated.name, 'Frühlingscon (Update)');
   });
 });
 
@@ -144,7 +121,7 @@ test('admin can activate an event; activating one deactivates all others; partic
       const res = await fetch(`http://localhost:${port}/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-        body: JSON.stringify({ name, eventDate: '2027-10-01', characterFormSchema: [] }),
+        body: JSON.stringify({ name, eventDate: '2027-10-01' }),
       });
       return res.json();
     }
@@ -176,35 +153,6 @@ test('admin can activate an event; activating one deactivates all others; partic
       method: 'POST', headers: { Cookie: admin.cookie },
     });
     assert.equal(unknownEvent.status, 404);
-  });
-});
-
-test('PUT /events/:id rejects a characterFormSchema using the reserved key "id" or "name"', async () => {
-  await withTestServer(async (port) => {
-    const admin = await makeUserAndSession('admin');
-    const createRes = await fetch(`http://localhost:${port}/events`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ name: 'Schema Test Con', eventDate: '2027-08-01' }),
-    });
-    const { id } = await createRes.json();
-
-    const withId = await fetch(`http://localhost:${port}/events/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ characterFormSchema: [{ key: 'id', label: 'Id', type: 'text' }] }),
-    });
-    assert.equal(withId.status, 400);
-
-    const withDuplicate = await fetch(`http://localhost:${port}/events/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ characterFormSchema: [
-        { key: 'klasse', label: 'Klasse', type: 'text' },
-        { key: 'klasse', label: 'Klasse (2)', type: 'text' },
-      ] }),
-    });
-    assert.equal(withDuplicate.status, 400);
   });
 });
 

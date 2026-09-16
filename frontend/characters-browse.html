@@ -35,6 +35,7 @@ const listBody = document.getElementById('character-list');
 const message = document.getElementById('message');
 
 let events = [];
+let scSchema = [];
 
 function renderTag(field, value) {
   if (field.type === 'link' && typeof value === 'string' && /^https?:\/\//.test(value)) {
@@ -55,8 +56,6 @@ async function loadCharacters() {
   message.textContent = '';
   const eventId = eventSelect.value;
   if (!eventId) { listBody.innerHTML = ''; return; }
-  const event = events.find((e) => e.id === eventId);
-  const schema = event ? event.character_form_schema : [];
   try {
     const characters = await api.get(`/events/${eventId}/characters/public`);
     if (characters.length === 0) {
@@ -65,7 +64,7 @@ async function loadCharacters() {
     }
     listBody.innerHTML = characters.map((c) => `<div class="char-card">
       <h3>${escapeHtml(c.name)}</h3>
-      <div class="char-tags">${tagsForCharacter(c, schema)}</div>
+      <div class="char-tags">${tagsForCharacter(c, scSchema)}</div>
     </div>`).join('');
   } catch (err) {
     message.textContent = err.message;
@@ -85,6 +84,7 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  scSchema = await api.get('/sc-schema');
   events = await api.get('/events');
   eventSelect.innerHTML = renderEventOptions(events);
   await loadCharacters();

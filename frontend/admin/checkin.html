@@ -166,10 +166,7 @@ function renderExtraCells(p) {
 }
 
 function onEventChanged() {
-  const event = events.find((e) => e.id === eventSelect.value);
-  currentSchema = event?.character_form_schema ?? [];
   selectedColumns = loadSelectedColumns(eventSelect.value);
-  // drop columns from a previous event's schema that don't exist here
   selectedColumns.it = selectedColumns.it.filter((key) => currentSchema.some((f) => f.key === key));
   renderColumnCheckboxes();
   renderTableHead();
@@ -595,6 +592,7 @@ try {
   canManageMembers = (account.menus ?? []).includes('mitglieder');
   myAccountFields = account.accountFields ?? [];
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
+  currentSchema = await api.get('/sc-schema');
   events = await api.get('/events');
   eventSelect.innerHTML = renderEventOptions(events);
   if (events.length > 0) {

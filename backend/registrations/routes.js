@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
+import { getScCharacterSchema } from '../scSchema/repository.js';
 import { REGISTRATION_FIELD_KEYS } from '../registrationFields.js';
 import {
   registerForEvent,
@@ -50,6 +51,7 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
     }
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
+    if (err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
     throw err;
   }
 }));
@@ -73,7 +75,8 @@ router.get('/registrations', requireAuth(async ({ user }) => {
 router.get('/events/:id/participants', requireAuth(requireMenu('checkin')(async ({ params, user }) => {
   const event = await getEvent(params.id);
   if (!event) return { status: 404, body: { error: 'event not found' } };
-  const participants = await listParticipantsForEvent(params.id, { schema: event.character_form_schema, viewer: user });
+  const schema = await getScCharacterSchema();
+  const participants = await listParticipantsForEvent(params.id, { schema, viewer: user });
   return { status: 200, body: participants };
 })));
 
@@ -192,6 +195,7 @@ router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ re
     }
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
+    if (err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
     throw err;
   }
 }));

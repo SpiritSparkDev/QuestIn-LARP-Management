@@ -29,98 +29,57 @@ async function makeUserAndSession(groupKey = 'mitglied') {
   return { userId: rows[0].id, cookie: `session=${session.token}` };
 }
 
-async function makeEvent(schema = [{ key: 'fraction', label: 'Fraktion', type: 'text', required: true }], isActive = true) {
+async function makeEvent(isActive = true) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, character_form_schema, is_active)
-     VALUES ('Char Test Con', '2027-05-01', $1, $2) RETURNING id`,
-    [JSON.stringify(schema), isActive]
+    "INSERT INTO events (name, event_date, is_active) VALUES ('Char Test Con', '2027-05-01', $1) RETURNING id",
+    [isActive]
   );
   return rows[0].id;
 }
 
-test('creating a character only requires a name; event-scoped data is validated via PUT with eventId', async () => {
+async function setScSchema(schema) {
+  await query('UPDATE sc_character_schema SET schema = $1', [JSON.stringify(schema)]);
+}
+
+test.beforeEach(async () => {
+  await setScSchema([{ key: 'fraction', label: 'Fraktion', type: 'text', required: true }]);
+});
+
+test('creating an sc-class character validates data against the global sc schema at creation time', async () => {
   await withTestServer(async (port) => {
     const participant = await makeUserAndSession();
-    const eventId = await makeEvent();
 
-    const created = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ name: 'Aldric' }),
-    });
-    assert.equal(created.status, 201);
-    const { id } = await created.json();
-
-    const missingRequired = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ eventId, data: {} }),
+    const missingRequired = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ name: 'Aldric', data: {} }),
     });
     assert.equal(missingRequired.status, 400);
 
-    const ok = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ eventId, data: { fraction: 'Nordmark' } }),
+    const ok = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ name: 'Aldric', data: { fraction: 'Nordmark' } }),
     });
-    assert.equal(ok.status, 200);
+    assert.equal(ok.status, 201);
     assert.deepEqual((await ok.json()).data, { fraction: 'Nordmark' });
-
-    const unknownEvent = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ eventId: crypto.randomUUID(), data: {} }),
-    });
-    assert.equal(unknownEvent.status, 404);
   });
 });
 
-test('a character\'s data accumulates fields across two events with different schemas', async () => {
+test('PUT /characters/:id replaces sc-class data (no merge, no eventId needed)', async () => {
   await withTestServer(async (port) => {
     const participant = await makeUserAndSession();
-    const eventA = await makeEvent([{ key: 'fraction', label: 'Fraktion', type: 'text', required: true }]);
-    const eventB = await makeEvent([{ key: 'waffenklasse', label: 'Waffenklasse', type: 'text', required: true }]);
 
-    const createRes = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ name: 'Aldric' }),
-    });
-    assert.equal(createRes.status, 201);
-    const { id } = await createRes.json();
-
-    const putA = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ eventId: eventA, data: { fraction: 'Nordmark' } }),
-    });
-    assert.equal(putA.status, 200);
-    assert.deepEqual((await putA.json()).data, { fraction: 'Nordmark' });
-
-    const putB = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ eventId: eventB, data: { waffenklasse: 'Schwert' } }),
-    });
-    assert.equal(putB.status, 200);
-    assert.deepEqual((await putB.json()).data, { fraction: 'Nordmark', waffenklasse: 'Schwert' });
-  });
-});
-
-test('PUT /characters/:id rejects an sc-class data update with no eventId', async () => {
-  await withTestServer(async (port) => {
-    const participant = await makeUserAndSession();
     const createRes = await fetch(`http://localhost:${port}/characters`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ name: 'Aldric' }),
+      body: JSON.stringify({ name: 'Aldric', data: { fraction: 'Nordmark' } }),
     });
     const { id } = await createRes.json();
 
-    const res = await fetch(`http://localhost:${port}/characters/${id}`, {
+    const putRes = await fetch(`http://localhost:${port}/characters/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ data: { fraction: 'Nordmark' } }),
+      body: JSON.stringify({ data: { fraction: 'Suedmark' } }),
     });
-    assert.equal(res.status, 400);
+    assert.equal(putRes.status, 200);
+    assert.deepEqual((await putRes.json()).data, { fraction: 'Suedmark' });
   });
 });
 
@@ -131,16 +90,42 @@ test('a participant only sees their own characters in the list', async () => {
 
     await fetch(`http://localhost:${port}/characters`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: alice.cookie },
-      body: JSON.stringify({ name: 'Alice Char' }),
+      body: JSON.stringify({ name: 'Alice Char', data: { fraction: 'Nordmark' } }),
     });
     await fetch(`http://localhost:${port}/characters`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: bob.cookie },
-      body: JSON.stringify({ name: 'Bob Char' }),
+      body: JSON.stringify({ name: 'Bob Char', data: { fraction: 'Suedmark' } }),
     });
 
     const aliceList = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: alice.cookie } })).json();
     assert.ok(aliceList.every((c) => c.name !== 'Bob Char'));
     assert.ok(aliceList.some((c) => c.name === 'Alice Char'));
+  });
+});
+
+test('GET /characters lists registeredFor:null for an unused sc character and the event/role after registering', async () => {
+  await withTestServer(async (port) => {
+    const participant = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ name: 'Aldric', data: { fraction: 'Nordmark' } }),
+    });
+    const { id } = await createRes.json();
+
+    const beforeList = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: participant.cookie } })).json();
+    assert.equal(beforeList.find((c) => c.id === id).registeredFor, null);
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: id }),
+    });
+
+    const afterList = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: participant.cookie } })).json();
+    const registered = afterList.find((c) => c.id === id).registeredFor;
+    assert.equal(registered.eventId, eventId);
+    assert.equal(registered.conRole, 'sc');
   });
 });
 
@@ -152,14 +137,15 @@ test('a participant cannot view or edit another participant\'s character; an adm
 
     const createRes = await fetch(`http://localhost:${port}/characters`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ name: 'Owned' }),
+      body: JSON.stringify({ name: 'Owned', data: { fraction: 'Nordmark' } }),
     });
     const { id } = await createRes.json();
 
     const strangerGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: stranger.cookie } });
     assert.equal(strangerGet.status, 200);
-    const strangerBody = await strangerGet.json();
-    assert.deepEqual(strangerBody.data, {});
+    // The global schema's one field has no `public: true` flag by default
+    // in this test's setScSchema call, so a non-owner sees no data fields.
+    assert.deepEqual((await strangerGet.json()).data, {});
 
     const adminGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: admin.cookie } });
     assert.equal(adminGet.status, 200);
@@ -178,44 +164,10 @@ test('a participant cannot view or edit another participant\'s character; an adm
     const adminUpdated = await adminPut.json();
     assert.equal(adminUpdated.name, 'Admin-Edit');
     assert.equal(adminUpdated.user_id, owner.userId);
-
-    const ownerPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ name: 'Renamed' }),
-    });
-    assert.equal(ownerPut.status, 200);
-    assert.equal((await ownerPut.json()).name, 'Renamed');
   });
 });
 
-test('PUT /characters/:id validates data against the event schema', async () => {
-  await withTestServer(async (port) => {
-    const owner = await makeUserAndSession();
-    const eventId = await makeEvent();
-
-    const createRes = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ name: 'Aldric' }),
-    });
-    const { id } = await createRes.json();
-
-    const invalidPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ eventId, data: {} }),
-    });
-    assert.equal(invalidPut.status, 400);
-
-    const validPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ eventId, data: { fraction: 'Valid Value' } }),
-    });
-    assert.equal(validPut.status, 200);
-    const updated = await validPut.json();
-    assert.deepEqual(updated.data, { fraction: 'Valid Value' });
-  });
-});
-
-test('creating an nsc-class character validates against the current nsc_profile_schema, not an event', async () => {
+test('creating an nsc-class character validates against the current nsc_profile_schema, unaffected by the sc schema change', async () => {
   await withTestServer(async (port) => {
     const nscUser = await makeUserAndSession('mitglied');
 
@@ -232,8 +184,7 @@ test('creating an nsc-class character validates against the current nsc_profile_
       body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: {} }),
     });
     assert.equal(ok.status, 201);
-    const created = await ok.json();
-    assert.equal(created.class, 'nsc');
+    assert.equal((await ok.json()).class, 'nsc');
   });
 });
 
@@ -243,13 +194,13 @@ test('a user can create multiple sc-class characters (Ersatzcharaktere)', async 
 
     const first = await fetch(`http://localhost:${port}/characters`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ name: 'Hauptcharakter' }),
+      body: JSON.stringify({ name: 'Hauptcharakter', data: { fraction: 'Nordmark' } }),
     });
     assert.equal(first.status, 201);
 
     const second = await fetch(`http://localhost:${port}/characters`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
-      body: JSON.stringify({ name: 'Ersatzcharakter' }),
+      body: JSON.stringify({ name: 'Ersatzcharakter', data: { fraction: 'Suedmark' } }),
     });
     assert.equal(second.status, 201);
 
@@ -283,14 +234,55 @@ test('PUT on an nsc-class character validates against the current nsc_profile_sc
   });
 });
 
-test('PUT /characters/:id allows a canOverrideCheckinStatus group to edit another user\'s character', async () => {
+test('DELETE /characters/:id removes an unused character; owner-only; blocked once confirmed', async () => {
   await withTestServer(async (port) => {
-    const owner = await makeUserAndSession('mitglied');
-    const sl = await makeUserAndSession('moderator'); // moderator defaults to canOverrideCheckinStatus: true
+    const owner = await makeUserAndSession();
+    const stranger = await makeUserAndSession();
+    const eventId = await makeEvent();
 
     const createRes = await fetch(`http://localhost:${port}/characters`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ name: 'Fremdcharakter' }),
+      body: JSON.stringify({ name: 'Deletable', data: { fraction: 'Nordmark' } }),
+    });
+    const { id } = await createRes.json();
+
+    const strangerDelete = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'DELETE', headers: { Cookie: stranger.cookie },
+    });
+    assert.equal(strangerDelete.status, 403);
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: id }),
+    });
+    await query("UPDATE registrations SET status = 'confirmed' WHERE character_id = $1", [id]);
+
+    const blockedDelete = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'DELETE', headers: { Cookie: owner.cookie },
+    });
+    assert.equal(blockedDelete.status, 409);
+
+    await query("UPDATE registrations SET status = 'pending' WHERE character_id = $1", [id]);
+    await query('DELETE FROM registrations WHERE character_id = $1', [id]);
+
+    const okDelete = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'DELETE', headers: { Cookie: owner.cookie },
+    });
+    assert.equal(okDelete.status, 200);
+
+    const getAfterDelete = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: owner.cookie } });
+    assert.equal(getAfterDelete.status, 404);
+  });
+});
+
+test('PUT /characters/:id allows a canOverrideCheckinStatus group to edit another user\'s character', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession('mitglied');
+    const sl = await makeUserAndSession('moderator');
+
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ name: 'Fremdcharakter', data: { fraction: 'Nordmark' } }),
     });
     const { id } = await createRes.json();
 
@@ -306,5 +298,6 @@ test('PUT /characters/:id allows a canOverrideCheckinStatus group to edit anothe
 });
 
 test.after(async () => {
+  await setScSchema([]);
   await closePool();
 });

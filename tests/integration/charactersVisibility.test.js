@@ -34,23 +34,26 @@ const VISIBILITY_SCHEMA = [
   { key: 'secretNote', label: 'Geheimnis', type: 'text' },
 ];
 
-async function makeEvent(schema = VISIBILITY_SCHEMA, isActive = true) {
+async function setScSchema(schema) {
+  await query('UPDATE sc_character_schema SET schema = $1', [JSON.stringify(schema)]);
+}
+
+async function makeEvent(isActive = true) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, character_form_schema, is_active)
-     VALUES ('Visibility Test Con', '2027-06-01', $1, $2) RETURNING id`,
-    [JSON.stringify(schema), isActive]
+    "INSERT INTO events (name, event_date, is_active) VALUES ('Visibility Test Con', '2027-06-01', $1) RETURNING id",
+    [isActive]
   );
   return rows[0].id;
 }
 
-// Creates an sc-class character, registers it for eventId, and writes `data`
-// through PUT with eventId -- the character only shows up in
+// Creates an sc-class character with `data` set at creation time, then
+// registers it for eventId -- the character only shows up in
 // /events/:eventId/characters/public once it's actually registered (the
 // endpoint joins through registrations.character_id, not a direct column).
 async function makeRegisteredCharacter(port, cookie, eventId, name, data) {
   const createRes = await fetch(`http://localhost:${port}/characters`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, data }),
   });
   const { id } = await createRes.json();
 
@@ -59,13 +62,12 @@ async function makeRegisteredCharacter(port, cookie, eventId, name, data) {
     body: JSON.stringify({ conRole: 'sc', characterId: id }),
   });
 
-  await fetch(`http://localhost:${port}/characters/${id}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-    body: JSON.stringify({ eventId, data }),
-  });
-
   return id;
 }
+
+test.beforeEach(async () => {
+  await setScSchema(VISIBILITY_SCHEMA);
+});
 
 test('owner sees a non-public field; a different non-elevated user does not', async () => {
   await withTestServer(async (port) => {
@@ -179,10 +181,10 @@ test('GET /characters/:id filters non-public fields for a non-owner, non-elevate
     const strangerGet = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: stranger.cookie } });
     assert.equal(strangerGet.status, 200);
     const strangerBody = await strangerGet.json();
-    // GET /characters/:id (not the per-event /public list) has no single
-    // event context to resolve a schema against anymore -- a stranger only
-    // ever sees the name, regardless of any field's `public` flag.
-    assert.deepEqual(strangerBody.data, {});
+    // GET /characters/:id now resolves the one global sc schema (no more
+    // per-event ambiguity) -- a stranger sees exactly the schema's public
+    // fields, same as through the per-event /public list.
+    assert.deepEqual(strangerBody.data, { fraction: 'Westmark' });
 
     const missingGet = await fetch(`http://localhost:${port}/characters/${crypto.randomUUID()}`, { headers: { Cookie: stranger.cookie } });
     assert.equal(missingGet.status, 404);
@@ -190,5 +192,6 @@ test('GET /characters/:id filters non-public fields for a non-owner, non-elevate
 });
 
 test.after(async () => {
+  await setScSchema([]);
   await closePool();
 });

@@ -1,34 +1,29 @@
 import { query } from '../db.js';
 import { validateCharacterData } from '../events/schemaValidation.js';
-import { getEvent } from '../events/repository.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
+import { getScCharacterSchema } from '../scSchema/repository.js';
 
 const SELECT_COLUMNS = 'id, user_id, class, name, data, created_at';
+const CHARACTER_LOCKING_STATUSES = ['confirmed', 'checked_in', 'checked_out'];
 
-export async function createCharacter(userId, { characterClass, name, data }) {
-  if (characterClass === 'nsc') {
-    const schema = await getNscProfileSchema();
-    const errors = validateCharacterData(schema, data ?? {});
-    if (errors.length > 0) {
-      const err = new Error('invalid character data');
-      err.code = 'INVALID_CHARACTER_DATA';
-      err.details = errors;
-      throw err;
-    }
-    const { rows } = await query(
-      `INSERT INTO characters (user_id, class, name, data)
-       VALUES ($1, 'nsc', $2, $3)
-       RETURNING ${SELECT_COLUMNS}`,
-      [userId, name, JSON.stringify(data ?? {})]
-    );
-    return rows[0];
+async function schemaForClass(characterClass) {
+  return characterClass === 'nsc' ? getNscProfileSchema() : getScCharacterSchema();
+}
+
+export async function createCharacter(userId, { characterClass = 'sc', name, data }) {
+  const schema = await schemaForClass(characterClass);
+  const errors = validateCharacterData(schema, data ?? {});
+  if (errors.length > 0) {
+    const err = new Error('invalid character data');
+    err.code = 'INVALID_CHARACTER_DATA';
+    err.details = errors;
+    throw err;
   }
-
   const { rows } = await query(
     `INSERT INTO characters (user_id, class, name, data)
-     VALUES ($1, 'sc', $2, '{}')
+     VALUES ($1, $2, $3, $4)
      RETURNING ${SELECT_COLUMNS}`,
-    [userId, name]
+    [userId, characterClass, name, JSON.stringify(data ?? {})]
   );
   return rows[0];
 }
@@ -38,17 +33,45 @@ export async function getCharacter(id) {
   return rows[0] ?? null;
 }
 
+// Each sc-class row gets at most one registrations match (enforced at the
+// application level in registrations/repository.js's resolveCharacterId,
+// not a DB constraint -- see the design spec section 4.3) -- the LATERAL
+// join only runs for class='sc' rows, so an nsc-class character (still
+// reusable across many registrations) is never multiplied into duplicate
+// list entries.
 export async function listCharactersForUser(userId) {
   const { rows } = await query(
-    `SELECT ${SELECT_COLUMNS} FROM characters WHERE user_id = $1 ORDER BY created_at`,
+    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.created_at,
+            reg.event_id AS registered_event_id, reg.con_role AS registered_con_role,
+            ev.name AS registered_event_name
+     FROM characters c
+     LEFT JOIN LATERAL (
+       SELECT r.event_id, r.con_role
+       FROM registrations r
+       WHERE r.character_id = c.id
+       ORDER BY r.event_id
+       LIMIT 1
+     ) reg ON c.class = 'sc'
+     LEFT JOIN events ev ON ev.id = reg.event_id
+     WHERE c.user_id = $1
+     ORDER BY c.created_at`,
     [userId]
   );
-  return rows;
+  return rows.map((row) => ({
+    id: row.id,
+    user_id: row.user_id,
+    class: row.class,
+    name: row.name,
+    data: row.data,
+    created_at: row.created_at,
+    registeredFor: row.registered_event_id
+      ? { eventId: row.registered_event_id, eventName: row.registered_event_name, conRole: row.registered_con_role }
+      : null,
+  }));
 }
 
 // Characters registered for a given event, found via the registration link
-// (not a direct column anymore — a character can be registered for many
-// events, so "its" event only exists in the context of one registration).
+// (not a direct column -- see design spec section 4.3).
 export async function listCharactersForEvent(eventId) {
   const { rows } = await query(
     `SELECT c.id, c.user_id, c.class, c.name, c.data, c.created_at
@@ -61,48 +84,21 @@ export async function listCharactersForEvent(eventId) {
   return rows;
 }
 
-export async function updateCharacter(id, userId, { name, data, eventId }) {
+export async function updateCharacter(id, userId, { name, data }) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
-  let mergedData;
+  let newData;
   if (data !== undefined) {
-    if (character.class === 'nsc') {
-      const schema = await getNscProfileSchema();
-      const errors = validateCharacterData(schema, data);
-      if (errors.length > 0) {
-        const err = new Error('invalid character data');
-        err.code = 'INVALID_CHARACTER_DATA';
-        err.details = errors;
-        throw err;
-      }
-      mergedData = data;
-    } else {
-      if (!eventId) {
-        const err = new Error('eventId is required when updating data for an sc-class character');
-        err.code = 'EVENT_ID_REQUIRED';
-        throw err;
-      }
-      const event = await getEvent(eventId);
-      if (!event) {
-        const err = new Error('event not found');
-        err.code = 'EVENT_NOT_FOUND';
-        throw err;
-      }
-      // The submitted `data` is validated as a complete fragment against
-      // THIS event's schema (must contain exactly this schema's fields,
-      // validateCharacterData rejects unknown keys) -- then merged into the
-      // character's existing data so fields from other events' schemas
-      // survive, instead of being wiped by a full replace.
-      const errors = validateCharacterData(event.character_form_schema, data);
-      if (errors.length > 0) {
-        const err = new Error('invalid character data');
-        err.code = 'INVALID_CHARACTER_DATA';
-        err.details = errors;
-        throw err;
-      }
-      mergedData = { ...character.data, ...data };
+    const schema = await schemaForClass(character.class);
+    const errors = validateCharacterData(schema, data);
+    if (errors.length > 0) {
+      const err = new Error('invalid character data');
+      err.code = 'INVALID_CHARACTER_DATA';
+      err.details = errors;
+      throw err;
     }
+    newData = data;
   }
 
   const { rows } = await query(
@@ -111,7 +107,22 @@ export async function updateCharacter(id, userId, { name, data, eventId }) {
        data = COALESCE($4, data)
      WHERE id = $1 AND user_id = $2
      RETURNING ${SELECT_COLUMNS}`,
-    [id, userId, name ?? null, mergedData !== undefined ? JSON.stringify(mergedData) : null]
+    [id, userId, name ?? null, newData !== undefined ? JSON.stringify(newData) : null]
   );
   return rows[0] ?? null;
+}
+
+export async function deleteCharacter(id, userId) {
+  const character = await getCharacter(id);
+  if (!character || character.user_id !== userId) return null;
+
+  const { rows } = await query('SELECT status FROM registrations WHERE character_id = $1', [id]);
+  if (rows.some((r) => CHARACTER_LOCKING_STATUSES.includes(r.status))) {
+    const err = new Error('Charakter ist mit einer bestätigten Anmeldung verknüpft und kann nicht gelöscht werden.');
+    err.code = 'CHARACTER_IN_USE';
+    throw err;
+  }
+
+  await query('DELETE FROM characters WHERE id = $1', [id]);
+  return true;
 }
