@@ -58,15 +58,24 @@ test('PUT /sc-schema updates the schema for an admin caller', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession('admin');
     const newSchema = [{ key: 'fraction', label: 'Fraktion', type: 'text', required: true }];
-    const putRes = await fetch(`http://localhost:${port}/sc-schema`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ schema: newSchema }),
-    });
-    assert.equal(putRes.status, 200);
+    try {
+      const putRes = await fetch(`http://localhost:${port}/sc-schema`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ schema: newSchema }),
+      });
+      assert.equal(putRes.status, 200);
 
-    const getRes = await fetch(`http://localhost:${port}/sc-schema`, { headers: { Cookie: cookie } });
-    assert.deepEqual(await getRes.json(), newSchema);
+      const getRes = await fetch(`http://localhost:${port}/sc-schema`, { headers: { Cookie: cookie } });
+      assert.deepEqual(await getRes.json(), newSchema);
+    } finally {
+      // Restore empty schema so other tests run on a fresh state.
+      await fetch(`http://localhost:${port}/sc-schema`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ schema: [] }),
+      });
+    }
   });
 });
 
