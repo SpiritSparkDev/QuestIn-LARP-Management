@@ -32,8 +32,13 @@ async function canGrantStaffConRole(eventId, requestingUser) {
 // Validates characterId against con_role: CHARACTER_REQUIRED_CON_ROLES must
 // have one that exists, belongs to userId, and has the matching class
 // (sc/gsc -> 'sc', nsc -> 'nsc'); every other con_role must NOT have one.
+// For an sc-class character, also enforces "at most one registration ever"
+// (design spec 2026-09-16, section 4.3) -- excludes the caller's own
+// (eventId, userId) row so re-saving an existing registration's con-role
+// doesn't flag itself as a conflict. NSC stays exempt: it remains reusable
+// across many events, unchanged from before this spec.
 // Returns the characterId to store (always null for non-character roles).
-async function resolveCharacterId(userId, conRole, characterId) {
+async function resolveCharacterId(userId, conRole, characterId, eventId) {
   if (!CHARACTER_REQUIRED_CON_ROLES.includes(conRole)) {
     if (characterId) {
       const err = new Error(`Für die Rolle "${conRole}" darf kein Charakter angegeben werden.`);
@@ -64,6 +69,17 @@ async function resolveCharacterId(userId, conRole, characterId) {
     const err = new Error(`Rolle "${conRole}" erfordert einen Charakter der Klasse "${expectedClass}".`);
     err.code = 'CHARACTER_CLASS_MISMATCH';
     throw err;
+  }
+  if (expectedClass === 'sc') {
+    const { rows: existing } = await query(
+      'SELECT 1 FROM registrations WHERE character_id = $1 AND NOT (event_id = $2 AND user_id = $3)',
+      [characterId, eventId, userId]
+    );
+    if (existing.length > 0) {
+      const err = new Error('Dieser Charakter ist bereits für ein anderes Event angemeldet.');
+      err.code = 'CHARACTER_ALREADY_REGISTERED';
+      throw err;
+    }
   }
   return characterId;
 }
@@ -97,7 +113,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ot
     throw err;
   }
 
-  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId);
+  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
 
   try {
     const { rows } = await query(
@@ -141,7 +157,7 @@ export async function setConRole(eventId, userId, conRole, characterId, requesti
   // future caller from also changing a helfer to sc here) -- always resolve
   // characterId the same way registerForEvent does, so this can never write
   // a row that violates registrations_character_con_role_check.
-  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId);
+  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
 
   const { rows } = await query(
     `UPDATE registrations SET con_role = $3, character_id = $4

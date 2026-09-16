@@ -48,10 +48,9 @@ async function makeCustomGroupUserAndSession(overrides) {
   return makeUserAndSession(key);
 }
 
-async function makeEvent(schema) {
+async function makeEvent() {
   const { rows } = await query(
-    'INSERT INTO events (name, event_date, character_form_schema, is_active) VALUES ($1, $2, $3, true) RETURNING id',
-    ['Checkin Test Con', '2027-09-01', JSON.stringify(schema ?? [])]
+    "INSERT INTO events (name, event_date, is_active) VALUES ('Checkin Test Con', '2027-09-01', true) RETURNING id"
   );
   return rows[0].id;
 }
@@ -417,7 +416,8 @@ test('participants list filters character (IT) fields by canOverrideCheckinStatu
       { key: 'faction', label: 'Fraktion', type: 'text', public: true },
       { key: 'secretGoal', label: 'Geheimes Ziel', type: 'text', public: false },
     ];
-    const eventId = await makeEvent(schema);
+    await query('UPDATE sc_character_schema SET schema = $1', [JSON.stringify(schema)]);
+    const eventId = await makeEvent();
     const admin = await makeUserAndSession('admin'); // canOverrideCheckinStatus: true
     const hilfsSl = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
     const attendee = await makeUserAndSession('mitglied');

@@ -108,6 +108,35 @@ test('a participant can register and unregister for an event', async () => {
   });
 });
 
+test('the same sc character cannot be used to register for a second event; freed again after unregistering', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventA = await makeEvent();
+    const eventB = await makeEventNamed('Zweites Con', '2027-09-01');
+    const characterId = await makeCharacter(port, cookie);
+
+    const firstReg = await fetch(`http://localhost:${port}/events/${eventA}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId }),
+    });
+    assert.equal(firstReg.status, 201);
+
+    const secondReg = await fetch(`http://localhost:${port}/events/${eventB}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId }),
+    });
+    assert.equal(secondReg.status, 409);
+
+    await fetch(`http://localhost:${port}/events/${eventA}/register`, { method: 'DELETE', headers: { Cookie: cookie } });
+
+    const thirdReg = await fetch(`http://localhost:${port}/events/${eventB}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId }),
+    });
+    assert.equal(thirdReg.status, 201);
+  });
+});
+
 test('registering for an unknown event returns 404', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession();
@@ -192,7 +221,11 @@ test('GET /registrations lists only the calling participant\'s registrations', a
     const b = await makeUserAndSession();
     const eventId1 = await makeEventNamed('Reg Test Con A', '2027-08-02');
     const eventId2 = await makeEventNamed('Reg Test Con B', '2027-08-03');
+    // A needs two distinct sc characters here: an sc character can now be
+    // used for at most one registration ever, so reusing the same one across
+    // eventId1 and eventId2 would 409 on the second call.
     const aCharacterId = await makeCharacter(port, a.cookie);
+    const aCharacterId2 = await makeCharacter(port, a.cookie, 'sc', 'Test Char 2');
     const bCharacterId = await makeCharacter(port, b.cookie);
 
     await fetch(`http://localhost:${port}/events/${eventId1}/register`, {
@@ -201,7 +234,7 @@ test('GET /registrations lists only the calling participant\'s registrations', a
     });
     await fetch(`http://localhost:${port}/events/${eventId2}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: a.cookie },
-      body: JSON.stringify({ conRole: 'sc', characterId: aCharacterId }),
+      body: JSON.stringify({ conRole: 'sc', characterId: aCharacterId2 }),
     });
     await fetch(`http://localhost:${port}/events/${eventId1}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: b.cookie },
