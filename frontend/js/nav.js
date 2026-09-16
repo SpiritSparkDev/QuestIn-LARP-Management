@@ -9,6 +9,7 @@ export function renderNavLinks(account, currentPath) {
   const links = MENU_LINKS.filter((item) => account.menus.includes(item.key));
   if (account.group.key === 'admin') {
     links.push({ key: 'gruppen', label: 'Gruppen', href: '/admin/groups.html' });
+    links.push({ key: 'charakterschema', label: 'Charakterschema', href: '/admin/character-schema.html' });
     links.push({ key: 'einstellungen', label: 'Einstellungen', href: '/admin/settings.html' });
     links.push({ key: 'branding', label: 'Branding', href: '/admin/branding.html' });
     links.push({ key: 'speicher', label: 'Speicher', href: '/admin/storage.html' });

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Charakterschema – Pakyrion Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/everest-registry.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot"><a href="#" id="logout-link">Logout</a></div>
+  </aside>
+  <div class="main"><div class="content">
+    <h1>Charakterschema</h1>
+    <p class="sub">Legt fest, welche Sheet-Felder Charaktere haben. SC/GSC-Charaktere teilen sich ein Schema über alle Events hinweg; NSC-Charaktere haben ihr eigenes, ebenfalls app-weites Schema.</p>
+
+    <div class="tabs" id="class-tabs">
+      <button type="button" class="tab-btn active" data-tab="sc-schema-tab">SC/GSC</button>
+      <button type="button" class="tab-btn" data-tab="nsc-schema-tab">NSC</button>
+    </div>
+
+    <div class="tab-panel card form-pad" id="sc-schema-tab">
+      <div id="sc-schema-rows"></div>
+      <button type="button" id="sc-add-field">Feld hinzufügen</button>
+      <button type="button" id="sc-load-template">Standard-Vorlage laden</button>
+      <button type="button" id="sc-schema-save">Speichern</button>
+    </div>
+
+    <div class="tab-panel card form-pad" id="nsc-schema-tab" hidden>
+      <div id="nsc-schema-rows"></div>
+      <button type="button" id="nsc-add-field">Feld hinzufügen</button>
+      <button type="button" id="nsc-schema-save">Speichern</button>
+    </div>
+
+    <p id="message"></p>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+applyBranding();
+import { escapeHtml } from '/js/formFields.js';
+import { DEFAULT_CHARACTER_SCHEMA } from '/js/defaultCharacterSchema.js';
+import { renderNavLinks } from '/js/nav.js';
+
+const message = document.getElementById('message');
+
+function initTabs(tabsEl) {
+  const buttons = [...tabsEl.querySelectorAll('.tab-btn')];
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      buttons.forEach((b) => {
+        b.classList.toggle('active', b === btn);
+        document.getElementById(b.dataset.tab).hidden = b !== btn;
+      });
+    });
+  });
+}
+initTabs(document.getElementById('class-tabs'));
+
+function addSchemaRow(container, field = { key: '', label: '', type: 'text', required: false, public: false, options: [] }) {
+  const row = document.createElement('div');
+  row.className = 'schema-row';
+  const optionsValue = Array.isArray(field.options) ? field.options.join(', ') : '';
+  row.innerHTML = `
+    <input type="text" placeholder="key" class="schema-key" value="${escapeHtml(field.key)}">
+    <input type="text" placeholder="Label" class="schema-label" value="${escapeHtml(field.label)}">
+    <select class="schema-type">
+      <option value="text" ${field.type === 'text' ? 'selected' : ''}>Text</option>
+      <option value="textarea" ${field.type === 'textarea' ? 'selected' : ''}>Textarea</option>
+      <option value="select" ${field.type === 'select' ? 'selected' : ''}>Auswahl</option>
+      <option value="number" ${field.type === 'number' ? 'selected' : ''}>Zahl</option>
+      <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>Ja/Nein</option>
+      <option value="multiselect" ${field.type === 'multiselect' ? 'selected' : ''}>Mehrfachauswahl</option>
+      <option value="link" ${field.type === 'link' ? 'selected' : ''}>Link</option>
+    </select>
+    <input type="text" placeholder="Optionen (kommagetrennt, nur bei Auswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
+    <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
+    <label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>
+    <button type="button" class="remove-row">Entfernen</button>
+  `;
+  row.querySelector('.remove-row').addEventListener('click', () => row.remove());
+  container.appendChild(row);
+}
+
+function collectSchema(container) {
+  return [...container.children].map((row) => {
+    const type = row.querySelector('.schema-type').value;
+    const field = {
+      key: row.querySelector('.schema-key').value.trim(),
+      label: row.querySelector('.schema-label').value.trim(),
+      type,
+      required: row.querySelector('.schema-required').checked,
+      public: row.querySelector('.schema-public').checked,
+    };
+    if (type === 'select' || type === 'multiselect') {
+      field.options = row.querySelector('.schema-options').value
+        .split(',')
+        .map((opt) => opt.trim())
+        .filter((opt) => opt.length > 0);
+    }
+    return field;
+  }).filter((field) => field.key.length > 0);
+}
+
+function setupSchemaEditor({ rowsId, addFieldId, saveId, endpoint, loadTemplateId }) {
+  const rows = document.getElementById(rowsId);
+  document.getElementById(addFieldId).addEventListener('click', () => addSchemaRow(rows));
+  if (loadTemplateId) {
+    document.getElementById(loadTemplateId).addEventListener('click', () => {
+      rows.innerHTML = '';
+      DEFAULT_CHARACTER_SCHEMA.forEach((field) => addSchemaRow(rows, field));
+    });
+  }
+  document.getElementById(saveId).addEventListener('click', async () => {
+    message.textContent = '';
+    message.className = '';
+    try {
+      await api.put(endpoint, { schema: collectSchema(rows) });
+      message.textContent = 'Gespeichert.';
+      message.className = 'success';
+    } catch (err) {
+      message.textContent = err.status === 400 && err.body?.error ? err.body.error : err.message;
+      message.className = 'error';
+    }
+  });
+  return rows;
+}
+
+const scRows = setupSchemaEditor({ rowsId: 'sc-schema-rows', addFieldId: 'sc-add-field', saveId: 'sc-schema-save', endpoint: '/sc-schema', loadTemplateId: 'sc-load-template' });
+const nscRows = setupSchemaEditor({ rowsId: 'nsc-schema-rows', addFieldId: 'nsc-add-field', saveId: 'nsc-schema-save', endpoint: '/nsc-schema' });
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  if (account.group.key !== 'admin') {
+    message.textContent = 'Kein Zugriff – nur für Admin.';
+    message.className = 'error';
+  } else {
+    const [scSchema, nscSchema] = await Promise.all([api.get('/sc-schema'), api.get('/nsc-schema')]);
+    scSchema.forEach((field) => addSchemaRow(scRows, field));
+    nscSchema.forEach((field) => addSchemaRow(nscRows, field));
+  }
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+}
+</script>
+</body>
+</html>
