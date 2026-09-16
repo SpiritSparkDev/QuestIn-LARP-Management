@@ -298,5 +298,6 @@ test('PUT /characters/:id allows a canOverrideCheckinStatus group to edit anothe
 });
 
 test.after(async () => {
+  await setScSchema([]);
   await closePool();
 });

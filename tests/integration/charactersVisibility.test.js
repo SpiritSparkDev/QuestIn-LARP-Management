@@ -192,5 +192,6 @@ test('GET /characters/:id filters non-public fields for a non-owner, non-elevate
 });
 
 test.after(async () => {
+  await setScSchema([]);
   await closePool();
 });
