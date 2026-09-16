@@ -6,29 +6,42 @@
 <title>Charaktere durchsuchen – Pakyrion</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/chronicle-crest.css">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/sahara.css">
 </head>
 <body>
-<div class="shell">
-  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
-  <p class="brand-sub">QuestIn LARP Management</p>
-  <div class="folio folio--wide">
-    <nav class="app-nav" id="nav-links"></nav>
-    <a href="#" id="logout-link">Logout</a>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand">Pakyrion</div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
     <h1>Charaktere durchsuchen</h1>
     <p><a href="/account.html">← Zurück zu meinen Charakteren</a></p>
     <label for="event-select">Event</label>
     <select id="event-select"></select>
     <div id="character-list" class="char-grid"></div>
     <p id="message"></p>
-  </div>
+  </div></div>
 </div>
 
 <script type="module">
 import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+applyBranding();
 import { escapeHtml, formatFieldValue, renderEventOptions } from '/js/formFields.js';
-import { renderNavLinks } from '/js/nav.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+initSidebarToggle();
 
 const eventSelect = document.getElementById('event-select');
 const listBody = document.getElementById('character-list');
@@ -84,6 +97,7 @@ document.getElementById('logout-link').addEventListener('click', async (evt) => 
 try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
   scSchema = await api.get('/sc-schema');
   events = await api.get('/events');
   eventSelect.innerHTML = renderEventOptions(events);
