@@ -3,19 +3,15 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { createEvent, getEvent, listEvents, updateEvent, activateEvent } from './repository.js';
-import { validateSchemaShape } from './schemaValidation.js';
 
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, code, characterFormSchema } = body;
+  const { name, eventDate, code } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
-  if (characterFormSchema !== undefined && !validateSchemaShape(characterFormSchema)) {
-    return { status: 400, body: { error: 'characterFormSchema must be an array of objects, each with a unique, non-reserved string "key" (not "id" or "name")' } };
-  }
-  const event = await createEvent({ name, eventDate, code, characterFormSchema });
+  const event = await createEvent({ name, eventDate, code });
   return { status: 201, body: event };
 })));
 
@@ -33,11 +29,7 @@ router.get('/events/:id', requireAuth(async ({ params }) => {
 router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { code, characterFormSchema } = body;
-  if (characterFormSchema !== undefined && !validateSchemaShape(characterFormSchema)) {
-    return { status: 400, body: { error: 'characterFormSchema must be an array of objects, each with a unique, non-reserved string "key" (not "id" or "name")' } };
-  }
-  const event = await updateEvent(params.id, { ...body, code });
+  const event = await updateEvent(params.id, body);
   if (!event) return { status: 404, body: { error: 'event not found' } };
   return { status: 200, body: event };
 })));
