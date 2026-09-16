@@ -11,6 +11,7 @@ export function renderNavLinks(account, currentPath) {
   const links = MENU_LINKS.filter((item) => account.menus.includes(item.key));
   if (account.group.key === 'admin') {
     links.push({ key: 'gruppen', label: 'Gruppen', href: '/admin/groups.html', icon: 'groups' });
+    links.push({ key: 'charakterschema', label: 'Charakterschema', href: '/admin/character-schema.html', icon: 'badge' });
     links.push({ key: 'einstellungen', label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' });
     links.push({ key: 'branding', label: 'Branding', href: '/admin/branding.html', icon: 'palette' });
     links.push({ key: 'speicher', label: 'Speicher', href: '/admin/storage.html', icon: 'storage' });
