@@ -64,10 +64,10 @@
 <script type="module">
 import { api } from '/js/api.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+initSidebarToggle();
 import { applyBranding } from '/js/branding.js';
 
 applyBranding();
-initSidebarToggle();
 
 const form = document.getElementById('branding-form');
 const message = document.getElementById('message');
