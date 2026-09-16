@@ -103,8 +103,6 @@
             <p id="no-character-hint" style="display:none;">Du hast noch keinen passenden Charakter. <button type="button" id="no-character-hint-btn" class="btn-ghost">Charakter anlegen</button></p>
           </div>
 
-          <div id="dynamic-fields"></div>
-
           <h3>Weitere Angaben zu dieser Anmeldung</h3>
           <div id="ot-fields"></div>
 
@@ -293,7 +291,6 @@ const conRoleSelect = document.getElementById('con-role-select');
 const characterSelectWrap = document.getElementById('character-select-wrap');
 const characterSelect = document.getElementById('character-select');
 const noCharacterHint = document.getElementById('no-character-hint');
-const dynamicFields = document.getElementById('dynamic-fields');
 const registerButton = document.getElementById('register-button');
 const registrationMessage = document.getElementById('registration-message');
 const otFieldsContainer = document.getElementById('ot-fields');
@@ -332,34 +329,19 @@ function populateCharacterOptions() {
   const conRole = conRoleSelect.value;
   const needsCharacter = ['sc', 'gsc', 'nsc'].includes(conRole);
   characterSelectWrap.style.display = needsCharacter ? '' : 'none';
-  if (!needsCharacter) {
-    dynamicFields.innerHTML = '';
-    return;
-  }
+  if (!needsCharacter) return;
   const expectedClass = classForConRole(conRole);
-  const matching = characters.filter((c) => c.class === expectedClass);
+  const matching = characters.filter((c) => {
+    if (c.class !== expectedClass) return false;
+    if (expectedClass === 'sc' && c.registeredFor) return false;
+    return true;
+  });
   characterSelect.innerHTML = matching.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
   noCharacterHint.style.display = matching.length === 0 ? '' : 'none';
-  renderDynamicFieldsForSelection();
-}
-
-function renderDynamicFieldsForSelection() {
-  const event = events.find((e) => e.id === eventSelect.value);
-  const character = characters.find((c) => c.id === characterSelect.value);
-  const schema = event ? event.character_form_schema : [];
-  const data = character ? character.data : {};
-  dynamicFields.innerHTML = ['sc', 'gsc'].includes(conRoleSelect.value)
-    ? schema.map((field) => renderField(field, data[field.key], 'reg-')).join('')
-    : '';
-  attachLiveValidation(dynamicFields);
 }
 
 conRoleSelect.addEventListener('change', populateCharacterOptions);
-characterSelect.addEventListener('change', renderDynamicFieldsForSelection);
-eventSelect.addEventListener('change', () => {
-  updateRegisterButtonLabel();
-  renderDynamicFieldsForSelection();
-});
+eventSelect.addEventListener('change', updateRegisterButtonLabel);
 
 document.getElementById('no-character-hint-btn').addEventListener('click', () => {
   document.querySelector('#veranstaltung-subtabs [data-tab="charaktere-subtab"]').click();
@@ -482,16 +464,12 @@ registrationForm.addEventListener('submit', async (event) => {
   if (needsCharacter && !characterId) return;
 
   try {
-    if (['sc', 'gsc'].includes(conRole)) {
-      const schema = events.find((e) => e.id === eventId)?.character_form_schema ?? [];
-      const data = collectFieldValues(registrationForm, schema);
-      await api.put(`/characters/${characterId}`, { eventId, data });
-    }
     await api.post(`/events/${eventId}/register`, { conRole, characterId, otFields: collectOtFields() });
     registrationMessage.textContent = 'Angemeldet.';
     registrationMessage.className = 'success';
     renderOtFields();
     await loadRegistrations();
+    await loadCharacters();
   } catch (err) {
     registrationMessage.textContent = err.status === 400 && err.body?.details
       ? err.body.details.join(', ')
