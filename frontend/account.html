@@ -124,13 +124,27 @@
 
         <div class="tab-panel" id="sc-tab">
           <div id="character-list" class="char-grid"></div>
+          <button type="button" id="copy-character-btn" class="btn-ghost">Aus bestehendem Charakter kopieren</button>
+
+          <dialog id="copy-character-dialog">
+            <h3>Charakter kopieren</h3>
+            <p class="lede">Übernimmt Name und Sheet-Daten in einen neuen, unabhängigen Charakter.</p>
+            <label for="copy-character-select">Vorlage</label>
+            <select id="copy-character-select"></select>
+            <div class="dialog-actions">
+              <button type="button" id="copy-character-confirm">Kopieren</button>
+              <button type="button" id="copy-character-cancel" class="btn-ghost">Abbrechen</button>
+            </div>
+          </dialog>
 
           <div id="sc-form-section" style="display:none;">
             <h3 id="form-title">Neuen Charakter anlegen</h3>
             <form id="character-form">
               <label for="character-name">Charaktername</label>
               <input id="character-name" name="name" type="text" required>
+              <div id="character-dynamic-fields"></div>
               <button type="submit">Speichern</button>
+              <button type="button" id="character-cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
             </form>
             <p id="character-message"></p>
           </div>
@@ -492,7 +506,15 @@ attachLiveValidation(characterForm);
 const characterMessage = document.getElementById('character-message');
 const characterListBody = document.getElementById('character-list');
 const characterFormTitle = document.getElementById('form-title');
+const characterDynamicFields = document.getElementById('character-dynamic-fields');
+const characterCancelButton = document.getElementById('character-cancel-edit');
 
+function renderScSchemaFields(data = {}) {
+  characterDynamicFields.innerHTML = scSchema.map((field) => renderField(field, data[field.key], 'sc-char-')).join('');
+  attachLiveValidation(characterDynamicFields);
+}
+
+let scSchema = [];
 let nscSchema = [];
 let nscCharacters = [];
 let editingNscCharacterId = null;
@@ -703,14 +725,22 @@ nscForm.addEventListener('submit', async (event) => {
   }
 });
 
+function statusLineForCharacter(c) {
+  if (!c.registeredFor) return 'Noch keinem Event zugeordnet.';
+  const roleLabel = CON_ROLE_LABELS[c.registeredFor.conRole] ?? c.registeredFor.conRole;
+  return `Für ${escapeHtml(c.registeredFor.eventName)} als ${escapeHtml(roleLabel)} angemeldet.`;
+}
+
 function renderCharacterList() {
   const scCharacters = characters.filter((c) => c.class !== 'nsc');
   characterListBody.innerHTML = scCharacters.map((c) => {
     const tagsHtml = tagsForCharacter(c);
     return `<div class="char-card">
       <h3>${escapeHtml(c.name)}</h3>
+      <p class="sub">${statusLineForCharacter(c)}</p>
       <div class="char-tags">${tagsHtml}</div>
       <button type="button" data-edit="${c.id}" class="btn-ghost" style="margin-top:14px;">Bearbeiten</button>
+      <button type="button" data-delete="${c.id}" class="btn-ghost">Löschen</button>
       <div class="char-files" data-files-for="${c.id}">
         <p class="sub">Dateien werden geladen …</p>
       </div>
@@ -719,6 +749,9 @@ function renderCharacterList() {
 
   characterListBody.querySelectorAll('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => startEdit(button.dataset.edit));
+  });
+  characterListBody.querySelectorAll('[data-delete]').forEach((button) => {
+    button.addEventListener('click', () => deleteCharacterCard(button.dataset.delete));
   });
   scCharacters.forEach((c) => loadFilesInto(c.id));
 
@@ -734,26 +767,69 @@ function startEdit(characterId) {
   editingCharacterId = characterId;
   characterFormTitle.textContent = `Charakter bearbeiten: ${character.name}`;
   characterForm.elements.name.value = character.name;
+  renderScSchemaFields(character.data);
   characterForm.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
+  characterCancelButton.style.display = '';
 }
 
 function resetCharacterForm() {
   editingCharacterId = null;
   characterFormTitle.textContent = 'Neuen Charakter anlegen';
   characterForm.reset();
+  renderScSchemaFields();
   characterForm.querySelector('button[type="submit"]').textContent = 'Speichern';
+  characterCancelButton.style.display = 'none';
 }
+
+characterCancelButton.addEventListener('click', resetCharacterForm);
+
+async function deleteCharacterCard(characterId) {
+  if (!confirm('Charakter wirklich löschen?')) return;
+  characterMessage.textContent = '';
+  characterMessage.className = '';
+  try {
+    await api.delete(`/characters/${characterId}`);
+    if (editingCharacterId === characterId) resetCharacterForm();
+    await loadCharacters();
+  } catch (err) {
+    characterMessage.textContent = err.message;
+    characterMessage.className = 'error';
+  }
+}
+
+document.getElementById('copy-character-btn').addEventListener('click', () => {
+  const scCharacters = characters.filter((c) => c.class !== 'nsc');
+  const select = document.getElementById('copy-character-select');
+  select.innerHTML = scCharacters.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+  document.getElementById('copy-character-dialog').showModal();
+});
+
+document.getElementById('copy-character-cancel').addEventListener('click', () => {
+  document.getElementById('copy-character-dialog').close();
+});
+
+document.getElementById('copy-character-confirm').addEventListener('click', () => {
+  const sourceId = document.getElementById('copy-character-select').value;
+  const source = characters.find((c) => c.id === sourceId);
+  document.getElementById('copy-character-dialog').close();
+  if (!source) return;
+  resetCharacterForm();
+  characterForm.elements.name.value = source.name;
+  renderScSchemaFields(source.data);
+  scFormSection.scrollIntoView({ behavior: 'smooth' });
+});
 
 characterForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   characterMessage.textContent = '';
   characterMessage.className = '';
   const name = characterForm.elements.name.value;
+  const data = collectFieldValues(characterForm, scSchema);
   try {
     if (editingCharacterId) {
-      await api.put(`/characters/${editingCharacterId}`, { name });
+      await api.put(`/characters/${editingCharacterId}`, { name, data });
     } else {
-      await api.post('/characters', { class: 'sc', name });
+      await api.post('/characters', { class: 'sc', name, data });
     }
     characterMessage.textContent = 'Gespeichert.';
     characterMessage.className = 'success';
@@ -785,6 +861,8 @@ try {
   renderOtFields();
 
   scFormSection.style.display = '';
+  scSchema = await api.get('/sc-schema');
+  renderScSchemaFields();
   try {
     nscSchema = await api.get('/nsc-schema');
     nscSection.style.display = '';
