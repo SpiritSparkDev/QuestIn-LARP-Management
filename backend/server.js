@@ -18,6 +18,7 @@ import './registrations/routes.js';
 import './groups/routes.js';
 import './members/routes.js';
 import './nscSchema/routes.js';
+import './scSchema/routes.js';
 import './smtpSettings/routes.js';
 import './appSettings/routes.js';
 import './storageSettings/routes.js';
