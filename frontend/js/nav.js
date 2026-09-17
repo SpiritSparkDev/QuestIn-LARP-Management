@@ -1,25 +1,44 @@
 import { escapeHtml } from './formFields.js';
 
+// Dashboard/Konto/Veranstaltung are three facets of the same 'konto'
+// permission and the same page (account.html) -- distinguished only by
+// hash, so they render identically (and consistently, on every page,
+// admin pages included) to every other role-gated nav item. account.html
+// itself reads location.hash to decide which of the three panels shows.
 const MENU_LINKS = [
-  { key: 'konto', label: 'Konto', href: '/account.html', icon: 'manage_accounts' },
+  { key: 'konto', label: 'Dashboard', href: '/account.html#dashboard', icon: 'dashboard' },
+  { key: 'konto', label: 'Konto', href: '/account.html#konto', icon: 'manage_accounts' },
+  { key: 'konto', label: 'Veranstaltung', href: '/account.html#veranstaltung', icon: 'event' },
   { key: 'mitglieder', label: 'Mitglieder', href: '/admin/members.html', icon: 'group' },
   { key: 'events', label: 'Events', href: '/admin/events.html', icon: 'calendar_month' },
   { key: 'checkin', label: 'Check-In', href: '/admin/checkin.html', icon: 'qr_code_scanner' },
 ];
 
+const ADMIN_ONLY_LINKS = [
+  { label: 'Gruppen', href: '/admin/groups.html', icon: 'groups' },
+  { label: 'Charakterschema', href: '/admin/character-schema.html', icon: 'badge' },
+  { label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' },
+  { label: 'Branding', href: '/admin/branding.html', icon: 'palette' },
+  { label: 'Speicher', href: '/admin/storage.html', icon: 'storage' },
+];
+
+function renderNavItem({ href, label, icon }, currentPath) {
+  const current = href === currentPath ? 'sidebar-nav-item current' : 'sidebar-nav-item';
+  return `<a href="${href}" class="${current}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span></a>`;
+}
+
 export function renderNavLinks(account, currentPath) {
-  const links = MENU_LINKS.filter((item) => account.menus.includes(item.key));
+  const items = MENU_LINKS.filter((item) => account.menus.includes(item.key));
+  let html = items.map((item) => renderNavItem(item, currentPath)).join('');
+  // A visual divider before the admin-only section -- keeps the role-gated
+  // items (everything above) and the admin-only items (everything below)
+  // visibly distinct, since both render through this same, single,
+  // role-driven function rather than any page-specific special-casing.
   if (account.group.key === 'admin') {
-    links.push({ key: 'gruppen', label: 'Gruppen', href: '/admin/groups.html', icon: 'groups' });
-    links.push({ key: 'charakterschema', label: 'Charakterschema', href: '/admin/character-schema.html', icon: 'badge' });
-    links.push({ key: 'einstellungen', label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' });
-    links.push({ key: 'branding', label: 'Branding', href: '/admin/branding.html', icon: 'palette' });
-    links.push({ key: 'speicher', label: 'Speicher', href: '/admin/storage.html', icon: 'storage' });
+    html += '<hr class="sidebar-nav-divider">';
+    html += ADMIN_ONLY_LINKS.map((item) => renderNavItem(item, currentPath)).join('');
   }
-  return links.map(({ href, label, icon }) => {
-    const current = href === currentPath ? 'sidebar-nav-item current' : 'sidebar-nav-item';
-    return `<a href="${href}" class="${current}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span></a>`;
-  }).join('');
+  return html;
 }
 
 // Renders the sidebar's bottom user-identity block (avatar initials, display

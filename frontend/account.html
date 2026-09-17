@@ -329,77 +329,63 @@
   <button type="button" class="sidebar-nav-item" data-tab="charaktere-subtab">Charaktere</button>
       `;
 
-      function buildSidebarTopTabs() {
-        const nav = document.getElementById("nav-links");
-        // renderNavLinks() already rendered a real "Konto" link (href="/account.html",
-        // from the 'konto' menu key -- account.html is the only page where that key's
-        // target IS this page, so it's the one page where this generic link would be
-        // redundant with the tab-button below). Remove it before adding the richer
-        // tab-driven replacement, so "Konto" doesn't appear twice.
-        nav.querySelector('a[href="/account.html"]')?.remove();
-
-        const dashboardBtn = document.createElement("button");
-        dashboardBtn.type = "button";
-        dashboardBtn.className = "sidebar-nav-item active";
-        dashboardBtn.dataset.tab = "dashboard-tab";
-        dashboardBtn.innerHTML =
-          '<span class="material-symbols-outlined" aria-hidden="true">dashboard</span><span>Dashboard</span>';
-
-        const kontoBtn = document.createElement("button");
-        kontoBtn.type = "button";
-        kontoBtn.className = "sidebar-nav-item";
-        kontoBtn.dataset.tab = "konto-tab";
-        kontoBtn.innerHTML =
-          '<span class="material-symbols-outlined" aria-hidden="true">manage_accounts</span><span>Konto</span>';
-
-        const veranstaltungBtn = document.createElement("button");
-        veranstaltungBtn.type = "button";
-        veranstaltungBtn.className = "sidebar-nav-item";
-        veranstaltungBtn.dataset.tab = "veranstaltung-tab";
-        veranstaltungBtn.innerHTML =
-          '<span class="material-symbols-outlined" aria-hidden="true">event</span><span>Veranstaltung</span>';
-
-        nav.prepend(veranstaltungSubnav);
-        nav.prepend(veranstaltungBtn);
-        nav.prepend(kontoBtn);
-        nav.prepend(dashboardBtn);
-
-        // Deliberately NOT reusing the shared initTabs() helper here: it selects
-        // by `.tab-btn`, a class with its own horizontal-underline-tab CSS that
-        // would fight `.sidebar-nav-item`'s look if applied to the same button
-        // (same selector specificity, source order would decide the winner --
-        // fragile). Both toggle groups below use the identical active/hidden
-        // mechanics as initTabs, just spelled out against `.sidebar-nav-item`.
-        const topButtons = [dashboardBtn, kontoBtn, veranstaltungBtn];
-        topButtons.forEach((btn) => {
-          btn.addEventListener("click", () => {
-            topButtons.forEach((b) => {
-              b.classList.toggle("active", b === btn);
-              document.getElementById(b.dataset.tab).hidden = b !== btn;
-            });
-            veranstaltungSubnav.hidden = btn !== veranstaltungBtn;
+      const subButtons = [
+        ...veranstaltungSubnav.querySelectorAll(".sidebar-nav-item"),
+      ];
+      subButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          subButtons.forEach((b) => {
+            b.classList.toggle("active", b === btn);
+            document.getElementById(b.dataset.tab).hidden = b !== btn;
           });
         });
+      });
 
-        const subButtons = [
-          ...veranstaltungSubnav.querySelectorAll(".sidebar-nav-item"),
-        ];
-        subButtons.forEach((btn) => {
-          btn.addEventListener("click", () => {
-            subButtons.forEach((b) => {
-              b.classList.toggle("active", b === btn);
-              document.getElementById(b.dataset.tab).hidden = b !== btn;
-            });
-          });
+      const TOP_TAB_HASHES = ["dashboard", "konto", "veranstaltung"];
+
+      // Dashboard/Konto/Veranstaltung are rendered by the shared, role-driven
+      // renderNavLinks() as three ordinary links (all pointing at this same
+      // page, distinguished only by hash) -- exactly like every other
+      // sidebar item, on every page. This is the one place that reacts to
+      // the hash to decide which of the three panels shows; it runs once on
+      // load and again on every hashchange, so clicking one of these links
+      // behaves identically whether you were already on this page or just
+      // navigated here from somewhere else.
+      function applyHashTab() {
+        const requested = (window.location.hash || "#dashboard").slice(1);
+        const activeHash = TOP_TAB_HASHES.includes(requested)
+          ? requested
+          : "dashboard";
+        TOP_TAB_HASHES.forEach((hash) => {
+          document.getElementById(`${hash}-tab`).hidden = hash !== activeHash;
+          const link = document.querySelector(
+            `#nav-links a[href="/account.html#${hash}"]`,
+          );
+          if (link) link.classList.toggle("current", hash === activeHash);
         });
+        veranstaltungSubnav.hidden = activeHash !== "veranstaltung";
       }
 
-      function goToTab(tabName) {
-        document.querySelector(`#nav-links [data-tab="${tabName}"]`).click();
+      window.addEventListener("hashchange", applyHashTab);
+
+      // The nested Anmelden/Charaktere items aren't role-gated MENU_LINKS
+      // entries (they only ever make sense as a sub-section of THIS page's
+      // Veranstaltung tab), so they're not rendered by renderNavLinks --
+      // insert them into the DOM right after the Veranstaltung link once it
+      // exists.
+      function mountVeranstaltungSubnav() {
+        document
+          .querySelector('#nav-links a[href="/account.html#veranstaltung"]')
+          ?.insertAdjacentElement("afterend", veranstaltungSubnav);
+      }
+
+      function goToTab(hash) {
+        window.location.hash = hash;
+        applyHashTab();
       }
 
       function goToVeranstaltungSubtab(subTab) {
-        goToTab("veranstaltung-tab");
+        goToTab("veranstaltung");
         document
           .querySelector(`#veranstaltung-subnav [data-tab="${subTab}"]`)
           .click();
@@ -480,7 +466,7 @@
       <button type="button" id="dashboard-account-btn">Konto vervollständigen</button>`;
         document
           .getElementById("dashboard-account-btn")
-          .addEventListener("click", () => goToTab("konto-tab"));
+          .addEventListener("click", () => goToTab("konto"));
       }
 
       const accountForm = document.getElementById("account-form");
@@ -664,12 +650,7 @@
 
       document
         .getElementById("no-character-hint-btn")
-        .addEventListener("click", () => {
-          document.querySelector('#nav-links [data-tab="veranstaltung-tab"]').click();
-          document
-            .querySelector('#veranstaltung-subnav [data-tab="charaktere-subtab"]')
-            .click();
-        });
+        .addEventListener("click", () => goToVeranstaltungSubtab("charaktere-subtab"));
 
       function populateEventOptions() {
         const visibleEvents = canEditCharacters
@@ -1251,11 +1232,13 @@
 
       try {
         const account = await api.get("/account");
+        if (!window.location.hash) window.location.hash = "dashboard";
         document.getElementById("nav-links").innerHTML = renderNavLinks(
           account,
-          window.location.pathname,
+          window.location.pathname + window.location.hash,
         );
-        buildSidebarTopTabs();
+        mountVeranstaltungSubnav();
+        applyHashTab();
         document.getElementById("sidebar-user-info").innerHTML =
           renderSidebarUser(account);
 

@@ -222,6 +222,13 @@ h1, h2, h3 {
   display: none;
 }
 
+.sidebar-nav-divider {
+  border: none;
+  height: 1px;
+  margin: 10px 8px;
+  background: var(--outline-variant);
+}
+
 .sidebar-foot {
   margin-top: auto;
   padding-top: 16px;
