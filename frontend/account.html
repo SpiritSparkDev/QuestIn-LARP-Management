@@ -224,6 +224,7 @@
         renderEventOptions,
         renderAccountFieldInput,
         collectAccountFieldValues,
+        otFieldValuesEqual,
       } from "/js/formFields.js";
       import { buildScanCode } from "/js/qrCode.js";
 
@@ -623,7 +624,7 @@
           // Only send a field that actually changed -- a save that touched nothing
           // must not PUT .../ot-fields, since a successful call mails every event
           // orga/hilfs_orga plus every admin/moderator.
-          if (field.type === "boolean" ? Boolean(originalValue) === Boolean(newValue) : originalValue === newValue) continue;
+          if (otFieldValuesEqual(field, originalValue, newValue)) continue;
           payload[field.key] = newValue;
         }
         registrationMessage.textContent = "";

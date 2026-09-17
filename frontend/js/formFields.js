@@ -81,6 +81,26 @@ export function collectAccountFieldValues(container, schema) {
   return result;
 }
 
+// Compares an OT field's before/after value for the "did this actually
+// change" guard used before PATCH /members/:id or PUT .../ot-fields (both
+// of which mail every event orga/hilfs_orga plus every admin/moderator on
+// success) -- plain === breaks for multiselect (a fresh array every
+// collect) and for a blank number (undefined vs the '' default).
+export function otFieldValuesEqual(field, a, b) {
+  if (field.type === 'boolean') return Boolean(a) === Boolean(b);
+  if (field.type === 'multiselect') {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    return arrA.length === arrB.length && arrA.every((v, i) => v === arrB[i]);
+  }
+  if (field.type === 'number') {
+    const normA = a === undefined || a === null || a === '' ? undefined : Number(a);
+    const normB = b === undefined || b === null || b === '' ? undefined : Number(b);
+    return normA === normB;
+  }
+  return a === b;
+}
+
 // Formats a character (IT) custom-field value for display, e.g. as a
 // checkin-table cell or a browse-page tag. Returns undefined for values that
 // shouldn't be shown at all (empty/absent).

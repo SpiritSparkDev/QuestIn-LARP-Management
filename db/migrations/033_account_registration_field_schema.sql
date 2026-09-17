@@ -15,7 +15,7 @@ INSERT INTO account_field_schema (schema) VALUES ('[
   {"key": "emergencyContactLastName", "label": "Notfallkontakt: Name", "type": "text", "required": false},
   {"key": "emergencyContactFirstName", "label": "Notfallkontakt: Vorname", "type": "text", "required": false},
   {"key": "emergencyContactPhone", "label": "Notfallkontakt: Telefonnummer", "type": "text", "required": false},
-  {"key": "medicalNotes", "label": "Gesundheitshinweise", "type": "text", "required": false}
+  {"key": "medicalNotes", "label": "Gesundheitshinweise", "type": "textarea", "required": false}
 ]'::jsonb);
 
 CREATE TABLE registration_field_schema (

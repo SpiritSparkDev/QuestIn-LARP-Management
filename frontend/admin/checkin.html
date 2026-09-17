@@ -91,7 +91,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, formatFieldValue, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, renderField, collectFieldValues } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, otFieldValuesEqual, renderField, collectFieldValues } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 initSidebarToggle();
 import { parseScanCode } from '/js/qrCode.js';
@@ -349,7 +349,7 @@ document.getElementById('edit-save').addEventListener('click', async () => {
     // touched nothing OT-related (e.g. only a character field) must not
     // trigger PATCH /members or PUT .../ot-fields, since either one mails
     // every event orga/hilfs_orga plus every admin/moderator on success.
-    if (field.type === 'boolean' ? Boolean(originalValue) === Boolean(newValue) : originalValue === newValue) continue;
+    if (otFieldValuesEqual(field, originalValue, newValue)) continue;
     if (accountAccountFieldKeys.has(field.key)) accountPayload[field.key] = newValue;
     else registrationPayload[field.key] = newValue;
   }

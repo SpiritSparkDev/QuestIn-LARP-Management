@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeHtml, renderField, collectFieldValues, renderAccountFieldInput, collectAccountFieldValues } from '../../frontend/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, renderAccountFieldInput, collectAccountFieldValues, otFieldValuesEqual } from '../../frontend/js/formFields.js';
 
 test('escapeHtml escapes the five dangerous characters', () => {
   assert.equal(escapeHtml(`<script>&"'`), '&lt;script&gt;&amp;&quot;&#39;');
@@ -219,4 +219,41 @@ test('collectAccountFieldValues reads a boolean field from a checkbox and a text
   const fakeContainer = { querySelectorAll: () => fakeInputs };
   const result = collectAccountFieldValues(fakeContainer, schema);
   assert.deepEqual(result, { photoOptOut: true, address: 'Musterstr. 1' });
+});
+
+test('otFieldValuesEqual treats two different multiselect arrays as changed', () => {
+  const field = { key: 'craftOffer', type: 'multiselect' };
+  assert.equal(otFieldValuesEqual(field, ['Schmied'], ['Schneider']), false);
+  assert.equal(otFieldValuesEqual(field, ['Schmied'], ['Schmied', 'Schneider']), false);
+});
+
+test('otFieldValuesEqual treats two multiselect arrays with the same values in the same order as unchanged', () => {
+  const field = { key: 'craftOffer', type: 'multiselect' };
+  assert.equal(otFieldValuesEqual(field, ['Schmied', 'Schneider'], ['Schmied', 'Schneider']), true);
+  assert.equal(otFieldValuesEqual(field, [], []), true);
+  assert.equal(otFieldValuesEqual(field, undefined, []), true);
+});
+
+test('otFieldValuesEqual treats a blank number (undefined) and the \'\' default as unchanged', () => {
+  const field = { key: 'conTage', type: 'number' };
+  assert.equal(otFieldValuesEqual(field, '', undefined), true);
+  assert.equal(otFieldValuesEqual(field, undefined, undefined), true);
+});
+
+test('otFieldValuesEqual treats a real number change as changed', () => {
+  const field = { key: 'conTage', type: 'number' };
+  assert.equal(otFieldValuesEqual(field, 5, undefined), false);
+  assert.equal(otFieldValuesEqual(field, 5, 6), false);
+  assert.equal(otFieldValuesEqual(field, 5, 5), true);
+  assert.equal(otFieldValuesEqual(field, 5, '5'), true);
+});
+
+test('otFieldValuesEqual keeps boolean and plain-string comparison behavior', () => {
+  const boolField = { key: 'photoOptOut', type: 'boolean' };
+  assert.equal(otFieldValuesEqual(boolField, false, undefined), true);
+  assert.equal(otFieldValuesEqual(boolField, true, false), false);
+
+  const textField = { key: 'address', type: 'text' };
+  assert.equal(otFieldValuesEqual(textField, 'Musterstr. 1', 'Musterstr. 1'), true);
+  assert.equal(otFieldValuesEqual(textField, 'Musterstr. 1', 'Musterstr. 2'), false);
 });

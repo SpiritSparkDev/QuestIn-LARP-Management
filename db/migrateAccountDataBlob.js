@@ -16,6 +16,21 @@ const OLD_COLUMNS = {
 };
 const OLD_COLUMN_NAMES = Object.values(OLD_COLUMNS);
 
+// birthdate used to be free text typed via a TT.MM.JJJJ (German DD.MM.YYYY)
+// formatting helper; the new schema-driven field renders it as a native
+// <input type="date">, which requires ISO YYYY-MM-DD and otherwise silently
+// blanks the value (and the next save would then overwrite the real value
+// with an empty string -- silent PII loss). Converts only the exact old
+// German format; anything else (already-ISO, blank, partial, garbage) is
+// left completely unchanged, same as it would render today.
+export function normalizeBirthdateValue(value) {
+  if (typeof value === 'string' && /^\d{2}\.\d{2}\.\d{4}$/.test(value)) {
+    const [day, month, year] = value.split('.');
+    return `${year}-${month}-${day}`;
+  }
+  return value;
+}
+
 // One-time, idempotent data migration: decrypts the 7 old per-field
 // encrypted columns on users/invitations, merges them into a single JSON
 // blob, and writes it to the new account_data_enc column -- can't be a
@@ -40,7 +55,7 @@ export async function migrateAccountDataBlob() {
         const data = {};
         for (const [key, column] of Object.entries(OLD_COLUMNS)) {
           const value = decryptField(row[column]);
-          if (value !== null) data[key] = value;
+          if (value !== null) data[key] = key === 'birthdate' ? normalizeBirthdateValue(value) : value;
         }
         await client.query(`UPDATE ${table} SET account_data_enc = $1 WHERE id = $2`, [encryptFieldBlob(data), row.id]);
       }
