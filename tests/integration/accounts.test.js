@@ -17,6 +17,9 @@ await seedGroups();
 const { seedNscProfileSchema } = await import('../../db/seedNscProfileSchema.js');
 await seedNscProfileSchema();
 
+const { migrateAccountDataBlob } = await import('../../db/migrateAccountDataBlob.js');
+await migrateAccountDataBlob();
+
 const { createServer } = await import('../../backend/server.js');
 await import('../../backend/auth/register.js');
 await import('../../backend/auth/login.js');
@@ -105,9 +108,10 @@ test('PATCH /account encrypts and returns sensitive fields; unspecified fields s
     assert.equal(patched.emergencyContactFirstName, 'Erika');
     assert.equal(patched.emergencyContactPhone, '+49 987 654321');
 
-    const { rows } = await query('SELECT address_enc, emergency_contact_last_name_enc FROM users WHERE id = $1', [userId]);
-    assert.notEqual(rows[0].address_enc.toString('utf8'), 'Musterstraße 1, 12345 Musterstadt');
-    assert.notEqual(rows[0].emergency_contact_last_name_enc.toString('utf8'), 'Mustermann');
+    const { rows } = await query('SELECT account_data_enc FROM users WHERE id = $1', [userId]);
+    const rawBlob = rows[0].account_data_enc.toString('utf8');
+    assert.ok(!rawBlob.includes('Musterstraße 1, 12345 Musterstadt'));
+    assert.ok(!rawBlob.includes('Mustermann'));
 
     const secondPatchRes = await fetch(`http://localhost:${port}/account`, {
       method: 'PATCH',

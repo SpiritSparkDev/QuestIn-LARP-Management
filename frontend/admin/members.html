@@ -116,11 +116,11 @@
     import { api } from '/js/api.js';
     import { applyBranding } from '/js/branding.js';
     applyBranding();
-    import { escapeHtml, attachBirthdateFormatter, attachLiveValidation, ACCOUNT_FIELD_LABELS, renderEventOptions, renderAccountFieldInput } from '/js/formFields.js';
+    import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields } from '/js/formFields.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
     initSidebarToggle();
 
-    const ALL_FIELD_KEYS = Object.keys(ACCOUNT_FIELD_LABELS);
+    let accountSchema = [];
 
     const listBody = document.querySelector('#member-list tbody');
     const detailDialog = document.getElementById('detail-dialog');
@@ -178,12 +178,10 @@
     // Invite form: only ever shows/submits fields the caller is permitted to
     // set on a brand-new member.
     function buildFieldInputs(container, values = {}) {
-      container.innerHTML = myAccountFields
-        .filter((key) => key !== 'group')
-        .map((key) => renderAccountFieldInput(key, ACCOUNT_FIELD_LABELS[key] ?? key, values[key]))
+      container.innerHTML = accountSchema
+        .filter((field) => myAccountFields.includes(field.key))
+        .map((field) => renderAccountFieldInput(field, values[field.key]))
         .join('');
-      const birthdateInput = container.querySelector('[data-field="birthdate"]');
-      if (birthdateInput) attachBirthdateFormatter(birthdateInput);
       attachLiveValidation(container);
     }
 
@@ -206,16 +204,14 @@
       <input id="field-nickname" data-field="nickname" type="text" value="${escapeHtml(values.nickname ?? '')}">
     </div>
   `;
-      container.innerHTML = nameFieldsHtml + ALL_FIELD_KEYS.map((key) => {
-        const label = ACCOUNT_FIELD_LABELS[key] ?? key;
-        if (myAccountFields.includes(key)) {
+      container.innerHTML = nameFieldsHtml + accountSchema.map((field) => {
+        const label = field.label ?? field.key;
+        if (myAccountFields.includes(field.key)) {
           const sealedBadge = ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>';
-          return renderAccountFieldInput(key, label, values[key], { sealedBadge });
+          return renderAccountFieldInput(field, values[field.key], { sealedBadge });
         }
-        return `<label>${escapeHtml(label)}</label><p>${escapeHtml(values[key] ?? '–')}</p>`;
+        return `<div class="${escapeHtml(field.key)}-container"><label>${escapeHtml(label)}</label><p>${escapeHtml(values[field.key] ?? '–')}</p></div>`;
       }).join('');
-      const birthdateInput = container.querySelector('[data-field="birthdate"]');
-      if (birthdateInput) attachBirthdateFormatter(birthdateInput);
       attachLiveValidation(container);
     }
 
@@ -332,9 +328,11 @@
       message.textContent = '';
       message.className = '';
       const payload = {};
-      detailFields.querySelectorAll('[data-field]').forEach((input) => {
-        payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
-      });
+      const detailSchema = [
+        { key: 'firstName', type: 'text' }, { key: 'lastName', type: 'text' }, { key: 'nickname', type: 'text' },
+        ...accountSchema,
+      ];
+      Object.assign(payload, nullifyBlankNumberFields(detailSchema, collectAccountFieldValues(detailFields, detailSchema)));
       if (myAccountFields.includes('group') && detailGroupSelect.value) {
         payload.group = detailGroupSelect.value;
       }
@@ -471,9 +469,7 @@
       const payload = Object.fromEntries(formData);
       if (!payload.eventId) delete payload.eventId;
       payload.sendEmail = formData.has('sendEmail');
-      inviteFields.querySelectorAll('[data-field]').forEach((input) => {
-        payload[input.dataset.field] = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
-      });
+      Object.assign(payload, nullifyBlankNumberFields(accountSchema, collectAccountFieldValues(inviteFields, accountSchema)));
       try {
         const result = await api.post('/members/invite', payload);
         if (result.emailSent === false) {
@@ -512,6 +508,7 @@
       document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
       myAccountFields = account.accountFields ?? [];
       myUserId = account.id;
+      accountSchema = await api.get('/account-schema');
       buildFieldInputs(inviteFields);
       await loadEventOptions(inviteEventSelect);
       // The group select is only shown (and thus only ever sent) if the

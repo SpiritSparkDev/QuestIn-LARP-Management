@@ -1,55 +1,126 @@
-// OT (out-of-time) member fields: the encrypted, personal data columns a
-// group's account_fields permission can grant access to.
-export const ACCOUNT_FIELD_LABELS = {
-  address: 'Adresse', birthdate: 'Geburtsdatum', phone: 'Telefon',
-  emergencyContactLastName: 'Notfallkontakt: Name', emergencyContactFirstName: 'Notfallkontakt: Vorname', emergencyContactPhone: 'Notfallkontakt: Telefonnummer',
-  medicalNotes: 'Gesundheitshinweise',
-};
-
-// OT fields scoped to a single Con-Anmeldung instead of the account (moved
-// there in Teil 3 of the user-testing feedback package) -- the same
-// group.accountFields permission list gates visibility of these too.
-export const REGISTRATION_FIELD_LABELS = {
-  conTage: 'Con-Tage des Spielers',
-  accommodation: 'Unterbringung (Hütte/IT-Zelt/OT-Zelt, Anzahl, qm)',
-  craftOffer: 'Angebotenes Handwerk',
-  travelMethod: 'Anreise (Auto/Motorrad, Bahn, muss abgeholt werden)',
-  dataSharingOptOut: 'Daten nicht an andere Teilnehmer weitergeben (Ja/Nein)',
-  photoOptOut: 'Keine Fotoveröffentlichung (Ja/Nein)',
-};
-
 // Registration/participant status, keyed by the status column's DB value.
 export const STATUS_LABELS = {
   notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet',
   checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt',
 };
 
-// True if a Ja/Nein opt-out field's raw stored value means "yes" (checked).
-// These fields are free text at the DB layer, so this also accepts whatever
-// case a user typed before the field became a checkbox.
-export function isOptOutYes(value) {
-  return typeof value === 'string' && value.trim().toLowerCase() === 'ja';
+// Renders one OT (account/registration) field from a schema-shaped field
+// definition ({key, label, type, options}) -- same field shape as IT
+// (character) schema fields. `sealedBadge`, if given, is raw HTML appended
+// to the label (e.g. the lock-icon "Verschlüsselt" badge). Each field is
+// wrapped in its own `<div class="${key}-container">` -- this wrapper
+// carries no styling today and looks removable, but it's a deliberate
+// per-field CSS/JS hook the user added for upcoming UI work. Do not delete
+// it as "unused" or collapse it back to a bare label+input.
+export function renderAccountFieldInput(field, value, { sealedBadge = '', idPrefix = '' } = {}) {
+  const { key, type } = field;
+  const escapedLabel = escapeHtml(field.label ?? key) + sealedBadge;
+  const val = escapeHtml(value);
+  const id = `${idPrefix}field-${key}`;
+  const required = field.required ? 'required' : '';
+
+  if (type === 'boolean') {
+    const checked = value ? ' checked' : '';
+    return `<div class="${key}-container"><label for="${id}"><input id="${id}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}</label></div>`;
+  }
+  if (type === 'multiselect' && Array.isArray(field.options)) {
+    const selected = Array.isArray(value) ? value : [];
+    const checkboxes = field.options.map((opt, i) => {
+      const escapedOpt = escapeHtml(opt);
+      const checked = selected.includes(opt) ? ' checked' : '';
+      return `<label for="${id}-${i}"><input id="${id}-${i}" data-field="${key}" type="checkbox" value="${escapedOpt}"${checked}> ${escapedOpt}</label>`;
+    }).join('');
+    return `<div class="${key}-container"><span>${escapedLabel}</span>${checkboxes}</div>`;
+  }
+  if (type === 'number') {
+    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="number" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  if (type === 'link') {
+    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="url" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  if (type === 'date') {
+    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="date" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  if (type === 'textarea') {
+    return `<div class="${key}-container"><textarea id="${id}" data-field="${key}" ${required}>${val}</textarea><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  if (type === 'select' && Array.isArray(field.options)) {
+    const options = field.options.map((opt) => {
+      const escapedOpt = escapeHtml(opt);
+      const selected = opt === value ? ' selected' : '';
+      return `<option value="${escapedOpt}"${selected}>${escapedOpt}</option>`;
+    }).join('');
+    return `<div class="${key}-container"><select id="${id}" data-field="${key}" ${required}><option value=""></option>${options}</select><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="text" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
 }
 
-// Free text let a caller type anything besides Ja/Nein; these two are
-// rendered as checkboxes everywhere they're editable instead.
-export const OPT_OUT_KEYS = ['dataSharingOptOut', 'photoOptOut'];
-
-// Renders one OT (account) field as a labeled input: a checkbox for the two
-// Ja/Nein opt-out keys, a text input otherwise. `sealedBadge`, if given, is
-// raw HTML appended to the label (e.g. the lock-icon "Verschlüsselt" badge).
-// Each field is wrapped in its own `<div class="${key}-container">` -- this
-// wrapper carries no styling today and looks removable, but it's a
-// deliberate per-field CSS/JS hook the user added for upcoming UI work.
-// Do not delete it as "unused" or collapse it back to a bare label+input.
-export function renderAccountFieldInput(key, label, value, { sealedBadge = '', idPrefix = '' } = {}) {
-  const escapedLabel = escapeHtml(label);
-  const id = `${idPrefix}field-${key}`;
-  if (OPT_OUT_KEYS.includes(key)) {
-    const checked = isOptOutYes(value) ? ' checked' : '';
-    return `<div class="${key}-container"><label for="${id}"><input id="${id}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}${sealedBadge}</label></div>`;
+// Reads a schema-driven OT-field container's current values back into a
+// plain object, keyed by field key. Mirrors collectFieldValues's per-type
+// logic, but keys off [data-field] elements (this page family's existing
+// DOM convention) instead of a <form>'s `name` attributes.
+export function collectAccountFieldValues(container, schema) {
+  const result = {};
+  const inputsByKey = new Map();
+  container.querySelectorAll('[data-field]').forEach((input) => {
+    if (!inputsByKey.has(input.dataset.field)) inputsByKey.set(input.dataset.field, []);
+    inputsByKey.get(input.dataset.field).push(input);
+  });
+  for (const field of schema) {
+    const inputs = inputsByKey.get(field.key) ?? [];
+    if (inputs.length === 0) continue;
+    if (field.type === 'boolean') {
+      result[field.key] = inputs[0].checked;
+    } else if (field.type === 'multiselect') {
+      result[field.key] = inputs.filter((i) => i.checked).map((i) => i.value);
+    } else if (field.type === 'number') {
+      result[field.key] = inputs[0].value === '' ? undefined : Number(inputs[0].value);
+    } else {
+      result[field.key] = inputs[0].value;
+    }
   }
-  return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="text" value="${escapeHtml(value ?? '')}"><label for="${id}">${escapedLabel}${sealedBadge}</label></div>`;
+  return result;
+}
+
+// collectAccountFieldValues returns `undefined` for a blank number input --
+// deliberately, since otFieldValuesEqual's own dirty-check comparisons rely
+// on `undefined` meaning "no value" (it treats null the same way in that
+// branch, so this is safe to apply before a dirty-check comparison too).
+// But a payload that's actually SENT needs `null` for that same case,
+// because every repository merge does `if (fields[key] !== undefined)
+// nextData[key] = fields[key]` -- an `undefined` payload value is dropped
+// by JSON.stringify entirely and silently skipped, so a numeric field once
+// set could otherwise never be cleared back to blank via the UI. Only
+// touches keys collectAccountFieldValues actually populated (a field the
+// caller wasn't permitted/didn't render is correctly left absent).
+export function nullifyBlankNumberFields(schema, values) {
+  const result = { ...values };
+  for (const field of schema) {
+    if (field.type === 'number' && field.key in result && result[field.key] === undefined) {
+      result[field.key] = null;
+    }
+  }
+  return result;
+}
+
+// Compares an OT field's before/after value for the "did this actually
+// change" guard used before PATCH /members/:id or PUT .../ot-fields (both
+// of which mail every event orga/hilfs_orga plus every admin/moderator on
+// success) -- plain === breaks for multiselect (a fresh array every
+// collect) and for a blank number (undefined vs the '' default).
+export function otFieldValuesEqual(field, a, b) {
+  if (field.type === 'boolean') return Boolean(a) === Boolean(b);
+  if (field.type === 'multiselect') {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    return arrA.length === arrB.length && arrA.every((v, i) => v === arrB[i]);
+  }
+  if (field.type === 'number') {
+    const normA = a === undefined || a === null || a === '' ? undefined : Number(a);
+    const normB = b === undefined || b === null || b === '' ? undefined : Number(b);
+    return normA === normB;
+  }
+  return a === b;
 }
 
 // Formats a character (IT) custom-field value for display, e.g. as a
@@ -73,16 +144,6 @@ export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
-}
-
-export function attachBirthdateFormatter(inputEl) {
-  inputEl.addEventListener('input', () => {
-    const digits = inputEl.value.replace(/\D/g, '').slice(0, 8);
-    let formatted = digits.slice(0, 2);
-    if (digits.length > 2) formatted += `.${digits.slice(2, 4)}`;
-    if (digits.length > 4) formatted += `.${digits.slice(4, 8)}`;
-    inputEl.value = formatted;
-  });
 }
 
 let liveValidationIdCounter = 0;
@@ -157,6 +218,9 @@ export function renderField(field, value, idPrefix = '') {
   }
   if (field.type === 'link') {
     return `<input id="${id}" name="${key}" type="url" value="${val}" ${required}><label for="${id}">${label}</label>`;
+  }
+  if (field.type === 'date') {
+    return `<input id="${id}" name="${key}" type="date" value="${val}" ${required}><label for="${id}">${label}</label>`;
   }
   if (field.type === 'textarea') {
     return `<textarea id="${id}" name="${key}" ${required}>${val}</textarea><label for="${id}">${label}</label>`;

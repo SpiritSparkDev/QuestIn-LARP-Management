@@ -149,6 +149,19 @@ test('validateCharacterData accepts a well-formed https link', () => {
   assert.deepEqual(errors, []);
 });
 
+const DATE_SCHEMA = [
+  { key: 'geburtstag', label: 'Geburtstag', type: 'date', required: false },
+];
+
+test('a date value given as a string is valid', () => {
+  assert.deepEqual(validateCharacterData(DATE_SCHEMA, { geburtstag: '2000-01-01' }), []);
+});
+
+test('a non-string value for a date field is an error', () => {
+  const errors = validateCharacterData(DATE_SCHEMA, { geburtstag: 123 });
+  assert.ok(errors.some((e) => e.includes('geburtstag')));
+});
+
 test('validateSchemaShape accepts a well-formed schema', () => {
   assert.equal(validateSchemaShape([
     { key: 'klasse', label: 'Klasse', type: 'text' },
@@ -186,4 +199,11 @@ test('validateSchemaShape rejects duplicate keys within one schema', () => {
     { key: 'klasse', label: 'Klasse', type: 'text' },
     { key: 'klasse', label: 'Klasse (2)', type: 'text' },
   ]), false);
+});
+
+test('validateSchemaShape accepts a custom reserved-key list, rejecting only those keys', () => {
+  assert.equal(validateSchemaShape([{ key: 'group', label: 'Gruppe', type: 'text' }], ['id', 'group']), false);
+  assert.equal(validateSchemaShape([{ key: 'address', label: 'Adresse', type: 'text' }], ['id', 'group']), true);
+  // Default reserved keys still apply when no second argument is given.
+  assert.equal(validateSchemaShape([{ key: 'name', label: 'Name', type: 'text' }]), false);
 });

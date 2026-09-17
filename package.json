@@ -13,7 +13,9 @@
     "migrate": "node db/migrate.js",
     "seed-groups": "node db/seedGroups.js",
     "seed-nsc-schema": "node db/seedNscProfileSchema.js",
-    "seed-admin": "node db/seedAdmin.js"
+    "seed-admin": "node db/seedAdmin.js",
+    "migrate-account-data-blob": "node db/migrateAccountDataBlob.js",
+    "migrate-registration-data-blob": "node db/migrateRegistrationDataBlob.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

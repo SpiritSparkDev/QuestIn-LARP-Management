@@ -1,6 +1,7 @@
 import { query } from '../db.js';
 import { displayName } from '../displayName.js';
-import { decryptEncryptedAccountFields, encryptAccountFieldValues } from '../accountFields.js';
+import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
+import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 
 function decryptAccount(row) {
   return {
@@ -18,13 +19,13 @@ function decryptAccount(row) {
     canOverrideCheckinStatus: row.can_override_checkin_status,
     emailVerified: row.email_verified,
     discordUsername: row.discord_username,
-    ...decryptEncryptedAccountFields(row),
+    ...decryptFieldBlob(row.account_data_enc),
   };
 }
 
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys,
-  users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc,
+  users.account_data_enc,
   groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status,
   discord_accounts.username AS discord_username
 `;
@@ -41,19 +42,26 @@ export async function getAccount(userId) {
 }
 
 export async function updateAccount(userId, fields) {
+  const schema = await getAccountFieldSchema();
+  const { rows: currentRows } = await query('SELECT account_data_enc FROM users WHERE id = $1', [userId]);
+  if (currentRows.length === 0) return null;
+  const nextData = decryptFieldBlob(currentRows[0].account_data_enc);
+  for (const field of schema) {
+    if (fields[field.key] !== undefined) nextData[field.key] = fields[field.key];
+  }
+
+  // Merges into the blob in JS rather than one atomic UPDATE ... COALESCE
+  // per column (impossible once the field set is dynamic) -- two
+  // concurrent PATCH /account calls touching different fields on the same
+  // account can race, last write wins. Accepted tradeoff of the
+  // single-blob model (design spec 2026-09-17, section 9).
   const { rows } = await query(
     `UPDATE users SET
        first_name = COALESCE($2, first_name),
        last_name = COALESCE($3, last_name),
        nickname = COALESCE($4, nickname),
        hotkeys = COALESCE($5, hotkeys),
-       address_enc = COALESCE($6, address_enc),
-       birthdate_enc = COALESCE($7, birthdate_enc),
-       phone_enc = COALESCE($8, phone_enc),
-       emergency_contact_last_name_enc = COALESCE($9, emergency_contact_last_name_enc),
-       emergency_contact_first_name_enc = COALESCE($10, emergency_contact_first_name_enc),
-       emergency_contact_phone_enc = COALESCE($11, emergency_contact_phone_enc),
-       medical_notes_enc = COALESCE($12, medical_notes_enc)
+       account_data_enc = $6
      WHERE id = $1
      RETURNING id`,
     [
@@ -62,7 +70,7 @@ export async function updateAccount(userId, fields) {
       fields.lastName ?? null,
       fields.nickname ?? null,
       fields.hotkeys !== undefined ? JSON.stringify(fields.hotkeys) : null,
-      ...encryptAccountFieldValues(fields),
+      encryptFieldBlob(nextData),
     ]
   );
   if (rows.length === 0) return null;
