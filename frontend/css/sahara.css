@@ -471,7 +471,7 @@ label {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--on-surface-variant);
-  margin: 18px 0 6px;
+  margin: 6px 0 18px;
 }
 
 #dynamic-fields label,
