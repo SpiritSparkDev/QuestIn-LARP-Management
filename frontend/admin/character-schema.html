@@ -90,6 +90,7 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
       <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>Ja/Nein</option>
       <option value="multiselect" ${field.type === 'multiselect' ? 'selected' : ''}>Mehrfachauswahl</option>
       <option value="link" ${field.type === 'link' ? 'selected' : ''}>Link</option>
+      <option value="date" ${field.type === 'date' ? 'selected' : ''}>Datum</option>
     </select>
     <input type="text" placeholder="Optionen (kommagetrennt, nur bei Auswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
     <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>

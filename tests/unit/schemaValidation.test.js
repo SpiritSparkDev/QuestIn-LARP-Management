@@ -149,6 +149,19 @@ test('validateCharacterData accepts a well-formed https link', () => {
   assert.deepEqual(errors, []);
 });
 
+const DATE_SCHEMA = [
+  { key: 'geburtstag', label: 'Geburtstag', type: 'date', required: false },
+];
+
+test('a date value given as a string is valid', () => {
+  assert.deepEqual(validateCharacterData(DATE_SCHEMA, { geburtstag: '2000-01-01' }), []);
+});
+
+test('a non-string value for a date field is an error', () => {
+  const errors = validateCharacterData(DATE_SCHEMA, { geburtstag: 123 });
+  assert.ok(errors.some((e) => e.includes('geburtstag')));
+});
+
 test('validateSchemaShape accepts a well-formed schema', () => {
   assert.equal(validateSchemaShape([
     { key: 'klasse', label: 'Klasse', type: 'text' },

@@ -60,6 +60,9 @@ export function validateCharacterData(schema, data) {
     if (!isEmpty && field.type === 'link' && typeof value === 'string' && !/^https?:\/\//.test(value)) {
       errors.push(`${label} muss mit http:// oder https:// beginnen`);
     }
+    if (!isEmpty && field.type === 'date' && typeof value !== 'string') {
+      errors.push(`${label} muss ein Datum sein`);
+    }
     if (!isEmpty && typeof value === 'string' && value.length > MAX_VALUE_LENGTH) {
       errors.push(`${label} darf höchstens ${MAX_VALUE_LENGTH} Zeichen lang sein`);
     }

@@ -100,6 +100,13 @@ test('renderField renders a URL input for type "link"', () => {
   assert.ok(html.includes('value="https://example.com/sheet"'));
 });
 
+test('renderField renders an input type="date" for type "date"', () => {
+  const html = renderField({ key: 'geburtstag', label: 'Geburtstag', type: 'date' }, '2000-01-01');
+  assert.ok(html.includes('type="date"'));
+  assert.ok(html.includes('value="2000-01-01"'));
+  assert.ok(html.includes('name="geburtstag"'));
+});
+
 test('renderField escapes multiselect option labels', () => {
   const field = { key: 'x', label: 'X', type: 'multiselect', options: ['<b>evil</b>'] };
   const html = renderField(field, []);
