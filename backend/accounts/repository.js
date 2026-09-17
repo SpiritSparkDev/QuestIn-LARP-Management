@@ -17,6 +17,7 @@ function decryptAccount(row) {
     accountFields: row.account_fields,
     canOverrideCheckinStatus: row.can_override_checkin_status,
     emailVerified: row.email_verified,
+    discordUsername: row.discord_username,
     ...decryptEncryptedAccountFields(row),
   };
 }
@@ -24,10 +25,14 @@ function decryptAccount(row) {
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys,
   users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc,
-  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status
+  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status,
+  discord_accounts.username AS discord_username
 `;
 
-const FROM_JOIN = `FROM users JOIN groups ON groups.id = users.group_id`;
+const FROM_JOIN = `
+  FROM users JOIN groups ON groups.id = users.group_id
+  LEFT JOIN oauth_accounts discord_accounts ON discord_accounts.user_id = users.id AND discord_accounts.provider = 'discord'
+`;
 
 export async function getAccount(userId) {
   const { rows } = await query(`SELECT ${SELECT_COLUMNS} ${FROM_JOIN} WHERE users.id = $1`, [userId]);

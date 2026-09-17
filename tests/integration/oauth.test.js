@@ -93,6 +93,18 @@ test('findOrCreateOAuthUser returns the same user for a repeat login (no duplica
   assert.equal(rows[0].count, 1);
 });
 
+test('findOrCreateOAuthUser stores the provider username and refreshes it on repeat login', async () => {
+  const email = `oauth-username-${crypto.randomUUID()}@example.com`;
+  const providerUserId = `discord-${crypto.randomUUID()}`;
+  await findOrCreateOAuthUser('discord', providerUserId, email, 'Discord Name', true, 'old_handle');
+  let { rows } = await query('SELECT username FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2', ['discord', providerUserId]);
+  assert.equal(rows[0].username, 'old_handle');
+
+  await findOrCreateOAuthUser('discord', providerUserId, email, 'Discord Name', true, 'new_handle');
+  ({ rows } = await query('SELECT username FROM oauth_accounts WHERE provider = $1 AND provider_user_id = $2', ['discord', providerUserId]));
+  assert.equal(rows[0].username, 'new_handle');
+});
+
 test('findOrCreateOAuthUser links to an existing password-registered account by email', async () => {
   const email = `oauth-link-${crypto.randomUUID()}@example.com`;
   const { rows: existing } = await query(

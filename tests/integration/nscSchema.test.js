@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { log } from 'node:console';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   || 'postgres://app:app@localhost:5433/pakyrion_test';

@@ -5,7 +5,13 @@ import { decryptEncryptedAccountFields, encryptAccountFieldValues } from '../acc
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.deactivated_at,
   users.address_enc, users.birthdate_enc, users.phone_enc, users.emergency_contact_last_name_enc, users.emergency_contact_first_name_enc, users.emergency_contact_phone_enc, users.medical_notes_enc,
-  groups.id AS group_id, groups.key AS group_key, groups.name AS group_name
+  groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
+  discord_accounts.username AS discord_username
+`;
+
+const FROM_JOIN = `
+  FROM users JOIN groups ON groups.id = users.group_id
+  LEFT JOIN oauth_accounts discord_accounts ON discord_accounts.user_id = users.id AND discord_accounts.provider = 'discord'
 `;
 
 function decryptMember(row) {
@@ -20,6 +26,7 @@ function decryptMember(row) {
     status: row.deactivated_at ? 'deactivated' : 'active',
     deactivatedAt: row.deactivated_at,
     group: { id: row.group_id, key: row.group_key, name: row.group_name },
+    discordUsername: row.discord_username,
     ...decryptEncryptedAccountFields(row),
   };
 }
@@ -27,14 +34,14 @@ function decryptMember(row) {
 export async function listMembers(includeDeactivated = false) {
   const where = includeDeactivated ? '' : 'WHERE users.deactivated_at IS NULL';
   const { rows } = await query(
-    `SELECT ${SELECT_COLUMNS} FROM users JOIN groups ON groups.id = users.group_id ${where} ORDER BY users.last_name, users.first_name`
+    `SELECT ${SELECT_COLUMNS} ${FROM_JOIN} ${where} ORDER BY users.last_name, users.first_name`
   );
   return rows.map(decryptMember);
 }
 
 export async function getMember(id) {
   const { rows } = await query(
-    `SELECT ${SELECT_COLUMNS} FROM users JOIN groups ON groups.id = users.group_id WHERE users.id = $1`,
+    `SELECT ${SELECT_COLUMNS} ${FROM_JOIN} WHERE users.id = $1`,
     [id]
   );
   if (rows.length === 0) return null;

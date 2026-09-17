@@ -115,7 +115,7 @@ router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
     return { status: 502, body: { error: 'oauth provider error' }, headers: { 'Set-Cookie': clearStateCookie } };
   }
   const info = await userInfoRes.json();
-  const { providerUserId, email, name, emailVerified } = provider.extractUser(info);
+  const { providerUserId, email, name, emailVerified, providerUsername } = provider.extractUser(info);
   if (!email || !providerUserId) {
     return {
       status: 502,
@@ -126,7 +126,7 @@ router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
 
   let userId;
   try {
-    userId = await findOrCreateOAuthUser(params.provider, providerUserId, email, name, emailVerified);
+    userId = await findOrCreateOAuthUser(params.provider, providerUserId, email, name, emailVerified, providerUsername);
   } catch (err) {
     if (err.code === 'OAUTH_EMAIL_NOT_VERIFIED') {
       logger.info('oauth link rejected: unverified email', { provider: params.provider });
@@ -158,7 +158,7 @@ router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
   };
 });
 
-export async function findOrCreateOAuthUser(providerName, providerUserId, email, name, emailVerifiedByProvider) {
+export async function findOrCreateOAuthUser(providerName, providerUserId, email, name, emailVerifiedByProvider, providerUsername) {
   const normalizedEmail = email.toLowerCase();
 
   const existingOAuth = await query(
@@ -172,6 +172,12 @@ export async function findOrCreateOAuthUser(providerName, providerUserId, email,
       const err = new Error('oauth account deactivated');
       err.code = 'OAUTH_ACCOUNT_DEACTIVATED';
       throw err;
+    }
+    if (providerUsername) {
+      await query(
+        'UPDATE oauth_accounts SET username = $3 WHERE provider = $1 AND provider_user_id = $2',
+        [providerName, providerUserId, providerUsername]
+      );
     }
     return existingOAuth.rows[0].user_id;
   }
@@ -201,8 +207,8 @@ export async function findOrCreateOAuthUser(providerName, providerUserId, email,
   }
 
   await query(
-    'INSERT INTO oauth_accounts (user_id, provider, provider_user_id) VALUES ($1, $2, $3)',
-    [userId, providerName, providerUserId]
+    'INSERT INTO oauth_accounts (user_id, provider, provider_user_id, username) VALUES ($1, $2, $3, $4)',
+    [userId, providerName, providerUserId, providerUsername ?? null]
   );
   return userId;
 }

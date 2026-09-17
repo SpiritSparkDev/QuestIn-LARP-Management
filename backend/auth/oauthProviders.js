@@ -34,6 +34,7 @@ export const PROVIDERS = {
       email: info.email,
       name: info.global_name || info.username,
       emailVerified: info.verified === true,
+      providerUsername: info.username,
     }),
   },
 };

@@ -407,6 +407,7 @@ h3 {
   font-size: 16px;
   font-weight: 600;
   color: var(--on-surface);
+  margin: 2rem 0px 1rem;
 }
 
 .lede,
@@ -952,6 +953,11 @@ tbody tr:last-child td {
   color: var(--primary);
   text-transform: none;
   letter-spacing: 0;
+}
+
+.discord-badge {
+  display: inline-flex;
+  vertical-align: middle;
 }
 
 .char-files {

@@ -64,6 +64,23 @@ test('GET /account returns the logged-in user\'s account with null sensitive fie
   });
 });
 
+test('GET /account exposes discordUsername only when a discord account is linked', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await registerLoginAndGetCookie(port);
+
+    const before = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: cookie } });
+    assert.equal((await before.json()).discordUsername, null);
+
+    await query(
+      "INSERT INTO oauth_accounts (user_id, provider, provider_user_id, username) VALUES ($1, 'discord', $2, 'somebody')",
+      [userId, `discord-${crypto.randomUUID()}`]
+    );
+
+    const after = await fetch(`http://localhost:${port}/account`, { headers: { Cookie: cookie } });
+    assert.equal((await after.json()).discordUsername, 'somebody');
+  });
+});
+
 test('PATCH /account encrypts and returns sensitive fields; unspecified fields survive a partial update', async () => {
   await withTestServer(async (port) => {
     const { userId, cookie } = await registerLoginAndGetCookie(port);
