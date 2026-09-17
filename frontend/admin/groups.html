@@ -63,20 +63,7 @@
 
         <h3>Bearbeitbare Account-Felder (in der Mitgliederverwaltung)</h3>
         <div class="checkbox-group" id="field-checkboxes">
-          <label><input type="checkbox" value="address"> Adresse</label>
-          <label><input type="checkbox" value="birthdate"> Geburtsdatum</label>
-          <label><input type="checkbox" value="phone"> Telefon</label>
-          <label><input type="checkbox" value="emergencyContactLastName"> Notfallkontakt: Name</label>
-          <label><input type="checkbox" value="emergencyContactFirstName"> Notfallkontakt: Vorname</label>
-          <label><input type="checkbox" value="emergencyContactPhone"> Notfallkontakt: Telefonnummer</label>
-          <label><input type="checkbox" value="medicalNotes"> Gesundheitshinweise</label>
           <label><input type="checkbox" value="group"> Gruppe</label>
-          <label><input type="checkbox" value="conTage"> Con-Tage des Spielers</label>
-          <label><input type="checkbox" value="accommodation"> Unterbringung</label>
-          <label><input type="checkbox" value="craftOffer"> Angebotenes Handwerk</label>
-          <label><input type="checkbox" value="travelMethod"> Anreise</label>
-          <label><input type="checkbox" value="dataSharingOptOut"> Daten nicht weitergeben (Opt-out)</label>
-          <label><input type="checkbox" value="photoOptOut"> Keine Fotoveröffentlichung (Opt-out)</label>
         </div>
 
         <div class="checkbox-group">
@@ -103,6 +90,14 @@ applyBranding();
 import { escapeHtml } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 initSidebarToggle();
+
+const fieldCheckboxes = document.getElementById('field-checkboxes');
+
+function appendFieldCheckboxes(schema) {
+  fieldCheckboxes.insertAdjacentHTML('beforeend', schema.map((field) =>
+    `<label><input type="checkbox" value="${escapeHtml(field.key)}"> ${escapeHtml(field.label ?? field.key)}</label>`
+  ).join(''));
+}
 
 const listBody = document.querySelector('#group-list tbody');
 const form = document.getElementById('group-form');
@@ -238,6 +233,9 @@ try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  const [accountSchema, registrationSchema] = await Promise.all([api.get('/account-schema'), api.get('/registration-schema')]);
+  appendFieldCheckboxes(accountSchema);
+  appendFieldCheckboxes(registrationSchema);
   await loadGroups();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

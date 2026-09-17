@@ -4,12 +4,16 @@ import crypto from 'node:crypto';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   || 'postgres://app:app@localhost:5433/pakyrion_test';
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64);
 
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
 const { seedGroups } = await import('../../db/seedGroups.js');
 await seedGroups();
+
+const { migrateRegistrationDataBlob } = await import('../../db/migrateRegistrationDataBlob.js');
+await migrateRegistrationDataBlob();
 
 const { query, closePool } = await import('../../backend/db.js');
 
@@ -81,6 +85,20 @@ test('registrations_character_con_role_check rejects an sc registration with no 
     ),
     /registrations_character_con_role_check/
   );
+});
+
+test('registrations.con_tage_enc column no longer exists after migration', async () => {
+  const { rows } = await query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'registrations' AND column_name = 'con_tage_enc'`
+  );
+  assert.equal(rows.length, 0);
+});
+
+test('registrations.registration_data_enc column exists after migration', async () => {
+  const { rows } = await query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'registrations' AND column_name = 'registration_data_enc'`
+  );
+  assert.equal(rows.length, 1);
 });
 
 test.after(async () => {

@@ -98,6 +98,39 @@ test('POST /groups rejects a duplicate key', async () => {
   }
 });
 
+test('POST /groups accepts a newly-admin-added account-schema field key in accountFields', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const schemaRes = await fetch(`http://localhost:${port}/account-schema`, { headers: { Cookie: cookie } });
+    const originalSchema = await schemaRes.json();
+    const newSchema = [...originalSchema, { key: 'newTestField', label: 'Neues Testfeld', type: 'text', required: false }];
+    try {
+      await fetch(`http://localhost:${port}/account-schema`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ schema: newSchema }),
+      });
+
+      const res = await fetch(`http://localhost:${port}/groups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ key: `test_group_${crypto.randomUUID().slice(0, 8)}`, name: 'Test Group', accountFields: ['newTestField'] }),
+      });
+      assert.equal(res.status, 201);
+    } finally {
+      await fetch(`http://localhost:${port}/account-schema`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ schema: originalSchema }),
+      });
+    }
+  } finally {
+    server.close();
+  }
+});
+
 test('POST /groups rejects an invalid menu key', async () => {
   const server = createServer().listen(0);
   try {
@@ -316,6 +349,6 @@ test('DELETE /groups/:id returns 404 for an unknown group', async () => {
 });
 
 test.after(async () => {
-  await query("DELETE FROM groups WHERE key ~ '^(custom|dup|editable|renamed|deletable|inuse)_[0-9]+$'");
+  await query("DELETE FROM groups WHERE key ~ '^(custom|dup|editable|renamed|deletable|inuse)_[0-9]+$' OR key ~ '^test_group_[0-9a-f]+$'");
   await closePool();
 });

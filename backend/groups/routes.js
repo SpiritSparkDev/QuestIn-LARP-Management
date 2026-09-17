@@ -3,19 +3,26 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { listGroups, getGroup, createGroup, updateGroup, deleteGroup } from './repository.js';
-import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
-import { REGISTRATION_FIELD_KEYS } from '../registrationFields.js';
+import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
+import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 
 const MENU_KEYS = ['konto', 'mitglieder', 'events', 'checkin'];
 const KEY_PATTERN = /^[a-z0-9_]+$/;
-const ALLOWED_ACCOUNT_FIELD_KEYS = [...ACCOUNT_FIELD_KEYS, ...REGISTRATION_FIELD_KEYS];
 
 function isValidMenuList(value) {
   return Array.isArray(value) && value.every((v) => MENU_KEYS.includes(v));
 }
 
-function isValidFieldList(value) {
-  return Array.isArray(value) && value.every((v) => ALLOWED_ACCOUNT_FIELD_KEYS.includes(v));
+// 'group' is a hardcoded permission key, never part of either schema.
+async function allowedFieldKeys() {
+  const [accountSchema, registrationSchema] = await Promise.all([getAccountFieldSchema(), getRegistrationFieldSchema()]);
+  return ['group', ...accountSchema.map((f) => f.key), ...registrationSchema.map((f) => f.key)];
+}
+
+async function isValidFieldList(value) {
+  if (!Array.isArray(value)) return false;
+  const allowed = await allowedFieldKeys();
+  return value.every((v) => allowed.includes(v));
 }
 
 router.get('/groups', requireAuth(requireAdminGroup(async () => {
@@ -36,8 +43,8 @@ router.post('/groups', requireAuth(requireAdminGroup(async ({ req }) => {
   if (visibleMenus !== undefined && !isValidMenuList(visibleMenus)) {
     return { status: 400, body: { error: `visibleMenus must be an array containing only: ${MENU_KEYS.join(', ')}` } };
   }
-  if (accountFields !== undefined && !isValidFieldList(accountFields)) {
-    return { status: 400, body: { error: `accountFields must be an array containing only: ${ALLOWED_ACCOUNT_FIELD_KEYS.join(', ')}` } };
+  if (accountFields !== undefined && !(await isValidFieldList(accountFields))) {
+    return { status: 400, body: { error: `accountFields must be an array containing only: ${(await allowedFieldKeys()).join(', ')}` } };
   }
   try {
     const group = await createGroup({ key, name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus });
@@ -60,8 +67,8 @@ router.put('/groups/:id', requireAuth(requireAdminGroup(async ({ req, params }) 
   if (visibleMenus !== undefined && !isValidMenuList(visibleMenus)) {
     return { status: 400, body: { error: `visibleMenus must be an array containing only: ${MENU_KEYS.join(', ')}` } };
   }
-  if (accountFields !== undefined && !isValidFieldList(accountFields)) {
-    return { status: 400, body: { error: `accountFields must be an array containing only: ${ALLOWED_ACCOUNT_FIELD_KEYS.join(', ')}` } };
+  if (accountFields !== undefined && !(await isValidFieldList(accountFields))) {
+    return { status: 400, body: { error: `accountFields must be an array containing only: ${(await allowedFieldKeys()).join(', ')}` } };
   }
   const group = await updateGroup(params.id, { name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus });
   return { status: 200, body: group };

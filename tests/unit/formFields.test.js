@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeHtml, renderField, collectFieldValues, renderAccountFieldInput } from '../../frontend/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, otFieldValuesEqual } from '../../frontend/js/formFields.js';
 
 test('escapeHtml escapes the five dangerous characters', () => {
   assert.equal(escapeHtml(`<script>&"'`), '&lt;script&gt;&amp;&quot;&#39;');
@@ -100,6 +100,13 @@ test('renderField renders a URL input for type "link"', () => {
   assert.ok(html.includes('value="https://example.com/sheet"'));
 });
 
+test('renderField renders an input type="date" for type "date"', () => {
+  const html = renderField({ key: 'geburtstag', label: 'Geburtstag', type: 'date' }, '2000-01-01');
+  assert.ok(html.includes('type="date"'));
+  assert.ok(html.includes('value="2000-01-01"'));
+  assert.ok(html.includes('name="geburtstag"'));
+});
+
 test('renderField escapes multiselect option labels', () => {
   const field = { key: 'x', label: 'X', type: 'multiselect', options: ['<b>evil</b>'] };
   const html = renderField(field, []);
@@ -160,30 +167,125 @@ test('collectFieldValues reads a text field as a plain string via get', () => {
   assert.equal(result.name, 'Isolde');
 });
 
-test('renderAccountFieldInput renders opt-out keys as checkboxes and others as text', () => {
-  const checkboxHtml = renderAccountFieldInput('photoOptOut', 'Keine Fotoveröffentlichung', 'Ja');
+test('renderAccountFieldInput renders a checkbox for type "boolean" and a text input otherwise, both wrapped in a per-field container div', () => {
+  const checkboxHtml = renderAccountFieldInput({ key: 'photoOptOut', label: 'Keine Fotoveröffentlichung', type: 'boolean' }, true);
+  assert.match(checkboxHtml, /class="photoOptOut-container"/);
   assert.match(checkboxHtml, /type="checkbox"/);
   assert.match(checkboxHtml, / checked/);
 
-  const uncheckedHtml = renderAccountFieldInput('photoOptOut', 'Keine Fotoveröffentlichung', 'Nein');
+  const uncheckedHtml = renderAccountFieldInput({ key: 'photoOptOut', label: 'Keine Fotoveröffentlichung', type: 'boolean' }, false);
   assert.doesNotMatch(uncheckedHtml, / checked/);
 
-  const textHtml = renderAccountFieldInput('address', 'Adresse', 'Musterstr. 1');
+  const textHtml = renderAccountFieldInput({ key: 'address', label: 'Adresse', type: 'text' }, 'Musterstr. 1');
+  assert.match(textHtml, /class="address-container"/);
   assert.match(textHtml, /type="text"/);
   assert.match(textHtml, /value="Musterstr\. 1"/);
 });
 
+test('renderAccountFieldInput supports select, number, multiselect, link, and date types like renderField', () => {
+  const selectHtml = renderAccountFieldInput({ key: 'shirtSize', label: 'Shirtgröße', type: 'select', options: ['S', 'M'] }, 'M');
+  assert.match(selectHtml, /<select/);
+  assert.match(selectHtml, /class="shirtSize-container"/);
+
+  const dateHtml = renderAccountFieldInput({ key: 'birthdate', label: 'Geburtsdatum', type: 'date' }, '2000-01-01');
+  assert.match(dateHtml, /type="date"/);
+  assert.match(dateHtml, /value="2000-01-01"/);
+});
+
 test('renderAccountFieldInput appends the sealedBadge HTML after the label text when given', () => {
-  const html = renderAccountFieldInput('address', 'Adresse', '', { sealedBadge: '<span class="sealed">X</span>' });
+  const html = renderAccountFieldInput({ key: 'address', label: 'Adresse', type: 'text' }, '', { sealedBadge: '<span class="sealed">X</span>' });
   assert.match(html, /Adresse<span class="sealed">X<\/span><\/label>/);
 });
 
 test('renderAccountFieldInput namespaces id/for with idPrefix, defaulting to unprefixed', () => {
-  const plain = renderAccountFieldInput('address', 'Adresse', '');
+  const plain = renderAccountFieldInput({ key: 'address', label: 'Adresse', type: 'text' }, '');
   assert.match(plain, /id="field-address"/);
   assert.match(plain, /for="field-address"/);
 
-  const prefixed = renderAccountFieldInput('address', 'Adresse', '', { idPrefix: 'edit-' });
+  const prefixed = renderAccountFieldInput({ key: 'address', label: 'Adresse', type: 'text' }, '', { idPrefix: 'edit-' });
   assert.match(prefixed, /id="edit-field-address"/);
   assert.match(prefixed, /for="edit-field-address"/);
+});
+
+test('collectAccountFieldValues reads a boolean field from a checkbox and a text field from its value', () => {
+  const schema = [
+    { key: 'photoOptOut', label: 'Foto', type: 'boolean' },
+    { key: 'address', label: 'Adresse', type: 'text' },
+  ];
+  const fakeInputs = [
+    { dataset: { field: 'photoOptOut' }, type: 'checkbox', checked: true },
+    { dataset: { field: 'address' }, type: 'text', value: 'Musterstr. 1' },
+  ];
+  const fakeContainer = { querySelectorAll: () => fakeInputs };
+  const result = collectAccountFieldValues(fakeContainer, schema);
+  assert.deepEqual(result, { photoOptOut: true, address: 'Musterstr. 1' });
+});
+
+test('otFieldValuesEqual treats two different multiselect arrays as changed', () => {
+  const field = { key: 'craftOffer', type: 'multiselect' };
+  assert.equal(otFieldValuesEqual(field, ['Schmied'], ['Schneider']), false);
+  assert.equal(otFieldValuesEqual(field, ['Schmied'], ['Schmied', 'Schneider']), false);
+});
+
+test('otFieldValuesEqual treats two multiselect arrays with the same values in the same order as unchanged', () => {
+  const field = { key: 'craftOffer', type: 'multiselect' };
+  assert.equal(otFieldValuesEqual(field, ['Schmied', 'Schneider'], ['Schmied', 'Schneider']), true);
+  assert.equal(otFieldValuesEqual(field, [], []), true);
+  assert.equal(otFieldValuesEqual(field, undefined, []), true);
+});
+
+test('otFieldValuesEqual treats a blank number (undefined) and the \'\' default as unchanged', () => {
+  const field = { key: 'conTage', type: 'number' };
+  assert.equal(otFieldValuesEqual(field, '', undefined), true);
+  assert.equal(otFieldValuesEqual(field, undefined, undefined), true);
+});
+
+test('otFieldValuesEqual treats a real number change as changed', () => {
+  const field = { key: 'conTage', type: 'number' };
+  assert.equal(otFieldValuesEqual(field, 5, undefined), false);
+  assert.equal(otFieldValuesEqual(field, 5, 6), false);
+  assert.equal(otFieldValuesEqual(field, 5, 5), true);
+  assert.equal(otFieldValuesEqual(field, 5, '5'), true);
+});
+
+test('renderAccountFieldInput emits a required attribute for text, textarea, number, link, date, and select, matching renderField', () => {
+  const required = { key: 'address', label: 'Adresse', type: 'text', required: true };
+  assert.match(renderAccountFieldInput(required, ''), /<input[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'textarea' }, ''), /<textarea[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'number' }, ''), /<input[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'link' }, ''), /<input[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'date' }, ''), /<input[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'select', options: ['A'] }, ''), /<select[^>]* required[^>]*>/);
+
+  const notRequired = { ...required, required: false };
+  assert.doesNotMatch(renderAccountFieldInput(notRequired, ''), /required/);
+});
+
+test('nullifyBlankNumberFields converts a collected blank number (undefined) to null, leaving other fields and absent keys untouched', () => {
+  const schema = [
+    { key: 'conTage', type: 'number' },
+    { key: 'address', type: 'text' },
+  ];
+  const result = nullifyBlankNumberFields(schema, { conTage: undefined, address: 'Musterstr. 1' });
+  assert.deepEqual(result, { conTage: null, address: 'Musterstr. 1' });
+
+  // A field the caller wasn't permitted to render never appears in the
+  // collected values at all -- must stay fully absent, not become an
+  // explicit null (that would wrongly clear a value on the server).
+  const withAbsentField = nullifyBlankNumberFields(schema, { address: 'Musterstr. 1' });
+  assert.deepEqual(withAbsentField, { address: 'Musterstr. 1' });
+
+  // A real numeric value must pass through unchanged.
+  const withValue = nullifyBlankNumberFields(schema, { conTage: 3 });
+  assert.deepEqual(withValue, { conTage: 3 });
+});
+
+test('otFieldValuesEqual keeps boolean and plain-string comparison behavior', () => {
+  const boolField = { key: 'photoOptOut', type: 'boolean' };
+  assert.equal(otFieldValuesEqual(boolField, false, undefined), true);
+  assert.equal(otFieldValuesEqual(boolField, true, false), false);
+
+  const textField = { key: 'address', type: 'text' };
+  assert.equal(otFieldValuesEqual(textField, 'Musterstr. 1', 'Musterstr. 1'), true);
+  assert.equal(otFieldValuesEqual(textField, 'Musterstr. 1', 'Musterstr. 2'), false);
 });

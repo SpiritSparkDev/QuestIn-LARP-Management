@@ -91,7 +91,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, formatFieldValue, ACCOUNT_FIELD_LABELS, REGISTRATION_FIELD_LABELS, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, renderField, collectFieldValues, isOptOutYes, OPT_OUT_KEYS } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, otFieldValuesEqual, renderField, collectFieldValues } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 initSidebarToggle();
 import { parseScanCode } from '/js/qrCode.js';
@@ -108,13 +108,15 @@ const statCheckedIn = document.getElementById('stat-checked-in');
 
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
 const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', gsc: 'GSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga' };
-const OT_FIELD_LABELS = { ...ACCOUNT_FIELD_LABELS, ...REGISTRATION_FIELD_LABELS };
 let currentSearch = '';
 let canOverride = false;
 let canManageMembers = false;
 let events = [];
 let myAccountFields = [];
 let currentSchema = [];
+let accountSchema = [];
+let registrationSchema = [];
+let otFieldsByKey = new Map();
 let selectedColumns = { it: [], ot: [] };
 let participantsById = new Map();
 const STATUS_ORDER = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
@@ -136,9 +138,9 @@ function renderColumnCheckboxes() {
   itColumnCheckboxes.innerHTML = currentSchema.map((field) => `
     <label><input type="checkbox" data-it-column="${escapeHtml(field.key)}" ${selectedColumns.it.includes(field.key) ? 'checked' : ''}> ${escapeHtml(field.label ?? field.key)}</label>
   `).join('');
-  const otKeys = Object.keys(OT_FIELD_LABELS).filter((key) => myAccountFields.includes(key));
+  const otKeys = [...otFieldsByKey.keys()].filter((key) => myAccountFields.includes(key));
   otColumnCheckboxes.innerHTML = otKeys.map((key) => `
-    <label><input type="checkbox" data-ot-column="${escapeHtml(key)}" ${selectedColumns.ot.includes(key) ? 'checked' : ''}> ${escapeHtml(OT_FIELD_LABELS[key])}</label>
+    <label><input type="checkbox" data-ot-column="${escapeHtml(key)}" ${selectedColumns.ot.includes(key) ? 'checked' : ''}> ${escapeHtml(otFieldsByKey.get(key).label ?? key)}</label>
   `).join('');
 
   itColumnCheckboxes.querySelectorAll('[data-it-column]').forEach((cb) => {
@@ -160,7 +162,7 @@ function toggleColumn(group, key, checked) {
 
 function renderTableHead() {
   const itLabels = selectedColumns.it.map((key) => currentSchema.find((f) => f.key === key)?.label ?? key);
-  const otLabels = selectedColumns.ot.map((key) => OT_FIELD_LABELS[key] ?? key);
+  const otLabels = selectedColumns.ot.map((key) => otFieldsByKey.get(key)?.label ?? key);
   const extraTh = [...itLabels, ...otLabels].map((label) => `<th>${escapeHtml(label)}</th>`).join('');
   tableHeadRow.innerHTML = `<th>Name</th><th>Charaktere</th><th>Rolle</th>${extraTh}<th>Status</th><th></th><th>Override</th>`;
 }
@@ -171,7 +173,10 @@ function renderExtraCells(p) {
     const values = p.characters.map((c) => formatFieldValue(field, c.data?.[key])).filter((v) => v !== undefined);
     return `<td>${escapeHtml(values.join(', '))}</td>`;
   }).join('');
-  const otCells = selectedColumns.ot.map((key) => `<td>${escapeHtml(p.otFields?.[key] ?? '')}</td>`).join('');
+  const otCells = selectedColumns.ot.map((key) => {
+    const field = otFieldsByKey.get(key) ?? { key };
+    return `<td>${escapeHtml(formatFieldValue(field, p.otFields?.[key]) ?? '')}</td>`;
+  }).join('');
   return itCells + otCells;
 }
 
@@ -306,9 +311,15 @@ function openEditDialog(userId) {
   editingUserId = userId;
   document.getElementById('edit-dialog-title').textContent = `Bearbeiten: ${p.name}`;
 
-  const otKeys = canManageMembers ? Object.keys(p.otFields ?? {}) : [];
-  editOtFields.innerHTML = otKeys.length > 0
-    ? `<h3>Weitere Felder</h3>` + otKeys.map((key) => renderAccountFieldInput(key, OT_FIELD_LABELS[key] ?? key, p.otFields[key])).join('')
+  // Derived from the schema/permission intersection, not p.otFields' own
+  // keys -- a brand-new admin-added field has no guaranteed presence in the
+  // payload for a participant who doesn't have a value yet (see
+  // listParticipantsForEvent), so keying off the payload would make it
+  // permanently uneditable until someone else set a value first.
+  const otKeys = canManageMembers ? [...otFieldsByKey.keys()].filter((key) => myAccountFields.includes(key)) : [];
+  const editableOtFields = otKeys.map((key) => otFieldsByKey.get(key)).filter(Boolean);
+  editOtFields.innerHTML = editableOtFields.length > 0
+    ? `<h3>Weitere Felder</h3>` + editableOtFields.map((field) => renderAccountFieldInput(field, p.otFields[field.key])).join('')
     : '';
 
   editCharacters.innerHTML = canOverride
@@ -332,21 +343,24 @@ document.getElementById('edit-save').addEventListener('click', async () => {
   message.textContent = '';
   message.className = '';
   const original = participantsById.get(editingUserId)?.otFields ?? {};
+  const editedFields = [...editOtFields.querySelectorAll('[data-field]')]
+    .map((input) => otFieldsByKey.get(input.dataset.field))
+    .filter((field, index, arr) => field && arr.findIndex((f) => f.key === field.key) === index);
+  const collected = nullifyBlankNumberFields(editedFields, collectAccountFieldValues(editOtFields, editedFields));
+  const accountAccountFieldKeys = new Set(accountSchema.map((f) => f.key));
   const accountPayload = {};
   const registrationPayload = {};
-  editOtFields.querySelectorAll('[data-field]').forEach((input) => {
-    const key = input.dataset.field;
-    const originalValue = original[key] ?? '';
+  for (const field of editedFields) {
+    const originalValue = original[field.key] ?? (field.type === 'boolean' ? false : '');
+    const newValue = collected[field.key];
     // Only send a field whose value actually changed -- an edit-save that
     // touched nothing OT-related (e.g. only a character field) must not
     // trigger PATCH /members or PUT .../ot-fields, since either one mails
     // every event orga/hilfs_orga plus every admin/moderator on success.
-    const changed = OPT_OUT_KEYS.includes(key) ? isOptOutYes(originalValue) !== input.checked : originalValue !== input.value;
-    if (!changed) return;
-    const value = input.type === 'checkbox' ? (input.checked ? 'Ja' : 'Nein') : input.value;
-    if (key in ACCOUNT_FIELD_LABELS) accountPayload[key] = value;
-    else registrationPayload[key] = value;
-  });
+    if (otFieldValuesEqual(field, originalValue, newValue)) continue;
+    if (accountAccountFieldKeys.has(field.key)) accountPayload[field.key] = newValue;
+    else registrationPayload[field.key] = newValue;
+  }
   const characterForms = [...editCharacters.querySelectorAll('.checkin-character-form')];
   let savedAnything = false;
   let currentStep = '';
@@ -443,7 +457,7 @@ function renderActionCell(p) {
   if ((p.status === 'pending' || p.status === 'confirmed') && canOverride) {
     parts.push(`<button type="button" class="btn btn-ghost" data-cancel="${p.userId}">Absagen</button>`);
   }
-  const canEditOt = canManageMembers && Object.keys(p.otFields ?? {}).length > 0;
+  const canEditOt = canManageMembers && [...otFieldsByKey.keys()].some((key) => myAccountFields.includes(key));
   const canEditCharacters = canOverride && (p.characters ?? []).length > 0;
   if (canEditOt || canEditCharacters) {
     parts.push(`<button type="button" class="btn-ghost" data-edit="${p.userId}">Bearbeiten</button>`);
@@ -604,6 +618,8 @@ try {
   myAccountFields = account.accountFields ?? [];
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
   currentSchema = await api.get('/sc-schema');
+  [accountSchema, registrationSchema] = await Promise.all([api.get('/account-schema'), api.get('/registration-schema')]);
+  otFieldsByKey = new Map([...accountSchema, ...registrationSchema].map((f) => [f.key, f]));
   events = await api.get('/events');
   eventSelect.innerHTML = renderEventOptions(events);
   if (events.length > 0) {

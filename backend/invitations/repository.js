@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
 import { query } from '../db.js';
-import { encryptField, decryptField } from '../crypto/fieldCrypto.js';
 import { displayName } from '../displayName.js';
+import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
+import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 
 const SELECT_COLUMNS = `
   id, token, email, first_name, last_name, nickname, group_id,
-  address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc,
+  account_data_enc,
   event_id, cancelled_at,
   invited_by, expires_at, created_at, redeemed_at
 `;
@@ -22,13 +23,7 @@ function decryptInvitation(row) {
     groupId: row.group_id,
     eventId: row.event_id,
     cancelledAt: row.cancelled_at,
-    address: decryptField(row.address_enc),
-    birthdate: decryptField(row.birthdate_enc),
-    phone: decryptField(row.phone_enc),
-    emergencyContactLastName: decryptField(row.emergency_contact_last_name_enc),
-    emergencyContactFirstName: decryptField(row.emergency_contact_first_name_enc),
-    emergencyContactPhone: decryptField(row.emergency_contact_phone_enc),
-    medicalNotes: decryptField(row.medical_notes_enc),
+    ...decryptFieldBlob(row.account_data_enc),
     invitedBy: row.invited_by,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
@@ -36,25 +31,19 @@ function decryptInvitation(row) {
   };
 }
 
-export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, eventId, address, birthdate, phone, emergencyContactLastName, emergencyContactFirstName, emergencyContactPhone, medicalNotes, ttlDays = 3 }) {
+export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, eventId, ttlDays = 3, ...otFields }) {
+  const schema = await getAccountFieldSchema();
+  const data = {};
+  for (const field of schema) {
+    if (otFields[field.key] !== undefined) data[field.key] = otFields[field.key];
+  }
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
   const { rows } = await query(
-    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, address_enc, birthdate_enc, phone_enc, emergency_contact_last_name_enc, emergency_contact_first_name_enc, emergency_contact_phone_enc, medical_notes_enc, event_id, invited_by, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, account_data_enc, event_id, invited_by, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING ${SELECT_COLUMNS}`,
-    [
-      token, email, firstName, lastName, nickname ?? null, groupId,
-      address !== undefined ? encryptField(address) : null,
-      birthdate !== undefined ? encryptField(birthdate) : null,
-      phone !== undefined ? encryptField(phone) : null,
-      emergencyContactLastName !== undefined ? encryptField(emergencyContactLastName) : null,
-      emergencyContactFirstName !== undefined ? encryptField(emergencyContactFirstName) : null,
-      emergencyContactPhone !== undefined ? encryptField(emergencyContactPhone) : null,
-      medicalNotes !== undefined ? encryptField(medicalNotes) : null,
-      eventId ?? null,
-      invitedBy, expiresAt,
-    ]
+    [token, email, firstName, lastName, nickname ?? null, groupId, encryptFieldBlob(data), eventId ?? null, invitedBy, expiresAt]
   );
   return decryptInvitation(rows[0]);
 }

@@ -26,12 +26,14 @@
     <span class="material-symbols-outlined" aria-hidden="true">menu</span>
   </button>
   <div class="main"><div class="content">
-    <h1>Charakterschema</h1>
-    <p class="sub">Legt fest, welche Sheet-Felder Charaktere haben. SC/GSC-Charaktere teilen sich ein Schema über alle Events hinweg; NSC-Charaktere haben ihr eigenes, ebenfalls app-weites Schema.</p>
+    <h1>Feldschemas</h1>
+    <p class="sub">Legt fest, welche Felder Charaktere (IT) und Konten/Anmeldungen (OT) haben. SC/GSC-Charaktere teilen sich ein Schema über alle Events hinweg; NSC-Charaktere, Konto-Felder und Anmeldungs-Felder haben je ihr eigenes, ebenfalls app-weites Schema.</p>
 
     <div class="tabs" id="class-tabs">
       <button type="button" class="tab-btn active" data-tab="sc-schema-tab">SC/GSC</button>
       <button type="button" class="tab-btn" data-tab="nsc-schema-tab">NSC</button>
+      <button type="button" class="tab-btn" data-tab="account-schema-tab">Konto</button>
+      <button type="button" class="tab-btn" data-tab="registration-schema-tab">Anmeldung</button>
     </div>
 
     <div class="tab-panel card form-pad" id="sc-schema-tab">
@@ -45,6 +47,18 @@
       <div id="nsc-schema-rows"></div>
       <button type="button" id="nsc-add-field">Feld hinzufügen</button>
       <button type="button" id="nsc-schema-save">Speichern</button>
+    </div>
+
+    <div class="tab-panel card form-pad" id="account-schema-tab" hidden>
+      <div id="account-schema-rows"></div>
+      <button type="button" id="account-add-field">Feld hinzufügen</button>
+      <button type="button" id="account-schema-save">Speichern</button>
+    </div>
+
+    <div class="tab-panel card form-pad" id="registration-schema-tab" hidden>
+      <div id="registration-schema-rows"></div>
+      <button type="button" id="registration-add-field">Feld hinzufügen</button>
+      <button type="button" id="registration-schema-save">Speichern</button>
     </div>
 
     <p id="message"></p>
@@ -75,10 +89,16 @@ function initTabs(tabsEl) {
 }
 initTabs(document.getElementById('class-tabs'));
 
-function addSchemaRow(container, field = { key: '', label: '', type: 'text', required: false, public: false, options: [] }) {
+// `allowPublic` is false for the two OT (Konto/Anmeldung) tabs -- per spec,
+// OT schema fields have no "public" concept at all, unlike IT (character)
+// fields, so those tabs must render neither the checkbox nor a `public` key.
+function addSchemaRow(container, field = { key: '', label: '', type: 'text', required: false, public: false, options: [] }, { allowPublic = true } = {}) {
   const row = document.createElement('div');
   row.className = 'schema-row';
   const optionsValue = Array.isArray(field.options) ? field.options.join(', ') : '';
+  const publicCheckboxHtml = allowPublic
+    ? `<label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>`
+    : '';
   row.innerHTML = `
     <input type="text" placeholder="key" class="schema-key" value="${escapeHtml(field.key)}">
     <input type="text" placeholder="Label" class="schema-label" value="${escapeHtml(field.label)}">
@@ -90,17 +110,18 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
       <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>Ja/Nein</option>
       <option value="multiselect" ${field.type === 'multiselect' ? 'selected' : ''}>Mehrfachauswahl</option>
       <option value="link" ${field.type === 'link' ? 'selected' : ''}>Link</option>
+      <option value="date" ${field.type === 'date' ? 'selected' : ''}>Datum</option>
     </select>
     <input type="text" placeholder="Optionen (kommagetrennt, nur bei Auswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
     <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
-    <label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>
+    ${publicCheckboxHtml}
     <button type="button" class="remove-row">Entfernen</button>
   `;
   row.querySelector('.remove-row').addEventListener('click', () => row.remove());
   container.appendChild(row);
 }
 
-function collectSchema(container) {
+function collectSchema(container, { allowPublic = true } = {}) {
   return [...container.children].map((row) => {
     const type = row.querySelector('.schema-type').value;
     const field = {
@@ -108,8 +129,8 @@ function collectSchema(container) {
       label: row.querySelector('.schema-label').value.trim(),
       type,
       required: row.querySelector('.schema-required').checked,
-      public: row.querySelector('.schema-public').checked,
     };
+    if (allowPublic) field.public = row.querySelector('.schema-public').checked;
     if (type === 'select' || type === 'multiselect') {
       field.options = row.querySelector('.schema-options').value
         .split(',')
@@ -120,20 +141,20 @@ function collectSchema(container) {
   }).filter((field) => field.key.length > 0);
 }
 
-function setupSchemaEditor({ rowsId, addFieldId, saveId, endpoint, loadTemplateId }) {
+function setupSchemaEditor({ rowsId, addFieldId, saveId, endpoint, loadTemplateId, allowPublic = true }) {
   const rows = document.getElementById(rowsId);
-  document.getElementById(addFieldId).addEventListener('click', () => addSchemaRow(rows));
+  document.getElementById(addFieldId).addEventListener('click', () => addSchemaRow(rows, undefined, { allowPublic }));
   if (loadTemplateId) {
     document.getElementById(loadTemplateId).addEventListener('click', () => {
       rows.innerHTML = '';
-      DEFAULT_CHARACTER_SCHEMA.forEach((field) => addSchemaRow(rows, field));
+      DEFAULT_CHARACTER_SCHEMA.forEach((field) => addSchemaRow(rows, field, { allowPublic }));
     });
   }
   document.getElementById(saveId).addEventListener('click', async () => {
     message.textContent = '';
     message.className = '';
     try {
-      await api.put(endpoint, { schema: collectSchema(rows) });
+      await api.put(endpoint, { schema: collectSchema(rows, { allowPublic }) });
       message.textContent = 'Gespeichert.';
       message.className = 'success';
     } catch (err) {
@@ -146,6 +167,8 @@ function setupSchemaEditor({ rowsId, addFieldId, saveId, endpoint, loadTemplateI
 
 const scRows = setupSchemaEditor({ rowsId: 'sc-schema-rows', addFieldId: 'sc-add-field', saveId: 'sc-schema-save', endpoint: '/sc-schema', loadTemplateId: 'sc-load-template' });
 const nscRows = setupSchemaEditor({ rowsId: 'nsc-schema-rows', addFieldId: 'nsc-add-field', saveId: 'nsc-schema-save', endpoint: '/nsc-schema' });
+const accountRows = setupSchemaEditor({ rowsId: 'account-schema-rows', addFieldId: 'account-add-field', saveId: 'account-schema-save', endpoint: '/account-schema', allowPublic: false });
+const registrationRows = setupSchemaEditor({ rowsId: 'registration-schema-rows', addFieldId: 'registration-add-field', saveId: 'registration-schema-save', endpoint: '/registration-schema', allowPublic: false });
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
@@ -162,9 +185,13 @@ try {
     message.textContent = 'Kein Zugriff – nur für Admin.';
     message.className = 'error';
   } else {
-    const [scSchema, nscSchema] = await Promise.all([api.get('/sc-schema'), api.get('/nsc-schema')]);
+    const [scSchema, nscSchema, accountSchema, registrationSchema] = await Promise.all([
+      api.get('/sc-schema'), api.get('/nsc-schema'), api.get('/account-schema'), api.get('/registration-schema'),
+    ]);
     scSchema.forEach((field) => addSchemaRow(scRows, field));
     nscSchema.forEach((field) => addSchemaRow(nscRows, field));
+    accountSchema.forEach((field) => addSchemaRow(accountRows, field, { allowPublic: false }));
+    registrationSchema.forEach((field) => addSchemaRow(registrationRows, field, { allowPublic: false }));
   }
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
