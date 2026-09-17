@@ -49,7 +49,7 @@ export function renderAccountFieldInput(key, label, value, { sealedBadge = '', i
     const checked = isOptOutYes(value) ? ' checked' : '';
     return `<div class="${key}-container"><label for="${id}"><input id="${id}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}${sealedBadge}</label></div>`;
   }
-  return `<div class="${key}-container"><label for="${id}">${escapedLabel}${sealedBadge}</label><input id="${id}" data-field="${key}" type="text" value="${escapeHtml(value ?? '')}"></div>`;
+  return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="text" value="${escapeHtml(value ?? '')}"><label for="${id}">${escapedLabel}${sealedBadge}</label></div>`;
 }
 
 // Formats a character (IT) custom-field value for display, e.g. as a

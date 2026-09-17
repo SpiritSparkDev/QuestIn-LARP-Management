@@ -118,6 +118,10 @@ h1, h2, h3 {
 .form-pad {
   padding: 24px;
 }
+#login-form button {
+    margin: 2rem auto;
+    width: 100%;
+}
 
 /* ---------- Sidebar app shell ---------- */
 
@@ -547,10 +551,6 @@ textarea.invalid {
   .field-grid {
     grid-template-columns: 1fr;
   }
-}
-
-.field-grid > div > label {
-  margin-top: 18px;
 }
 
 .field-below label {
