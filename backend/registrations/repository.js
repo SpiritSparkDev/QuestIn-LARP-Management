@@ -115,12 +115,18 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ot
 
   const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
 
+  const schema = await getRegistrationFieldSchema();
+  const data = {};
+  for (const field of schema) {
+    if (otFields?.[field.key] !== undefined) data[field.key] = otFields[field.key];
+  }
+
   try {
     const { rows } = await query(
       `INSERT INTO registrations (user_id, event_id, con_role, character_id, registration_data_enc)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING user_id, event_id, status, con_role, character_id, checked_in_at, checked_out_at`,
-      [userId, eventId, conRole, resolvedCharacterId, encryptFieldBlob(otFields ?? {})]
+      [userId, eventId, conRole, resolvedCharacterId, encryptFieldBlob(data)]
     );
     return rows[0];
   } catch (err) {
