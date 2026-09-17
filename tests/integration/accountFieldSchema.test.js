@@ -81,6 +81,13 @@ test('PUT /account-schema updates the schema for an admin caller and rejects the
         body: JSON.stringify({ schema: [{ key: 'group', label: 'Gruppe', type: 'text' }] }),
       });
       assert.equal(rejected.status, 400);
+
+      const rejectedEmail = await fetch(`http://localhost:${port}/account-schema`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ schema: [{ key: 'email', label: 'E-Mail', type: 'text' }] }),
+      });
+      assert.equal(rejectedEmail.status, 400);
     } finally {
       await fetch(`http://localhost:${port}/account-schema`, {
         method: 'PUT',

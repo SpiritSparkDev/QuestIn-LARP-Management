@@ -57,7 +57,7 @@ export async function migrateAccountDataBlob() {
           const value = decryptField(row[column]);
           if (value !== null) data[key] = key === 'birthdate' ? normalizeBirthdateValue(value) : value;
         }
-        await client.query(`UPDATE ${table} SET account_data_enc = $1 WHERE id = $2`, [encryptFieldBlob(data), row.id]);
+        await client.query(`UPDATE ${table} SET account_data_enc = $1 WHERE id = $2 AND account_data_enc IS NULL`, [encryptFieldBlob(data), row.id]);
       }
     }
 

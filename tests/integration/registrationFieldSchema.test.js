@@ -56,6 +56,13 @@ test('PUT /registration-schema rejects a non-admin group and the reserved "id" k
       body: JSON.stringify({ schema: [{ key: 'id', label: 'Id', type: 'text' }] }),
     });
     assert.equal(rejected.status, 400);
+
+    const rejectedStatus = await fetch(`http://localhost:${port}/registration-schema`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ schema: [{ key: 'status', label: 'Status', type: 'text' }] }),
+    });
+    assert.equal(rejectedStatus.status, 400);
   });
 });
 

@@ -161,6 +161,10 @@ router.post('/events/:id/cancel', requireAuth(requireMenu('checkin')(async ({ re
 
 const VALID_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
 
+// Structural keys updateRegistrationOtFields always returns, as opposed to
+// OT-schema-driven ones -- see the strip loop below.
+const STRUCTURAL_REGISTRATION_KEYS = ['userId', 'eventId', 'status', 'conRole', 'characterId', 'checkedInAt', 'checkedOutAt'];
+
 router.put('/events/:id/checkin/:userId', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
   if (!user.group.canOverrideCheckinStatus) {
     return { status: 403, body: { error: 'forbidden' } };
@@ -232,10 +236,13 @@ router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ r
   // sending N emails.
   notifyRegistrationOtFieldsChanged(params.id, params.userId);
 
+  // Strip by iterating the RESPONSE's own keys (not the live schema's) so a
+  // value orphaned by a since-deleted schema field, or a null-default from
+  // DEFAULT_REGISTRATION_FIELD_KEYS, can't leak to unpermitted staff just
+  // because it fell off the current schema's key list.
   if (!isOwner) {
-    const registrationFieldKeys = (await getRegistrationFieldSchema()).map((f) => f.key);
-    for (const key of registrationFieldKeys) {
-      if (!user.group.accountFields.includes(key)) delete registration[key];
+    for (const key of Object.keys(registration)) {
+      if (!STRUCTURAL_REGISTRATION_KEYS.includes(key) && !user.group.accountFields.includes(key)) delete registration[key];
     }
   }
   return { status: 200, body: registration };

@@ -91,7 +91,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
-import { escapeHtml, formatFieldValue, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, otFieldValuesEqual, renderField, collectFieldValues } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, otFieldValuesEqual, renderField, collectFieldValues } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 initSidebarToggle();
 import { parseScanCode } from '/js/qrCode.js';
@@ -173,7 +173,10 @@ function renderExtraCells(p) {
     const values = p.characters.map((c) => formatFieldValue(field, c.data?.[key])).filter((v) => v !== undefined);
     return `<td>${escapeHtml(values.join(', '))}</td>`;
   }).join('');
-  const otCells = selectedColumns.ot.map((key) => `<td>${escapeHtml(p.otFields?.[key] ?? '')}</td>`).join('');
+  const otCells = selectedColumns.ot.map((key) => {
+    const field = otFieldsByKey.get(key) ?? { key };
+    return `<td>${escapeHtml(formatFieldValue(field, p.otFields?.[key]) ?? '')}</td>`;
+  }).join('');
   return itCells + otCells;
 }
 
@@ -308,7 +311,12 @@ function openEditDialog(userId) {
   editingUserId = userId;
   document.getElementById('edit-dialog-title').textContent = `Bearbeiten: ${p.name}`;
 
-  const otKeys = canManageMembers ? Object.keys(p.otFields ?? {}) : [];
+  // Derived from the schema/permission intersection, not p.otFields' own
+  // keys -- a brand-new admin-added field has no guaranteed presence in the
+  // payload for a participant who doesn't have a value yet (see
+  // listParticipantsForEvent), so keying off the payload would make it
+  // permanently uneditable until someone else set a value first.
+  const otKeys = canManageMembers ? [...otFieldsByKey.keys()].filter((key) => myAccountFields.includes(key)) : [];
   const editableOtFields = otKeys.map((key) => otFieldsByKey.get(key)).filter(Boolean);
   editOtFields.innerHTML = editableOtFields.length > 0
     ? `<h3>Weitere Felder</h3>` + editableOtFields.map((field) => renderAccountFieldInput(field, p.otFields[field.key])).join('')
@@ -338,7 +346,7 @@ document.getElementById('edit-save').addEventListener('click', async () => {
   const editedFields = [...editOtFields.querySelectorAll('[data-field]')]
     .map((input) => otFieldsByKey.get(input.dataset.field))
     .filter((field, index, arr) => field && arr.findIndex((f) => f.key === field.key) === index);
-  const collected = collectAccountFieldValues(editOtFields, editedFields);
+  const collected = nullifyBlankNumberFields(editedFields, collectAccountFieldValues(editOtFields, editedFields));
   const accountAccountFieldKeys = new Set(accountSchema.map((f) => f.key));
   const accountPayload = {};
   const registrationPayload = {};
@@ -449,7 +457,7 @@ function renderActionCell(p) {
   if ((p.status === 'pending' || p.status === 'confirmed') && canOverride) {
     parts.push(`<button type="button" class="btn btn-ghost" data-cancel="${p.userId}">Absagen</button>`);
   }
-  const canEditOt = canManageMembers && Object.keys(p.otFields ?? {}).length > 0;
+  const canEditOt = canManageMembers && [...otFieldsByKey.keys()].some((key) => myAccountFields.includes(key));
   const canEditCharacters = canOverride && (p.characters ?? []).length > 0;
   if (canEditOt || canEditCharacters) {
     parts.push(`<button type="button" class="btn-ghost" data-edit="${p.userId}">Bearbeiten</button>`);

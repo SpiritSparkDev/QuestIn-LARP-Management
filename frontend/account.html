@@ -224,6 +224,7 @@
         renderEventOptions,
         renderAccountFieldInput,
         collectAccountFieldValues,
+        nullifyBlankNumberFields,
         otFieldValuesEqual,
       } from "/js/formFields.js";
       import { buildScanCode } from "/js/qrCode.js";
@@ -366,20 +367,11 @@
           .join("");
       }
 
-      const DASHBOARD_ACCOUNT_CHECK_FIELDS = {
-        address: "Adresse",
-        birthdate: "Geburtsdatum",
-        phone: "Telefon",
-        emergencyContactLastName: "Notfallkontakt: Name",
-        emergencyContactFirstName: "Notfallkontakt: Vorname",
-        emergencyContactPhone: "Notfallkontakt: Telefonnummer",
-      };
-
       function renderDashboardAccountHint(account) {
         const hint = document.getElementById("dashboard-account-hint");
-        const missing = Object.entries(DASHBOARD_ACCOUNT_CHECK_FIELDS)
-          .filter(([key]) => !account[key])
-          .map(([, label]) => label);
+        const missing = accountSchema
+          .filter((f) => !account[f.key])
+          .map((f) => f.label ?? f.key);
         if (missing.length === 0) {
           hint.style.display = "none";
           return;
@@ -480,7 +472,7 @@
         accountMessage.className = "";
         const data = {
           ...Object.fromEntries(new FormData(accountForm)),
-          ...collectAccountFieldValues(accountOtFieldsContainer, accountSchema),
+          ...nullifyBlankNumberFields(accountSchema, collectAccountFieldValues(accountOtFieldsContainer, accountSchema)),
         };
         try {
           const updated = await api.patch("/account", data);
@@ -616,7 +608,7 @@
         const registration = currentRegistrations.find(
           (r) => r.eventId === editingEventId,
         );
-        const collected = collectAccountFieldValues(editOtFieldsContainer, registrationSchema);
+        const collected = nullifyBlankNumberFields(registrationSchema, collectAccountFieldValues(editOtFieldsContainer, registrationSchema));
         const payload = {};
         for (const field of registrationSchema) {
           const originalValue = registration?.[field.key] ?? (field.type === "boolean" ? false : "");

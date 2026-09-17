@@ -120,7 +120,7 @@
     import { api } from '/js/api.js';
     import { applyBranding } from '/js/branding.js';
     applyBranding();
-    import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues } from '/js/formFields.js';
+    import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields } from '/js/formFields.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
     initSidebarToggle();
 
@@ -214,7 +214,7 @@
           const sealedBadge = ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>';
           return renderAccountFieldInput(field, values[field.key], { sealedBadge });
         }
-        return `<label>${escapeHtml(label)}</label><p>${escapeHtml(values[field.key] ?? '–')}</p>`;
+        return `<div class="${escapeHtml(field.key)}-container"><label>${escapeHtml(label)}</label><p>${escapeHtml(values[field.key] ?? '–')}</p></div>`;
       }).join('');
       attachLiveValidation(container);
     }
@@ -329,10 +329,11 @@
       message.textContent = '';
       message.className = '';
       const payload = {};
-      Object.assign(payload, collectAccountFieldValues(detailFields, [
+      const detailSchema = [
         { key: 'firstName', type: 'text' }, { key: 'lastName', type: 'text' }, { key: 'nickname', type: 'text' },
         ...accountSchema,
-      ]));
+      ];
+      Object.assign(payload, nullifyBlankNumberFields(detailSchema, collectAccountFieldValues(detailFields, detailSchema)));
       if (myAccountFields.includes('group') && detailGroupSelect.value) {
         payload.group = detailGroupSelect.value;
       }
@@ -469,7 +470,7 @@
       const payload = Object.fromEntries(formData);
       if (!payload.eventId) delete payload.eventId;
       payload.sendEmail = formData.has('sendEmail');
-      Object.assign(payload, collectAccountFieldValues(inviteFields, accountSchema));
+      Object.assign(payload, nullifyBlankNumberFields(accountSchema, collectAccountFieldValues(inviteFields, accountSchema)));
       try {
         const result = await api.post('/members/invite', payload);
         if (result.emailSent === false) {

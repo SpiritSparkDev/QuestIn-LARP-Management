@@ -17,6 +17,7 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
   const escapedLabel = escapeHtml(field.label ?? key) + sealedBadge;
   const val = escapeHtml(value);
   const id = `${idPrefix}field-${key}`;
+  const required = field.required ? 'required' : '';
 
   if (type === 'boolean') {
     const checked = value ? ' checked' : '';
@@ -32,16 +33,16 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
     return `<div class="${key}-container"><span>${escapedLabel}</span>${checkboxes}</div>`;
   }
   if (type === 'number') {
-    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="number" value="${val}"><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="number" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'link') {
-    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="url" value="${val}"><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="url" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'date') {
-    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="date" value="${val}"><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="date" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'textarea') {
-    return `<div class="${key}-container"><textarea id="${id}" data-field="${key}">${val}</textarea><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${key}-container"><textarea id="${id}" data-field="${key}" ${required}>${val}</textarea><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'select' && Array.isArray(field.options)) {
     const options = field.options.map((opt) => {
@@ -49,9 +50,9 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
       const selected = opt === value ? ' selected' : '';
       return `<option value="${escapedOpt}"${selected}>${escapedOpt}</option>`;
     }).join('');
-    return `<div class="${key}-container"><select id="${id}" data-field="${key}"><option value=""></option>${options}</select><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${key}-container"><select id="${id}" data-field="${key}" ${required}><option value=""></option>${options}</select><label for="${id}">${escapedLabel}</label></div>`;
   }
-  return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="text" value="${val}"><label for="${id}">${escapedLabel}</label></div>`;
+  return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="text" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
 }
 
 // Reads a schema-driven OT-field container's current values back into a
@@ -76,6 +77,27 @@ export function collectAccountFieldValues(container, schema) {
       result[field.key] = inputs[0].value === '' ? undefined : Number(inputs[0].value);
     } else {
       result[field.key] = inputs[0].value;
+    }
+  }
+  return result;
+}
+
+// collectAccountFieldValues returns `undefined` for a blank number input --
+// deliberately, since otFieldValuesEqual's own dirty-check comparisons rely
+// on `undefined` meaning "no value" (it treats null the same way in that
+// branch, so this is safe to apply before a dirty-check comparison too).
+// But a payload that's actually SENT needs `null` for that same case,
+// because every repository merge does `if (fields[key] !== undefined)
+// nextData[key] = fields[key]` -- an `undefined` payload value is dropped
+// by JSON.stringify entirely and silently skipped, so a numeric field once
+// set could otherwise never be cleared back to blank via the UI. Only
+// touches keys collectAccountFieldValues actually populated (a field the
+// caller wasn't permitted/didn't render is correctly left absent).
+export function nullifyBlankNumberFields(schema, values) {
+  const result = { ...values };
+  for (const field of schema) {
+    if (field.type === 'number' && field.key in result && result[field.key] === undefined) {
+      result[field.key] = null;
     }
   }
   return result;

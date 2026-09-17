@@ -15,6 +15,20 @@ const OLD_COLUMNS = {
 };
 const OLD_COLUMN_NAMES = Object.values(OLD_COLUMNS);
 
+// Legacy free-text 'Ja'/'Nein' opt-outs become real booleans, since the
+// seeded schema types both fields `boolean` and a truthy 'Nein' string
+// would otherwise render as checked (opted out) for every existing
+// registration -- inverting the displayed consent state.
+export function normalizeBooleanValue(value) {
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'ja') return true;
+  if (normalized === 'nein') return false;
+  return value;
+}
+
+const BOOLEAN_KEYS = ['dataSharingOptOut', 'photoOptOut'];
+
 // One-time, idempotent data migration -- see db/migrateAccountDataBlob.js
 // for the equivalent on users/invitations; same reasoning, one table here.
 export async function migrateRegistrationDataBlob() {
@@ -33,10 +47,10 @@ export async function migrateRegistrationDataBlob() {
       const data = {};
       for (const [key, column] of Object.entries(OLD_COLUMNS)) {
         const value = decryptField(row[column]);
-        if (value !== null) data[key] = value;
+        if (value !== null) data[key] = BOOLEAN_KEYS.includes(key) ? normalizeBooleanValue(value) : value;
       }
       await client.query(
-        'UPDATE registrations SET registration_data_enc = $1 WHERE user_id = $2 AND event_id = $3',
+        'UPDATE registrations SET registration_data_enc = $1 WHERE user_id = $2 AND event_id = $3 AND registration_data_enc IS NULL',
         [encryptFieldBlob(data), row.user_id, row.event_id]
       );
     }

@@ -5,7 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { validateSchemaShape } from '../events/schemaValidation.js';
 import { getRegistrationFieldSchema, setRegistrationFieldSchema } from './repository.js';
 
-const RESERVED_REGISTRATION_FIELD_KEYS = ['id'];
+const RESERVED_REGISTRATION_FIELD_KEYS = ['id', 'userId', 'eventId', 'status', 'conRole', 'characterId'];
 
 router.get('/registration-schema', requireAuth(async () => {
   const schema = await getRegistrationFieldSchema();

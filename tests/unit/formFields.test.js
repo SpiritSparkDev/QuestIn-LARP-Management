@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeHtml, renderField, collectFieldValues, renderAccountFieldInput, collectAccountFieldValues, otFieldValuesEqual } from '../../frontend/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, otFieldValuesEqual } from '../../frontend/js/formFields.js';
 
 test('escapeHtml escapes the five dangerous characters', () => {
   assert.equal(escapeHtml(`<script>&"'`), '&lt;script&gt;&amp;&quot;&#39;');
@@ -246,6 +246,38 @@ test('otFieldValuesEqual treats a real number change as changed', () => {
   assert.equal(otFieldValuesEqual(field, 5, 6), false);
   assert.equal(otFieldValuesEqual(field, 5, 5), true);
   assert.equal(otFieldValuesEqual(field, 5, '5'), true);
+});
+
+test('renderAccountFieldInput emits a required attribute for text, textarea, number, link, date, and select, matching renderField', () => {
+  const required = { key: 'address', label: 'Adresse', type: 'text', required: true };
+  assert.match(renderAccountFieldInput(required, ''), /<input[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'textarea' }, ''), /<textarea[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'number' }, ''), /<input[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'link' }, ''), /<input[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'date' }, ''), /<input[^>]* required[^>]*>/);
+  assert.match(renderAccountFieldInput({ ...required, type: 'select', options: ['A'] }, ''), /<select[^>]* required[^>]*>/);
+
+  const notRequired = { ...required, required: false };
+  assert.doesNotMatch(renderAccountFieldInput(notRequired, ''), /required/);
+});
+
+test('nullifyBlankNumberFields converts a collected blank number (undefined) to null, leaving other fields and absent keys untouched', () => {
+  const schema = [
+    { key: 'conTage', type: 'number' },
+    { key: 'address', type: 'text' },
+  ];
+  const result = nullifyBlankNumberFields(schema, { conTage: undefined, address: 'Musterstr. 1' });
+  assert.deepEqual(result, { conTage: null, address: 'Musterstr. 1' });
+
+  // A field the caller wasn't permitted to render never appears in the
+  // collected values at all -- must stay fully absent, not become an
+  // explicit null (that would wrongly clear a value on the server).
+  const withAbsentField = nullifyBlankNumberFields(schema, { address: 'Musterstr. 1' });
+  assert.deepEqual(withAbsentField, { address: 'Musterstr. 1' });
+
+  // A real numeric value must pass through unchanged.
+  const withValue = nullifyBlankNumberFields(schema, { conTage: 3 });
+  assert.deepEqual(withValue, { conTage: 3 });
 });
 
 test('otFieldValuesEqual keeps boolean and plain-string comparison behavior', () => {

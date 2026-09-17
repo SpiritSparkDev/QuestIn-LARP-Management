@@ -5,7 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { validateSchemaShape } from '../events/schemaValidation.js';
 import { getAccountFieldSchema, setAccountFieldSchema } from './repository.js';
 
-const RESERVED_ACCOUNT_FIELD_KEYS = ['id', 'group'];
+const RESERVED_ACCOUNT_FIELD_KEYS = ['id', 'group', 'name', 'email', 'firstName', 'lastName', 'nickname', 'menus', 'accountFields'];
 
 router.get('/account-schema', requireAuth(async () => {
   const schema = await getAccountFieldSchema();
