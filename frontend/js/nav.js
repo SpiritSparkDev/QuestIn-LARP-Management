@@ -30,6 +30,7 @@ function renderNavItem({ href, label, icon }, currentPath) {
 export function renderNavLinks(account, currentPath) {
   const items = MENU_LINKS.filter((item) => account.menus.includes(item.key));
   let html = items.map((item) => renderNavItem(item, currentPath)).join('');
+  
   // A visual divider before the admin-only section -- keeps the role-gated
   // items (everything above) and the admin-only items (everything below)
   // visibly distinct, since both render through this same, single,

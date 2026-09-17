@@ -3,4 +3,5 @@ node_modules/
 .env
 web_interface/
 uploads/
-logo.psd
+*.psd
+*.ai
