@@ -42,7 +42,7 @@ services:
       - ./db:/app/db
       - ./frontend:/app/frontend
       - uploads-data:/app/uploads
-    command: sh -c "npm run migrate && npm run seed-groups && npm run seed-nsc-schema && npm run seed-admin && npm run migrate-account-data-blob && npm run dev"
+    command: sh -c "npm run migrate && npm run seed-groups && npm run seed-nsc-schema && npm run seed-admin && npm run migrate-account-data-blob && npm run migrate-registration-data-blob && npm run dev"
 
 volumes:
   db-data:

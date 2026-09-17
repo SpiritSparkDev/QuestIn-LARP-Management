@@ -1,39 +1,24 @@
 import { encryptField, decryptField } from './crypto/fieldCrypto.js';
 
-// The 6 event-scoped OT fields living on registrations (moved off the
-// account in Teil 3 of the user-testing feedback package) -- same
-// encrypted-column pattern as accountFields.js, gated by the same
-// group.accountFields permission list (see
-// registrations/repository.js's listParticipantsForEvent).
+// The 6 event-scoped OT fields on registrations -- field DEFINITIONS now
+// live in the admin-editable registration_field_schema (see
+// backend/registrationFieldSchema). This list only tracks the current set
+// of keys for callers that still need a static list; migrated to the live
+// schema in a later task (see backend/groups/routes.js).
 export const REGISTRATION_FIELD_KEYS = [
   'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut',
 ];
 
-export const ENCRYPTED_REGISTRATION_FIELD_COLUMNS = {
-  conTage: 'con_tage_enc',
-  accommodation: 'accommodation_enc',
-  craftOffer: 'craft_offer_enc',
-  travelMethod: 'travel_method_enc',
-  dataSharingOptOut: 'data_sharing_opt_out_enc',
-  photoOptOut: 'photo_opt_out_enc',
-};
-
-const ENCRYPTED_FIELD_KEYS = Object.keys(ENCRYPTED_REGISTRATION_FIELD_COLUMNS);
-
-// Decrypts every registration OT field out of a row that carries the
-// *_enc columns above (aliased or not), keyed back to their camelCase
-// field name.
-export function decryptEncryptedRegistrationFields(row) {
-  const result = {};
-  for (const key of ENCRYPTED_FIELD_KEYS) {
-    result[key] = decryptField(row[ENCRYPTED_REGISTRATION_FIELD_COLUMNS[key]]);
-  }
-  return result;
+export function encryptFieldBlob(values) {
+  return encryptField(JSON.stringify(values ?? {}));
 }
 
-// Encrypts whichever of the 6 fields are present in `fields`, always in
-// ENCRYPTED_REGISTRATION_FIELD_COLUMNS order -- callers append the result
-// to their own COALESCE UPDATE/INSERT param list.
-export function encryptRegistrationFieldValues(fields) {
-  return ENCRYPTED_FIELD_KEYS.map((key) => (fields[key] !== undefined ? encryptField(fields[key]) : null));
+export function decryptFieldBlob(buffer) {
+  const json = decryptField(buffer);
+  const data = json ? JSON.parse(json) : {};
+  // Every known field key is present in the result, defaulting to null --
+  // matches the old one-column-per-field behavior, where a NULL column
+  // always decrypted to null rather than being absent from the row (same
+  // fix as accountFields.js's decryptFieldBlob).
+  return { ...Object.fromEntries(REGISTRATION_FIELD_KEYS.map((key) => [key, null])), ...data };
 }

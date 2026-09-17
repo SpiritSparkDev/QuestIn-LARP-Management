@@ -4,7 +4,7 @@ import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
-import { REGISTRATION_FIELD_KEYS } from '../registrationFields.js';
+import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 import {
   registerForEvent,
   setConRole,
@@ -213,7 +213,8 @@ router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ r
   // exists to restrict what staff may do to OTHERS, not self-service), same
   // as PATCH /account has no such restriction.
   if (!isOwner) {
-    const disallowed = Object.keys(body).filter((key) => REGISTRATION_FIELD_KEYS.includes(key) && !user.group.accountFields.includes(key));
+    const registrationFieldKeys = (await getRegistrationFieldSchema()).map((f) => f.key);
+    const disallowed = Object.keys(body).filter((key) => registrationFieldKeys.includes(key) && !user.group.accountFields.includes(key));
     if (disallowed.length > 0) {
       return { status: 400, body: { error: `not permitted to edit: ${disallowed.join(', ')}` } };
     }
@@ -232,7 +233,8 @@ router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ r
   notifyRegistrationOtFieldsChanged(params.id, params.userId);
 
   if (!isOwner) {
-    for (const key of REGISTRATION_FIELD_KEYS) {
+    const registrationFieldKeys = (await getRegistrationFieldSchema()).map((f) => f.key);
+    for (const key of registrationFieldKeys) {
       if (!user.group.accountFields.includes(key)) delete registration[key];
     }
   }
