@@ -2,10 +2,11 @@ import { encryptField, decryptField } from './crypto/fieldCrypto.js';
 
 // The 6 event-scoped OT fields on registrations -- field DEFINITIONS now
 // live in the admin-editable registration_field_schema (see
-// backend/registrationFieldSchema). This list only tracks the current set
-// of keys for callers that still need a static list; migrated to the live
-// schema in a later task (see backend/groups/routes.js).
-export const REGISTRATION_FIELD_KEYS = [
+// backend/registrationFieldSchema). backend/groups/routes.js fetches the
+// live schema instead of a static list. This fixed list is kept only for
+// decryptFieldBlob's defaults below, matching the old one-column-per-field
+// behavior regardless of what admins add/remove from the schema.
+const DEFAULT_REGISTRATION_FIELD_KEYS = [
   'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut',
 ];
 
@@ -20,5 +21,5 @@ export function decryptFieldBlob(buffer) {
   // matches the old one-column-per-field behavior, where a NULL column
   // always decrypted to null rather than being absent from the row (same
   // fix as accountFields.js's decryptFieldBlob).
-  return { ...Object.fromEntries(REGISTRATION_FIELD_KEYS.map((key) => [key, null])), ...data };
+  return { ...Object.fromEntries(DEFAULT_REGISTRATION_FIELD_KEYS.map((key) => [key, null])), ...data };
 }

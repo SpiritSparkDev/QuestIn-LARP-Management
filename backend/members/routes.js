@@ -9,14 +9,15 @@ import { sendInvitationEmail, sendVerificationEmail, baseUrl } from '../auth/mai
 import { getAppSettings } from '../appSettings/repository.js';
 import { logger } from '../logger.js';
 import { query } from '../db.js';
-import { ACCOUNT_FIELD_KEYS } from '../accountFields.js';
+import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { isValidEmail } from '../validation.js';
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
-function filterToAllowedFields(body, allowedFields) {
-  const disallowed = Object.keys(body).filter((key) => ACCOUNT_FIELD_KEYS.includes(key) && !allowedFields.includes(key));
-  return disallowed;
+async function filterToAllowedFields(body, allowedFields) {
+  const schemaKeys = (await getAccountFieldSchema()).map((f) => f.key);
+  const accountFieldKeys = ['group', ...schemaKeys];
+  return Object.keys(body).filter((key) => accountFieldKeys.includes(key) && !allowedFields.includes(key));
 }
 
 router.get('/members', requireAuth(requireMenu('mitglieder')(async ({ req }) => {
@@ -44,7 +45,7 @@ router.patch('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ req,
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
 
-  const disallowed = filterToAllowedFields(body, user.group.accountFields);
+  const disallowed = await filterToAllowedFields(body, user.group.accountFields);
   if (disallowed.length > 0) {
     return { status: 400, body: { error: `not permitted to edit: ${disallowed.join(', ')}` } };
   }
@@ -140,7 +141,7 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
   // they try to set it without the permission, that's the same 400 as any
   // other disallowed field.
   const fieldsToCheck = group !== undefined ? { ...rest, group } : rest;
-  const disallowed = filterToAllowedFields(fieldsToCheck, user.group.accountFields);
+  const disallowed = await filterToAllowedFields(fieldsToCheck, user.group.accountFields);
   if (disallowed.length > 0) {
     return { status: 400, body: { error: `not permitted to set: ${disallowed.join(', ')}` } };
   }
@@ -163,8 +164,9 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
 
   // 'rest' (arbitrary OT fields from the request body) is spread FIRST, so
   // an attacker-supplied 'groupId' (not filtered by filterToAllowedFields --
-  // that only guards ACCOUNT_FIELD_KEYS, and 'groupId' isn't one of those,
-  // 'group' is) can never override the server-computed values that follow.
+  // that only guards the account schema's field keys plus 'group', and
+  // 'groupId' isn't one of those) can never override the server-computed
+  // values that follow.
   const invitation = await createInvitation({
     ...rest,
     email: email.toLowerCase(),

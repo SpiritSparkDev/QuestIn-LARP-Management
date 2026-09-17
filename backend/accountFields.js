@@ -2,21 +2,19 @@ import { encryptField, decryptField } from './crypto/fieldCrypto.js';
 
 // OT (out-of-time) account fields -- the field DEFINITIONS (key, label,
 // type) now live in the admin-editable account_field_schema (see
-// backend/accountFieldSchema). This list only tracks the current set of
-// keys for callers that still need a static list; migrated to the live
-// schema in a later task (see backend/groups/routes.js,
-// backend/members/routes.js). 'group' is deliberately included here even
-// though it's excluded from the schema -- it's an access-control field,
-// not personal data, gated by the same permission list.
-export const ACCOUNT_FIELD_KEYS = [
-  'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone',
-  'medicalNotes', 'group',
-];
+// backend/accountFieldSchema). Consumers that need the current key set
+// (backend/groups/routes.js, backend/members/routes.js) fetch the live
+// schema instead of a static list.
 
-// The personal-data subset of ACCOUNT_FIELD_KEYS -- excludes 'group', which
-// is an access-control field stored in its own column, not in the
-// account_data_enc blob.
-export const PERSONAL_ACCOUNT_FIELD_KEYS = ACCOUNT_FIELD_KEYS.filter((key) => key !== 'group');
+// The personal-data subset of the account field keys -- excludes 'group',
+// which is an access-control field stored in its own column, not in the
+// account_data_enc blob. This is a fixed, hardcoded set (unlike the
+// admin-editable schema) because it must match the old one-column-per-field
+// defaults below regardless of what admins add/remove from the schema.
+const PERSONAL_ACCOUNT_FIELD_KEYS = [
+  'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone',
+  'medicalNotes',
+];
 
 // Encrypts/decrypts the single JSON blob of account (OT) field values --
 // replaces one *_enc column per field now that the field set is dynamic

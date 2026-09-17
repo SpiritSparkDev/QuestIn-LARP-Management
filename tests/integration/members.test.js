@@ -337,7 +337,7 @@ test('POST /members/invite ignores an attacker-supplied groupId that bypasses th
     // moderator lacks 'group' in its account_fields, so filterToAllowedFields
     // blocks the 'group' key — but createInvitation is built from
     // { ...rest, groupId, invitedBy }, and 'groupId' (a different key
-    // name) isn't in ACCOUNT_FIELD_KEYS at all, so before the fix a caller
+    // name) isn't one of the allowed account field keys at all, so before the fix a caller
     // could sneak a real, valid group uuid through under the wrong key
     // and have it silently override the server-computed groupId via
     // object-spread order. Using the real admin group id (not a bogus
