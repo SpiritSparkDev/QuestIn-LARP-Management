@@ -1,16 +1,16 @@
 const MAX_VALUE_LENGTH = 5000;
 const MAX_TOTAL_LENGTH = 20000;
 
-const RESERVED_SCHEMA_KEYS = ['id', 'name', 'eventId'];
+const DEFAULT_RESERVED_SCHEMA_KEYS = ['id', 'name', 'eventId'];
 
-export function validateSchemaShape(schema) {
+export function validateSchemaShape(schema, reservedKeys = DEFAULT_RESERVED_SCHEMA_KEYS) {
   if (!Array.isArray(schema)) return false;
   const seenKeys = new Set();
   for (const field of schema) {
     if (!field || typeof field !== 'object' || typeof field.key !== 'string' || field.key.length === 0) {
       return false;
     }
-    if (RESERVED_SCHEMA_KEYS.includes(field.key)) return false;
+    if (reservedKeys.includes(field.key)) return false;
     if (seenKeys.has(field.key)) return false;
     seenKeys.add(field.key);
   }

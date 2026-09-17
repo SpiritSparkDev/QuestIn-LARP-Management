@@ -200,3 +200,10 @@ test('validateSchemaShape rejects duplicate keys within one schema', () => {
     { key: 'klasse', label: 'Klasse (2)', type: 'text' },
   ]), false);
 });
+
+test('validateSchemaShape accepts a custom reserved-key list, rejecting only those keys', () => {
+  assert.equal(validateSchemaShape([{ key: 'group', label: 'Gruppe', type: 'text' }], ['id', 'group']), false);
+  assert.equal(validateSchemaShape([{ key: 'address', label: 'Adresse', type: 'text' }], ['id', 'group']), true);
+  // Default reserved keys still apply when no second argument is given.
+  assert.equal(validateSchemaShape([{ key: 'name', label: 'Name', type: 'text' }]), false);
+});
