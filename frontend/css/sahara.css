@@ -322,6 +322,10 @@ h1, h2, h3 {
   cursor: pointer;
 }
 
+.sidebar-toggle:hover {
+  background: var(--surface-container-low);
+}
+
 .main {
   flex: 1;
   min-width: 0;
@@ -448,6 +452,10 @@ h3 {
   color: var(--primary-deep);
 }
 
+.tab-btn:hover {
+  background: none;
+}
+
 /* ---------- Forms ---------- */
 
 form {
@@ -489,6 +497,10 @@ textarea {
 input[type="checkbox"] {
   display: inline-block;
   width: auto;
+}
+
+#event-select {
+  margin-bottom: 16px;
 }
 
 input::placeholder,
@@ -601,6 +613,10 @@ textarea.invalid {
 .toggle-btn.active {
   background: var(--primary);
   color: var(--on-primary);
+}
+
+.toggle-btn:not(.active):hover {
+  background: var(--surface-container-low);
 }
 
 .toggle-group-sm {
