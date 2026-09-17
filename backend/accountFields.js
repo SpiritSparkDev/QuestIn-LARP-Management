@@ -1,37 +1,35 @@
 import { encryptField, decryptField } from './crypto/fieldCrypto.js';
 
+// OT (out-of-time) account fields -- the field DEFINITIONS (key, label,
+// type) now live in the admin-editable account_field_schema (see
+// backend/accountFieldSchema). This list only tracks the current set of
+// keys for callers that still need a static list; migrated to the live
+// schema in a later task (see backend/groups/routes.js,
+// backend/members/routes.js). 'group' is deliberately included here even
+// though it's excluded from the schema -- it's an access-control field,
+// not personal data, gated by the same permission list.
 export const ACCOUNT_FIELD_KEYS = [
   'address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone',
   'medicalNotes', 'group',
 ];
 
-// Encrypted-at-rest member (OT) fields, mapped to their column. 'group' is
-// deliberately excluded: it's an access-control field, not personal data.
-export const ENCRYPTED_ACCOUNT_FIELD_COLUMNS = {
-  address: 'address_enc',
-  birthdate: 'birthdate_enc',
-  phone: 'phone_enc',
-  emergencyContactLastName: 'emergency_contact_last_name_enc',
-  emergencyContactFirstName: 'emergency_contact_first_name_enc',
-  emergencyContactPhone: 'emergency_contact_phone_enc',
-  medicalNotes: 'medical_notes_enc',
-};
+// The personal-data subset of ACCOUNT_FIELD_KEYS -- excludes 'group', which
+// is an access-control field stored in its own column, not in the
+// account_data_enc blob.
+export const PERSONAL_ACCOUNT_FIELD_KEYS = ACCOUNT_FIELD_KEYS.filter((key) => key !== 'group');
 
-const ENCRYPTED_FIELD_KEYS = Object.keys(ENCRYPTED_ACCOUNT_FIELD_COLUMNS);
-
-// Decrypts every OT field out of a row that carries the *_enc columns above
-// (aliased or not), keyed back to their camelCase field name.
-export function decryptEncryptedAccountFields(row) {
-  const result = {};
-  for (const key of ENCRYPTED_FIELD_KEYS) {
-    result[key] = decryptField(row[ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]]);
-  }
-  return result;
+// Encrypts/decrypts the single JSON blob of account (OT) field values --
+// replaces one *_enc column per field now that the field set is dynamic
+// (admin-editable via account_field_schema).
+export function encryptFieldBlob(values) {
+  return encryptField(JSON.stringify(values ?? {}));
 }
 
-// Encrypts whichever of the 7 OT fields are present in `fields`, always in
-// ENCRYPTED_ACCOUNT_FIELD_COLUMNS order -- callers append the result to their
-// own COALESCE UPDATE param list, after their entity-specific columns.
-export function encryptAccountFieldValues(fields) {
-  return ENCRYPTED_FIELD_KEYS.map((key) => (fields[key] !== undefined ? encryptField(fields[key]) : null));
+export function decryptFieldBlob(buffer) {
+  const json = decryptField(buffer);
+  const data = json ? JSON.parse(json) : {};
+  // Every known personal field key is present in the result, defaulting to
+  // null -- matches the old one-column-per-field behavior, where a NULL
+  // column always decrypted to null rather than being absent from the row.
+  return { ...Object.fromEntries(PERSONAL_ACCOUNT_FIELD_KEYS.map((key) => [key, null])), ...data };
 }

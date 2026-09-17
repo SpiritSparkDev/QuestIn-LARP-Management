@@ -46,7 +46,7 @@ services:
     volumes:
       - uploads-data:/app/uploads
     restart: unless-stopped
-    command: sh -c "npm run migrate && npm run seed-groups && npm run seed-nsc-schema && npm run seed-admin && npm start"
+    command: sh -c "npm run migrate && npm run seed-groups && npm run seed-nsc-schema && npm run seed-admin && npm run migrate-account-data-blob && npm start"
 
 volumes:
   db-data:

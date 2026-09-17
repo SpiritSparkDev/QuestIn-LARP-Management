@@ -3,7 +3,7 @@ import { getEvent } from '../events/repository.js';
 import { applyTransition } from './statusMachine.js';
 import { displayName } from '../displayName.js';
 import { decryptField } from '../crypto/fieldCrypto.js';
-import { ENCRYPTED_ACCOUNT_FIELD_COLUMNS } from '../accountFields.js';
+import { PERSONAL_ACCOUNT_FIELD_KEYS, decryptFieldBlob } from '../accountFields.js';
 import { filterCharacterFields } from '../characters/visibility.js';
 import { listOpenInvitationsForEvent } from '../invitations/repository.js';
 import { ENCRYPTED_REGISTRATION_FIELD_COLUMNS, decryptEncryptedRegistrationFields, encryptRegistrationFieldValues } from '../registrationFields.js';
@@ -195,13 +195,12 @@ export async function unregisterFromEvent(userId, eventId) {
 }
 
 export async function listParticipantsForEvent(eventId, { schema = [], viewer } = {}) {
-  const otKeys = (viewer?.group?.accountFields ?? []).filter((key) => key in ENCRYPTED_ACCOUNT_FIELD_COLUMNS);
+  const otKeys = (viewer?.group?.accountFields ?? []).filter((key) => PERSONAL_ACCOUNT_FIELD_KEYS.includes(key));
   const registrationOtKeys = (viewer?.group?.accountFields ?? []).filter((key) => key in ENCRYPTED_REGISTRATION_FIELD_COLUMNS);
-  const otColumnsSql = otKeys.map((key) => `, u.${ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]}`).join('');
   const registrationOtColumnsSql = registrationOtKeys.map((key) => `, r.${ENCRYPTED_REGISTRATION_FIELD_COLUMNS[key]}`).join('');
 
   const { rows: registrations } = await query(
-    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.checked_in_at, r.checked_out_at${otColumnsSql}${registrationOtColumnsSql}
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.checked_in_at, r.checked_out_at, u.account_data_enc${registrationOtColumnsSql}
      FROM registrations r
      JOIN users u ON u.id = r.user_id
      WHERE r.event_id = $1
@@ -226,20 +225,23 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     });
   }
 
-  const registered = registrations.map((r) => ({
-    userId: r.user_id,
-    invitationId: null,
-    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
-    status: r.status,
-    conRole: r.con_role,
-    checkedInAt: r.checked_in_at,
-    checkedOutAt: r.checked_out_at,
-    characters: charactersByUser.get(r.user_id) ?? [],
-    otFields: {
-      ...Object.fromEntries(otKeys.map((key) => [key, decryptField(r[ENCRYPTED_ACCOUNT_FIELD_COLUMNS[key]])])),
-      ...Object.fromEntries(registrationOtKeys.map((key) => [key, decryptField(r[ENCRYPTED_REGISTRATION_FIELD_COLUMNS[key]])])),
-    },
-  }));
+  const registered = registrations.map((r) => {
+    const accountData = decryptFieldBlob(r.account_data_enc);
+    return {
+      userId: r.user_id,
+      invitationId: null,
+      name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
+      status: r.status,
+      conRole: r.con_role,
+      checkedInAt: r.checked_in_at,
+      checkedOutAt: r.checked_out_at,
+      characters: charactersByUser.get(r.user_id) ?? [],
+      otFields: {
+        ...Object.fromEntries(otKeys.map((key) => [key, accountData[key] ?? null])),
+        ...Object.fromEntries(registrationOtKeys.map((key) => [key, decryptField(r[ENCRYPTED_REGISTRATION_FIELD_COLUMNS[key]])])),
+      },
+    };
+  });
 
   const notified = (await listOpenInvitationsForEvent(eventId)).map((inv) => ({
     userId: null,

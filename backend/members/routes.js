@@ -161,7 +161,12 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
 
   const { invitationTtlDays } = await getAppSettings();
 
+  // 'rest' (arbitrary OT fields from the request body) is spread FIRST, so
+  // an attacker-supplied 'groupId' (not filtered by filterToAllowedFields --
+  // that only guards ACCOUNT_FIELD_KEYS, and 'groupId' isn't one of those,
+  // 'group' is) can never override the server-computed values that follow.
   const invitation = await createInvitation({
+    ...rest,
     email: email.toLowerCase(),
     firstName,
     lastName,
@@ -169,13 +174,6 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     groupId: groupRows[0].id,
     invitedBy: user.id,
     eventId: eventId || undefined,
-    address: rest.address,
-    birthdate: rest.birthdate,
-    phone: rest.phone,
-    emergencyContactLastName: rest.emergencyContactLastName,
-    emergencyContactFirstName: rest.emergencyContactFirstName,
-    emergencyContactPhone: rest.emergencyContactPhone,
-    medicalNotes: rest.medicalNotes,
     ttlDays: invitationTtlDays,
   });
 

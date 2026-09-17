@@ -13,6 +13,9 @@ await runMigrations();
 const { seedGroups } = await import('../../db/seedGroups.js');
 await seedGroups();
 
+const { migrateAccountDataBlob } = await import('../../db/migrateAccountDataBlob.js');
+await migrateAccountDataBlob();
+
 const { query, closePool } = await import('../../backend/db.js');
 const { createServer } = await import('../../backend/server.js');
 const { createInvitation, getInvitationByToken, regenerateToken, markRedeemed, getInvitationById, cancelInvitation } = await import('../../backend/invitations/repository.js');
@@ -42,8 +45,8 @@ test('createInvitation stores encrypted fields that decrypt back correctly', asy
     medicalNotes: 'keine',
   });
   assert.equal(invitation.medicalNotes, 'keine');
-  const { rows } = await query('SELECT medical_notes_enc FROM invitations WHERE id = $1', [invitation.id]);
-  assert.notEqual(rows[0].medical_notes_enc.toString('utf8'), 'keine');
+  const { rows } = await query('SELECT account_data_enc FROM invitations WHERE id = $1', [invitation.id]);
+  assert.ok(!rows[0].account_data_enc.toString('utf8').includes('keine'));
 });
 
 test('POST /auth/invite/redeem creates a real user, logs them in, and marks the invitation redeemed', async () => {
@@ -69,10 +72,10 @@ test('POST /auth/invite/redeem creates a real user, logs them in, and marks the 
     assert.equal(res.status, 200);
     assert.ok(res.headers.get('set-cookie'));
 
-    const { rows } = await query('SELECT email_verified, group_id, address_enc FROM users WHERE id = $1', [(await res.json()).id]);
+    const { rows } = await query('SELECT email_verified, group_id, account_data_enc FROM users WHERE id = $1', [(await res.json()).id]);
     assert.equal(rows[0].email_verified, true);
     assert.equal(rows[0].group_id, groupId);
-    assert.notEqual(rows[0].address_enc.toString('utf8'), 'Teststraße 1');
+    assert.ok(!rows[0].account_data_enc.toString('utf8').includes('Teststraße 1'));
 
     const redeemed = await getInvitationByToken(invitation.token);
     assert.ok(redeemed.redeemedAt);

@@ -3,12 +3,16 @@ import assert from 'node:assert/strict';
 
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   || 'postgres://app:app@localhost:5433/pakyrion_test';
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64);
 
 const { runMigrations } = await import('../../db/migrate.js');
 await runMigrations();
 
 const { seedGroups } = await import('../../db/seedGroups.js');
 await seedGroups();
+
+const { migrateAccountDataBlob } = await import('../../db/migrateAccountDataBlob.js');
+await migrateAccountDataBlob();
 
 const { query, closePool } = await import('../../backend/db.js');
 const { GROUP_DEFAULTS } = await import('../../db/groupDefaults.js');
@@ -86,6 +90,20 @@ test('users.first_name and users.last_name columns exist and are NOT NULL', asyn
   for (const row of rows) {
     assert.equal(row.is_nullable, 'NO', `${row.column_name} should be NOT NULL`);
   }
+});
+
+test('users.address_enc column no longer exists after migration', async () => {
+  const { rows } = await query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'address_enc'`
+  );
+  assert.equal(rows.length, 0);
+});
+
+test('users.account_data_enc column exists after migration', async () => {
+  const { rows } = await query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'account_data_enc'`
+  );
+  assert.equal(rows.length, 1);
 });
 
 test.after(async () => {
