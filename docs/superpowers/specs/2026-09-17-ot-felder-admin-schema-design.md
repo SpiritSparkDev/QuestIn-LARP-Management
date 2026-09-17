@@ -155,9 +155,18 @@ Anmeldungsfelder geben, ohne dass sich am Permission-Modell sonst etwas
 - `backend/accounts/repository.js`, `backend/members/repository.js`: SELECT/
   UPDATE verlieren die namentlich ausgeschriebenen `*_enc`-Spalten, lesen/
   schreiben stattdessen `account_data_enc` als Ganzes über
-  `decryptFieldBlob`/`encryptFieldBlob`. Eingehende Werte werden vor dem
-  Schreiben gegen das aktuelle `account_field_schema` validiert (gleiche
-  Funktion wie Charakterdaten).
+  `decryptFieldBlob`/`encryptFieldBlob`. Wie heute wird der Wert eines
+  OT-Felds beim Schreiben nicht typgeprüft (nur die Feld-**Keys** werden
+  gegen das aktuelle Schema abgeglichen, um zu entscheiden was überhaupt in
+  den Blob übernommen wird — ein unbekannter Key wie `nscData` wird wie
+  bisher stillschweigend ignoriert, nicht 400). Nur die Schema-**Definition**
+  selbst wird beim Speichern über `/account-schema`/`/registration-schema`
+  mit `validateSchemaShape` geprüft, nicht die einzelnen Feldwerte bei jedem
+  Schreibzugriff — das wäre eine neue, nicht angefragte Verschärfung
+  gegenüber dem heutigen Verhalten (Charakterdaten validieren Werte, weil
+  `PUT /characters/:id` ein Full-Replace ist; die OT-Endpunkte sind
+  Partial-Updates, bei denen "required" und "unbekanntes Feld" ohnehin nicht
+  sauber anwendbar wären).
 - `backend/invitations/repository.js`: `createInvitation`/
   `decryptInvitation` verlieren die 7 positional ausgeschriebenen Spalten,
   nutzen denselben Blob-Ansatz. `backend/auth/invite.js`s
@@ -186,12 +195,21 @@ Anmeldungsfelder geben, ohne dass sich am Permission-Modell sonst etwas
   verdrahtet. Der neue `date`-Typ wird im Typ-`<select>` des Editors
   ergänzt (steht damit auch IT-Schemas zur Verfügung, falls dort mal
   gebraucht).
-- `frontend/js/formFields.js`: `renderAccountFieldInput` entfällt zugunsten
-  des bereits generischen `renderField`/`collectFieldValues` (inkl. neuem
-  `date`-Fall: `<input type="date">`). Die bisherige Opt-Out-Checkbox-
-  Sonderbehandlung (`OPT_OUT_KEYS`) entfällt, da `dataSharingOptOut`/
-  `photoOptOut` im Schema als `type: boolean` geführt werden — `renderField`
-  rendert `boolean` bereits als Checkbox.
+- `frontend/js/formFields.js`: `renderAccountFieldInput` **bleibt erhalten**
+  (CLAUDE.md schützt explizit seine per-Feld `<div class="${key}-container">`-
+  Wrapper als bewussten UI-Hook — nicht beim Refactoring entfernen), wird aber
+  von `(key, label, value, opts)` auf ein volles Feld-Definitionsobjekt
+  `(field, value, opts)` umgestellt (`field = {key, label, type, required,
+  options}`, gleiche Form wie IT-Schema-Felder) und um dieselben Typ-Fälle wie
+  `renderField` erweitert (`text`, `textarea`, `select`, `number`, `boolean`,
+  `multiselect`, `link`, `date`) — jeder Fall weiterhin einzeln in
+  `<div class="${key}-container">` gewrappt. Die bisherige Opt-Out-Checkbox-
+  Sonderbehandlung (`OPT_OUT_KEYS`/`isOptOutYes`) entfällt, da
+  `dataSharingOptOut`/`photoOptOut` im Schema als `type: boolean` geführt
+  werden und dieser Fall generisch als Checkbox gerendert wird. Eine neue
+  `collectAccountFieldValues(form, schema)` (analog `collectFieldValues`,
+  aber mit `data-field`/`id`-Konvention statt `name`-Attributen, wie es die
+  bestehenden OT-Formulare heute schon verwenden) liest die Werte zurück.
 - `frontend/account.html`, `admin/members.html`, `admin/checkin.html`,
   `frontend/con-anmeldungen.html`: alle Stellen, die heute
   `ACCOUNT_FIELD_LABELS`/`REGISTRATION_FIELD_LABELS` importieren, laden
@@ -201,11 +219,11 @@ Anmeldungsfelder geben, ohne dass sich am Permission-Modell sonst etwas
 
 ## 7. Fehlerbehandlung
 
-- Ungültige Feldwerte (falscher Typ, fehlender Pflichtwert) bei
-  `PATCH /account`, `PATCH /members/:id`, `PUT .../ot-fields`: 400 mit
-  Validierungsfehler — gleiches Verhalten wie bei Charakterdaten.
-- Schema-PUT mit doppeltem/reserviertem Key: 400, gleiche Fehlermeldung wie
-  bei `/sc-schema`/`/nsc-schema`.
+- `PATCH /account`, `PATCH /members/:id`, `PUT .../ot-fields`: keine
+  Typprüfung der Feldwerte (siehe 5.) — unverändert gegenüber heute.
+- Schema-PUT (`/account-schema`, `/registration-schema`) mit doppeltem/
+  reserviertem Key: 400, gleiche Fehlermeldung wie bei
+  `/sc-schema`/`/nsc-schema`.
 - Migration schlägt bei nicht gesetztem `ENCRYPTION_KEY` fehl (wie jede
   bestehende Verschlüsselungs-Operation) — kein Sonderfall.
 
@@ -213,9 +231,9 @@ Anmeldungsfelder geben, ohne dass sich am Permission-Modell sonst etwas
 
 - Migrationsskript: Rundlauf alt-verschlüsselte Spalten → Blob, auf
   Testdaten mit Sonderzeichen/Umlauten/leeren Werten.
-- `validateSchemaShape`/Datenvalidierung gegen beide neuen Schemas
-  (reservierte Keys, doppelte Keys, unbekannter Typ) — analog bestehender
-  `scSchema`/`nscSchema`-Tests.
+- `validateSchemaShape` gegen die beiden neuen reservierten-Key-Mengen
+  (`['id', 'group']` fürs Konto-Schema, `['id']` fürs Anmeldungs-Schema) —
+  analog bestehender `scSchema`/`nscSchema`-Tests.
 - `GET/PUT /account-schema`, `GET/PUT /registration-schema`: Admin-Only-Gate,
   Persistenz.
 - Bestehende Suiten (`accounts`, `members`, `invitations`, `registrations`,
@@ -231,3 +249,17 @@ Projekts: erst gegen die lokale Dev-DB (`docker-compose.dev.yml`) verifizieren,
 dann erst auf Produktion. Migration und alle betroffenen Backend-Konsumenten
 gehören in denselben Task (gleiche Regel wie in den vorangegangenen
 OT-Feld-Migrationen dieses Projekts).
+
+**Akzeptierter Nebeneffekt des Ein-Blob-Modells**: Die heutige
+spaltenweise `COALESCE`-UPDATE ist pro Feld atomar und race-frei. Ein
+Blob-Feld lässt sich nicht mehr per SQL `COALESCE` mergen (die Menge der
+Keys ist dynamisch) — `updateAccount`/`updateMember`/
+`updateRegistrationOtFields` lesen den aktuellen Blob, mergen die
+übergebenen Felder in JS und schreiben ihn zurück. Zwei gleichzeitige
+`PATCH`-Aufrufe, die unterschiedliche Felder desselben Kontos ändern,
+können sich dadurch überschreiben (last write wins) — ein neues,
+akzeptiertes Risiko dieses Modells, in der Praxis vernachlässigbar (kein
+Multi-Device-Parallel-Editing-Anwendungsfall in dieser App). Nicht mit
+einer Locking-Lösung abgefangen; falls das je zum echten Problem wird, ist
+ein optimistisches `WHERE account_data_enc = $vorher`-Compare-and-swap der
+naheliegende Fix.
