@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeHtml, renderField, collectFieldValues, renderAccountFieldInput } from '../../frontend/js/formFields.js';
+import { escapeHtml, renderField, collectFieldValues, renderAccountFieldInput, collectAccountFieldValues } from '../../frontend/js/formFields.js';
 
 test('escapeHtml escapes the five dangerous characters', () => {
   assert.equal(escapeHtml(`<script>&"'`), '&lt;script&gt;&amp;&quot;&#39;');
@@ -167,30 +167,56 @@ test('collectFieldValues reads a text field as a plain string via get', () => {
   assert.equal(result.name, 'Isolde');
 });
 
-test('renderAccountFieldInput renders opt-out keys as checkboxes and others as text', () => {
-  const checkboxHtml = renderAccountFieldInput('photoOptOut', 'Keine Fotoveröffentlichung', 'Ja');
+test('renderAccountFieldInput renders a checkbox for type "boolean" and a text input otherwise, both wrapped in a per-field container div', () => {
+  const checkboxHtml = renderAccountFieldInput({ key: 'photoOptOut', label: 'Keine Fotoveröffentlichung', type: 'boolean' }, true);
+  assert.match(checkboxHtml, /class="photoOptOut-container"/);
   assert.match(checkboxHtml, /type="checkbox"/);
   assert.match(checkboxHtml, / checked/);
 
-  const uncheckedHtml = renderAccountFieldInput('photoOptOut', 'Keine Fotoveröffentlichung', 'Nein');
+  const uncheckedHtml = renderAccountFieldInput({ key: 'photoOptOut', label: 'Keine Fotoveröffentlichung', type: 'boolean' }, false);
   assert.doesNotMatch(uncheckedHtml, / checked/);
 
-  const textHtml = renderAccountFieldInput('address', 'Adresse', 'Musterstr. 1');
+  const textHtml = renderAccountFieldInput({ key: 'address', label: 'Adresse', type: 'text' }, 'Musterstr. 1');
+  assert.match(textHtml, /class="address-container"/);
   assert.match(textHtml, /type="text"/);
   assert.match(textHtml, /value="Musterstr\. 1"/);
 });
 
+test('renderAccountFieldInput supports select, number, multiselect, link, and date types like renderField', () => {
+  const selectHtml = renderAccountFieldInput({ key: 'shirtSize', label: 'Shirtgröße', type: 'select', options: ['S', 'M'] }, 'M');
+  assert.match(selectHtml, /<select/);
+  assert.match(selectHtml, /class="shirtSize-container"/);
+
+  const dateHtml = renderAccountFieldInput({ key: 'birthdate', label: 'Geburtsdatum', type: 'date' }, '2000-01-01');
+  assert.match(dateHtml, /type="date"/);
+  assert.match(dateHtml, /value="2000-01-01"/);
+});
+
 test('renderAccountFieldInput appends the sealedBadge HTML after the label text when given', () => {
-  const html = renderAccountFieldInput('address', 'Adresse', '', { sealedBadge: '<span class="sealed">X</span>' });
+  const html = renderAccountFieldInput({ key: 'address', label: 'Adresse', type: 'text' }, '', { sealedBadge: '<span class="sealed">X</span>' });
   assert.match(html, /Adresse<span class="sealed">X<\/span><\/label>/);
 });
 
 test('renderAccountFieldInput namespaces id/for with idPrefix, defaulting to unprefixed', () => {
-  const plain = renderAccountFieldInput('address', 'Adresse', '');
+  const plain = renderAccountFieldInput({ key: 'address', label: 'Adresse', type: 'text' }, '');
   assert.match(plain, /id="field-address"/);
   assert.match(plain, /for="field-address"/);
 
-  const prefixed = renderAccountFieldInput('address', 'Adresse', '', { idPrefix: 'edit-' });
+  const prefixed = renderAccountFieldInput({ key: 'address', label: 'Adresse', type: 'text' }, '', { idPrefix: 'edit-' });
   assert.match(prefixed, /id="edit-field-address"/);
   assert.match(prefixed, /for="edit-field-address"/);
+});
+
+test('collectAccountFieldValues reads a boolean field from a checkbox and a text field from its value', () => {
+  const schema = [
+    { key: 'photoOptOut', label: 'Foto', type: 'boolean' },
+    { key: 'address', label: 'Adresse', type: 'text' },
+  ];
+  const fakeInputs = [
+    { dataset: { field: 'photoOptOut' }, type: 'checkbox', checked: true },
+    { dataset: { field: 'address' }, type: 'text', value: 'Musterstr. 1' },
+  ];
+  const fakeContainer = { querySelectorAll: () => fakeInputs };
+  const result = collectAccountFieldValues(fakeContainer, schema);
+  assert.deepEqual(result, { photoOptOut: true, address: 'Musterstr. 1' });
 });

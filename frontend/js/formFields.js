@@ -1,55 +1,84 @@
-// OT (out-of-time) member fields: the encrypted, personal data columns a
-// group's account_fields permission can grant access to.
-export const ACCOUNT_FIELD_LABELS = {
-  address: 'Adresse', birthdate: 'Geburtsdatum', phone: 'Telefon',
-  emergencyContactLastName: 'Notfallkontakt: Name', emergencyContactFirstName: 'Notfallkontakt: Vorname', emergencyContactPhone: 'Notfallkontakt: Telefonnummer',
-  medicalNotes: 'Gesundheitshinweise',
-};
-
-// OT fields scoped to a single Con-Anmeldung instead of the account (moved
-// there in Teil 3 of the user-testing feedback package) -- the same
-// group.accountFields permission list gates visibility of these too.
-export const REGISTRATION_FIELD_LABELS = {
-  conTage: 'Con-Tage des Spielers',
-  accommodation: 'Unterbringung (Hütte/IT-Zelt/OT-Zelt, Anzahl, qm)',
-  craftOffer: 'Angebotenes Handwerk',
-  travelMethod: 'Anreise (Auto/Motorrad, Bahn, muss abgeholt werden)',
-  dataSharingOptOut: 'Daten nicht an andere Teilnehmer weitergeben (Ja/Nein)',
-  photoOptOut: 'Keine Fotoveröffentlichung (Ja/Nein)',
-};
-
 // Registration/participant status, keyed by the status column's DB value.
 export const STATUS_LABELS = {
   notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet',
   checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt',
 };
 
-// True if a Ja/Nein opt-out field's raw stored value means "yes" (checked).
-// These fields are free text at the DB layer, so this also accepts whatever
-// case a user typed before the field became a checkbox.
-export function isOptOutYes(value) {
-  return typeof value === 'string' && value.trim().toLowerCase() === 'ja';
+// Renders one OT (account/registration) field from a schema-shaped field
+// definition ({key, label, type, options}) -- same field shape as IT
+// (character) schema fields. `sealedBadge`, if given, is raw HTML appended
+// to the label (e.g. the lock-icon "Verschlüsselt" badge). Each field is
+// wrapped in its own `<div class="${key}-container">` -- this wrapper
+// carries no styling today and looks removable, but it's a deliberate
+// per-field CSS/JS hook the user added for upcoming UI work. Do not delete
+// it as "unused" or collapse it back to a bare label+input.
+export function renderAccountFieldInput(field, value, { sealedBadge = '', idPrefix = '' } = {}) {
+  const { key, type } = field;
+  const escapedLabel = escapeHtml(field.label ?? key) + sealedBadge;
+  const val = escapeHtml(value);
+  const id = `${idPrefix}field-${key}`;
+
+  if (type === 'boolean') {
+    const checked = value ? ' checked' : '';
+    return `<div class="${key}-container"><label for="${id}"><input id="${id}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}</label></div>`;
+  }
+  if (type === 'multiselect' && Array.isArray(field.options)) {
+    const selected = Array.isArray(value) ? value : [];
+    const checkboxes = field.options.map((opt, i) => {
+      const escapedOpt = escapeHtml(opt);
+      const checked = selected.includes(opt) ? ' checked' : '';
+      return `<label for="${id}-${i}"><input id="${id}-${i}" data-field="${key}" type="checkbox" value="${escapedOpt}"${checked}> ${escapedOpt}</label>`;
+    }).join('');
+    return `<div class="${key}-container"><span>${escapedLabel}</span>${checkboxes}</div>`;
+  }
+  if (type === 'number') {
+    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="number" value="${val}"><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  if (type === 'link') {
+    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="url" value="${val}"><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  if (type === 'date') {
+    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="date" value="${val}"><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  if (type === 'textarea') {
+    return `<div class="${key}-container"><textarea id="${id}" data-field="${key}">${val}</textarea><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  if (type === 'select' && Array.isArray(field.options)) {
+    const options = field.options.map((opt) => {
+      const escapedOpt = escapeHtml(opt);
+      const selected = opt === value ? ' selected' : '';
+      return `<option value="${escapedOpt}"${selected}>${escapedOpt}</option>`;
+    }).join('');
+    return `<div class="${key}-container"><select id="${id}" data-field="${key}"><option value=""></option>${options}</select><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="text" value="${val}"><label for="${id}">${escapedLabel}</label></div>`;
 }
 
-// Free text let a caller type anything besides Ja/Nein; these two are
-// rendered as checkboxes everywhere they're editable instead.
-export const OPT_OUT_KEYS = ['dataSharingOptOut', 'photoOptOut'];
-
-// Renders one OT (account) field as a labeled input: a checkbox for the two
-// Ja/Nein opt-out keys, a text input otherwise. `sealedBadge`, if given, is
-// raw HTML appended to the label (e.g. the lock-icon "Verschlüsselt" badge).
-// Each field is wrapped in its own `<div class="${key}-container">` -- this
-// wrapper carries no styling today and looks removable, but it's a
-// deliberate per-field CSS/JS hook the user added for upcoming UI work.
-// Do not delete it as "unused" or collapse it back to a bare label+input.
-export function renderAccountFieldInput(key, label, value, { sealedBadge = '', idPrefix = '' } = {}) {
-  const escapedLabel = escapeHtml(label);
-  const id = `${idPrefix}field-${key}`;
-  if (OPT_OUT_KEYS.includes(key)) {
-    const checked = isOptOutYes(value) ? ' checked' : '';
-    return `<div class="${key}-container"><label for="${id}"><input id="${id}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}${sealedBadge}</label></div>`;
+// Reads a schema-driven OT-field container's current values back into a
+// plain object, keyed by field key. Mirrors collectFieldValues's per-type
+// logic, but keys off [data-field] elements (this page family's existing
+// DOM convention) instead of a <form>'s `name` attributes.
+export function collectAccountFieldValues(container, schema) {
+  const result = {};
+  const inputsByKey = new Map();
+  container.querySelectorAll('[data-field]').forEach((input) => {
+    if (!inputsByKey.has(input.dataset.field)) inputsByKey.set(input.dataset.field, []);
+    inputsByKey.get(input.dataset.field).push(input);
+  });
+  for (const field of schema) {
+    const inputs = inputsByKey.get(field.key) ?? [];
+    if (inputs.length === 0) continue;
+    if (field.type === 'boolean') {
+      result[field.key] = inputs[0].checked;
+    } else if (field.type === 'multiselect') {
+      result[field.key] = inputs.filter((i) => i.checked).map((i) => i.value);
+    } else if (field.type === 'number') {
+      result[field.key] = inputs[0].value === '' ? undefined : Number(inputs[0].value);
+    } else {
+      result[field.key] = inputs[0].value;
+    }
   }
-  return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="text" value="${escapeHtml(value ?? '')}"><label for="${id}">${escapedLabel}${sealedBadge}</label></div>`;
+  return result;
 }
 
 // Formats a character (IT) custom-field value for display, e.g. as a

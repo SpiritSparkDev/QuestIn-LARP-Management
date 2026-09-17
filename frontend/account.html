@@ -299,9 +299,7 @@
         STATUS_LABELS,
         renderEventOptions,
         renderAccountFieldInput,
-        REGISTRATION_FIELD_LABELS,
-        isOptOutYes,
-        OPT_OUT_KEYS,
+        collectAccountFieldValues,
       } from "/js/formFields.js";
       import { buildScanCode } from "/js/qrCode.js";
 
@@ -593,25 +591,17 @@
       let canEditCharacters = false;
       let isModeratorOrAdmin = false;
       let currentUserId = null;
+      let registrationSchema = [];
 
       function renderOtFields(values = {}) {
-        otFieldsContainer.innerHTML = Object.entries(REGISTRATION_FIELD_LABELS)
-          .map(([key, label]) =>
-            renderAccountFieldInput(key, label, values[key], {
-              idPrefix: "register-",
-            }),
-          )
+        otFieldsContainer.innerHTML = registrationSchema
+          .map((field) => renderAccountFieldInput(field, values[field.key], { idPrefix: "register-" }))
           .join("");
         attachLiveValidation(otFieldsContainer);
       }
 
       function collectOtFields() {
-        const result = {};
-        otFieldsContainer.querySelectorAll("[data-field]").forEach((input) => {
-          result[input.dataset.field] =
-            input.type === "checkbox" ? (input.checked ? "Ja" : "Nein") : input.value;
-        });
-        return result;
+        return collectAccountFieldValues(otFieldsContainer, registrationSchema);
       }
 
       function updateRegisterButtonLabel() {
@@ -681,12 +671,8 @@
         const registration = currentRegistrations.find((r) => r.eventId === eventId);
         if (!registration) return;
         editingEventId = eventId;
-        editOtFieldsContainer.innerHTML = Object.entries(REGISTRATION_FIELD_LABELS)
-          .map(([key, label]) =>
-            renderAccountFieldInput(key, label, registration[key], {
-              idPrefix: "edit-",
-            }),
-          )
+        editOtFieldsContainer.innerHTML = registrationSchema
+          .map((field) => renderAccountFieldInput(field, registration[field.key], { idPrefix: "edit-" }))
           .join("");
         attachLiveValidation(editOtFieldsContainer);
         editOtDialog.showModal();
@@ -701,20 +687,17 @@
         const registration = currentRegistrations.find(
           (r) => r.eventId === editingEventId,
         );
+        const collected = collectAccountFieldValues(editOtFieldsContainer, registrationSchema);
         const payload = {};
-        editOtFieldsContainer.querySelectorAll("[data-field]").forEach((input) => {
-          const key = input.dataset.field;
-          const originalValue = registration?.[key] ?? "";
+        for (const field of registrationSchema) {
+          const originalValue = registration?.[field.key] ?? (field.type === "boolean" ? false : "");
+          const newValue = collected[field.key];
           // Only send a field that actually changed -- a save that touched nothing
           // must not PUT .../ot-fields, since a successful call mails every event
           // orga/hilfs_orga plus every admin/moderator.
-          const changed = OPT_OUT_KEYS.includes(key)
-            ? isOptOutYes(originalValue) !== input.checked
-            : originalValue !== input.value;
-          if (!changed) return;
-          payload[key] =
-            input.type === "checkbox" ? (input.checked ? "Ja" : "Nein") : input.value;
-        });
+          if (field.type === "boolean" ? Boolean(originalValue) === Boolean(newValue) : originalValue === newValue) continue;
+          payload[field.key] = newValue;
+        }
         registrationMessage.textContent = "";
         registrationMessage.className = "";
         if (Object.keys(payload).length === 0) {
@@ -1269,6 +1252,7 @@
             .querySelectorAll("#con-role-select option[data-staff-only]")
             .forEach((opt) => opt.remove());
         }
+        registrationSchema = await api.get("/registration-schema");
         renderOtFields();
         renderDashboardAccountHint(account);
 
