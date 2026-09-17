@@ -59,6 +59,31 @@ test('PUT /registration-schema rejects a non-admin group and the reserved "id" k
   });
 });
 
+test('PUT /registration-schema updates the schema for an admin caller', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const originalRes = await fetch(`http://localhost:${port}/registration-schema`, { headers: { Cookie: cookie } });
+    const original = await originalRes.json();
+    const newSchema = [{ key: 'tentSize', label: 'Zeltgröße', type: 'text', required: false }];
+    try {
+      const putRes = await fetch(`http://localhost:${port}/registration-schema`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ schema: newSchema }),
+      });
+      assert.equal(putRes.status, 200);
+      const getRes = await fetch(`http://localhost:${port}/registration-schema`, { headers: { Cookie: cookie } });
+      assert.deepEqual(await getRes.json(), newSchema);
+    } finally {
+      await fetch(`http://localhost:${port}/registration-schema`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ schema: original }),
+      });
+    }
+  });
+});
+
 test.after(async () => {
   await query("DELETE FROM users WHERE email LIKE 'reg-schema-%'");
   await closePool();
