@@ -104,16 +104,6 @@ export function escapeHtml(value) {
   }[ch]));
 }
 
-export function attachBirthdateFormatter(inputEl) {
-  inputEl.addEventListener('input', () => {
-    const digits = inputEl.value.replace(/\D/g, '').slice(0, 8);
-    let formatted = digits.slice(0, 2);
-    if (digits.length > 2) formatted += `.${digits.slice(2, 4)}`;
-    if (digits.length > 4) formatted += `.${digits.slice(4, 8)}`;
-    inputEl.value = formatted;
-  });
-}
-
 let liveValidationIdCounter = 0;
 
 // Shows a field's native validation message only after the user has
