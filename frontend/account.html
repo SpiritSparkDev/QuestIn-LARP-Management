@@ -34,22 +34,45 @@
       <div class="content account-page">
 
         <div class="tab-panel" id="dashboard-tab">
-          <h1>Übersicht</h1>
+          <div class="dashboard-layout">
+            <div class="dashboard-main">
+              <h1>Übersicht</h1>
 
-          <div class="card" id="dashboard-event-card"></div>
+              <div class="card" id="dashboard-event-card"></div>
 
-          <div id="qr-section" style="display:none;">
-            <hr class="rule">
-            <h2>Mein QR-Code</h2>
-            <p class="lede" id="qr-hint"></p>
-            <canvas id="qr-canvas"></canvas>
+              <h2>Meine Charaktere</h2>
+              <div id="dashboard-character-list" class="char-grid"></div>
+              <button type="button" id="dashboard-characters-link" class="btn-ghost">Alle Charaktere verwalten</button>
+
+              <div class="card" id="dashboard-account-hint" style="display:none;"></div>
+            </div>
+
+            <div class="ticket-panel" id="ticket-panel" style="display:none;">
+              <h2>Dein Event-Ticket</h2>
+              <p class="lede">Am Check-In Schalter vorzeigen oder digital abspeichern.</p>
+
+              <div class="ticket-card" id="ticket-card">
+                <p class="ticket-eyebrow">Offizieller Pass</p>
+                <h3 class="ticket-event-name" id="ticket-event-name"></h3>
+                <hr class="ticket-divider">
+                <div class="ticket-details">
+                  <div class="ticket-field"><span class="ticket-label">Teilnehmer</span><span class="ticket-value" id="ticket-participant"></span></div>
+                  <div class="ticket-field"><span class="ticket-label">Rolle</span><span class="ticket-value" id="ticket-role"></span></div>
+                  <div class="ticket-field"><span class="ticket-label">Datum</span><span class="ticket-value" id="ticket-date"></span></div>
+                </div>
+                <p class="ticket-scan-label">Scan beim Check-In</p>
+                <div class="ticket-qr-wrap"><canvas id="qr-canvas"></canvas></div>
+                <p class="ticket-id" id="ticket-id"></p>
+              </div>
+
+              <p class="sub" id="ticket-empty-hint" style="display:none;"></p>
+
+              <div class="ticket-actions">
+                <button type="button" id="ticket-download-png">Ticket herunterladen (PNG)</button>
+                <button type="button" id="ticket-download-pdf" class="btn-secondary">Als PDF</button>
+              </div>
+            </div>
           </div>
-
-          <h2>Meine Charaktere</h2>
-          <div id="dashboard-character-list" class="char-grid"></div>
-          <button type="button" id="dashboard-characters-link" class="btn-ghost">Alle Charaktere verwalten</button>
-
-          <div class="card" id="dashboard-account-hint" style="display:none;"></div>
         </div>
 
         <div class="tab-panel" id="konto-tab" hidden>
@@ -463,28 +486,33 @@
       window.location.href = "/login.html";
     });
 
+    function showTicketHint(message) {
+      document.getElementById("ticket-panel").style.display = "";
+      document.getElementById("ticket-card").style.display = "none";
+      const hint = document.getElementById("ticket-empty-hint");
+      hint.textContent = message;
+      hint.style.display = "";
+      document.querySelector("#ticket-panel .ticket-actions").style.display = "none";
+    }
+
     async function loadQrCode(account, qrEvents, qrRegistrations) {
-      const qrSection = document.getElementById("qr-section");
-      const qrHint = document.getElementById("qr-hint");
+      const panel = document.getElementById("ticket-panel");
+      const card = document.getElementById("ticket-card");
       try {
         const activeEvent = qrEvents.find((e) => e.is_active);
         if (!activeEvent) {
-          qrSection.style.display = "";
-          qrHint.textContent = "Aktuell ist kein Event für die Anmeldung geöffnet.";
+          showTicketHint("Aktuell ist kein Event für die Anmeldung geöffnet.");
           return;
         }
         if (!activeEvent.code) {
-          qrSection.style.display = "";
-          qrHint.textContent =
-            "Für dieses Event ist noch kein QR-Code eingerichtet.";
+          showTicketHint("Für dieses Event ist noch kein QR-Code eingerichtet.");
           return;
         }
         const registration = qrRegistrations.find(
           (r) => r.eventId === activeEvent.id,
         );
         if (!registration) {
-          qrSection.style.display = "";
-          qrHint.textContent = `Du bist für "${activeEvent.name}" nicht angemeldet.`;
+          showTicketHint(`Du bist für "${activeEvent.name}" nicht angemeldet.`);
           return;
         }
 
@@ -512,15 +540,47 @@
           }
         }
 
-        qrSection.style.display = "";
-        qrHint.textContent = `Für "${activeEvent.name}" — zeig diesen Code beim Check-In vor.`;
+        document.getElementById("ticket-event-name").textContent = activeEvent.name;
+        document.getElementById("ticket-participant").textContent =
+          account.nickname || `${account.firstName} ${account.lastName}`;
+        document.getElementById("ticket-role").textContent =
+          CON_ROLE_LABELS[registration.conRole] ?? registration.conRole;
+        document.getElementById("ticket-date").textContent = activeEvent.event_date;
+        document.getElementById("ticket-id").textContent = `ID: ${code}`;
+
+        const { hasUploadedTicketBackground } = await api.get("/app-settings");
+        card.style.setProperty(
+          "--ticket-bg-image",
+          hasUploadedTicketBackground ? `url("/app-settings/ticket-background")` : "none",
+        );
+
+        panel.style.display = "";
+        card.style.display = "";
+        document.getElementById("ticket-empty-hint").style.display = "none";
+        document.querySelector("#ticket-panel .ticket-actions").style.display = "";
       } catch {
-        // Branding-style fail-quiet: the QR section is a convenience, not core
+        // Branding-style fail-quiet: the ticket panel is a convenience, not core
         // account functionality, so a network hiccup here must not block or
         // error out the rest of the account page.
-        qrSection.style.display = "none";
+        panel.style.display = "none";
       }
     }
+
+    document.getElementById("ticket-download-png").addEventListener("click", () => {
+      const canvas = document.getElementById("qr-canvas");
+      const link = document.createElement("a");
+      link.download = "pakyrion-ticket-qr.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    });
+
+    document.getElementById("ticket-download-pdf").addEventListener("click", () => {
+      document.body.classList.add("printing-ticket");
+      window.print();
+    });
+    window.addEventListener("afterprint", () => {
+      document.body.classList.remove("printing-ticket");
+    });
 
     function renderEventBadge(qrEvents) {
       const badge = document.getElementById("sidebar-event-badge");

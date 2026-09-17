@@ -2,7 +2,10 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { getAppSettings, setAppSettings, getUploadedLogo, setLogo, clearLogo } from './repository.js';
+import {
+  getAppSettings, setAppSettings, getUploadedLogo, setLogo, clearLogo,
+  getUploadedTicketBackground, setTicketBackground, clearTicketBackground,
+} from './repository.js';
 
 router.get('/app-settings', async () => {
   const settings = await getAppSettings();
@@ -23,17 +26,21 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
   return { status: 200, body: saved };
 })));
 
-const LOGO_MIME_ALLOWLIST = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
-const MAX_LOGO_UPLOAD_BODY_BYTES = 3 * 1024 * 1024;
+const IMAGE_MIME_ALLOWLIST = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGE_UPLOAD_BODY_BYTES = 3 * 1024 * 1024;
 
-router.put('/app-settings/logo', requireAuth(requireAdminGroup(async ({ req }) => {
-  const body = await readJsonBody(req, MAX_LOGO_UPLOAD_BODY_BYTES);
-  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+// Shared by /app-settings/logo and /app-settings/ticket-background, whose
+// upload bodies and validation rules are identical. Returns either
+// { error: {status, body} } or { data, mimeType } -- never throws, so
+// callers can just check `.error`.
+async function parseImageUpload(req, label) {
+  const body = await readJsonBody(req, MAX_IMAGE_UPLOAD_BODY_BYTES);
+  if (body === null) return { error: { status: 400, body: { error: 'invalid JSON' } } };
   const { dataBase64, mimeType } = body;
 
-  if (!LOGO_MIME_ALLOWLIST.includes(mimeType)) {
-    return { status: 400, body: { error: `mimeType must be one of: ${LOGO_MIME_ALLOWLIST.join(', ')}` } };
+  if (!IMAGE_MIME_ALLOWLIST.includes(mimeType)) {
+    return { error: { status: 400, body: { error: `mimeType must be one of: ${IMAGE_MIME_ALLOWLIST.join(', ')}` } } };
   }
   // Buffer.from silently ignores the 'base64' encoding argument for a
   // non-string (e.g. an array-like {length: N}), allocating a zero-filled
@@ -41,21 +48,27 @@ router.put('/app-settings/logo', requireAuth(requireAdminGroup(async ({ req }) =
   // slow allocation this way. Reject anything that isn't a real string
   // before it ever reaches Buffer.from.
   if (typeof dataBase64 !== 'string') {
-    return { status: 400, body: { error: 'dataBase64 must be a base64 string' } };
+    return { error: { status: 400, body: { error: 'dataBase64 must be a base64 string' } } };
   }
 
   let data;
   try {
     data = Buffer.from(dataBase64, 'base64');
   } catch {
-    return { status: 400, body: { error: 'dataBase64 is not valid base64' } };
+    return { error: { status: 400, body: { error: 'dataBase64 is not valid base64' } } };
   }
-  if (data.length === 0) return { status: 400, body: { error: 'dataBase64 is required' } };
-  if (data.length > MAX_LOGO_BYTES) {
-    return { status: 413, body: { error: `logo exceeds the ${MAX_LOGO_BYTES / (1024 * 1024)}MB limit` } };
+  if (data.length === 0) return { error: { status: 400, body: { error: 'dataBase64 is required' } } };
+  if (data.length > MAX_IMAGE_BYTES) {
+    return { error: { status: 413, body: { error: `${label} exceeds the ${MAX_IMAGE_BYTES / (1024 * 1024)}MB limit` } } };
   }
 
-  await setLogo({ data, mimeType });
+  return { data, mimeType };
+}
+
+router.put('/app-settings/logo', requireAuth(requireAdminGroup(async ({ req }) => {
+  const upload = await parseImageUpload(req, 'logo');
+  if (upload.error) return upload.error;
+  await setLogo(upload);
   return { status: 200, body: await getAppSettings() };
 })));
 
@@ -68,4 +81,22 @@ router.get('/app-settings/logo', async () => {
   const logo = await getUploadedLogo();
   if (!logo) return { status: 404, body: { error: 'no logo uploaded' } };
   return { status: 200, isBinary: true, body: logo.data, headers: { 'Content-Type': logo.mimeType, 'X-Content-Type-Options': 'nosniff' } };
+});
+
+router.put('/app-settings/ticket-background', requireAuth(requireAdminGroup(async ({ req }) => {
+  const upload = await parseImageUpload(req, 'ticket background image');
+  if (upload.error) return upload.error;
+  await setTicketBackground(upload);
+  return { status: 200, body: await getAppSettings() };
+})));
+
+router.delete('/app-settings/ticket-background', requireAuth(requireAdminGroup(async () => {
+  await clearTicketBackground();
+  return { status: 200, body: await getAppSettings() };
+})));
+
+router.get('/app-settings/ticket-background', async () => {
+  const image = await getUploadedTicketBackground();
+  if (!image) return { status: 404, body: { error: 'no ticket background uploaded' } };
+  return { status: 200, isBinary: true, body: image.data, headers: { 'Content-Type': image.mimeType, 'X-Content-Type-Options': 'nosniff' } };
 });

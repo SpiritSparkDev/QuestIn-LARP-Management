@@ -895,6 +895,146 @@ tbody tr:last-child td {
   color: var(--on-surface-variant);
 }
 
+/* ---------- Dashboard layout + event ticket panel ---------- */
+
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 32px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ticket-panel h2 {
+  margin-top: 0;
+}
+
+.ticket-card {
+  position: relative;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 16px;
+  padding: 28px 24px;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* Uploaded ticket background image (set via the --ticket-bg-image inline
+   custom property, see account.html) renders on its own layer at low
+   opacity so it stays a faint watermark -- legible text/QR on top, and
+   light enough overall to cost little printer ink. */
+.ticket-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--ticket-bg-image, none);
+  background-size: cover;
+  background-position: center;
+  opacity: 0.14;
+}
+
+.ticket-card > * {
+  position: relative;
+}
+
+.ticket-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+}
+
+.ticket-event-name {
+  margin: 6px 0 0;
+}
+
+.ticket-divider {
+  margin: 20px 0;
+  border: none;
+  border-top: 1px dashed var(--outline);
+}
+
+.ticket-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  margin-bottom: 20px;
+}
+
+.ticket-field {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.ticket-label {
+  color: var(--outline);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  align-self: center;
+}
+
+.ticket-value {
+  font-weight: 600;
+}
+
+.ticket-scan-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--outline);
+  margin: 0 0 12px;
+}
+
+.ticket-qr-wrap {
+  background: #ffffff;
+  border: 1px solid var(--outline-variant);
+  border-radius: 8px;
+  padding: 12px;
+  display: inline-block;
+}
+
+.ticket-id {
+  margin: 12px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--outline);
+  word-break: break-all;
+}
+
+.ticket-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+@media print {
+  body.printing-ticket * {
+    visibility: hidden;
+  }
+  body.printing-ticket .ticket-card,
+  body.printing-ticket .ticket-card * {
+    visibility: visible;
+  }
+  body.printing-ticket .ticket-card {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}
+
 /* ---------- Character cards, tags, file uploads ---------- */
 
 .char-grid {

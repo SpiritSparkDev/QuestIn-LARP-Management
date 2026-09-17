@@ -54,6 +54,14 @@
       <input type="file" id="logo-file" accept="image/jpeg,image/png,image/webp">
       <button type="button" id="logo-upload-btn">Hochladen</button>
       <button type="button" id="logo-remove-btn" style="display:none;">Logo entfernen</button>
+      <hr class="hr">
+      <h2>Ticket-Hintergrund hochladen</h2>
+      <p class="sub">Erscheint blass als Wasserzeichen auf dem Event-Ticket im Konto-Dashboard.</p>
+      <img id="ticket-bg-preview" alt="Aktueller Ticket-Hintergrund" style="max-width:200px;max-height:120px;display:none;">
+      <p id="ticket-bg-preview-empty" class="sub">Kein Ticket-Hintergrund hochgeladen.</p>
+      <input type="file" id="ticket-bg-file" accept="image/jpeg,image/png,image/webp">
+      <button type="button" id="ticket-bg-upload-btn">Hochladen</button>
+      <button type="button" id="ticket-bg-remove-btn" style="display:none;">Hintergrund entfernen</button>
     </div>
     <p id="message"></p>
   </div></div>
@@ -77,9 +85,10 @@ async function loadSettings() {
   form.elements.logoUrl.value = settings.logoUrl ?? '';
   form.elements.quotaMbPerCharacter.value = settings.quotaMbPerCharacter ?? '';
   refreshLogoPreview(settings.hasUploadedLogo);
+  refreshTicketBgPreview(settings.hasUploadedTicketBackground);
 }
 
-const LOGO_MIME_ALLOWLIST = ['image/jpeg', 'image/png', 'image/webp'];
+const IMAGE_MIME_ALLOWLIST = ['image/jpeg', 'image/png', 'image/webp'];
 
 function readFileAsBase64(file) {
   return new Promise((resolve, reject) => {
@@ -109,48 +118,81 @@ function refreshLogoPreview(hasUploadedLogo) {
   }
 }
 
-document.getElementById('logo-upload-btn').addEventListener('click', async () => {
-  message.textContent = '';
-  message.className = '';
-  const file = document.getElementById('logo-file').files[0];
-  if (!file) return;
-  if (!LOGO_MIME_ALLOWLIST.includes(file.type)) {
-    message.textContent = 'Nicht unterstützter Dateityp.';
-    message.className = 'error';
-    return;
+function refreshTicketBgPreview(hasUploadedTicketBackground) {
+  const preview = document.getElementById('ticket-bg-preview');
+  const empty = document.getElementById('ticket-bg-preview-empty');
+  const removeBtn = document.getElementById('ticket-bg-remove-btn');
+  if (hasUploadedTicketBackground) {
+    preview.src = `/app-settings/ticket-background?t=${Date.now()}`;
+    preview.style.display = '';
+    empty.style.display = 'none';
+    removeBtn.style.display = '';
+  } else {
+    preview.style.display = 'none';
+    empty.style.display = '';
+    removeBtn.style.display = 'none';
   }
-  if (file.size > 2 * 1024 * 1024) {
-    message.textContent = 'Datei ist größer als 2 MB.';
-    message.className = 'error';
-    return;
-  }
-  try {
-    const dataBase64 = await readFileAsBase64(file);
-    await api.put('/app-settings/logo', { dataBase64, mimeType: file.type });
-    refreshLogoPreview(true);
-    await applyBranding();
-    message.textContent = 'Logo hochgeladen.';
-    message.className = 'success';
-  } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
-  }
+}
+
+// Shared by the logo and ticket-background upload/remove buttons, whose
+// behavior (validate, base64-encode, PUT/DELETE, refresh preview) is
+// identical -- only the endpoint and preview refresh differ.
+function wireImageUpload({ fileInputId, uploadBtnId, removeBtnId, endpoint, refreshPreview, removeConfirmMessage, uploadedMessage, removedMessage }) {
+  document.getElementById(uploadBtnId).addEventListener('click', async () => {
+    message.textContent = '';
+    message.className = '';
+    const file = document.getElementById(fileInputId).files[0];
+    if (!file) return;
+    if (!IMAGE_MIME_ALLOWLIST.includes(file.type)) {
+      message.textContent = 'Nicht unterstützter Dateityp.';
+      message.className = 'error';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      message.textContent = 'Datei ist größer als 2 MB.';
+      message.className = 'error';
+      return;
+    }
+    try {
+      const dataBase64 = await readFileAsBase64(file);
+      await api.put(endpoint, { dataBase64, mimeType: file.type });
+      refreshPreview(true);
+      await applyBranding();
+      message.textContent = uploadedMessage;
+      message.className = 'success';
+    } catch (err) {
+      message.textContent = err.message;
+      message.className = 'error';
+    }
+  });
+
+  document.getElementById(removeBtnId).addEventListener('click', async () => {
+    if (!confirm(removeConfirmMessage)) return;
+    message.textContent = '';
+    message.className = '';
+    try {
+      await api.delete(endpoint);
+      refreshPreview(false);
+      await applyBranding();
+      message.textContent = removedMessage;
+      message.className = 'success';
+    } catch (err) {
+      message.textContent = err.message;
+      message.className = 'error';
+    }
+  });
+}
+
+wireImageUpload({
+  fileInputId: 'logo-file', uploadBtnId: 'logo-upload-btn', removeBtnId: 'logo-remove-btn',
+  endpoint: '/app-settings/logo', refreshPreview: refreshLogoPreview,
+  removeConfirmMessage: 'Logo wirklich entfernen?', uploadedMessage: 'Logo hochgeladen.', removedMessage: 'Logo entfernt.',
 });
 
-document.getElementById('logo-remove-btn').addEventListener('click', async () => {
-  if (!confirm('Logo wirklich entfernen?')) return;
-  message.textContent = '';
-  message.className = '';
-  try {
-    await api.delete('/app-settings/logo');
-    refreshLogoPreview(false);
-    await applyBranding();
-    message.textContent = 'Logo entfernt.';
-    message.className = 'success';
-  } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
-  }
+wireImageUpload({
+  fileInputId: 'ticket-bg-file', uploadBtnId: 'ticket-bg-upload-btn', removeBtnId: 'ticket-bg-remove-btn',
+  endpoint: '/app-settings/ticket-background', refreshPreview: refreshTicketBgPreview,
+  removeConfirmMessage: 'Ticket-Hintergrund wirklich entfernen?', uploadedMessage: 'Ticket-Hintergrund hochgeladen.', removedMessage: 'Ticket-Hintergrund entfernt.',
 });
 
 form.addEventListener('submit', async (event) => {
