@@ -83,6 +83,55 @@ test('PUT /characters/:id replaces sc-class data (no merge, no eventId needed)',
   });
 });
 
+test('POST /characters accepts isGsc for sc-class characters', async () => {
+  await withTestServer(async (port) => {
+    const participant = await makeUserAndSession();
+    const res = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ name: 'Aldric', data: { fraction: 'Nordmark' }, isGsc: true }),
+    });
+    assert.equal(res.status, 201);
+    assert.equal((await res.json()).is_gsc, true);
+  });
+});
+
+test('isGsc is ignored for nsc-class characters', async () => {
+  await withTestServer(async (port) => {
+    const participant = await makeUserAndSession();
+    const res = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ class: 'nsc', name: 'Elenwe', isGsc: true }),
+    });
+    assert.equal(res.status, 201);
+    assert.equal((await res.json()).is_gsc, false);
+  });
+});
+
+test('PUT /characters/:id updates isGsc, and omitting it leaves the existing value unchanged', async () => {
+  await withTestServer(async (port) => {
+    const participant = await makeUserAndSession();
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ name: 'Aldric', data: { fraction: 'Nordmark' }, isGsc: true }),
+    });
+    const { id } = await createRes.json();
+
+    const putRes = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ data: { fraction: 'Suedmark' } }),
+    });
+    assert.equal(putRes.status, 200);
+    assert.equal((await putRes.json()).is_gsc, true);
+
+    const clearRes = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ isGsc: false }),
+    });
+    assert.equal(clearRes.status, 200);
+    assert.equal((await clearRes.json()).is_gsc, false);
+  });
+});
+
 test('a participant only sees their own characters in the list', async () => {
   await withTestServer(async (port) => {
     const alice = await makeUserAndSession();

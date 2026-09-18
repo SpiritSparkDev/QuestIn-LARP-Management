@@ -3,14 +3,14 @@ import { validateCharacterData } from '../events/schemaValidation.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 
-const SELECT_COLUMNS = 'id, user_id, class, name, data, created_at';
+const SELECT_COLUMNS = 'id, user_id, class, name, data, is_gsc, created_at';
 const CHARACTER_LOCKING_STATUSES = ['confirmed', 'checked_in', 'checked_out'];
 
 async function schemaForClass(characterClass) {
   return characterClass === 'nsc' ? getNscProfileSchema() : getScCharacterSchema();
 }
 
-export async function createCharacter(userId, { characterClass = 'sc', name, data }) {
+export async function createCharacter(userId, { characterClass = 'sc', name, data, isGsc = false }) {
   const schema = await schemaForClass(characterClass);
   const errors = validateCharacterData(schema, data ?? {});
   if (errors.length > 0) {
@@ -19,11 +19,15 @@ export async function createCharacter(userId, { characterClass = 'sc', name, dat
     err.details = errors;
     throw err;
   }
+  // isGsc is a system flag meaningful only for SC characters -- silently
+  // dropped for nsc rather than rejected, so the frontend never needs a
+  // conditional check before sending it.
+  const gscFlag = characterClass === 'sc' && Boolean(isGsc);
   const { rows } = await query(
-    `INSERT INTO characters (user_id, class, name, data)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO characters (user_id, class, name, data, is_gsc)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING ${SELECT_COLUMNS}`,
-    [userId, characterClass, name, JSON.stringify(data ?? {})]
+    [userId, characterClass, name, JSON.stringify(data ?? {}), gscFlag]
   );
   return rows[0];
 }
@@ -84,7 +88,7 @@ export async function listCharactersForEvent(eventId) {
   return rows;
 }
 
-export async function updateCharacter(id, userId, { name, data }) {
+export async function updateCharacter(id, userId, { name, data, isGsc }) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
@@ -101,13 +105,18 @@ export async function updateCharacter(id, userId, { name, data }) {
     newData = data;
   }
 
+  // Same "sc only" rule as createCharacter; NULL (not false) means "don't
+  // touch is_gsc" so COALESCE below preserves the existing value.
+  const gscFlag = isGsc !== undefined && character.class === 'sc' ? Boolean(isGsc) : null;
+
   const { rows } = await query(
     `UPDATE characters SET
        name = COALESCE($3, name),
-       data = COALESCE($4, data)
+       data = COALESCE($4, data),
+       is_gsc = COALESCE($5, is_gsc)
      WHERE id = $1 AND user_id = $2
      RETURNING ${SELECT_COLUMNS}`,
-    [id, userId, name ?? null, newData !== undefined ? JSON.stringify(newData) : null]
+    [id, userId, name ?? null, newData !== undefined ? JSON.stringify(newData) : null, gscFlag]
   );
   return rows[0] ?? null;
 }
