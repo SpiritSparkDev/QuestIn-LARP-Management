@@ -105,7 +105,7 @@ const statTotal = document.getElementById('stat-total');
 const statCheckedIn = document.getElementById('stat-checked-in');
 
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
-const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', gsc: 'GSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga' };
+const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga' };
 let currentSearch = '';
 let canOverride = false;
 let canManageMembers = false;
@@ -265,7 +265,7 @@ async function handleScannedCode(rawCode) {
 function openScanDialog(eventId, lookup) {
   dialogOpenForEventId = eventId;
   document.getElementById('scan-name').textContent = lookup.name;
-  document.getElementById('scan-group').textContent = `Kategorie: ${CON_ROLE_LABELS[lookup.conRole] ?? lookup.conRole}`;
+  document.getElementById('scan-group').textContent = `Kategorie: ${CON_ROLE_LABELS[lookup.conRole] ?? lookup.conRole}${lookup.nscAvailable ? ' (auch NSC-bereit)' : ''}`;
   document.getElementById('scan-status-line').textContent = `Status: ${STATUS_LABELS[lookup.status] ?? lookup.status}`;
   document.getElementById('scan-characters').textContent = lookup.characters.length > 0
     ? `Charaktere: ${lookup.characters.map((c) => c.name).join(', ')}`
@@ -430,11 +430,12 @@ function renderOverrideCell(p) {
 
 function renderConRoleCell(p) {
   const label = CON_ROLE_LABELS[p.conRole] ?? p.conRole ?? '–';
+  const badge = p.nscAvailable ? ' <span class="tag">auch NSC-bereit</span>' : '';
   if (!canOverride || !p.userId || !['helfer', 'orga', 'hilfs_orga'].includes(p.conRole)) {
-    return escapeHtml(label);
+    return escapeHtml(label) + badge;
   }
   const options = ['helfer', 'hilfs_orga', 'orga'].map((r) => `<option value="${r}" ${r === p.conRole ? 'selected' : ''}>${CON_ROLE_LABELS[r]}</option>`).join('');
-  return `<select data-con-role="${escapeHtml(p.userId)}" aria-label="Rolle ändern">${options}</select>`;
+  return `<select data-con-role="${escapeHtml(p.userId)}" aria-label="Rolle ändern">${options}</select>${badge}`;
 }
 
 searchInput.addEventListener('input', () => {
