@@ -856,6 +856,7 @@
 
     let scSchema = [];
     let nscSchema = [];
+    let nscSchemaAvailable = false;
     let nscCharacters = [];
     let editingNscCharacterId = null;
 
@@ -868,6 +869,20 @@
     const nscDynamicFields = document.getElementById("nsc-dynamic-fields");
     const nscCancelButton = document.getElementById("nsc-cancel-edit");
     const nscTabButton = document.getElementById("nsc-tab-btn");
+
+    // The NSC-Charaktere tab/section is only useful to someone who has
+    // actually said they're available as NSC somewhere -- shown only once
+    // both the schema loaded successfully AND at least one current
+    // registration qualifies (con_role='nsc', or the sc-bolt-on
+    // nsc_available=true). Called after loadRegistrations() populates
+    // currentRegistrations, and again after the registration form submits.
+    function updateNscMenuVisibility() {
+      const wantsNsc =
+        nscSchemaAvailable &&
+        currentRegistrations.some((r) => r.conRole === "nsc" || r.nscAvailable);
+      nscSection.style.display = wantsNsc ? "" : "none";
+      nscTabButton.style.display = wantsNsc ? "" : "none";
+    }
 
     let editingCharacterId = null;
 
@@ -1366,8 +1381,7 @@
       renderScSchemaFields();
       try {
         nscSchema = await api.get("/nsc-schema");
-        nscSection.style.display = "";
-        nscTabButton.style.display = "";
+        nscSchemaAvailable = true;
         renderNscSchemaFields();
       } catch {
         // NSC schema is optional-ish for this bootstrap: leave the NSC tab button
@@ -1376,8 +1390,9 @@
       }
 
       await loadEvents();
-      await loadCharacters();
       await loadRegistrations();
+      updateNscMenuVisibility();
+      await loadCharacters();
       await loadQrCode(account, events, currentRegistrations);
       renderEventBadge(events);
     } catch (err) {
