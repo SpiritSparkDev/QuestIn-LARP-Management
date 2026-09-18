@@ -125,21 +125,27 @@
               <select id="event-select" required></select>
               <label for="event-select">Event</label>
 
-              <select id="con-role-select">
-                <option value="sc">SC</option>
-                <option value="nsc">NSC</option>
-                <option value="gsc">GSC</option>
+              <select id="registration-mode-select">
+                <option value="character">Charakter</option>
                 <option value="helfer">Helfer</option>
                 <option value="orga" data-staff-only>Orga</option>
                 <option value="hilfs_orga" data-staff-only>Hilfs-Orga</option>
               </select>
-              <label for="con-role-select">Rolle</label>
+              <label for="registration-mode-select">Wie kommst du?</label>
 
               <div id="character-select-wrap">
                 <select id="character-select"></select>
-                <label for="character-select">Charakter</label>
+                <label for="character-select">Als welcher Charakter kommst du?</label>
                 <p id="no-character-hint" style="display:none;">Du hast noch keinen passenden Charakter. <button
                     type="button" id="no-character-hint-btn">Charakter anlegen</button></p>
+
+                <label><input type="checkbox" id="nsc-available-toggle"> Ich stehe zusätzlich als NSC zur
+                  Verfügung</label>
+
+                <div id="nsc-character-wrap" style="display:none;">
+                  <select id="nsc-character-select"></select>
+                  <label for="nsc-character-select">NSC-Charakter (optional)</label>
+                </div>
               </div>
 
               <h3>Weitere Angaben zu dieser Anmeldung</h3>
@@ -569,7 +575,6 @@
     const CON_ROLE_LABELS = {
       sc: "SC",
       nsc: "NSC",
-      gsc: "GSC",
       helfer: "Helfer",
       orga: "Orga",
       hilfs_orga: "Hilfs-Orga",
@@ -579,10 +584,13 @@
     const registrationForm = document.getElementById("registration-form");
     attachLiveValidation(registrationForm);
     const eventSelect = document.getElementById("event-select");
-    const conRoleSelect = document.getElementById("con-role-select");
+    const registrationModeSelect = document.getElementById("registration-mode-select");
     const characterSelectWrap = document.getElementById("character-select-wrap");
     const characterSelect = document.getElementById("character-select");
     const noCharacterHint = document.getElementById("no-character-hint");
+    const nscAvailableToggle = document.getElementById("nsc-available-toggle");
+    const nscCharacterWrap = document.getElementById("nsc-character-wrap");
+    const nscCharacterSelect = document.getElementById("nsc-character-select");
     const registerButton = document.getElementById("register-button");
     const registrationMessage = document.getElementById("registration-message");
     const otFieldsContainer = document.getElementById("ot-fields");
@@ -613,31 +621,40 @@
         : "Anmelden";
     }
 
-    function classForConRole(conRole) {
-      return conRole === "nsc" ? "nsc" : "sc";
+    function updateRegistrationModeVisibility() {
+      characterSelectWrap.style.display = registrationModeSelect.value === "character" ? "" : "none";
     }
 
-    function populateCharacterOptions() {
-      const conRole = conRoleSelect.value;
-      const needsCharacter = ["sc", "gsc", "nsc"].includes(conRole);
-      characterSelectWrap.style.display = needsCharacter ? "" : "none";
-      if (!needsCharacter) return;
-      const expectedClass = classForConRole(conRole);
-      const matching = characters.filter((c) => {
-        if (c.class !== expectedClass) return false;
-        if (expectedClass === "sc" && c.registeredFor) return false;
-        return true;
-      });
-      characterSelect.innerHTML = matching
-        .map(
-          (c) =>
-            `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`,
+    function updateNscCharacterWrapVisibility() {
+      nscCharacterWrap.style.display = nscAvailableToggle.checked ? "" : "none";
+    }
+
+    function populateRegistrationCharacterFields() {
+      const matchingSc = characters.filter((c) => c.class === "sc" && !c.registeredFor);
+      characterSelect.innerHTML = ['<option value="">Kein SC-Charakter</option>']
+        .concat(
+          matchingSc.map(
+            (c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`,
+          ),
         )
         .join("");
-      noCharacterHint.style.display = matching.length === 0 ? "" : "none";
+      noCharacterHint.style.display = matchingSc.length === 0 ? "" : "none";
+
+      const matchingNsc = characters.filter((c) => c.class === "nsc");
+      nscCharacterSelect.innerHTML = ['<option value="">Kein bestimmter NSC-Charakter</option>']
+        .concat(
+          matchingNsc.map(
+            (c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`,
+          ),
+        )
+        .join("");
+
+      updateRegistrationModeVisibility();
+      updateNscCharacterWrapVisibility();
     }
 
-    conRoleSelect.addEventListener("change", populateCharacterOptions);
+    registrationModeSelect.addEventListener("change", updateRegistrationModeVisibility);
+    nscAvailableToggle.addEventListener("change", updateNscCharacterWrapVisibility);
     eventSelect.addEventListener("change", updateRegisterButtonLabel);
 
     document
@@ -659,7 +676,7 @@
 
     async function loadCharacters() {
       characters = await api.get("/characters");
-      populateCharacterOptions();
+      populateRegistrationCharacterFields();
       renderCharacterList();
       renderDashboardCharacters();
     }
@@ -727,9 +744,12 @@
       registrationListBody.innerHTML = registrations
         .map((r) => {
           const label = STATUS_LABELS[r.status] ?? r.status;
+          const roleCell = r.nscAvailable
+            ? `${escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole)} <span class="tag">auch NSC-bereit</span>`
+            : escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole);
           return `<tr>
     <td>${escapeHtml(r.eventName)}</td>
-    <td>${escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole)}</td>
+    <td>${roleCell}</td>
     <td><span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(label)}</span></td>
     <td>
       <button type="button" data-edit-ot="${r.eventId}">Bearbeiten</button>
@@ -772,21 +792,39 @@
       registrationMessage.textContent = "";
       registrationMessage.className = "";
       const eventId = eventSelect.value;
-      const conRole = conRoleSelect.value;
-      const needsCharacter = ["sc", "gsc", "nsc"].includes(conRole);
-      const characterId = needsCharacter ? characterSelect.value : undefined;
-      if (needsCharacter && !characterId) return;
+      const mode = registrationModeSelect.value;
+
+      let conRole, characterId, nscAvailable, nscCharacterId;
+      if (mode === "character") {
+        characterId = characterSelect.value || undefined;
+        nscAvailable = nscAvailableToggle.checked;
+        nscCharacterId = nscAvailable ? nscCharacterSelect.value || undefined : undefined;
+        conRole = characterId ? "sc" : "nsc";
+        if (!characterId && !nscAvailable) {
+          registrationMessage.textContent = "Wähle einen Charakter oder aktiviere die NSC-Verfügbarkeit.";
+          registrationMessage.className = "error";
+          return;
+        }
+      } else {
+        conRole = mode;
+        characterId = undefined;
+        nscAvailable = false;
+        nscCharacterId = undefined;
+      }
 
       try {
         await api.post(`/events/${eventId}/register`, {
           conRole,
           characterId,
+          nscAvailable,
+          nscCharacterId,
           otFields: collectOtFields(),
         });
         registrationMessage.textContent = "Angemeldet.";
         registrationMessage.className = "success";
         renderOtFields();
         await loadRegistrations();
+        updateNscMenuVisibility();
         await loadCharacters();
       } catch (err) {
         registrationMessage.textContent =
@@ -1311,7 +1349,7 @@
         account.group?.key === "admin" || account.group?.key === "moderator";
       if (!isModeratorOrAdmin) {
         document
-          .querySelectorAll("#con-role-select option[data-staff-only]")
+          .querySelectorAll("#registration-mode-select option[data-staff-only]")
           .forEach((opt) => opt.remove());
       }
       registrationSchema = await api.get("/registration-schema");
