@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/css/sahara.css">
   <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1/dist/html2canvas.min.js"></script>
 </head>
 
 <body>
@@ -52,13 +53,12 @@
               <p class="lede">Am Check-In Schalter vorzeigen oder digital abspeichern.</p>
 
               <div class="ticket-card" id="ticket-card">
-                <p class="ticket-eyebrow">Offizieller Pass</p>
+                <p class="ticket-eyebrow">Con Ticket</p>
                 <h3 class="ticket-event-name" id="ticket-event-name"></h3>
                 <hr class="ticket-divider">
                 <div class="ticket-details">
                   <div class="ticket-field"><span class="ticket-label">Teilnehmer</span><span class="ticket-value" id="ticket-participant"></span></div>
                   <div class="ticket-field"><span class="ticket-label">Rolle</span><span class="ticket-value" id="ticket-role"></span></div>
-                  <div class="ticket-field"><span class="ticket-label">Datum</span><span class="ticket-value" id="ticket-date"></span></div>
                 </div>
                 <p class="ticket-scan-label">Scan beim Check-In</p>
                 <div class="ticket-qr-wrap"><canvas id="qr-canvas"></canvas></div>
@@ -524,10 +524,11 @@
       }
     }
 
-    document.getElementById("ticket-download-png").addEventListener("click", () => {
-      const canvas = document.getElementById("qr-canvas");
+    document.getElementById("ticket-download-png").addEventListener("click", async () => {
+      const card = document.getElementById("ticket-card");
+      const canvas = await html2canvas(card, { backgroundColor: null, scale: 2 });
       const link = document.createElement("a");
-      link.download = "pakyrion-ticket-qr.png";
+      link.download = "pakyrion-ticket.png";
       link.href = canvas.toDataURL("image/png");
       link.click();
     });
