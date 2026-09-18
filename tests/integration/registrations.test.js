@@ -258,7 +258,7 @@ test('GET /registrations lists only the calling participant\'s registrations', a
   });
 });
 
-test('a participant can self-register with a self-service con_role (sc/nsc/gsc/helfer)', async () => {
+test('a participant can self-register with a self-service con_role (sc/nsc/helfer)', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession();
     const eventId = await makeEvent();
@@ -512,6 +512,141 @@ test('registering with con_role helfer and a characterId set is rejected', async
       body: JSON.stringify({ conRole: 'helfer', characterId }),
     });
     assert.equal(res.status, 400);
+  });
+});
+
+test('registering with con_role nsc and no characterId now succeeds', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'nsc' }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.con_role, 'nsc');
+    assert.equal(body.character_id, null);
+  });
+});
+
+test('registering with con_role nsc and an own nsc-class character still works', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const nscCharacterId = await makeCharacter(port, cookie, 'nsc', 'Elenwe');
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'nsc', characterId: nscCharacterId }),
+    });
+    assert.equal(res.status, 201);
+    assert.equal((await res.json()).character_id, nscCharacterId);
+  });
+});
+
+test('registering with con_role sc and nscAvailable=true stores both, with an optional nsc character', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
+    const nscCharacterId = await makeCharacter(port, cookie, 'nsc', 'Elenwe');
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId, nscAvailable: true, nscCharacterId }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.con_role, 'sc');
+    assert.equal(body.character_id, scCharacterId);
+    assert.equal(body.nsc_available, true);
+    assert.equal(body.nsc_character_id, nscCharacterId);
+  });
+});
+
+test('nscAvailable/nscCharacterId are rejected for any con_role other than sc', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer', nscAvailable: true }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+test('nscCharacterId without nscAvailable=true is rejected', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
+    const nscCharacterId = await makeCharacter(port, cookie, 'nsc', 'Elenwe');
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId, nscAvailable: false, nscCharacterId }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+test('an sc-class character cannot be used as nscCharacterId (class mismatch)', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
+    const otherScCharacterId = await makeCharacter(port, cookie, 'sc', 'Bram');
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId, nscAvailable: true, nscCharacterId: otherScCharacterId }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+test('an nsc character reused as nscCharacterId across two sc registrations is allowed (nsc stays reusable)', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId1 = await makeEventNamed('Reg Test Con NSC-Reuse A', '2027-09-01');
+    const eventId2 = await makeEventNamed('Reg Test Con NSC-Reuse B', '2027-09-02');
+    const scCharacterId1 = await makeCharacter(port, cookie, 'sc', 'Aldric');
+    const scCharacterId2 = await makeCharacter(port, cookie, 'sc', 'Bram');
+    const nscCharacterId = await makeCharacter(port, cookie, 'nsc', 'Elenwe');
+
+    const res1 = await fetch(`http://localhost:${port}/events/${eventId1}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId1, nscAvailable: true, nscCharacterId }),
+    });
+    assert.equal(res1.status, 201);
+
+    const res2 = await fetch(`http://localhost:${port}/events/${eventId2}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId2, nscAvailable: true, nscCharacterId }),
+    });
+    assert.equal(res2.status, 201);
+  });
+});
+
+test('GET /registrations includes nscAvailable/nscCharacterId', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId, nscAvailable: true }),
+    });
+
+    const list = await (await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: cookie } })).json();
+    const registration = list.find((r) => r.eventId === eventId);
+    assert.equal(registration.nscAvailable, true);
+    assert.equal(registration.nscCharacterId, null);
   });
 });
 

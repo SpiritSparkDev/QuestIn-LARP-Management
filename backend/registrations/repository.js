@@ -10,13 +10,15 @@ import { encryptFieldBlob, decryptFieldBlob } from '../registrationFields.js';
 import { sendRegistrationOtFieldsChangedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELF_SERVICE_CON_ROLES = ['sc', 'nsc', 'gsc', 'helfer'];
+const SELF_SERVICE_CON_ROLES = ['sc', 'nsc', 'helfer'];
 const STAFF_CON_ROLES = ['orga', 'hilfs_orga'];
 const ALL_CON_ROLES = [...SELF_SERVICE_CON_ROLES, ...STAFF_CON_ROLES];
 // Roles that don't play a character on-site, so approval doesn't require one assigned.
 const CHARACTER_EXEMPT_CON_ROLES = [...STAFF_CON_ROLES, 'helfer'];
-// Roles whose registration must reference a specific character.
-const CHARACTER_REQUIRED_CON_ROLES = ['sc', 'gsc', 'nsc'];
+// A registration's character_id: 'sc' must have one, 'nsc' may optionally
+// have one, every other role must not.
+const CHARACTER_REQUIRED_CON_ROLES = ['sc'];
+const CHARACTER_OPTIONAL_CON_ROLES = ['nsc'];
 
 // Orga/Hilfs-Orga may only be granted by someone who is already orga/hilfs_orga
 // for THIS SAME event, or who holds system role moderator/admin.
@@ -29,17 +31,19 @@ async function canGrantStaffConRole(eventId, requestingUser) {
   return rows.length > 0;
 }
 
-// Validates characterId against con_role: CHARACTER_REQUIRED_CON_ROLES must
-// have one that exists, belongs to userId, and has the matching class
-// (sc/gsc -> 'sc', nsc -> 'nsc'); every other con_role must NOT have one.
+// Validates characterId against con_role: 'sc' must have one that exists,
+// belongs to userId, and is class='sc'; 'nsc' may optionally have one of
+// class='nsc'; every other con_role must NOT have one.
 // For an sc-class character, also enforces "at most one registration ever"
 // (design spec 2026-09-16, section 4.3) -- excludes the caller's own
 // (eventId, userId) row so re-saving an existing registration's con-role
 // doesn't flag itself as a conflict. NSC stays exempt: it remains reusable
 // across many events, unchanged from before this spec.
-// Returns the characterId to store (always null for non-character roles).
+// Returns the characterId to store (null when none applies).
 async function resolveCharacterId(userId, conRole, characterId, eventId) {
-  if (!CHARACTER_REQUIRED_CON_ROLES.includes(conRole)) {
+  const isRequired = CHARACTER_REQUIRED_CON_ROLES.includes(conRole);
+  const isOptional = CHARACTER_OPTIONAL_CON_ROLES.includes(conRole);
+  if (!isRequired && !isOptional) {
     if (characterId) {
       const err = new Error(`Für die Rolle "${conRole}" darf kein Charakter angegeben werden.`);
       err.code = 'CHARACTER_NOT_ALLOWED';
@@ -48,9 +52,12 @@ async function resolveCharacterId(userId, conRole, characterId, eventId) {
     return null;
   }
   if (!characterId) {
-    const err = new Error(`Für die Rolle "${conRole}" ist ein Charakter erforderlich.`);
-    err.code = 'CHARACTER_REQUIRED';
-    throw err;
+    if (isRequired) {
+      const err = new Error(`Für die Rolle "${conRole}" ist ein Charakter erforderlich.`);
+      err.code = 'CHARACTER_REQUIRED';
+      throw err;
+    }
+    return null;
   }
   const { rows } = await query('SELECT user_id, class FROM characters WHERE id = $1', [characterId]);
   if (rows.length === 0) {
@@ -84,7 +91,50 @@ async function resolveCharacterId(userId, conRole, characterId, eventId) {
   return characterId;
 }
 
-export async function registerForEvent(userId, eventId, conRole, characterId, otFields, requestingUser) {
+// Validates the "sc + also available as NSC" bolt-on: only meaningful when
+// con_role='sc'; nscCharacterId (if given) must be the caller's own
+// nsc-class character, with no "at most one" restriction (nsc characters
+// stay reusable, same as resolveCharacterId's 'nsc' case).
+// Returns { nscAvailable, nscCharacterId } to store.
+async function resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId) {
+  const available = Boolean(nscAvailable);
+  if (conRole !== 'sc') {
+    if (available || nscCharacterId) {
+      const err = new Error('nscAvailable/nscCharacterId sind nur zusammen mit con_role "sc" erlaubt.');
+      err.code = 'INVALID_NSC_AVAILABILITY';
+      throw err;
+    }
+    return { nscAvailable: false, nscCharacterId: null };
+  }
+  if (nscCharacterId && !available) {
+    const err = new Error('nscCharacterId erfordert nscAvailable = true.');
+    err.code = 'INVALID_NSC_AVAILABILITY';
+    throw err;
+  }
+  if (!available) return { nscAvailable: false, nscCharacterId: null };
+  if (!nscCharacterId) return { nscAvailable: true, nscCharacterId: null };
+
+  const { rows } = await query('SELECT user_id, class FROM characters WHERE id = $1', [nscCharacterId]);
+  if (rows.length === 0) {
+    const err = new Error('character not found');
+    err.code = 'CHARACTER_NOT_FOUND';
+    throw err;
+  }
+  const character = rows[0];
+  if (character.user_id !== userId) {
+    const err = new Error('character does not belong to this user');
+    err.code = 'CHARACTER_FORBIDDEN';
+    throw err;
+  }
+  if (character.class !== 'nsc') {
+    const err = new Error('nscCharacterId erfordert einen Charakter der Klasse "nsc".');
+    err.code = 'CHARACTER_CLASS_MISMATCH';
+    throw err;
+  }
+  return { nscAvailable: true, nscCharacterId };
+}
+
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, otFields, requestingUser) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -114,6 +164,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ot
   }
 
   const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
+  const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId);
 
   const schema = await getRegistrationFieldSchema();
   const data = {};
@@ -123,10 +174,10 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ot
 
   try {
     const { rows } = await query(
-      `INSERT INTO registrations (user_id, event_id, con_role, character_id, registration_data_enc)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING user_id, event_id, status, con_role, character_id, checked_in_at, checked_out_at`,
-      [userId, eventId, conRole, resolvedCharacterId, encryptFieldBlob(data)]
+      `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, registration_data_enc)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, checked_in_at, checked_out_at`,
+      [userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, encryptFieldBlob(data)]
     );
     return rows[0];
   } catch (err) {
@@ -139,7 +190,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ot
   }
 }
 
-export async function setConRole(eventId, userId, conRole, characterId, requestingUser) {
+export async function setConRole(eventId, userId, conRole, characterId, nscAvailable, nscCharacterId, requestingUser) {
   if (!ALL_CON_ROLES.includes(conRole)) {
     const err = new Error(`conRole must be one of: ${ALL_CON_ROLES.join(', ')}`);
     err.code = 'INVALID_CON_ROLE';
@@ -164,12 +215,13 @@ export async function setConRole(eventId, userId, conRole, characterId, requesti
   // characterId the same way registerForEvent does, so this can never write
   // a row that violates registrations_character_con_role_check.
   const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
+  const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId);
 
   const { rows } = await query(
-    `UPDATE registrations SET con_role = $3, character_id = $4
+    `UPDATE registrations SET con_role = $3, character_id = $4, nsc_available = $5, nsc_character_id = $6
      WHERE event_id = $1 AND user_id = $2
-     RETURNING user_id, event_id, status, con_role, character_id, checked_in_at, checked_out_at`,
-    [eventId, userId, conRole, resolvedCharacterId]
+     RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, checked_in_at, checked_out_at`,
+    [eventId, userId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId]
   );
   if (rows.length === 0) {
     const err = new Error('registration not found');
@@ -204,7 +256,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
   const otKeys = (viewer?.group?.accountFields ?? []).filter((key) => key !== 'group');
 
   const { rows: registrations } = await query(
-    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.checked_in_at, r.checked_out_at,
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.checked_in_at, r.checked_out_at,
             u.account_data_enc, r.registration_data_enc
      FROM registrations r
      JOIN users u ON u.id = r.user_id
@@ -244,6 +296,8 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
       status: r.status,
       conRole: r.con_role,
+      nscAvailable: r.nsc_available,
+      nscCharacterId: r.nsc_character_id,
       checkedInAt: r.checked_in_at,
       checkedOutAt: r.checked_out_at,
       characters: charactersByUser.get(r.user_id) ?? [],
@@ -267,7 +321,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
 
 export async function getScanLookup(eventId, userId) {
   const { rows } = await query(
-    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, g.key AS group_key, r.status, r.con_role
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, g.key AS group_key, r.status, r.con_role, r.nsc_available
      FROM registrations r
      JOIN users u ON u.id = r.user_id
      JOIN groups g ON g.id = u.group_id
@@ -289,13 +343,14 @@ export async function getScanLookup(eventId, userId) {
     group: r.group_key,
     status: r.status,
     conRole: r.con_role,
+    nscAvailable: r.nsc_available,
     characters: characters.map((c) => ({ id: c.id, name: c.name })),
   };
 }
 
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
-    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.checked_in_at, r.checked_out_at,
+    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.checked_in_at, r.checked_out_at,
             r.registration_data_enc
      FROM registrations r
      JOIN events e ON e.id = r.event_id
@@ -310,6 +365,8 @@ export async function listRegistrationsForUser(userId) {
     status: r.status,
     conRole: r.con_role,
     characterId: r.character_id,
+    nscAvailable: r.nsc_available,
+    nscCharacterId: r.nsc_character_id,
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,
     ...decryptFieldBlob(r.registration_data_enc),
@@ -356,9 +413,11 @@ export async function checkOut(eventId, userId) {
 }
 
 // The character-existence check from Teil 1 is gone: the
-// registrations_character_con_role_check CHECK constraint now guarantees
-// every sc/gsc/nsc registration already has a character_id at INSERT time,
-// so there's nothing left to verify here.
+// registrations_character_con_role_check CHECK constraint enforces
+// character_id at INSERT time for 'sc' (required) and forbids it for
+// helfer/orga/hilfs_orga; 'nsc' may or may not have one (see
+// resolveNscAvailability/resolveCharacterId above) -- either way, there's
+// nothing left to verify here.
 export async function approveRegistration(eventId, userId) {
   return transitionStatus(eventId, userId, 'approve');
 }
