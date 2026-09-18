@@ -188,6 +188,7 @@
                 <form id="character-form">
                   <input id="character-name" name="name" type="text" required>
                   <label for="character-name">Charaktername</label>
+                  <label><input type="checkbox" id="character-is-gsc"> GSC (Gildensprecher-Charakter)</label>
                   <div id="character-dynamic-fields"></div>
                   <button type="submit">Speichern</button>
                   <button type="button" id="character-cancel-edit" style="display:none;"
@@ -1004,7 +1005,7 @@
     }
 
     function tagsForCharacter(c) {
-      return Object.entries(c.data ?? {})
+      const dataTags = Object.entries(c.data ?? {})
         .map(([key, value]) => ({
           key,
           value: tagValueForField(
@@ -1025,6 +1026,7 @@
             `<span class="tag">${escapeHtml(key)}: ${escapeHtml(value)}</span>`,
         )
         .join("");
+      return c.is_gsc ? `<span class="tag">GSC</span>${dataTags}` : dataTags;
     }
 
     function renderNscSchemaFields(data = {}) {
@@ -1183,6 +1185,7 @@
       editingCharacterId = characterId;
       characterFormTitle.textContent = `Charakter bearbeiten: ${character.name}`;
       characterForm.elements.name.value = character.name;
+      document.getElementById("character-is-gsc").checked = character.is_gsc ?? false;
       renderScSchemaFields(character.data);
       characterForm.querySelector('button[type="submit"]').textContent =
         "Änderungen speichern";
@@ -1193,6 +1196,7 @@
       editingCharacterId = null;
       characterFormTitle.textContent = "Neuen Charakter anlegen";
       characterForm.reset();
+      document.getElementById("character-is-gsc").checked = false;
       renderScSchemaFields();
       characterForm.querySelector('button[type="submit"]').textContent =
         "Speichern";
@@ -1291,11 +1295,12 @@
       characterMessage.className = "";
       const name = characterForm.elements.name.value;
       const data = collectFieldValues(characterForm, scSchema);
+      const isGsc = document.getElementById("character-is-gsc").checked;
       try {
         if (editingCharacterId) {
-          await api.put(`/characters/${editingCharacterId}`, { name, data });
+          await api.put(`/characters/${editingCharacterId}`, { name, data, isGsc });
         } else {
-          await api.post("/characters", { class: "sc", name, data });
+          await api.post("/characters", { class: "sc", name, data, isGsc });
         }
         characterMessage.textContent = "Gespeichert.";
         characterMessage.className = "success";
