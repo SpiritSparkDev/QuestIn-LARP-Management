@@ -773,6 +773,7 @@
         );
       });
       renderDashboardEventCard();
+      updateNscMenuVisibility();
     }
 
     async function unregister(eventId) {
@@ -797,14 +798,24 @@
 
       let conRole, characterId, nscAvailable, nscCharacterId;
       if (mode === "character") {
-        characterId = characterSelect.value || undefined;
-        nscAvailable = nscAvailableToggle.checked;
-        nscCharacterId = nscAvailable ? nscCharacterSelect.value || undefined : undefined;
-        conRole = characterId ? "sc" : "nsc";
-        if (!characterId && !nscAvailable) {
+        const scCharacterId = characterSelect.value || undefined;
+        const nscToggleOn = nscAvailableToggle.checked;
+        const pickedNscCharacterId = nscToggleOn ? nscCharacterSelect.value || undefined : undefined;
+        if (!scCharacterId && !nscToggleOn) {
           registrationMessage.textContent = "Wähle einen Charakter oder aktiviere die NSC-Verfügbarkeit.";
           registrationMessage.className = "error";
           return;
+        }
+        if (scCharacterId) {
+          conRole = "sc";
+          characterId = scCharacterId;
+          nscAvailable = nscToggleOn;
+          nscCharacterId = pickedNscCharacterId;
+        } else {
+          conRole = "nsc";
+          characterId = pickedNscCharacterId;
+          nscAvailable = false;
+          nscCharacterId = undefined;
         }
       } else {
         conRole = mode;
@@ -825,7 +836,6 @@
         registrationMessage.className = "success";
         renderOtFields();
         await loadRegistrations();
-        updateNscMenuVisibility();
         await loadCharacters();
       } catch (err) {
         registrationMessage.textContent =
@@ -1391,7 +1401,6 @@
 
       await loadEvents();
       await loadRegistrations();
-      updateNscMenuVisibility();
       await loadCharacters();
       await loadQrCode(account, events, currentRegistrations);
       renderEventBadge(events);

@@ -45,7 +45,7 @@ export async function getCharacter(id) {
 // list entries.
 export async function listCharactersForUser(userId) {
   const { rows } = await query(
-    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.created_at,
+    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.is_gsc, c.created_at,
             reg.event_id AS registered_event_id, reg.con_role AS registered_con_role,
             ev.name AS registered_event_name
      FROM characters c
@@ -67,6 +67,7 @@ export async function listCharactersForUser(userId) {
     class: row.class,
     name: row.name,
     data: row.data,
+    is_gsc: row.is_gsc,
     created_at: row.created_at,
     registeredFor: row.registered_event_id
       ? { eventId: row.registered_event_id, eventName: row.registered_event_name, conRole: row.registered_con_role }
@@ -78,7 +79,7 @@ export async function listCharactersForUser(userId) {
 // (not a direct column -- see design spec section 4.3).
 export async function listCharactersForEvent(eventId) {
   const { rows } = await query(
-    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.created_at
+    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.is_gsc, c.created_at
      FROM characters c
      JOIN registrations r ON r.character_id = c.id
      WHERE r.event_id = $1 AND c.class = 'sc'
@@ -125,7 +126,7 @@ export async function deleteCharacter(id, userId) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
-  const { rows } = await query('SELECT status FROM registrations WHERE character_id = $1', [id]);
+  const { rows } = await query('SELECT status FROM registrations WHERE character_id = $1 OR nsc_character_id = $1', [id]);
   if (rows.some((r) => CHARACTER_LOCKING_STATUSES.includes(r.status))) {
     const err = new Error('Charakter ist mit einer bestätigten Anmeldung verknüpft und kann nicht gelöscht werden.');
     err.code = 'CHARACTER_IN_USE';

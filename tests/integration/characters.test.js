@@ -346,6 +346,21 @@ test('PUT /characters/:id allows a canOverrideCheckinStatus group to edit anothe
   });
 });
 
+test('GET /characters includes is_gsc for sc-class characters', async () => {
+  await withTestServer(async (port) => {
+    const participant = await makeUserAndSession();
+    await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ name: 'Aldric', data: { fraction: 'Nordmark' }, isGsc: true }),
+    });
+
+    const listRes = await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: participant.cookie } });
+    const list = await listRes.json();
+    const aldric = list.find((c) => c.name === 'Aldric');
+    assert.equal(aldric.is_gsc, true);
+  });
+});
+
 test.after(async () => {
   await setScSchema([]);
   await closePool();

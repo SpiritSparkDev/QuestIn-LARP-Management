@@ -853,6 +853,23 @@ test('resolveOtFieldsChangeRecipients returns event orga/hilfs_orga plus system 
   });
 });
 
+test('registering with con_role nsc, an own nsc-class characterId, and nscAvailable explicitly false succeeds (the corrected frontend payload for "no SC + NSC toggle on")', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const nscCharacterId = await makeCharacter(port, cookie, 'nsc', 'Elenwe');
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'nsc', characterId: nscCharacterId, nscAvailable: false }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.con_role, 'nsc');
+    assert.equal(body.character_id, nscCharacterId);
+  });
+});
+
 test.after(async () => {
   // Users created in a reg_custom_* group must be deleted before the group
   // itself (users.group_id -> groups.id has no ON DELETE CASCADE), otherwise
