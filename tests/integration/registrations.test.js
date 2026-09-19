@@ -650,6 +650,42 @@ test('GET /registrations includes nscAvailable/nscCharacterId', async () => {
   });
 });
 
+test('GET /registrations includes characterName and nscCharacterName', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
+    const nscCharacterId = await makeCharacter(port, cookie, 'nsc', 'Elenwe');
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId, nscAvailable: true, nscCharacterId }),
+    });
+
+    const list = await (await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: cookie } })).json();
+    const registration = list.find((r) => r.eventId === eventId);
+    assert.equal(registration.characterName, 'Aldric');
+    assert.equal(registration.nscCharacterName, 'Elenwe');
+  });
+});
+
+test('GET /registrations has null characterName/nscCharacterName for a helfer registration', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const list = await (await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: cookie } })).json();
+    const registration = list.find((r) => r.eventId === eventId);
+    assert.equal(registration.characterName, null);
+    assert.equal(registration.nscCharacterName, null);
+  });
+});
+
 test('a non-privileged user cannot register with a self-service con_role for an inactive event', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession();

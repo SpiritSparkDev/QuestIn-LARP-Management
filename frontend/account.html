@@ -98,63 +98,74 @@
 
         <div class="tab-panel" id="veranstaltung-tab" hidden>
           <div class="tab-panel" id="anmelden-subtab">
-            <h2>Meine Anmeldungen</h2>
-            <table id="registration-list">
-              <thead>
-                <tr>
-                  <th>Event</th>
-                  <th>Rolle</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+            <div class="dashboard-layout">
+              <div class="dashboard-main">
+                <h2>Meine Anmeldungen</h2>
+                <table id="registration-list">
+                </table>
 
-            <dialog id="edit-ot-dialog">
-              <h3>Anmeldungsdaten bearbeiten</h3>
-              <p class="lede">Diese Änderung benachrichtigt die Orga und Admin dieses Events per E-Mail.</p>
-              <div id="edit-ot-fields"></div>
-              <div class="dialog-actions">
-                <button type="button" id="edit-ot-save">Speichern</button>
-                <button type="button" id="edit-ot-cancel" class="btn-ghost">Abbrechen</button>
+                <dialog id="edit-ot-dialog">
+                  <h3>Anmeldungsdaten bearbeiten</h3>
+                  <p class="lede">Diese Änderung benachrichtigt die Orga und Admin dieses Events per E-Mail.</p>
+                  <div id="edit-ot-fields"></div>
+                  <div class="dialog-actions">
+                    <button type="button" id="edit-ot-save">Speichern</button>
+                    <button type="button" id="edit-ot-cancel" class="btn-ghost">Abbrechen</button>
+                  </div>
+                </dialog>
+
+                <h2>Neu anmelden</h2>
+                <form id="registration-form">
+                  <select id="event-select" required></select>
+                  <label for="event-select">Event</label>
+
+                  <select id="registration-mode-select">
+                    <option value="character">Charakter</option>
+                    <option value="helfer">Helfer</option>
+                    <option value="orga" data-staff-only>Orga</option>
+                    <option value="hilfs_orga" data-staff-only>Hilfs-Orga</option>
+                  </select>
+                  <label for="registration-mode-select">Wie kommst du?</label>
+
+                  <div id="character-select-wrap">
+                    <select id="character-select"></select>
+                    <label for="character-select">Als welcher Charakter kommst du?</label>
+                    <p id="no-character-hint" style="display:none;">Du hast noch keinen passenden Charakter. <button
+                        type="button" id="no-character-hint-btn">Charakter anlegen</button></p>
+
+                    <label><input type="checkbox" id="nsc-available-toggle"> Ich stehe zusätzlich als NSC zur
+                      Verfügung</label>
+
+                    <div id="nsc-character-wrap" style="display:none;">
+                      <select id="nsc-character-select"></select>
+                      <label for="nsc-character-select">NSC-Charakter (optional)</label>
+                    </div>
+                  </div>
+
+                  <h3>Weitere Angaben zu dieser Anmeldung</h3>
+                  <div id="ot-fields"></div>
+
+                  <button type="submit" id="register-button">Anmelden</button>
+                </form>
+                <p id="registration-message"></p>
               </div>
-            </dialog>
 
-            <h2>Neu anmelden</h2>
-            <form id="registration-form">
-              <select id="event-select" required></select>
-              <label for="event-select">Event</label>
-
-              <select id="registration-mode-select">
-                <option value="character">Charakter</option>
-                <option value="helfer">Helfer</option>
-                <option value="orga" data-staff-only>Orga</option>
-                <option value="hilfs_orga" data-staff-only>Hilfs-Orga</option>
-              </select>
-              <label for="registration-mode-select">Wie kommst du?</label>
-
-              <div id="character-select-wrap">
-                <select id="character-select"></select>
-                <label for="character-select">Als welcher Charakter kommst du?</label>
-                <p id="no-character-hint" style="display:none;">Du hast noch keinen passenden Charakter. <button
-                    type="button" id="no-character-hint-btn">Charakter anlegen</button></p>
-
-                <label><input type="checkbox" id="nsc-available-toggle"> Ich stehe zusätzlich als NSC zur
-                  Verfügung</label>
-
-                <div id="nsc-character-wrap" style="display:none;">
-                  <select id="nsc-character-select"></select>
-                  <label for="nsc-character-select">NSC-Charakter (optional)</label>
-                </div>
+              <div class="card" id="active-registration-panel" style="display:none;">
+                <h2 id="active-registration-event-name"></h2>
+                <p class="sub" id="active-registration-as"></p>
+                <p>
+                  <span class="status-pill" id="active-registration-status"></span>
+                  <span class="tag" id="active-registration-nsc-badge" style="display:none;"></span>
+                </p>
+                <button type="button" id="active-registration-edit-btn">Bearbeiten</button>
+                <button type="button" id="active-registration-unregister-btn" class="btn-secondary" style="display:none;">Abmelden</button>
               </div>
 
-              <h3>Weitere Angaben zu dieser Anmeldung</h3>
-              <div id="ot-fields"></div>
-
-              <button type="submit" id="register-button">Anmelden</button>
-            </form>
-            <p id="registration-message"></p>
+              <div class="card" id="active-registration-empty" style="display:none;">
+                <p class="sub" id="active-registration-empty-hint"></p>
+                <button type="button" id="active-registration-empty-btn">Jetzt anmelden</button>
+              </div>
+            </div>
           </div>
 
           <div class="tab-panel" id="charaktere-subtab" hidden>
@@ -741,40 +752,86 @@
     });
 
     async function loadRegistrations() {
+      console.log("Loading registrations");
       const registrations = await api.get("/registrations");
       currentRegistrations = registrations;
-      registrationListBody.innerHTML = registrations
-        .map((r) => {
-          const label = STATUS_LABELS[r.status] ?? r.status;
-          const roleCell = r.nscAvailable
-            ? `${escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole)} <span class="tag">auch NSC-bereit</span>`
-            : escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole);
-          return `<tr>
-    <td>${escapeHtml(r.eventName)}</td>
-    <td>${roleCell}</td>
-    <td><span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(label)}</span></td>
-    <td>
-      <button type="button" data-edit-ot="${r.eventId}">Bearbeiten</button>
-      ${r.status === "pending" ? `<button type="button" data-unregister="${r.eventId}">Abmelden</button>` : ""}
-    </td>
-  </tr>`;
-        })
-        .join("");
 
-      registrationListBody
-        .querySelectorAll("[data-unregister]")
-        .forEach((button) => {
-          button.addEventListener("click", () =>
-            unregister(button.dataset.unregister),
-          );
-        });
-      registrationListBody.querySelectorAll("[data-edit-ot]").forEach((button) => {
-        button.addEventListener("click", () =>
-          openEditOtDialog(button.dataset.editOt),
-        );
-      });
       renderDashboardEventCard();
       updateNscMenuVisibility();
+      renderActiveRegistrationPanel();
+    }
+
+    function labelForRegisteredAs(r) {
+      if (r.conRole === "sc") return `Angemeldet als SC: ${r.characterName}`;
+      if (r.conRole === "nsc") {
+        return r.characterName
+          ? `Angemeldet als NSC: ${r.characterName}`
+          : "Angemeldet als NSC";
+      }
+      return `Angemeldet als ${CON_ROLE_LABELS[r.conRole] ?? r.conRole}`;
+    }
+
+    async function renderActiveRegistrationPanel() {
+      const panel = document.getElementById("active-registration-panel");
+      const empty = document.getElementById("active-registration-empty");
+      const activeEvent = events.find((e) => e.is_active);
+      if (!activeEvent) {
+        panel.style.display = "none";
+        empty.style.display = "none";
+        return;
+      }
+      const registration = currentRegistrations.find(
+        (r) => r.eventId === activeEvent.id,
+      );
+      if (!registration) {
+        panel.style.display = "none";
+        empty.style.display = "";
+        document.getElementById("active-registration-empty-hint").textContent =
+          `Du bist für "${activeEvent.name}" noch nicht angemeldet.`;
+        document.getElementById("active-registration-empty-btn").onclick = () =>
+          document.getElementById("event-select").focus();
+        return;
+      }
+
+      document.getElementById("active-registration-event-name").textContent =
+        activeEvent.name;
+      document.getElementById("active-registration-as").textContent =
+        escapeHtml(labelForRegisteredAs(registration));
+
+      characters = await api.get("/characters");
+        console.log(characters, registration.characterId)
+      const character = characters.find((c) => c.id === registration.characterId);
+      if (character) {
+        // Zusammenstellung von Informationen für die Card im rechten Bereich
+      }
+
+      const statusLabel = STATUS_LABELS[registration.status] ?? registration.status;
+      const statusEl = document.getElementById("active-registration-status");
+      statusEl.textContent = statusLabel;
+      statusEl.className = `status-pill status-${registration.status}`;
+
+      const nscBadge = document.getElementById("active-registration-nsc-badge");
+      if (registration.nscAvailable) {
+        nscBadge.textContent = registration.nscCharacterName
+          ? `auch NSC-bereit: ${registration.nscCharacterName}`
+          : "auch NSC-bereit";
+        nscBadge.style.display = "";
+      } else {
+        nscBadge.style.display = "none";
+      }
+
+      document.getElementById("active-registration-edit-btn").onclick = () =>
+        openEditOtDialog(activeEvent.id);
+      const unregisterBtn = document.getElementById("active-registration-unregister-btn");
+      if (registration.status === "pending") {
+        unregisterBtn.style.display = "";
+        unregisterBtn.onclick = () => unregister(activeEvent.id);
+      } else {
+        unregisterBtn.style.display = "none";
+      }
+
+      panel.style.display = "";
+      empty.style.display = "none";
     }
 
     async function unregister(eventId) {

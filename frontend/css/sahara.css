@@ -346,9 +346,6 @@ h1, h2, h3 {
 .content {
   padding: 40px 48px;
 }
-.content.account-page {
-  max-width: 960px;
-}
 
 @media (max-width: 900px) {
   .sidebar {

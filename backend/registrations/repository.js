@@ -351,9 +351,11 @@ export async function getScanLookup(eventId, userId) {
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
     `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.checked_in_at, r.checked_out_at,
-            r.registration_data_enc
+            r.registration_data_enc, c.name AS character_name, nc.name AS nsc_character_name
      FROM registrations r
      JOIN events e ON e.id = r.event_id
+     LEFT JOIN characters c ON c.id = r.character_id
+     LEFT JOIN characters nc ON nc.id = r.nsc_character_id
      WHERE r.user_id = $1
      ORDER BY e.event_date`,
     [userId]
@@ -365,8 +367,10 @@ export async function listRegistrationsForUser(userId) {
     status: r.status,
     conRole: r.con_role,
     characterId: r.character_id,
+    characterName: r.character_name,
     nscAvailable: r.nsc_available,
     nscCharacterId: r.nsc_character_id,
+    nscCharacterName: r.nsc_character_name,
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,
     ...decryptFieldBlob(r.registration_data_enc),
