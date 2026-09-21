@@ -113,9 +113,19 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
     <input type="text" placeholder="Optionen (kommagetrennt, nur bei Auswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
     <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
     ${publicCheckboxHtml}
+    <button type="button" class="move-up" aria-label="Nach oben verschieben">▲</button>
+    <button type="button" class="move-down" aria-label="Nach unten verschieben">▼</button>
     <button type="button" class="remove-row">Entfernen</button>
   `;
   row.querySelector('.remove-row').addEventListener('click', () => row.remove());
+  row.querySelector('.move-up').addEventListener('click', () => {
+    const prev = row.previousElementSibling;
+    if (prev) row.parentElement.insertBefore(row, prev);
+  });
+  row.querySelector('.move-down').addEventListener('click', () => {
+    const next = row.nextElementSibling;
+    if (next) row.parentElement.insertBefore(next, row);
+  });
   container.appendChild(row);
 }
 
