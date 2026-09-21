@@ -119,14 +119,6 @@
                   <select id="event-select" required></select>
                   <label for="event-select">Event</label>
 
-                  <select id="registration-mode-select">
-                    <option value="character">Charakter</option>
-                    <option value="helfer">Helfer</option>
-                    <option value="orga" data-staff-only>Orga</option>
-                    <option value="hilfs_orga" data-staff-only>Hilfs-Orga</option>
-                  </select>
-                  <label for="registration-mode-select">Wie kommst du?</label>
-
                   <div id="character-select-wrap">
                     <select id="character-select"></select>
                     <label for="character-select">Als welcher Charakter kommst du?</label>
@@ -597,7 +589,6 @@
     const registrationForm = document.getElementById("registration-form");
     attachLiveValidation(registrationForm);
     const eventSelect = document.getElementById("event-select");
-    const registrationModeSelect = document.getElementById("registration-mode-select");
     const characterSelectWrap = document.getElementById("character-select-wrap");
     const characterSelect = document.getElementById("character-select");
     const noCharacterHint = document.getElementById("no-character-hint");
@@ -611,7 +602,6 @@
     let events = [];
     let characters = [];
     let canEditCharacters = false;
-    let isModeratorOrAdmin = false;
     let currentUserId = null;
     let registrationSchema = [];
     let accountSchema = [];
@@ -632,10 +622,6 @@
       registerButton.textContent = event
         ? `Anmelden für ${event.name}`
         : "Anmelden";
-    }
-
-    function updateRegistrationModeVisibility() {
-      characterSelectWrap.style.display = registrationModeSelect.value === "character" ? "" : "none";
     }
 
     function updateNscCharacterWrapVisibility() {
@@ -662,11 +648,9 @@
         )
         .join("");
 
-      updateRegistrationModeVisibility();
       updateNscCharacterWrapVisibility();
     }
 
-    registrationModeSelect.addEventListener("change", updateRegistrationModeVisibility);
     nscAvailableToggle.addEventListener("change", updateNscCharacterWrapVisibility);
     eventSelect.addEventListener("change", updateRegisterButtonLabel);
 
@@ -852,32 +836,25 @@
       registrationMessage.textContent = "";
       registrationMessage.className = "";
       const eventId = eventSelect.value;
-      const mode = registrationModeSelect.value;
+
+      const scCharacterId = characterSelect.value || undefined;
+      const nscToggleOn = nscAvailableToggle.checked;
+      const pickedNscCharacterId = nscToggleOn ? nscCharacterSelect.value || undefined : undefined;
+      if (!scCharacterId && !nscToggleOn) {
+        registrationMessage.textContent = "Wähle einen Charakter oder aktiviere die NSC-Verfügbarkeit.";
+        registrationMessage.className = "error";
+        return;
+      }
 
       let conRole, characterId, nscAvailable, nscCharacterId;
-      if (mode === "character") {
-        const scCharacterId = characterSelect.value || undefined;
-        const nscToggleOn = nscAvailableToggle.checked;
-        const pickedNscCharacterId = nscToggleOn ? nscCharacterSelect.value || undefined : undefined;
-        if (!scCharacterId && !nscToggleOn) {
-          registrationMessage.textContent = "Wähle einen Charakter oder aktiviere die NSC-Verfügbarkeit.";
-          registrationMessage.className = "error";
-          return;
-        }
-        if (scCharacterId) {
-          conRole = "sc";
-          characterId = scCharacterId;
-          nscAvailable = nscToggleOn;
-          nscCharacterId = pickedNscCharacterId;
-        } else {
-          conRole = "nsc";
-          characterId = pickedNscCharacterId;
-          nscAvailable = false;
-          nscCharacterId = undefined;
-        }
+      if (scCharacterId) {
+        conRole = "sc";
+        characterId = scCharacterId;
+        nscAvailable = nscToggleOn;
+        nscCharacterId = pickedNscCharacterId;
       } else {
-        conRole = mode;
-        characterId = undefined;
+        conRole = "nsc";
+        characterId = pickedNscCharacterId;
         nscAvailable = false;
         nscCharacterId = undefined;
       }
@@ -1433,13 +1410,6 @@
 
       currentUserId = account.id;
       canEditCharacters = account.canEditCharacters;
-      isModeratorOrAdmin =
-        account.group?.key === "admin" || account.group?.key === "moderator";
-      if (!isModeratorOrAdmin) {
-        document
-          .querySelectorAll("#registration-mode-select option[data-staff-only]")
-          .forEach((opt) => opt.remove());
-      }
       registrationSchema = await api.get("/registration-schema");
       renderOtFields();
       renderDashboardAccountHint(account);

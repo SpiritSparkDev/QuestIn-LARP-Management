@@ -431,7 +431,7 @@ function renderOverrideCell(p) {
 function renderConRoleCell(p) {
   const label = CON_ROLE_LABELS[p.conRole] ?? p.conRole ?? '–';
   const badge = p.nscAvailable ? ' <span class="tag">auch NSC-bereit</span>' : '';
-  if (!canOverride || !p.userId || !['helfer', 'orga', 'hilfs_orga'].includes(p.conRole)) {
+  if (!canOverride || !p.userId) {
     return escapeHtml(label) + badge;
   }
   const options = ['helfer', 'hilfs_orga', 'orga'].map((r) => `<option value="${r}" ${r === p.conRole ? 'selected' : ''}>${CON_ROLE_LABELS[r]}</option>`).join('');
