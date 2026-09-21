@@ -2,7 +2,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { createEvent, getEvent, listEvents, updateEvent, activateEvent } from './repository.js';
+import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEvent } from './repository.js';
 
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
@@ -38,4 +38,15 @@ router.post('/events/:id/activate', requireAuth(requireMenu('events')(async ({ p
   const event = await activateEvent(params.id);
   if (!event) return { status: 404, body: { error: 'event not found' } };
   return { status: 200, body: event };
+})));
+
+router.delete('/events/:id', requireAuth(requireMenu('events')(async ({ params }) => {
+  try {
+    const deleted = await deleteEvent(params.id);
+    if (!deleted) return { status: 404, body: { error: 'event not found' } };
+    return { status: 200, body: { deleted: true } };
+  } catch (err) {
+    if (err.code === 'EVENT_HAS_REGISTRATIONS') return { status: 409, body: { error: err.message } };
+    throw err;
+  }
 })));

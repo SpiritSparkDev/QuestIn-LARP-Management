@@ -55,3 +55,16 @@ export async function activateEvent(id) {
   await query('UPDATE events SET is_active = (id = $1)', [id]);
   return getEvent(id);
 }
+
+export async function deleteEvent(id) {
+  const existing = await getEvent(id);
+  if (!existing) return false;
+  const { rows } = await query('SELECT 1 FROM registrations WHERE event_id = $1 LIMIT 1', [id]);
+  if (rows.length > 0) {
+    const err = new Error('Event hat noch Anmeldungen und kann nicht gelöscht werden.');
+    err.code = 'EVENT_HAS_REGISTRATIONS';
+    throw err;
+  }
+  await query('DELETE FROM events WHERE id = $1', [id]);
+  return true;
+}

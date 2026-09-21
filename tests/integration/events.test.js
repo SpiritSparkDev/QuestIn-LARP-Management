@@ -205,6 +205,62 @@ test('events.code round-trips through POST/GET/PUT, can be changed, and can be c
   });
 });
 
+test('admin can delete an event with no registrations; cannot delete one that has registrations; participant cannot delete', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const participant = await makeUserAndSession('mitglied');
+
+    const createRes = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Löschbares Event', eventDate: '2027-11-01' }),
+    });
+    const { id } = await createRes.json();
+
+    const asParticipant = await fetch(`http://localhost:${port}/events/${id}`, {
+      method: 'DELETE', headers: { Cookie: participant.cookie },
+    });
+    assert.equal(asParticipant.status, 403);
+
+    const registerRes = await fetch(`http://localhost:${port}/events/${id}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    assert.equal(registerRes.status, 403); // event isn't active yet -- fine, we just need SOME registration row
+
+    // Use an active event instead, so the registration above actually lands.
+    await fetch(`http://localhost:${port}/events/${id}/activate`, { method: 'POST', headers: { Cookie: admin.cookie } });
+    const registerActiveRes = await fetch(`http://localhost:${port}/events/${id}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    assert.equal(registerActiveRes.status, 201);
+
+    const blockedDelete = await fetch(`http://localhost:${port}/events/${id}`, {
+      method: 'DELETE', headers: { Cookie: admin.cookie },
+    });
+    assert.equal(blockedDelete.status, 409);
+
+    await fetch(`http://localhost:${port}/events/${id}/register`, { method: 'DELETE', headers: { Cookie: participant.cookie } });
+
+    const okDelete = await fetch(`http://localhost:${port}/events/${id}`, {
+      method: 'DELETE', headers: { Cookie: admin.cookie },
+    });
+    assert.equal(okDelete.status, 200);
+    assert.deepEqual(await okDelete.json(), { deleted: true });
+
+    const getAfter = await fetch(`http://localhost:${port}/events/${id}`, { headers: { Cookie: admin.cookie } });
+    assert.equal(getAfter.status, 404);
+
+    const unknownDelete = await fetch(`http://localhost:${port}/events/${crypto.randomUUID()}`, {
+      method: 'DELETE', headers: { Cookie: admin.cookie },
+    });
+    assert.equal(unknownDelete.status, 404);
+  });
+});
+
 test.after(async () => {
   await closePool();
 });

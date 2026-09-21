@@ -29,7 +29,7 @@
     <div class="card">
       <div class="table-scroll">
       <table id="event-list">
-        <thead><tr><th>Name</th><th>Datum</th><th>Status</th><th></th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Datum</th><th>Status</th><th></th><th></th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       </div>
@@ -78,6 +78,7 @@ async function loadEvents() {
     <td>${e.is_active ? '<span class="badge badge-active">Aktiv – Anmeldung offen</span>' : '<span class="badge badge-inactive">Inaktiv</span>'}</td>
     <td>${e.is_active ? '' : `<button type="button" class="btn-sm" data-activate="${e.id}">Aktivieren</button>`}</td>
     <td><button type="button" class="btn-sm btn-ghost" data-edit="${e.id}">Bearbeiten</button></td>
+    <td><button type="button" class="btn-sm btn-ghost" data-delete="${e.id}">Löschen</button></td>
   </tr>`).join('');
 
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
@@ -98,6 +99,24 @@ async function loadEvents() {
         await loadEvents();
       } catch (err) {
         message.textContent = err.message;
+        message.className = 'error';
+      }
+    });
+  });
+
+  listBody.querySelectorAll('[data-delete]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const eventData = events.find((e) => e.id === button.dataset.delete);
+      if (!confirm(`"${eventData.name}" wirklich löschen? Das kann nicht rückgängig gemacht werden.`)) return;
+      message.textContent = '';
+      message.className = '';
+      try {
+        await api.delete(`/events/${button.dataset.delete}`);
+        message.textContent = 'Gelöscht.';
+        message.className = 'success';
+        await loadEvents();
+      } catch (err) {
+        message.textContent = err.status === 409 ? err.body.error : err.message;
         message.className = 'error';
       }
     });
