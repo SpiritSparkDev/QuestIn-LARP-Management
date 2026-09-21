@@ -283,6 +283,11 @@ function openScanDialog(eventId, lookup) {
   }
   confirmButton.dataset.userId = lookup.userId;
   scanDialog.showModal();
+  // Cross-browser hardening: don't rely on showModal()'s own default-focus
+  // behavior (inconsistent across browsers/tablets) to put focus on the
+  // confirm button -- do it explicitly so the Enter hotkey has a
+  // deterministic, real DOM focus target to activate.
+  if (!confirmButton.disabled) confirmButton.focus();
   scanDialogAutoCloseId = setTimeout(() => { if (scanDialog.open) scanDialog.close(); }, 30000);
 }
 
