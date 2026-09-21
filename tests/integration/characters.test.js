@@ -361,6 +361,43 @@ test('GET /characters includes is_gsc for sc-class characters', async () => {
   });
 });
 
+test('a staffOnly character field cannot be changed by the owner, but can be changed by canOverrideCheckinStatus staff', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    await setScSchema([
+      { key: 'name', label: 'Name', type: 'text', required: true },
+      { key: 'itGeld', label: 'IT-Geld', type: 'number', staffOnly: true },
+    ]);
+
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ class: 'sc', name: 'Aldric', data: { name: 'Aldric', itGeld: 100 } }),
+    });
+    const character = await createRes.json();
+    assert.equal(character.data.itGeld, 100);
+
+    // Owner tries to change itGeld -- must be silently ignored, not an error,
+    // since the owner's own edit form doesn't even render an input for it.
+    const ownerUpdate = await fetch(`http://localhost:${port}/characters/${character.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ data: { name: 'Aldric', itGeld: 9999 } }),
+    });
+    assert.equal(ownerUpdate.status, 200);
+    assert.equal((await ownerUpdate.json()).data.itGeld, 100);
+
+    const admin = await makeUserAndSession('admin');
+    const staffUpdate = await fetch(`http://localhost:${port}/characters/${character.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ data: { name: 'Aldric', itGeld: 50 } }),
+    });
+    assert.equal(staffUpdate.status, 200);
+    assert.equal((await staffUpdate.json()).data.itGeld, 50);
+  });
+});
+
 test.after(async () => {
   await setScSchema([]);
   await closePool();

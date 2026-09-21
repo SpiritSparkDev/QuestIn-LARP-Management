@@ -89,21 +89,32 @@ export async function listCharactersForEvent(eventId) {
   return rows;
 }
 
-export async function updateCharacter(id, userId, { name, data, isGsc }) {
+export async function updateCharacter(id, userId, { name, data, isGsc }, { isElevated = false } = {}) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
   let newData;
   if (data !== undefined) {
     const schema = await schemaForClass(character.class);
-    const errors = validateCharacterData(schema, data);
+    // A staffOnly field's value can never be changed by the owner
+    // themselves -- their own edit form doesn't even render an input for
+    // it (a disabled input never reaches FormData), so trust the SERVER's
+    // existing value here rather than whatever the client happened to
+    // send, regardless of type or emptiness.
+    const effectiveData = isElevated ? data : { ...data };
+    if (!isElevated) {
+      for (const field of schema) {
+        if (field.staffOnly) effectiveData[field.key] = character.data?.[field.key];
+      }
+    }
+    const errors = validateCharacterData(schema, effectiveData);
     if (errors.length > 0) {
       const err = new Error('invalid character data');
       err.code = 'INVALID_CHARACTER_DATA';
       err.details = errors;
       throw err;
     }
-    newData = data;
+    newData = effectiveData;
   }
 
   // Same "sc only" rule as createCharacter; NULL (not false) means "don't

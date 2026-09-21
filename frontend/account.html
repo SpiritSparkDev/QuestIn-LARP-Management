@@ -894,7 +894,7 @@
 
     function renderScSchemaFields(data = {}) {
       characterDynamicFields.innerHTML = scSchema
-        .map((field) => renderField(field, data[field.key], "sc-char-"))
+        .map((field) => renderField(field, data[field.key], "sc-char-", { readOnly: field.staffOnly === true }))
         .join("");
       attachLiveValidation(characterDynamicFields);
     }
@@ -1097,11 +1097,11 @@
 
       if (nscSchema.map((f) => f.type) === "multiselect") {
         nscDynamicFields.innerHTML = nscSchema
-          .map((field) => `<div class="form-group multiselect">${renderField(field, data[field.key], "nsc-")}</div>`)
+          .map((field) => `<div class="form-group multiselect">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true })}</div>`)
           .join("");
       } else {
         nscDynamicFields.innerHTML = nscSchema
-          .map((field) => `<div class="form-group">${renderField(field, data[field.key], "nsc-")}</div>`)
+          .map((field) => `<div class="form-group">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true })}</div>`)
           .join("");
       }
 

@@ -193,37 +193,38 @@ export function attachLiveValidation(formEl) {
   });
 }
 
-export function renderField(field, value, idPrefix = '') {
+export function renderField(field, value, idPrefix = '', { readOnly = false } = {}) {
   const val = escapeHtml(value);
-  const label = escapeHtml(field.label ?? field.key) + (field.required ? ' *' : '');
+  const label = escapeHtml(field.label ?? field.key) + (field.required ? ' *' : '') + (readOnly ? ' 🔒' : '');
   const key = escapeHtml(field.key);
   const required = field.required ? 'required' : '';
+  const disabled = readOnly ? 'disabled' : '';
   const id = `${idPrefix}field-${key}`;
 
   if (field.type === 'boolean') {
     const checked = value ? ' checked' : '';
-    return `<label for="${id}"><input id="${id}" name="${key}" type="checkbox"${checked}> ${label}</label>`;
+    return `<label for="${id}"><input id="${id}" name="${key}" type="checkbox"${checked} ${disabled}> ${label}</label>`;
   }
   if (field.type === 'multiselect' && Array.isArray(field.options)) {
     const selected = Array.isArray(value) ? value : [];
     const checkboxes = field.options.map((opt, i) => {
       const escapedOpt = escapeHtml(opt);
       const checked = selected.includes(opt) ? ' checked' : '';
-      return `<label for="${id}-${i}"><input id="${id}-${i}" name="${key}" type="checkbox" value="${escapedOpt}"${checked}> ${escapedOpt}</label>`;
+      return `<label for="${id}-${i}"><input id="${id}-${i}" name="${key}" type="checkbox" value="${escapedOpt}"${checked} ${disabled}> ${escapedOpt}</label>`;
     }).join('');
     return `<span>${label}</span>${checkboxes}`;
   }
   if (field.type === 'number') {
-    return `<input id="${id}" name="${key}" type="number" value="${val}" ${required}><label for="${id}">${label}</label>`;
+    return `<input id="${id}" name="${key}" type="number" value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
   }
   if (field.type === 'link') {
-    return `<input id="${id}" name="${key}" type="url" value="${val}" ${required}><label for="${id}">${label}</label>`;
+    return `<input id="${id}" name="${key}" type="url" value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
   }
   if (field.type === 'date') {
-    return `<input id="${id}" name="${key}" type="date" value="${val}" ${required}><label for="${id}">${label}</label>`;
+    return `<input id="${id}" name="${key}" type="date" value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
   }
   if (field.type === 'textarea') {
-    return `<textarea id="${id}" name="${key}" ${required}>${val}</textarea><label for="${id}">${label}</label>`;
+    return `<textarea id="${id}" name="${key}" ${required} ${disabled}>${val}</textarea><label for="${id}">${label}</label>`;
   }
   if (field.type === 'select' && Array.isArray(field.options)) {
     const blankOption = field.required ? '' : '<option value=""></option>';
@@ -232,9 +233,9 @@ export function renderField(field, value, idPrefix = '') {
       const selected = opt === value ? ' selected' : '';
       return `<option value="${escapedOpt}"${selected}>${escapedOpt}</option>`;
     }).join('');
-    return `<select id="${id}" name="${key}" ${required}>${blankOption}${options}</select><label for="${id}">${label}</label>`;
+    return `<select id="${id}" name="${key}" ${required} ${disabled}>${blankOption}${options}</select><label for="${id}">${label}</label>`;
   }
-  return `<input id="${id}" name="${key}" type="text" value="${val}" ${required}><label for="${id}">${label}</label>`;
+  return `<input id="${id}" name="${key}" type="text" value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
 }
 
 // Reads a schema-driven form's current values back into a plain object.

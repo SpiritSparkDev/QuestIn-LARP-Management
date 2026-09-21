@@ -90,12 +90,13 @@ initTabs(document.getElementById('class-tabs'));
 // `allowPublic` is false for the two OT (Konto/Anmeldung) tabs -- per spec,
 // OT schema fields have no "public" concept at all, unlike IT (character)
 // fields, so those tabs must render neither the checkbox nor a `public` key.
-function addSchemaRow(container, field = { key: '', label: '', type: 'text', required: false, public: false, options: [] }, { allowPublic = true } = {}) {
+function addSchemaRow(container, field = { key: '', label: '', type: 'text', required: false, public: false, staffOnly: false, options: [] }, { allowPublic = true } = {}) {
   const row = document.createElement('div');
   row.className = 'schema-row';
   const optionsValue = Array.isArray(field.options) ? field.options.join(', ') : '';
   const publicCheckboxHtml = allowPublic
-    ? `<label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>`
+    ? `<label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>
+       <label><input type="checkbox" class="schema-staff-only" ${field.staffOnly ? 'checked' : ''}> Nur Staff darf bearbeiten</label>`
     : '';
   row.innerHTML = `
     <input type="text" placeholder="key" class="schema-key" value="${escapeHtml(field.key)}">
@@ -138,7 +139,10 @@ function collectSchema(container, { allowPublic = true } = {}) {
       type,
       required: row.querySelector('.schema-required').checked,
     };
-    if (allowPublic) field.public = row.querySelector('.schema-public').checked;
+    if (allowPublic) {
+      field.public = row.querySelector('.schema-public').checked;
+      field.staffOnly = row.querySelector('.schema-staff-only').checked;
+    }
     if (type === 'select' || type === 'multiselect') {
       field.options = row.querySelector('.schema-options').value
         .split(',')

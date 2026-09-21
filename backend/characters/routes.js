@@ -77,7 +77,7 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const updated = await updateCharacter(params.id, character.user_id, body);
+    const updated = await updateCharacter(params.id, character.user_id, body, { isElevated });
     return { status: 200, body: updated };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {
