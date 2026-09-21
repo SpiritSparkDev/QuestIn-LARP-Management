@@ -89,6 +89,13 @@ export async function listCharactersForEvent(eventId) {
   return rows;
 }
 
+// `isElevated` here means "this caller may write staffOnly fields" -- the
+// route deliberately passes `isElevated && !isOwner`, NOT plain group
+// permission, because the character's OWNER must never be able to write a
+// staffOnly field through their own edit form, regardless of what other
+// permissions they happen to hold as a person (e.g. an admin editing their
+// own character). Only a genuinely different elevated staff member (e.g.
+// via the check-in dialog) may write them.
 export async function updateCharacter(id, userId, { name, data, isGsc }, { isElevated = false } = {}) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;

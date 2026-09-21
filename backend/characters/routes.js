@@ -77,7 +77,13 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const updated = await updateCharacter(params.id, character.user_id, body, { isElevated });
+    // A staffOnly field may only be written by a genuinely different,
+    // elevated staff member (e.g. via the check-in dialog) -- an
+    // elevated user editing their OWN character through their own
+    // account page must still be treated as a plain owner for this
+    // purpose, since that form renders staffOnly fields disabled
+    // regardless of the viewer's role (see updateCharacter's comment).
+    const updated = await updateCharacter(params.id, character.user_id, body, { isElevated: isElevated && !isOwner });
     return { status: 200, body: updated };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {
