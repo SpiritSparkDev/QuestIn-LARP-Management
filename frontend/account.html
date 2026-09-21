@@ -162,7 +162,7 @@
 
           <div class="tab-panel" id="charaktere-subtab" hidden>
             <h2>Meine Charaktere</h2>
-            <p><a href="/characters-browse.html">Charaktere anderer Spieler durchsuchen</a></p>
+            <p id="browse-characters-link"><a href="/characters-browse.html">Charaktere anderer Spieler durchsuchen</a></p>
 
             <div class="tabs" id="char-class-tabs">
               <button type="button" class="tab-btn active" data-tab="sc-tab">Charaktere</button>
@@ -1432,6 +1432,9 @@
       await loadCharacters();
       await loadQrCode(account, events, currentRegistrations);
       renderEventBadge(events);
+
+      const { characterBrowsingEnabled } = await api.get("/app-settings");
+      document.getElementById("browse-characters-link").style.display = characterBrowsingEnabled ? "" : "none";
     } catch (err) {
       if (err.status === 401) window.location.href = "/login.html";
     }

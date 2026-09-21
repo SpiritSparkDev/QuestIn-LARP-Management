@@ -30,7 +30,7 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, hasUploadedLogo: false, hasUploadedTicketBackground: false });
   });
 });
 
@@ -49,7 +49,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, hasUploadedLogo: false, hasUploadedTicketBackground: false });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
@@ -265,6 +265,30 @@ test('PUT /app-settings/ticket-background rejects a non-admin group and an unaut
       body: JSON.stringify({ dataBase64: 'x', mimeType: 'image/png' }),
     });
     assert.equal(anonymous.status, 401);
+  });
+});
+
+test('PUT /app-settings can change characterBrowsingEnabled independently of other fields', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+
+    const disableRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ characterBrowsingEnabled: false }),
+    });
+    assert.equal(disableRes.status, 200);
+    const disabled = await disableRes.json();
+    assert.equal(disabled.characterBrowsingEnabled, false);
+
+    // Re-enable so this doesn't leak disabled state into later tests/files
+    // sharing the same single-row app_settings table.
+    const reenableRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ characterBrowsingEnabled: true }),
+    });
+    assert.equal((await reenableRes.json()).characterBrowsingEnabled, true);
   });
 });
 

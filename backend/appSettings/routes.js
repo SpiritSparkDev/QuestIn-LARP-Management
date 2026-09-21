@@ -15,14 +15,17 @@ router.get('/app-settings', async () => {
 router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays } = body;
+  const { logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled } = body;
   if (quotaMbPerCharacter !== undefined && (!Number.isInteger(quotaMbPerCharacter) || quotaMbPerCharacter < 1)) {
     return { status: 400, body: { error: 'quotaMbPerCharacter must be a positive integer' } };
   }
   if (invitationTtlDays !== undefined && (!Number.isInteger(invitationTtlDays) || invitationTtlDays < 1)) {
     return { status: 400, body: { error: 'invitationTtlDays must be a positive integer' } };
   }
-  const saved = await setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays });
+  if (characterBrowsingEnabled !== undefined && typeof characterBrowsingEnabled !== 'boolean') {
+    return { status: 400, body: { error: 'characterBrowsingEnabled must be a boolean' } };
+  }
+  const saved = await setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled });
   return { status: 200, body: saved };
 })));
 

@@ -6,6 +6,7 @@ import { createCharacter, getCharacter, listCharactersForUser, listCharactersFor
 import { filterCharacterFields } from './visibility.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
+import { getAppSettings } from '../appSettings/repository.js';
 
 router.post('/characters', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
@@ -35,6 +36,8 @@ router.get('/characters', requireAuth(async ({ user }) => {
 }));
 
 router.get('/events/:eventId/characters/public', requireAuth(async ({ params, user }) => {
+  const { characterBrowsingEnabled } = await getAppSettings();
+  if (!characterBrowsingEnabled) return { status: 403, body: { error: 'character browsing is disabled' } };
   const event = await getEvent(params.eventId);
   if (!event) return { status: 404, body: { error: 'event not found' } };
   const schema = await getScCharacterSchema();

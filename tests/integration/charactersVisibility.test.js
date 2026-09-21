@@ -191,6 +191,40 @@ test('GET /characters/:id filters non-public fields for a non-owner, non-elevate
   });
 });
 
+test('disabling characterBrowsingEnabled blocks GET /events/:id/characters/public with 403', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const viewer = await makeUserAndSession();
+    await setScSchema(VISIBILITY_SCHEMA);
+    const eventId = await makeEvent();
+    const owner = await makeUserAndSession();
+    await makeRegisteredCharacter(port, owner.cookie, eventId, 'Aldric', { fraction: 'Rebellen' });
+
+    const openRes = await fetch(`http://localhost:${port}/events/${eventId}/characters/public`, {
+      headers: { Cookie: viewer.cookie },
+    });
+    assert.equal(openRes.status, 200);
+
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ characterBrowsingEnabled: false }),
+    });
+
+    const blockedRes = await fetch(`http://localhost:${port}/events/${eventId}/characters/public`, {
+      headers: { Cookie: viewer.cookie },
+    });
+    assert.equal(blockedRes.status, 403);
+
+    // Re-enable so this doesn't leak disabled state into later tests.
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ characterBrowsingEnabled: true }),
+    });
+  });
+});
+
 test.after(async () => {
   await setScSchema([]);
   await closePool();
