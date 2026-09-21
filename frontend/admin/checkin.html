@@ -619,7 +619,7 @@ try {
   currentSchema = await api.get('/sc-schema');
   [accountSchema, registrationSchema] = await Promise.all([api.get('/account-schema'), api.get('/registration-schema')]);
   otFieldsByKey = new Map([...accountSchema, ...registrationSchema].map((f) => [f.key, f]));
-  events = await api.get('/events');
+  events = (await api.get('/events')).filter((e) => e.is_active);
   eventSelect.innerHTML = renderEventOptions(events);
   if (events.length > 0) {
     onEventChanged();
