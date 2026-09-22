@@ -93,6 +93,7 @@ import { escapeHtml, formatFieldValue, STATUS_LABELS, renderEventOptions, render
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 initSidebarToggle();
 import { parseScanCode } from '/js/qrCode.js';
+import { notify } from '/js/notifications.js';
 
 const eventSelect = document.getElementById('event-select');
 const listBody = document.querySelector('#participant-list tbody');
@@ -343,8 +344,6 @@ document.getElementById('edit-cancel').addEventListener('click', () => {
 });
 
 document.getElementById('edit-save').addEventListener('click', async () => {
-  message.textContent = '';
-  message.className = '';
   const original = participantsById.get(editingUserId)?.otFields ?? {};
   const editedFields = [...editOtFields.querySelectorAll('[data-field]')]
     .map((input) => otFieldsByKey.get(input.dataset.field))
@@ -384,15 +383,16 @@ document.getElementById('edit-save').addEventListener('click', async () => {
       await api.put(`/characters/${form.dataset.characterId}`, { data });
       savedAnything = true;
     }
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
+    notify('Gespeichert.', 'success');
     editDialog.close();
     await loadParticipants(eventSelect.value);
   } catch (err) {
-    message.textContent = savedAnything
-      ? `Teilweise gespeichert, dann Fehler bei ${currentStep}: ${err.message}`
-      : err.message;
-    message.className = 'error';
+    notify(
+      savedAnything
+        ? `Teilweise gespeichert, dann Fehler bei ${currentStep}: ${err.message}`
+        : err.message,
+      'error',
+    );
     if (savedAnything) {
       editDialog.close();
       await loadParticipants(eventSelect.value);
@@ -515,26 +515,20 @@ async function loadParticipants(eventId) {
 }
 
 async function cancelInvitationRow(invitationId, eventId) {
-  message.textContent = '';
-  message.className = '';
   try {
     await api.post(`/members/invitations/${invitationId}/cancel`, {});
     await loadParticipants(eventId);
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 }
 
 async function transition(eventId, userId, action) {
-  message.textContent = '';
-  message.className = '';
   try {
     await api.post(`/events/${eventId}/${action}`, { userId });
     await loadParticipants(eventId);
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 }
 
@@ -550,14 +544,11 @@ async function overrideStatus(eventId, userId, newStatus, previousStatus) {
     await loadParticipants(eventId);
     return;
   }
-  message.textContent = '';
-  message.className = '';
   try {
     await api.put(`/events/${eventId}/checkin/${userId}`, { status: newStatus, previousStatus });
     await loadParticipants(eventId);
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
     await loadParticipants(eventId);
   }
 }
@@ -567,14 +558,11 @@ async function promoteConRole(eventId, userId, conRole) {
     await loadParticipants(eventId);
     return;
   }
-  message.textContent = '';
-  message.className = '';
   try {
     await api.put(`/events/${eventId}/registrations/${userId}/con-role`, { conRole });
     await loadParticipants(eventId);
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
     await loadParticipants(eventId);
   }
 }
@@ -635,7 +623,7 @@ try {
   }
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Moderator.'; message.className = 'error'; }
+  else if (err.status === 403) { notify('Kein Zugriff – nur für Admin/Moderator.', 'error'); }
 }
 </script>
 </body>

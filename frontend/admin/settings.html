@@ -84,7 +84,6 @@
       <p class="sub">Schaltet die öffentliche "Charaktere anderer Spieler durchsuchen"-Seite für alle Nutzer ein oder aus.</p>
       <label><input type="checkbox" id="character-browsing-toggle"> Charaktere durchsuchen aktiviert</label>
     </div>
-    <p id="message"></p>
   </div></div>
 </div>
 
@@ -93,10 +92,10 @@ import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
 initSidebarToggle();
 
 const form = document.getElementById('smtp-form');
-const message = document.getElementById('message');
 const testToInput = document.getElementById('test-to');
 
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
@@ -122,8 +121,7 @@ function captureHotkey(inputId, action) {
     try {
       await api.patch('/account', { hotkeys: currentHotkeys });
     } catch (err) {
-      message.textContent = err.message;
-      message.className = 'error';
+      notify(err.message, 'error');
     }
   });
 }
@@ -145,18 +143,14 @@ async function loadSettings() {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = '';
   const data = Object.fromEntries(new FormData(form));
   try {
     await api.put('/admin/settings/smtp', data);
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
+    notify('Gespeichert.', 'success');
     form.elements.password.value = '';
     await loadSettings();
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
@@ -169,15 +163,11 @@ async function loadInvitationSettings() {
 
 invitationForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = '';
   try {
     await api.put('/app-settings', { invitationTtlDays: Number(invitationForm.elements.invitationTtlDays.value) });
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
+    notify('Gespeichert.', 'success');
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
@@ -187,30 +177,22 @@ async function loadCharacterBrowsingSetting() {
 }
 
 document.getElementById('character-browsing-toggle').addEventListener('change', async (event) => {
-  message.textContent = '';
-  message.className = '';
   try {
     await api.put('/app-settings', { characterBrowsingEnabled: event.target.checked });
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
+    notify('Gespeichert.', 'success');
   } catch (err) {
     event.target.checked = !event.target.checked;
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
 document.getElementById('send-test').addEventListener('click', async () => {
-  message.textContent = '';
-  message.className = '';
   const data = Object.fromEntries(new FormData(form));
   try {
     await api.post('/admin/settings/smtp/test', { ...data, to: testToInput.value });
-    message.textContent = 'Test-Mail verschickt.';
-    message.className = 'success';
+    notify('Test-Mail verschickt.', 'success');
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
@@ -232,7 +214,7 @@ try {
   await loadCharacterBrowsingSetting();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins.'; message.className = 'error'; }
+  else if (err.status === 403) { notify('Kein Zugriff – nur für Admins.', 'error'); }
 }
 </script>
 </body>

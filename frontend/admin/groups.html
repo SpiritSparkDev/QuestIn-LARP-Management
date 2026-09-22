@@ -75,10 +75,8 @@
 
         <button type="submit">Speichern</button>
         <button type="button" id="cancel-edit" class="btn-ghost">Abbrechen</button>
-        <p id="dialog-message"></p>
       </form>
     </dialog>
-    <p id="message"></p>
   </div></div>
 </div>
 
@@ -88,6 +86,7 @@ import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { escapeHtml } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
 initSidebarToggle();
 
 const fieldCheckboxes = document.getElementById('field-checkboxes');
@@ -100,14 +99,12 @@ function appendFieldCheckboxes(schema) {
 
 const listBody = document.querySelector('#group-list tbody');
 const form = document.getElementById('group-form');
-const message = document.getElementById('message');
 const formTitle = document.getElementById('form-title');
 const nameInput = document.getElementById('group-name');
 const keyInput = document.getElementById('group-key');
 const cancelButton = document.getElementById('cancel-edit');
 const openCreateButton = document.getElementById('open-create');
 const dialog = document.getElementById('group-dialog');
-const dialogMessage = document.getElementById('dialog-message');
 
 let editingGroupId = null;
 
@@ -147,16 +144,12 @@ async function loadGroups() {
 
 async function deleteGroupRow(id) {
   if (!confirm('Gruppe wirklich löschen? Das kann nicht rückgängig gemacht werden.')) return;
-  message.textContent = '';
-  message.className = '';
   try {
     await api.delete(`/groups/${id}`);
-    message.textContent = 'Gruppe gelöscht.';
-    message.className = 'success';
+    notify('Gruppe gelöscht.', 'success');
     await loadGroups();
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 }
 
@@ -181,8 +174,6 @@ function resetForm() {
   keyInput.disabled = false;
   form.querySelector('button[type="submit"]').textContent = 'Speichern';
   dialog.close();
-  dialogMessage.textContent = '';
-  dialogMessage.className = '';
 }
 
 cancelButton.addEventListener('click', resetForm);
@@ -193,10 +184,6 @@ openCreateButton.addEventListener('click', () => {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = '';
-  dialogMessage.textContent = '';
-  dialogMessage.className = '';
   const payload = {
     name: nameInput.value,
     visibleMenus: getCheckedValues('menu-checkboxes'),
@@ -211,13 +198,11 @@ form.addEventListener('submit', async (event) => {
       payload.key = keyInput.value;
       await api.post('/groups', payload);
     }
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
+    notify('Gespeichert.', 'success');
     resetForm();
     await loadGroups();
   } catch (err) {
-    dialogMessage.textContent = err.message;
-    dialogMessage.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
@@ -238,7 +223,7 @@ try {
   await loadGroups();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins.'; message.className = 'error'; }
+  else if (err.status === 403) { notify('Kein Zugriff – nur für Admins.', 'error'); }
 }
 </script>
 </body>

@@ -102,7 +102,6 @@
             <button type="button" id="invite-cancel" class="btn-ghost">Abbrechen</button>
           </form>
         </dialog>
-        <p id="message"></p>
         <div id="invite-link-box" style="display:none;">
           <label for="invite-link-text">Einladungslink</label>
           <input id="invite-link-text" readonly>
@@ -118,6 +117,7 @@
     applyBranding();
     import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields } from '/js/formFields.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+    import { notify } from '/js/notifications.js';
     initSidebarToggle();
 
     let accountSchema = [];
@@ -134,7 +134,6 @@
     const inviteGroupWrap = document.getElementById('invite-group-wrap');
     const inviteGroupSelect = document.getElementById('invite-group');
     const inviteEventSelect = document.getElementById('invite-event');
-    const message = document.getElementById('message');
     const inviteLinkBox = document.getElementById('invite-link-box');
     const inviteLinkText = document.getElementById('invite-link-text');
     const searchInput = document.getElementById('member-search');
@@ -325,8 +324,6 @@
     document.getElementById('detail-save').addEventListener('click', async (evt) => {
       const saveButton = evt.currentTarget;
       saveButton.disabled = true;
-      message.textContent = '';
-      message.className = '';
       const payload = {};
       const detailSchema = [
         { key: 'firstName', type: 'text' }, { key: 'lastName', type: 'text' }, { key: 'nickname', type: 'text' },
@@ -338,106 +335,79 @@
       }
       try {
         await api.patch(`/members/${editingMemberId}`, payload);
-        message.textContent = 'Gespeichert.';
-        message.className = 'success';
+        notify('Gespeichert.', 'success');
         detailDialog.close();
         await loadMembers();
       } catch (err) {
-        message.textContent = err.message;
-        message.className = 'error';
+        notify(err.message, 'error');
       } finally {
         saveButton.disabled = false;
       }
     });
 
     async function resendInvitation(invitationId) {
-      message.textContent = '';
-      message.className = '';
       try {
         const result = await api.post(`/members/invitations/${invitationId}/resend`, {});
         if (result.emailSent === false) {
-          message.textContent = 'Erneuter Versand fehlgeschlagen. Bitte SMTP-Einstellungen prüfen.';
-          message.className = 'error';
+          notify('Erneuter Versand fehlgeschlagen. Bitte SMTP-Einstellungen prüfen.', 'error');
         } else {
-          message.textContent = 'Einladung erneut verschickt.';
-          message.className = 'success';
+          notify('Einladung erneut verschickt.', 'success');
         }
         showInviteLink(result.link);
         await loadMembers();
       } catch (err) {
-        message.textContent = err.message;
-        message.className = 'error';
+        notify(err.message, 'error');
       }
     }
 
     async function cancelInvite(invitationId) {
-      message.textContent = '';
-      message.className = '';
       try {
         await api.post(`/members/invitations/${invitationId}/cancel`, {});
-        message.textContent = 'Einladung abgesagt.';
-        message.className = 'success';
+        notify('Einladung abgesagt.', 'success');
         await loadMembers();
       } catch (err) {
-        message.textContent = err.message;
-        message.className = 'error';
+        notify(err.message, 'error');
       }
     }
 
     async function deactivateMemberRow(id) {
       if (!confirm('Mitglied wirklich deaktivieren? Der Login wird gesperrt und alle aktiven Sitzungen werden sofort beendet.')) return;
-      message.textContent = '';
-      message.className = '';
       try {
         await api.post(`/members/${id}/deactivate`, {});
-        message.textContent = 'Mitglied deaktiviert.';
-        message.className = 'success';
+        notify('Mitglied deaktiviert.', 'success');
         await loadMembers();
       } catch (err) {
-        message.textContent = err.message;
-        message.className = 'error';
+        notify(err.message, 'error');
       }
     }
 
     async function reactivateMemberRow(id) {
-      message.textContent = '';
-      message.className = '';
       try {
         await api.post(`/members/${id}/reactivate`, {});
-        message.textContent = 'Mitglied reaktiviert.';
-        message.className = 'success';
+        notify('Mitglied reaktiviert.', 'success');
         await loadMembers();
       } catch (err) {
-        message.textContent = err.message;
-        message.className = 'error';
+        notify(err.message, 'error');
       }
     }
 
     async function deleteMemberRow(id) {
       if (!confirm('Mitglied wirklich endgültig löschen? Das kann nicht rückgängig gemacht werden.')) return;
-      message.textContent = '';
-      message.className = '';
       try {
         await api.delete(`/members/${id}`);
-        message.textContent = 'Mitglied gelöscht.';
-        message.className = 'success';
+        notify('Mitglied gelöscht.', 'success');
         await loadMembers();
       } catch (err) {
-        message.textContent = err.message;
-        message.className = 'error';
+        notify(err.message, 'error');
       }
     }
 
     async function resendVerification(id) {
-      message.textContent = '';
-      message.className = '';
       try {
         await api.post(`/members/${id}/resend-verification`, {});
-        message.textContent = 'Bestätigungsmail erneut verschickt.';
-        message.className = 'success';
+        notify('Bestätigungsmail erneut verschickt.', 'success');
       } catch (err) {
-        message.textContent = err.message;
-        message.className = 'error';
+        notify(err.message, 'error');
       }
     }
 
@@ -461,8 +431,6 @@
 
     document.getElementById('invite-form').addEventListener('submit', async (event) => {
       event.preventDefault();
-      message.textContent = '';
-      message.className = '';
       const submitButton = event.target.querySelector('button[type="submit"]');
       submitButton.disabled = true;
       const formData = new FormData(event.target);
@@ -473,14 +441,11 @@
       try {
         const result = await api.post('/members/invite', payload);
         if (result.emailSent === false) {
-          message.textContent = 'Einladung erstellt, aber der E-Mail-Versand ist fehlgeschlagen. Bitte SMTP-Einstellungen prüfen oder über "Erneut senden" in der Mitgliederliste erneut versuchen.';
-          message.className = 'error';
+          notify('Einladung erstellt, aber der E-Mail-Versand ist fehlgeschlagen. Bitte SMTP-Einstellungen prüfen oder über "Erneut senden" in der Mitgliederliste erneut versuchen.', 'error');
         } else if (result.emailSent === null) {
-          message.textContent = 'Einladung erstellt. Link unten kopieren und manuell teilen.';
-          message.className = 'success';
+          notify('Einladung erstellt. Link unten kopieren und manuell teilen.', 'success');
         } else {
-          message.textContent = 'Einladung verschickt.';
-          message.className = 'success';
+          notify('Einladung verschickt.', 'success');
         }
         event.target.reset();
         buildFieldInputs(inviteFields);
@@ -488,8 +453,7 @@
         showInviteLink(result.link);
         await loadMembers();
       } catch (err) {
-        message.textContent = err.message;
-        message.className = 'error';
+        notify(err.message, 'error');
       } finally {
         submitButton.disabled = false;
       }
@@ -536,7 +500,7 @@
       await loadMembers();
     } catch (err) {
       if (err.status === 401) window.location.href = '/login.html';
-      else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Moderator.'; message.className = 'error'; }
+      else if (err.status === 403) { notify('Kein Zugriff – nur für Admin/Moderator.', 'error'); }
     }
   </script>
 </body>

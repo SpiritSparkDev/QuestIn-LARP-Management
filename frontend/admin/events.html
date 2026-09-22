@@ -48,7 +48,6 @@
         <button type="button" id="event-cancel-edit" class="btn-ghost">Abbrechen</button>
       </form>
     </div>
-    <p id="message"></p>
   </div></div>
 </div>
 
@@ -58,11 +57,11 @@ import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { escapeHtml } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
 initSidebarToggle();
 
 const listBody = document.querySelector('#event-list tbody');
 const form = document.getElementById('event-form');
-const message = document.getElementById('message');
 const formTitle = document.getElementById('form-title');
 
 let editingEventId = null;
@@ -90,16 +89,12 @@ async function loadEvents() {
 
   listBody.querySelectorAll('[data-activate]').forEach((button) => {
     button.addEventListener('click', async () => {
-      message.textContent = '';
-      message.className = '';
       try {
         await api.post(`/events/${button.dataset.activate}/activate`, {});
-        message.textContent = 'Event aktiviert.';
-        message.className = 'success';
+        notify('Event aktiviert.', 'success');
         await loadEvents();
       } catch (err) {
-        message.textContent = err.message;
-        message.className = 'error';
+        notify(err.message, 'error');
       }
     });
   });
@@ -108,16 +103,12 @@ async function loadEvents() {
     button.addEventListener('click', async () => {
       const eventData = events.find((e) => e.id === button.dataset.delete);
       if (!confirm(`"${eventData.name}" wirklich löschen? Das kann nicht rückgängig gemacht werden.`)) return;
-      message.textContent = '';
-      message.className = '';
       try {
         await api.delete(`/events/${button.dataset.delete}`);
-        message.textContent = 'Gelöscht.';
-        message.className = 'success';
+        notify('Gelöscht.', 'success');
         await loadEvents();
       } catch (err) {
-        message.textContent = err.status === 409 ? err.body.error : err.message;
-        message.className = 'error';
+        notify(err.status === 409 ? err.body.error : err.message, 'error');
       }
     });
   });
@@ -141,8 +132,6 @@ function resetForm() {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = '';
   const payload = {
     name: form.elements.name.value,
     eventDate: form.elements.eventDate.value,
@@ -154,13 +143,11 @@ form.addEventListener('submit', async (event) => {
     } else {
       await api.post('/events', payload);
     }
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
+    notify('Gespeichert.', 'success');
     resetForm();
     await loadEvents();
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
@@ -178,7 +165,7 @@ try {
   await loadEvents();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admin/Moderator.'; message.className = 'error'; }
+  else if (err.status === 403) { notify('Kein Zugriff – nur für Admin/Moderator.', 'error'); }
 }
 </script>
 </body>

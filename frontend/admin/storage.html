@@ -77,7 +77,6 @@
       <p id="migrate-result"></p>
     </div>
 
-    <p id="message"></p>
   </div></div>
 </div>
 
@@ -86,10 +85,10 @@ import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
 initSidebarToggle();
 
 const form = document.getElementById('storage-form');
-const message = document.getElementById('message');
 const backendSelect = document.getElementById('backend-select');
 const ftpFields = document.getElementById('ftp-fields');
 const s3Fields = document.getElementById('s3-fields');
@@ -168,33 +167,25 @@ async function loadUsage() {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = '';
   const data = Object.fromEntries(new FormData(form));
   try {
     await api.put('/admin/settings/storage', formToPayload(data));
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
+    notify('Gespeichert.', 'success');
     form.elements.ftpPassword.value = '';
     form.elements.s3SecretAccessKey.value = '';
     await loadSettings();
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
 document.getElementById('test-connection').addEventListener('click', async () => {
-  message.textContent = '';
-  message.className = '';
   const data = Object.fromEntries(new FormData(form));
   try {
     await api.post('/admin/settings/storage/test', formToPayload(data));
-    message.textContent = 'Verbindung erfolgreich.';
-    message.className = 'success';
+    notify('Verbindung erfolgreich.', 'success');
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
@@ -235,7 +226,7 @@ try {
   await loadUsage();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins.'; message.className = 'error'; }
+  else if (err.status === 403) { notify('Kein Zugriff – nur für Admins.', 'error'); }
 }
 </script>
 </body>

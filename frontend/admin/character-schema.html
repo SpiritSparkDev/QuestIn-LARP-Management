@@ -59,7 +59,6 @@
       <button type="button" id="registration-schema-save">Speichern</button>
     </div>
 
-    <p id="message"></p>
   </div></div>
 </div>
 
@@ -70,9 +69,8 @@ applyBranding();
 import { escapeHtml } from '/js/formFields.js';
 import { DEFAULT_CHARACTER_SCHEMA } from '/js/defaultCharacterSchema.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
 initSidebarToggle();
-
-const message = document.getElementById('message');
 
 function initTabs(tabsEl) {
   const buttons = [...tabsEl.querySelectorAll('.tab-btn')];
@@ -166,15 +164,11 @@ function setupSchemaEditor({ rowsId, addFieldId, saveId, endpoint, loadTemplateI
     });
   }
   document.getElementById(saveId).addEventListener('click', async () => {
-    message.textContent = '';
-    message.className = '';
     try {
       await api.put(endpoint, { schema: collectSchema(rows, { allowPublic }) });
-      message.textContent = 'Gespeichert.';
-      message.className = 'success';
+      notify('Gespeichert.', 'success');
     } catch (err) {
-      message.textContent = err.status === 400 && err.body?.error ? err.body.error : err.message;
-      message.className = 'error';
+      notify(err.status === 400 && err.body?.error ? err.body.error : err.message, 'error');
     }
   });
   return rows;
@@ -197,8 +191,7 @@ try {
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
   if (account.group.key !== 'admin') {
-    message.textContent = 'Kein Zugriff – nur für Admin.';
-    message.className = 'error';
+    notify('Kein Zugriff – nur für Admin.', 'error');
   } else {
     const [scSchema, nscSchema, accountSchema, registrationSchema] = await Promise.all([
       api.get('/sc-schema'), api.get('/nsc-schema'), api.get('/account-schema'), api.get('/registration-schema'),

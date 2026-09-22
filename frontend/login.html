@@ -22,7 +22,6 @@
       <input id="password" name="password" type="password" required>
       <button type="submit">Anmelden</button>
     </form>
-    <p id="message"></p>
     <p><a href="#" id="forgot-link">Passwort vergessen?</a></p>
     <div class="divider-word" id="oauth-divider">oder anmelden mit</div>
     <div class="oauth-row" id="oauth-row">
@@ -37,9 +36,9 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
+import { notify } from '/js/notifications.js';
 
 const form = document.getElementById('login-form');
-const message = document.getElementById('message');
 
 (async () => {
   try {
@@ -62,21 +61,17 @@ const message = document.getElementById('message');
 })();
 
 if (new URLSearchParams(window.location.search).get('oauth_error') === 'denied') {
-  message.textContent = 'Anmeldung abgebrochen.';
-  message.className = 'error';
+  notify('Anmeldung abgebrochen.', 'error');
 }
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = '';
   const data = Object.fromEntries(new FormData(form));
   try {
     await api.post('/auth/login', data);
     window.location.href = '/account.html';
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
@@ -84,17 +79,14 @@ document.getElementById('forgot-link').addEventListener('click', async (event) =
   event.preventDefault();
   const email = document.getElementById('email').value;
   if (!email) {
-    message.textContent = 'Bitte zuerst die E-Mail-Adresse eingeben.';
-    message.className = 'error';
+    notify('Bitte zuerst die E-Mail-Adresse eingeben.', 'error');
     return;
   }
   try {
     await api.post('/auth/password-reset/request', { email });
-    message.textContent = 'Falls diese E-Mail registriert ist, wurde eine Mail mit einem Reset-Link verschickt.';
-    message.className = 'success';
+    notify('Falls diese E-Mail registriert ist, wurde eine Mail mit einem Reset-Link verschickt.', 'success');
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 </script>

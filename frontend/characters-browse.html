@@ -30,7 +30,6 @@
     <label for="event-select">Event</label>
     <select id="event-select"></select>
     <div id="character-list" class="char-grid"></div>
-    <p id="message"></p>
   </div></div>
 </div>
 
@@ -40,11 +39,11 @@ import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { escapeHtml, formatFieldValue, renderEventOptions } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
 initSidebarToggle();
 
 const eventSelect = document.getElementById('event-select');
 const listBody = document.getElementById('character-list');
-const message = document.getElementById('message');
 
 let events = [];
 let scSchema = [];
@@ -65,7 +64,6 @@ function tagsForCharacter(character, schema) {
 }
 
 async function loadCharacters() {
-  message.textContent = '';
   const eventId = eventSelect.value;
   if (!eventId) { listBody.innerHTML = ''; return; }
   try {
@@ -79,8 +77,7 @@ async function loadCharacters() {
       <div class="char-tags">${tagsForCharacter(c, scSchema)}</div>
     </div>`).join('');
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 }
 

@@ -30,7 +30,6 @@
       <label><input type="checkbox" id="password-toggle"> Passwort anzeigen</label>
       <button type="submit">Registrieren</button>
     </form>
-    <p id="message"></p>
     <p class="text-center" style="margin-top:28px;"><a href="/login.html" class="btn-ghost">Bereits registriert? Anmelden</a></p>
   </div>
 </div>
@@ -38,9 +37,9 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
+import { notify } from '/js/notifications.js';
 
 const form = document.getElementById('register-form');
-const message = document.getElementById('message');
 const passwordInput = document.getElementById('password');
 const passwordConfirmInput = document.getElementById('passwordConfirm');
 
@@ -52,22 +51,17 @@ document.getElementById('password-toggle').addEventListener('change', (event) =>
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = '';
   if (passwordInput.value !== passwordConfirmInput.value) {
-    message.textContent = 'Die Passwörter stimmen nicht überein.';
-    message.className = 'error';
+    notify('Die Passwörter stimmen nicht überein.', 'error');
     return;
   }
   const data = Object.fromEntries(new FormData(form));
   try {
     await api.post('/auth/register', data);
-    message.textContent = 'Konto erstellt. Bitte prüfe dein E-Mail-Postfach und bestätige deine Adresse, bevor du dich einloggst.';
-    message.className = 'success';
+    notify('Konto erstellt. Bitte prüfe dein E-Mail-Postfach und bestätige deine Adresse, bevor du dich einloggst.', 'success');
     form.reset();
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 </script>

@@ -63,7 +63,6 @@
       <button type="button" id="ticket-bg-upload-btn">Hochladen</button>
       <button type="button" id="ticket-bg-remove-btn" style="display:none;">Hintergrund entfernen</button>
     </div>
-    <p id="message"></p>
   </div></div>
 </div>
 
@@ -72,11 +71,11 @@ import { api } from '/js/api.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 initSidebarToggle();
 import { applyBranding } from '/js/branding.js';
+import { notify } from '/js/notifications.js';
 
 applyBranding();
 
 const form = document.getElementById('branding-form');
-const message = document.getElementById('message');
 
 async function loadSettings() {
   const settings = await api.get('/app-settings');
@@ -139,18 +138,14 @@ function refreshTicketBgPreview(hasUploadedTicketBackground) {
 // identical -- only the endpoint and preview refresh differ.
 function wireImageUpload({ fileInputId, uploadBtnId, removeBtnId, endpoint, refreshPreview, removeConfirmMessage, uploadedMessage, removedMessage }) {
   document.getElementById(uploadBtnId).addEventListener('click', async () => {
-    message.textContent = '';
-    message.className = '';
     const file = document.getElementById(fileInputId).files[0];
     if (!file) return;
     if (!IMAGE_MIME_ALLOWLIST.includes(file.type)) {
-      message.textContent = 'Nicht unterstützter Dateityp.';
-      message.className = 'error';
+      notify('Nicht unterstützter Dateityp.', 'error');
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      message.textContent = 'Datei ist größer als 2 MB.';
-      message.className = 'error';
+      notify('Datei ist größer als 2 MB.', 'error');
       return;
     }
     try {
@@ -158,27 +153,21 @@ function wireImageUpload({ fileInputId, uploadBtnId, removeBtnId, endpoint, refr
       await api.put(endpoint, { dataBase64, mimeType: file.type });
       refreshPreview(true);
       await applyBranding();
-      message.textContent = uploadedMessage;
-      message.className = 'success';
+      notify(uploadedMessage, 'success');
     } catch (err) {
-      message.textContent = err.message;
-      message.className = 'error';
+      notify(err.message, 'error');
     }
   });
 
   document.getElementById(removeBtnId).addEventListener('click', async () => {
     if (!confirm(removeConfirmMessage)) return;
-    message.textContent = '';
-    message.className = '';
     try {
       await api.delete(endpoint);
       refreshPreview(false);
       await applyBranding();
-      message.textContent = removedMessage;
-      message.className = 'success';
+      notify(removedMessage, 'success');
     } catch (err) {
-      message.textContent = err.message;
-      message.className = 'error';
+      notify(err.message, 'error');
     }
   });
 }
@@ -197,19 +186,15 @@ wireImageUpload({
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = '';
   const data = Object.fromEntries(new FormData(form));
   data.quotaMbPerCharacter = data.quotaMbPerCharacter ? Number(data.quotaMbPerCharacter) : undefined;
   try {
     await api.put('/app-settings', data);
-    message.textContent = 'Gespeichert.';
-    message.className = 'success';
+    notify('Gespeichert.', 'success');
     await loadSettings();
     await applyBranding();
   } catch (err) {
-    message.textContent = err.message;
-    message.className = 'error';
+    notify(err.message, 'error');
   }
 });
 
@@ -227,7 +212,7 @@ try {
   await loadSettings();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { message.textContent = 'Kein Zugriff – nur für Admins.'; message.className = 'error'; }
+  else if (err.status === 403) { notify('Kein Zugriff – nur für Admins.', 'error'); }
 }
 </script>
 </body>
