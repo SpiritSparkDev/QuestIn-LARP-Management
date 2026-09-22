@@ -1100,6 +1100,39 @@ test('manual promote via the existing status-override endpoint', async () => {
   });
 });
 
+test('manually demoting a pending registration to waitlisted promotes the next waitlisted person', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEventWithCapacity(1);
+    const staff = await makeCustomOverrideUserAndSession();
+
+    const first = await makeUserAndSession();
+    const firstCharacterId = await makeCharacter(port, first.cookie);
+    const firstRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: first.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: firstCharacterId }),
+    });
+    assert.equal((await firstRes.json()).status, 'pending');
+
+    const second = await makeUserAndSession();
+    const secondCharacterId = await makeCharacter(port, second.cookie);
+    const secondRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: second.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: secondCharacterId }),
+    });
+    assert.equal((await secondRes.json()).status, 'waitlisted');
+
+    const demoteRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${first.userId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: staff.cookie },
+      body: JSON.stringify({ status: 'waitlisted', previousStatus: 'pending' }),
+    });
+    assert.equal(demoteRes.status, 200);
+    assert.equal((await demoteRes.json()).status, 'waitlisted');
+
+    const { rows } = await query('SELECT status FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, second.userId]);
+    assert.equal(rows[0].status, 'pending');
+  });
+});
+
 test('raising an event capacity promotes as many waitlisted people as now fit', async () => {
   await withTestServer(async (port) => {
     const eventId = await makeEventWithCapacity(1);

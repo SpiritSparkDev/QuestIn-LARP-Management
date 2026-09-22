@@ -196,17 +196,22 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
       return rows[0];
     });
     if (registration.status === 'waitlisted') {
-      try {
-        // `event` is already in scope from the EVENT_NOT_FOUND check at the
-        // top of this function -- no second getEvent() call needed.
-        const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
-        if (userRows[0]) {
-          const transport = await getTransporterAndFrom();
-          await sendWaitlistedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event' }, transport);
+      // Fire-and-forget (same convention as notifyRegistrationOtFieldsChanged
+      // in routes.js): the try/catch below never throws, and awaiting it here
+      // would block the HTTP response on sending an email.
+      (async () => {
+        try {
+          // `event` is already in scope from the EVENT_NOT_FOUND check at the
+          // top of this function -- no second getEvent() call needed.
+          const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
+          if (userRows[0]) {
+            const transport = await getTransporterAndFrom();
+            await sendWaitlistedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event' }, transport);
+          }
+        } catch (err) {
+          logger.error('failed to send waitlisted notification', { error: err.message, userId, eventId });
         }
-      } catch (err) {
-        logger.error('failed to send waitlisted notification', { error: err.message, userId, eventId });
-      }
+      })();
     }
     return registration;
   } catch (err) {
@@ -324,17 +329,30 @@ export async function maybePromoteFromWaitlist(eventId) {
   });
 
   if (promotedUserIds.length === 0) return;
-  const event = await getEvent(eventId);
-  const eventName = event?.name ?? 'Unbekanntes Event';
-  const transport = await getTransporterAndFrom();
-  for (const userId of promotedUserIds) {
+  // Fire-and-forget (same convention as notifyRegistrationOtFieldsChanged in
+  // routes.js): the promotion UPDATEs already happened inside the awaited
+  // transaction above -- callers only need to wait for that, not for mail
+  // delivery. Awaiting this loop here would serialize a capacity increase's
+  // N promotion emails in front of the caller's response. Outer try/catch
+  // (in addition to the per-recipient one) so a getEvent/transport failure
+  // can't become an unhandled rejection now that nothing awaits this IIFE.
+  (async () => {
     try {
-      const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
-      if (userRows[0]) await sendWaitlistPromotedEmail(userRows[0].email, { eventName }, transport);
+      const event = await getEvent(eventId);
+      const eventName = event?.name ?? 'Unbekanntes Event';
+      const transport = await getTransporterAndFrom();
+      for (const userId of promotedUserIds) {
+        try {
+          const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
+          if (userRows[0]) await sendWaitlistPromotedEmail(userRows[0].email, { eventName }, transport);
+        } catch (err) {
+          logger.error('failed to send waitlist-promoted notification', { error: err.message, userId, eventId });
+        }
+      }
     } catch (err) {
-      logger.error('failed to send waitlist-promoted notification', { error: err.message, userId, eventId });
+      logger.error('failed to prepare waitlist-promoted notifications', { error: err.message, eventId });
     }
-  }
+  })();
 }
 
 export async function listParticipantsForEvent(eventId, { schema = [], viewer } = {}) {
@@ -518,9 +536,19 @@ export async function cancelRegistration(eventId, userId) {
 }
 
 export async function setStatus(eventId, userId, status, expectedStatus) {
+  // A manual override moving a counted registration back to 'waitlisted'
+  // means it's rejoining the waitlist NOW, not whenever it originally
+  // registered. maybePromoteFromWaitlist promotes oldest-created_at-first,
+  // so without this the rejoining row would keep its old created_at from
+  // its original registration and could jump ahead of (or, worse, be
+  // immediately re-selected over) people who have genuinely been waiting
+  // since before it was demoted -- created_at has no other reader (see
+  // maybePromoteFromWaitlist's ORDER BY), so resetting it here is safe.
+  const rejoinsWaitlist = status === 'waitlisted' && COUNTED_STATUSES.includes(expectedStatus);
   const { rows } = await query(
     `UPDATE registrations SET
        status = $4,
+       created_at = CASE WHEN $5 THEN now() ELSE created_at END,
        checked_in_at = CASE
          WHEN $4 IN ('pending', 'confirmed', 'cancelled', 'waitlisted') THEN NULL
          WHEN $4 = 'checked_in' AND checked_in_at IS NULL THEN now()
@@ -533,7 +561,7 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
        END
      WHERE event_id = $1 AND user_id = $2 AND status = $3
      RETURNING user_id, event_id, status, checked_in_at, checked_out_at`,
-    [eventId, userId, expectedStatus, status]
+    [eventId, userId, expectedStatus, status, rejoinsWaitlist]
   );
   if (rows.length === 0) {
     const { rows: existing } = await query(
@@ -550,20 +578,30 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
     throw err;
   }
 
-  if (status === 'cancelled' && COUNTED_STATUSES.includes(expectedStatus)) {
+  // A manual override can free a capacity slot two ways: an explicit
+  // 'cancelled', or staff moving a counted registration straight back to
+  // 'waitlisted' (the checkin.html override dropdown allows this -- exactly
+  // the `rejoinsWaitlist` case computed above). Both stop counting toward
+  // capacity, so both must offer the freed slot to the next waitlisted person.
+  if (rejoinsWaitlist || (status === 'cancelled' && COUNTED_STATUSES.includes(expectedStatus))) {
     await maybePromoteFromWaitlist(eventId);
   }
   if (expectedStatus === 'waitlisted' && status === 'pending') {
-    try {
-      const event = await getEvent(eventId);
-      const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
-      if (userRows[0]) {
-        const transport = await getTransporterAndFrom();
-        await sendWaitlistPromotedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event' }, transport);
+    // Fire-and-forget (same convention as notifyRegistrationOtFieldsChanged
+    // in routes.js): the try/catch below never throws, and awaiting it here
+    // would block the HTTP response on sending an email.
+    (async () => {
+      try {
+        const event = await getEvent(eventId);
+        const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
+        if (userRows[0]) {
+          const transport = await getTransporterAndFrom();
+          await sendWaitlistPromotedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event' }, transport);
+        }
+      } catch (err) {
+        logger.error('failed to send waitlist-promoted notification (manual)', { error: err.message, userId, eventId });
       }
-    } catch (err) {
-      logger.error('failed to send waitlist-promoted notification (manual)', { error: err.message, userId, eventId });
-    }
+    })();
   }
 
   return rows[0];
