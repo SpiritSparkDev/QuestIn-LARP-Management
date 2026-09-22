@@ -124,19 +124,22 @@ kann):
   nicht auf (es gäbe ohnehin nichts zu promovieren).
 
 **Manuelles Nachrücken** (unabhängig vom `waitlist_auto_promote`-Schalter,
-immer verfügbar):
-
-```
-POST /events/:id/waitlist/:userId/promote
-```
-
-Gated wie `/approve`/`/cancel`: `requireMenu('checkin')` +
-`user.group.canOverrideCheckinStatus`. Promoviert die per `:userId`
-konkret gewählte Person (kein erzwungenes FIFO — das ist der Zweck der
-manuellen Option), via `applyTransition('waitlisted', 'promote')` +
-`sendWaitlistPromotedEmail`. 404 falls kein `waitlisted`-Datensatz für
-`(eventId, userId)` existiert; 409 bei gleichzeitiger Statusänderung
-(gleiches `WHERE status = $current`-Muster wie `transitionStatus`).
+immer verfügbar) — **wiederverwendet den bereits existierenden
+Status-Override-Mechanismus** (`PUT /events/:id/checkin/:userId` +
+`setStatus`), statt einen neuen Endpoint einzuführen: `'waitlisted'` wird
+zur bestehenden `VALID_STATUSES`-Liste (Backend) und `STATUS_ORDER`
+(Frontend-Dropdown) hinzugefügt, als erstes Element (vor `pending`) — damit
+ist `waitlisted → pending` per Index ein "Vorwärts"-Schritt und löst
+NICHT den bestehenden Rückwärts-/Skip-Bestätigungsdialog aus, während
+`pending → waitlisted` (zurück auf die Warteliste setzen) korrekt als
+Rückwärts-Schritt mit Bestätigung behandelt wird. Der bereits vorhandene
+per-Zeile-Dropdown erlaubt Staff mit `canOverrideCheckinStatus` damit
+schon, jede beliebige wartende Person frei (nicht zwingend FIFO) auf
+`pending` zu setzen — kein neuer Button, kein neuer Endpoint nötig.
+Einzige Ergänzung: `setStatus`/die Routen-Handler-Funktion verschickt
+`sendWaitlistPromotedEmail`, wenn `previousStatus === 'waitlisted' &&
+status === 'pending'` war (unconditional, nicht an `waitlist_auto_promote`
+gebunden — das ist ja der manuelle, bewusste Staff-Klick).
 
 ## Benachrichtigungen
 
@@ -171,11 +174,13 @@ zurücksetzen (siehe Lehre aus dem Einladungslink-Feature, Memory
 - **`frontend/admin/settings.html`**: neuer Schalter "Warteliste automatisch
   nachrücken lassen" (bindet an `waitlistAutoPromote`), gleiche Karte/Formular
   wie die übrigen `app_settings`-Toggles.
-- **`frontend/admin/checkin.html`**: neuer Abschnitt/Filter "Warteliste" in
-  der bestehenden Teilnehmerliste (`listParticipantsForEvent` liefert
-  `waitlisted`-Zeilen bereits mit, keine Backend-Änderung an dieser Route
-  nötig), mit "Nachrücken"-Button pro Zeile — nur sichtbar für
-  `canOverrideCheckinStatus`-Staff, ruft den neuen Promote-Endpoint.
+- **`frontend/admin/checkin.html`**: `waitlisted`-Zeilen erscheinen bereits
+  automatisch in der bestehenden Teilnehmerliste (`listParticipantsForEvent`
+  liefert sie mit, keine Backend-Änderung an dieser Route nötig) mit einem
+  neuen Status-Pill-Label "Warteliste". Der bestehende
+  Status-Override-Dropdown (nur für `canOverrideCheckinStatus`-Staff
+  sichtbar) bekommt `waitlisted` als Option — Nachrücken ist damit ein
+  normaler Dropdown-Wechsel auf "Vorgemerkt", kein neues UI-Element nötig.
 - **Teilnehmer-Anmeldestatus** (`frontend/account.html` bzw. wo der
   Registrierungsstatus angezeigt wird): neuer Text für `status ===
   'waitlisted'` → "Du stehst auf der Warteliste."
@@ -210,8 +215,13 @@ zurücksetzen (siehe Lehre aus dem Einladungslink-Feature, Memory
 - Kapazität wird erhöht (z. B. 30→35) bei 5+ Wartenden und aktivem
   `waitlist_auto_promote` → genau 5 älteste `waitlisted`-Personen werden
   `pending`, Rest bleibt `waitlisted`.
-- Manueller Promote-Endpoint: Erfolg, 404 (kein Warteliste-Eintrag), 409
-  (Konflikt), Berechtigungsprüfung (`canOverrideCheckinStatus` fehlt → 403).
+- Manuelles Nachrücken über den bestehenden Override-Endpoint
+  (`PUT /events/:id/checkin/:userId` mit `previousStatus: 'waitlisted',
+  status: 'pending'`): Erfolg promoviert unabhängig vom Wert von
+  `waitlist_auto_promote`; 409 bei gleichzeitiger Statusänderung (bereits
+  bestehendes Verhalten); Berechtigungsprüfung (`canOverrideCheckinStatus`
+  fehlt → 403, bereits bestehendes Verhalten, nur mit `waitlisted` als
+  zusätzlichem Statuswert erneut abgedeckt).
 - `setAppSettings`-COALESCE-Regressionstest: `PUT` mit nur
   `{waitlistAutoPromote}` darf `logoUrl`/`appTitle`/`eventName`/etc. nicht
   verändern.
