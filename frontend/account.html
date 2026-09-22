@@ -847,7 +847,7 @@
       document.getElementById("active-registration-edit-btn").onclick = () =>
         openEditOtDialog(activeEvent.id);
       const unregisterBtn = document.getElementById("active-registration-unregister-btn");
-      if (registration.status === "pending") {
+      if (registration.status === "pending" || registration.status === "waitlisted") {
         unregisterBtn.style.display = "";
         unregisterBtn.onclick = () => unregister(activeEvent.id);
       } else {

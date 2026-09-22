@@ -80,6 +80,11 @@
       </form>
     </div>
     <div class="card form-pad">
+      <h2>Warteliste</h2>
+      <p class="sub">Wenn ein Platz frei wird (z.B. durch eine Absage), rückt automatisch die am längsten wartende Person nach. Ist der Schalter aus, muss Staff im Check-In-Bereich manuell nachrücken lassen.</p>
+      <label><input type="checkbox" id="waitlist-auto-promote-toggle"> Automatisch nachrücken lassen</label>
+    </div>
+    <div class="card form-pad">
       <h2>Charaktere durchsuchen</h2>
       <p class="sub">Schaltet die öffentliche "Charaktere anderer Spieler durchsuchen"-Seite für alle Nutzer ein oder aus.</p>
       <label><input type="checkbox" id="character-browsing-toggle"> Charaktere durchsuchen aktiviert</label>
@@ -176,6 +181,21 @@ async function loadCharacterBrowsingSetting() {
   document.getElementById('character-browsing-toggle').checked = settings.characterBrowsingEnabled;
 }
 
+async function loadWaitlistSetting() {
+  const settings = await api.get('/app-settings');
+  document.getElementById('waitlist-auto-promote-toggle').checked = settings.waitlistAutoPromote;
+}
+
+document.getElementById('waitlist-auto-promote-toggle').addEventListener('change', async (event) => {
+  try {
+    await api.put('/app-settings', { waitlistAutoPromote: event.target.checked });
+    notify('Gespeichert.', 'success');
+  } catch (err) {
+    event.target.checked = !event.target.checked;
+    notify(err.message, 'error');
+  }
+});
+
 document.getElementById('character-browsing-toggle').addEventListener('change', async (event) => {
   try {
     await api.put('/app-settings', { characterBrowsingEnabled: event.target.checked });
@@ -212,6 +232,7 @@ try {
   await loadSettings();
   await loadInvitationSettings();
   await loadCharacterBrowsingSetting();
+  await loadWaitlistSetting();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
   else if (err.status === 403) { notify('Kein Zugriff – nur für Admins.', 'error'); }

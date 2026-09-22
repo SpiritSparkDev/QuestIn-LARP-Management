@@ -44,6 +44,8 @@
         <input id="event-date" name="eventDate" type="date" required>
         <label for="event-code">QR-Code-Kennung <span style="opacity:0.6;font-size:12px;">optional, z.B. P17/2027</span></label>
         <input id="event-code" name="code" type="text" placeholder="P17/2027">
+        <label for="event-capacity">Max. Teilnehmerzahl <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
+        <input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt">
         <button type="submit">Speichern</button>
         <button type="button" id="event-cancel-edit" class="btn-ghost">Abbrechen</button>
       </form>
@@ -120,6 +122,7 @@ function startEdit(eventData) {
   form.elements.name.value = eventData.name;
   form.elements.eventDate.value = eventData.event_date;
   form.elements.code.value = eventData.code ?? '';
+  form.elements.capacity.value = eventData.capacity ?? '';
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
 }
 
@@ -132,10 +135,13 @@ function resetForm() {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
+  const capacityValue = form.elements.capacity.value;
   const payload = {
     name: form.elements.name.value,
     eventDate: form.elements.eventDate.value,
     code: form.elements.code.value || null,
+    capacity: capacityValue ? Number(capacityValue) : null,
+    clearCapacity: true,
   };
   try {
     if (editingEventId) {

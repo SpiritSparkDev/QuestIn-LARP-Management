@@ -2,6 +2,7 @@
 export const STATUS_LABELS = {
   notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet',
   checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt',
+  waitlisted: 'Warteliste',
 };
 
 // Renders one OT (account/registration) field from a schema-shaped field

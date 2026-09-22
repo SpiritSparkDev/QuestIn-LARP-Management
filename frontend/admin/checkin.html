@@ -118,7 +118,7 @@ let registrationSchema = [];
 let otFieldsByKey = new Map();
 let selectedColumns = { it: [], ot: [] };
 let participantsById = new Map();
-const STATUS_ORDER = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
+const STATUS_ORDER = ['waitlisted', 'pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
 
 function loadSelectedColumns(eventId) {
   try {

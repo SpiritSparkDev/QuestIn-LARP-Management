@@ -888,6 +888,11 @@ tbody tr:last-child td {
   color: #8a5a00;
 }
 
+.status-waitlisted {
+  background: #e6dcf5;
+  color: #5b3a8a;
+}
+
 .status-confirmed {
   background: var(--primary-container);
   color: var(--primary-deep);
