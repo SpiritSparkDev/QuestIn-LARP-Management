@@ -1113,6 +1113,13 @@
           openDeleteCharacterDialog(button.dataset.delete);
         });
       });
+      nscListBody.querySelectorAll(".char-photo-upload").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          startNscEdit(button.closest("[data-card-for]").dataset.cardFor);
+          nscFilesSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
       nscCharacters.forEach((c) => loadPhotoInto(c.id));
     }
 
@@ -1200,6 +1207,13 @@
         button.addEventListener("click", (event) => {
           event.stopPropagation();
           openDeleteCharacterDialog(button.dataset.delete);
+        });
+      });
+      characterListBody.querySelectorAll(".char-photo-upload").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          startEdit(button.closest("[data-card-for]").dataset.cardFor);
+          characterFilesSection.scrollIntoView({ behavior: "smooth", block: "start" });
         });
       });
       scCharacters.forEach((c) => loadPhotoInto(c.id));
