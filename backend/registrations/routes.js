@@ -160,7 +160,7 @@ router.post('/events/:id/cancel', requireAuth(requireMenu('checkin')(async ({ re
   }
 })));
 
-const VALID_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'];
+const VALID_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'waitlisted'];
 
 // Structural keys updateRegistrationOtFields always returns, as opposed to
 // OT-schema-driven ones -- see the strip loop below.

@@ -1,4 +1,4 @@
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import { getEvent } from '../events/repository.js';
 import { applyTransition } from './statusMachine.js';
 import { displayName } from '../displayName.js';
@@ -134,6 +134,8 @@ async function resolveNscAvailability(userId, conRole, nscAvailable, nscCharacte
   return { nscAvailable: true, nscCharacterId };
 }
 
+export const COUNTED_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out'];
+
 export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, otFields, requestingUser) {
   const event = await getEvent(eventId);
   if (!event) {
@@ -173,13 +175,25 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   }
 
   try {
-    const { rows } = await query(
-      `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, registration_data_enc)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, checked_in_at, checked_out_at`,
-      [userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, encryptFieldBlob(data)]
-    );
-    return rows[0];
+    return await withTransaction(async (client) => {
+      const { rows: eventRows } = await client.query('SELECT capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+      const capacity = eventRows[0]?.capacity ?? null;
+      let status = 'pending';
+      if (capacity !== null) {
+        const { rows: countRows } = await client.query(
+          'SELECT count(*)::int AS count FROM registrations WHERE event_id = $1 AND status = ANY($2::text[])',
+          [eventId, COUNTED_STATUSES]
+        );
+        if (countRows[0].count >= capacity) status = 'waitlisted';
+      }
+      const { rows } = await client.query(
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, registration_data_enc, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, checked_in_at, checked_out_at`,
+        [userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, encryptFieldBlob(data), status]
+      );
+      return rows[0];
+    });
   } catch (err) {
     if (err.code === '23505') {
       const dup = new Error('Bereits für dieses Event angemeldet.');
@@ -233,7 +247,7 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
 
 export async function unregisterFromEvent(userId, eventId) {
   const { rowCount } = await query(
-    "DELETE FROM registrations WHERE user_id = $1 AND event_id = $2 AND status = 'pending'",
+    "DELETE FROM registrations WHERE user_id = $1 AND event_id = $2 AND status IN ('pending', 'waitlisted')",
     [userId, eventId]
   );
   if (rowCount === 0) {

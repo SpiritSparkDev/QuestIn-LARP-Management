@@ -906,6 +906,100 @@ test('registering with con_role nsc, an own nsc-class characterId, and nscAvaila
   });
 });
 
+async function makeEventWithCapacity(capacity) {
+  const { rows } = await query(
+    "INSERT INTO events (name, event_date, is_active, capacity) VALUES ('Kapazitäts-Test-Con', '2027-08-02', true, $1) RETURNING id",
+    [capacity]
+  );
+  return rows[0].id;
+}
+
+test('registering at capacity lands on the waitlist instead of pending', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEventWithCapacity(1);
+
+    const first = await makeUserAndSession();
+    const firstCharacterId = await makeCharacter(port, first.cookie);
+    const firstRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: first.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: firstCharacterId }),
+    });
+    assert.equal((await firstRes.json()).status, 'pending');
+
+    const second = await makeUserAndSession();
+    const secondCharacterId = await makeCharacter(port, second.cookie);
+    const secondRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: second.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: secondCharacterId }),
+    });
+    assert.equal(secondRes.status, 201);
+    assert.equal((await secondRes.json()).status, 'waitlisted');
+  });
+});
+
+test('two simultaneous registrations at the last free slot: exactly one pending, one waitlisted', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEventWithCapacity(1);
+    const a = await makeUserAndSession();
+    const aCharacterId = await makeCharacter(port, a.cookie);
+    const b = await makeUserAndSession();
+    const bCharacterId = await makeCharacter(port, b.cookie);
+
+    const [resA, resB] = await Promise.all([
+      fetch(`http://localhost:${port}/events/${eventId}/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: a.cookie },
+        body: JSON.stringify({ conRole: 'sc', characterId: aCharacterId }),
+      }),
+      fetch(`http://localhost:${port}/events/${eventId}/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: b.cookie },
+        body: JSON.stringify({ conRole: 'sc', characterId: bCharacterId }),
+      }),
+    ]);
+    const statuses = [(await resA.json()).status, (await resB.json()).status].sort();
+    assert.deepEqual(statuses, ['pending', 'waitlisted']);
+  });
+});
+
+test('an event without capacity never waitlists', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const { userId, cookie } = await makeUserAndSession();
+    const characterId = await makeCharacter(port, cookie);
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId }),
+    });
+    assert.equal((await res.json()).status, 'pending');
+  });
+});
+
+test('a waitlisted participant can unregister (row deleted, no error)', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEventWithCapacity(1);
+    const filler = await makeUserAndSession();
+    const fillerCharacterId = await makeCharacter(port, filler.cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: filler.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: fillerCharacterId }),
+    });
+
+    const waitlisted = await makeUserAndSession();
+    const waitlistedCharacterId = await makeCharacter(port, waitlisted.cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: waitlisted.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: waitlistedCharacterId }),
+    });
+
+    const unregisterRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'DELETE', headers: { Cookie: waitlisted.cookie },
+    });
+    assert.equal(unregisterRes.status, 200);
+
+    const { rows } = await query('SELECT status FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, waitlisted.userId]);
+    assert.equal(rows.length, 0);
+  });
+});
+
 test.after(async () => {
   // Users created in a reg_custom_* group must be deleted before the group
   // itself (users.group_id -> groups.id has no ON DELETE CASCADE), otherwise
