@@ -838,6 +838,40 @@ tbody tr:last-child td {
   white-space: nowrap;
 }
 
+
+.grid-table {
+    display: grid;
+    grid-template-columns: minmax(140px, 1.4fr) minmax(140px, 1.4fr) minmax(100px, 0.8fr) var(--extra-column-tracks, ) minmax(110px, 0.8fr) minmax(96px, 0.6fr) minmax(96px, 0.6fr) minmax(96px, 0.6fr) minmax(96px, 0.6fr) minmax(96px, 0.6fr) minmax(90px, 0.7fr);
+}
+
+.grid-row {
+  display: contents;
+}
+
+.grid-cell {
+  display: flex;
+  align-items: center;
+  padding: 14px 10px;
+  border-bottom: 1px solid var(--outline-variant);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid-header .grid-cell {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+  padding: 12px 10px;
+  background: var(--surface-container-low);
+}
+
+.grid-row:last-child .grid-cell {
+  border-bottom: none;
+}
+
+
 .toolbar {
   display: flex;
   gap: 12px;

@@ -75,10 +75,13 @@
     <div class="card">
       <div class="toolbar"><input class="search" id="participant-search" placeholder="Suche nach Name oder Charakter …"></div>
       <div class="table-scroll">
-      <table id="participant-list">
-        <thead><tr><th>Name</th><th>Charaktere</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="grid-table" id="participant-list" role="table" aria-label="Teilnehmerliste">
+        <div class="grid-row grid-header" id="participant-list-head">
+          <div class="grid-cell" role="columnheader">Name</div>
+          <div class="grid-cell" role="columnheader">Charaktere</div>
+        </div>
+        <div id="participant-list-body" style="display:contents"></div>
+      </div>
       </div>
     </div>
     <p id="message"></p>
@@ -96,8 +99,9 @@ import { parseScanCode } from '/js/qrCode.js';
 import { notify } from '/js/notifications.js';
 
 const eventSelect = document.getElementById('event-select');
-const listBody = document.querySelector('#participant-list tbody');
-const tableHeadRow = document.querySelector('#participant-list thead tr');
+const participantList = document.getElementById('participant-list');
+const listBody = document.getElementById('participant-list-body');
+const tableHeadRow = document.getElementById('participant-list-head');
 const itColumnCheckboxes = document.getElementById('it-column-checkboxes');
 const otColumnCheckboxes = document.getElementById('ot-column-checkboxes');
 const message = document.getElementById('message');
@@ -162,19 +166,28 @@ function toggleColumn(group, key, checked) {
 function renderTableHead() {
   const itLabels = selectedColumns.it.map((key) => currentSchema.find((f) => f.key === key)?.label ?? key);
   const otLabels = selectedColumns.ot.map((key) => otFieldsByKey.get(key)?.label ?? key);
-  const extraTh = [...itLabels, ...otLabels].map((label) => `<th>${escapeHtml(label)}</th>`).join('');
-  tableHeadRow.innerHTML = `<th>Name</th><th>Charaktere</th><th>Rolle</th>${extraTh}<th>Status</th><th></th><th>Override</th>`;
+  const extraLabels = [...itLabels, ...otLabels];
+  const extraTh = extraLabels.map((label) => `<div class="grid-cell" role="columnheader">${escapeHtml(label)}</div>`).join('');
+  tableHeadRow.innerHTML = `<div class="grid-cell" role="columnheader">Name</div><div class="grid-cell" role="columnheader">Charaktere</div><div class="grid-cell" role="columnheader">Rolle</div>${extraTh}<div class="grid-cell" role="columnheader">Status</div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader">Override</div>`;
+  // grid-template-columns (sahara.css) splices this track-list string in
+  // between its fixed tracks -- built here rather than passing a bare
+  // count, since repeat()'s count must be >=1 and this needs to handle 0
+  // selected IT/OT columns (the default) without producing invalid CSS.
+  const extraTracks = extraLabels.length > 0
+    ? `repeat(${extraLabels.length}, minmax(120px, 1fr))`
+    : '';
+  participantList.style.setProperty('--extra-column-tracks', extraTracks);
 }
 
 function renderExtraCells(p) {
   const itCells = selectedColumns.it.map((key) => {
     const field = currentSchema.find((f) => f.key === key) ?? { key };
     const values = p.characters.map((c) => formatFieldValue(field, c.data?.[key])).filter((v) => v !== undefined);
-    return `<td>${escapeHtml(values.join(', '))}</td>`;
+    return `<div class="grid-cell">${escapeHtml(values.join(', '))}</div>`;
   }).join('');
   const otCells = selectedColumns.ot.map((key) => {
     const field = otFieldsByKey.get(key) ?? { key };
-    return `<td>${escapeHtml(formatFieldValue(field, p.otFields?.[key]) ?? '')}</td>`;
+    return `<div class="grid-cell">${escapeHtml(formatFieldValue(field, p.otFields?.[key]) ?? '')}</div>`;
   }).join('');
   return itCells + otCells;
 }
@@ -421,8 +434,9 @@ scanStartButton.style.display = savedScanMode === 'push' ? '' : 'none';
 
 function applySearchFilter() {
   const term = currentSearch.trim().toLowerCase();
-  listBody.querySelectorAll('tr').forEach((row) => {
-    const text = `${row.cells[0].textContent} ${row.cells[1].textContent}`.toLowerCase();
+  listBody.querySelectorAll('.grid-row').forEach((row) => {
+    const cells = row.querySelectorAll('.grid-cell');
+    const text = `${cells[0]?.textContent ?? ''} ${cells[1]?.textContent ?? ''}`.toLowerCase();
     row.style.display = !term || text.includes(term) ? '' : 'none';
   });
 }
@@ -448,40 +462,66 @@ searchInput.addEventListener('input', () => {
   applySearchFilter();
 });
 
-function renderActionCell(p) {
+// Each action used to share one wide "Actions" cell (buttons wrapping
+// awkwardly once several applied to the same row); each now gets its own
+// dedicated grid column instead, so the same action always lands in the
+// same column across every row -- these five functions are one per column,
+// each returning either its one button or '' when that action doesn't
+// apply to this participant's current status/permissions.
+
+function renderApproveCell(p) {
+  if (p.status !== 'pending' || !canOverride) return '';
+  return `<button type="button" class="btn" data-approve="${p.userId}">Freigeben</button>`;
+}
+
+function renderCheckinCell(p) {
+  if (p.status === 'notified') return '';
+  return `<button type="button" class="btn" data-checkin="${p.userId}" ${p.status !== 'confirmed' ? 'disabled' : ''}>Check-In</button>`;
+}
+
+function renderCheckoutCell(p) {
+  if (p.status === 'notified') return '';
+  return `<button type="button" class="btn btn-ghost" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>`;
+}
+
+// "Absagen" cancels two different things depending on status (an open
+// invitation vs. an existing registration) but the two are mutually
+// exclusive per row and share the same label, so they share one column.
+function renderCancelCell(p) {
   if (p.status === 'notified') {
     return canManageMembers ? `<button type="button" class="btn btn-ghost" data-cancel-invitation="${p.invitationId}">Absagen</button>` : '';
   }
-  const parts = [];
-  if (p.status === 'pending' && canOverride) {
-    parts.push(`<button type="button" class="btn" data-approve="${p.userId}">Freigeben</button>`);
-  }
-  parts.push(`<button type="button" class="btn" data-checkin="${p.userId}" ${p.status !== 'confirmed' ? 'disabled' : ''}>Check-In</button>`);
-  parts.push(`<button type="button" class="btn btn-ghost" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>`);
   if ((p.status === 'pending' || p.status === 'confirmed') && canOverride) {
-    parts.push(`<button type="button" class="btn btn-ghost" data-cancel="${p.userId}">Absagen</button>`);
+    return `<button type="button" class="btn btn-ghost" data-cancel="${p.userId}">Absagen</button>`;
   }
+  return '';
+}
+
+function renderEditCell(p) {
+  if (p.status === 'notified') return '';
   const canEditOt = canManageMembers && [...otFieldsByKey.keys()].some((key) => myAccountFields.includes(key));
   const canEditCharacters = canOverride && (p.characters ?? []).length > 0;
-  if (canEditOt || canEditCharacters) {
-    parts.push(`<button type="button" class="btn-ghost" data-edit="${p.userId}">Bearbeiten</button>`);
-  }
-  return parts.join(' ');
+  if (!canEditOt && !canEditCharacters) return '';
+  return `<button type="button" class="btn-ghost" data-edit="${p.userId}">Bearbeiten</button>`;
 }
 
 async function loadParticipants(eventId) {
-  listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
+  listBody.innerHTML = '<div class="grid-row"><div class="grid-cell" style="grid-column:1/-1;">Wird geladen …</div></div>';
   const participants = await api.get(`/events/${eventId}/participants`);
   participantsById = new Map(participants.map((p) => [p.userId, p]));
-  listBody.innerHTML = participants.map((p) => `<tr>
-    <td>${escapeHtml(p.name)}</td>
-    <td>${escapeHtml(p.characters.map((c) => c.name).join(', '))}</td>
-    <td>${renderConRoleCell(p)}</td>
+  listBody.innerHTML = participants.map((p) => `<div class="grid-row" role="row">
+    <div class="grid-cell">${escapeHtml(p.name)}</div>
+    <div class="grid-cell">${escapeHtml(p.characters.map((c) => c.name).join(', '))}</div>
+    <div class="grid-cell">${renderConRoleCell(p)}</div>
     ${renderExtraCells(p)}
-    <td><span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span></td>
-    <td>${renderActionCell(p)}</td>
-    <td>${renderOverrideCell(p)}</td>
-  </tr>`).join('');
+    <div class="grid-cell"><span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span></div>
+    <div class="grid-cell">${renderApproveCell(p)}</div>
+    <div class="grid-cell">${renderCheckinCell(p)}</div>
+    <div class="grid-cell">${renderCheckoutCell(p)}</div>
+    <div class="grid-cell">${renderCancelCell(p)}</div>
+    <div class="grid-cell">${renderEditCell(p)}</div>
+    <div class="grid-cell">${renderOverrideCell(p)}</div>
+  </div>`).join('');
 
   statTotal.textContent = participants.length;
   statCheckedIn.textContent = participants.filter((p) => p.status === 'checked_in').length;
