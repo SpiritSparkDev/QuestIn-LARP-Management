@@ -17,10 +17,10 @@ await seedGroups();
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 
-async function makeUserAndSession() {
+async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
-    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Reg', 'Test', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
-    [`reg-${crypto.randomUUID()}@example.com`]
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Reg', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    [`reg-${crypto.randomUUID()}@example.com`, groupKey]
   );
   const session = await createSession(rows[0].id);
   return { userId: rows[0].id, cookie: `session=${session.token}` };
@@ -997,6 +997,142 @@ test('a waitlisted participant can unregister (row deleted, no error)', async ()
 
     const { rows } = await query('SELECT status FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, waitlisted.userId]);
     assert.equal(rows.length, 0);
+  });
+});
+
+async function makeCustomOverrideUserAndSession() {
+  return makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: true });
+}
+
+test('auto-promote: cancelling a confirmed registration promotes the oldest waitlisted person', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEventWithCapacity(1);
+    const staff = await makeCustomOverrideUserAndSession();
+
+    const first = await makeUserAndSession();
+    const firstCharacterId = await makeCharacter(port, first.cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: first.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: firstCharacterId }),
+    });
+
+    const second = await makeUserAndSession();
+    const secondCharacterId = await makeCharacter(port, second.cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: second.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: secondCharacterId }),
+    });
+
+    const cancelRes = await fetch(`http://localhost:${port}/events/${eventId}/cancel`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: staff.cookie },
+      body: JSON.stringify({ userId: first.userId }),
+    });
+    assert.equal(cancelRes.status, 200);
+
+    const { rows } = await query('SELECT status FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, second.userId]);
+    assert.equal(rows[0].status, 'pending');
+  });
+});
+
+test('auto-promote disabled: cancelling does not promote anyone', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ waitlistAutoPromote: false }),
+    });
+    const eventId = await makeEventWithCapacity(1);
+    const staff = await makeCustomOverrideUserAndSession();
+
+    const first = await makeUserAndSession();
+    const firstCharacterId = await makeCharacter(port, first.cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: first.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: firstCharacterId }),
+    });
+    const second = await makeUserAndSession();
+    const secondCharacterId = await makeCharacter(port, second.cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: second.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: secondCharacterId }),
+    });
+
+    await fetch(`http://localhost:${port}/events/${eventId}/cancel`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: staff.cookie },
+      body: JSON.stringify({ userId: first.userId }),
+    });
+
+    const { rows } = await query('SELECT status FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, second.userId]);
+    assert.equal(rows[0].status, 'waitlisted');
+
+    // reset for later tests in this file
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ waitlistAutoPromote: true }),
+    });
+  });
+});
+
+test('manual promote via the existing status-override endpoint', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEventWithCapacity(1);
+    const staff = await makeCustomOverrideUserAndSession();
+
+    const filler = await makeUserAndSession();
+    const fillerCharacterId = await makeCharacter(port, filler.cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: filler.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: fillerCharacterId }),
+    });
+    const waitlisted = await makeUserAndSession();
+    const waitlistedCharacterId = await makeCharacter(port, waitlisted.cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: waitlisted.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: waitlistedCharacterId }),
+    });
+
+    const promoteRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${waitlisted.userId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: staff.cookie },
+      body: JSON.stringify({ status: 'pending', previousStatus: 'waitlisted' }),
+    });
+    assert.equal(promoteRes.status, 200);
+    assert.equal((await promoteRes.json()).status, 'pending');
+  });
+});
+
+test('raising an event capacity promotes as many waitlisted people as now fit', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEventWithCapacity(1);
+    const admin = await makeUserAndSession('admin');
+
+    const filler = await makeUserAndSession();
+    const fillerCharacterId = await makeCharacter(port, filler.cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: filler.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: fillerCharacterId }),
+    });
+
+    const waitlistedUsers = [];
+    for (let i = 0; i < 2; i += 1) {
+      const u = await makeUserAndSession();
+      const characterId = await makeCharacter(port, u.cookie);
+      await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: u.cookie },
+        body: JSON.stringify({ conRole: 'sc', characterId }),
+      });
+      waitlistedUsers.push(u);
+    }
+
+    await fetch(`http://localhost:${port}/events/${eventId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ capacity: 3 }),
+    });
+
+    const { rows } = await query(
+      'SELECT status FROM registrations WHERE event_id = $1 AND user_id = ANY($2::uuid[])',
+      [eventId, waitlistedUsers.map((u) => u.userId)]
+    );
+    assert.deepEqual(rows.map((r) => r.status).sort(), ['pending', 'pending']);
   });
 });
 

@@ -7,8 +7,9 @@ import { filterCharacterFields } from '../characters/visibility.js';
 import { listOpenInvitationsForEvent } from '../invitations/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../registrationFields.js';
-import { sendRegistrationOtFieldsChangedEmail, getTransporterAndFrom } from '../auth/mailer.js';
+import { sendRegistrationOtFieldsChangedEmail, sendWaitlistedEmail, sendWaitlistPromotedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
+import { getAppSettings } from '../appSettings/repository.js';
 
 const SELF_SERVICE_CON_ROLES = ['sc', 'nsc', 'helfer'];
 const STAFF_CON_ROLES = ['orga', 'hilfs_orga'];
@@ -175,7 +176,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   }
 
   try {
-    return await withTransaction(async (client) => {
+    const registration = await withTransaction(async (client) => {
       const { rows: eventRows } = await client.query('SELECT capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
       const capacity = eventRows[0]?.capacity ?? null;
       let status = 'pending';
@@ -194,6 +195,20 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
       );
       return rows[0];
     });
+    if (registration.status === 'waitlisted') {
+      try {
+        // `event` is already in scope from the EVENT_NOT_FOUND check at the
+        // top of this function -- no second getEvent() call needed.
+        const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
+        if (userRows[0]) {
+          const transport = await getTransporterAndFrom();
+          await sendWaitlistedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event' }, transport);
+        }
+      } catch (err) {
+        logger.error('failed to send waitlisted notification', { error: err.message, userId, eventId });
+      }
+    }
+    return registration;
   } catch (err) {
     if (err.code === '23505') {
       const dup = new Error('Bereits für dieses Event angemeldet.');
@@ -246,16 +261,18 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
 }
 
 export async function unregisterFromEvent(userId, eventId) {
+  const { rows: existingRows } = await query(
+    'SELECT status FROM registrations WHERE user_id = $1 AND event_id = $2',
+    [userId, eventId]
+  );
+  const previousStatus = existingRows[0]?.status;
+
   const { rowCount } = await query(
     "DELETE FROM registrations WHERE user_id = $1 AND event_id = $2 AND status IN ('pending', 'waitlisted')",
     [userId, eventId]
   );
   if (rowCount === 0) {
-    const { rows } = await query(
-      'SELECT status FROM registrations WHERE user_id = $1 AND event_id = $2',
-      [userId, eventId]
-    );
-    if (rows.length === 0) {
+    if (existingRows.length === 0) {
       const err = new Error('registration not found');
       err.code = 'REGISTRATION_NOT_FOUND';
       throw err;
@@ -263,6 +280,60 @@ export async function unregisterFromEvent(userId, eventId) {
     const err = new Error('Abmelden nach Check-In nicht mehr möglich.');
     err.code = 'CANNOT_UNREGISTER';
     throw err;
+  }
+  if (previousStatus === 'pending') {
+    await maybePromoteFromWaitlist(eventId);
+  }
+}
+
+// Promotes as many waitlisted registrations as now fit under `capacity`,
+// oldest first -- not just one, so both "one slot freed" (a cancellation)
+// and "several slots freed at once" (a capacity increase) are handled by
+// the same code path. No-op if auto-promote is off or the event has no
+// capacity limit (nothing could ever be waitlisted there).
+export async function maybePromoteFromWaitlist(eventId) {
+  const { waitlistAutoPromote } = await getAppSettings();
+  if (!waitlistAutoPromote) return;
+
+  const promotedUserIds = await withTransaction(async (client) => {
+    const { rows: eventRows } = await client.query('SELECT capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+    const capacity = eventRows[0]?.capacity ?? null;
+    if (capacity === null) return [];
+
+    const promoted = [];
+    for (;;) {
+      const { rows: countRows } = await client.query(
+        'SELECT count(*)::int AS count FROM registrations WHERE event_id = $1 AND status = ANY($2::text[])',
+        [eventId, COUNTED_STATUSES]
+      );
+      if (countRows[0].count >= capacity) break;
+
+      const { rows: nextRows } = await client.query(
+        "SELECT user_id FROM registrations WHERE event_id = $1 AND status = 'waitlisted' ORDER BY created_at ASC LIMIT 1",
+        [eventId]
+      );
+      if (nextRows.length === 0) break;
+
+      await client.query(
+        "UPDATE registrations SET status = 'pending' WHERE event_id = $1 AND user_id = $2 AND status = 'waitlisted'",
+        [eventId, nextRows[0].user_id]
+      );
+      promoted.push(nextRows[0].user_id);
+    }
+    return promoted;
+  });
+
+  if (promotedUserIds.length === 0) return;
+  const event = await getEvent(eventId);
+  const eventName = event?.name ?? 'Unbekanntes Event';
+  const transport = await getTransporterAndFrom();
+  for (const userId of promotedUserIds) {
+    try {
+      const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
+      if (userRows[0]) await sendWaitlistPromotedEmail(userRows[0].email, { eventName }, transport);
+    } catch (err) {
+      logger.error('failed to send waitlist-promoted notification', { error: err.message, userId, eventId });
+    }
   }
 }
 
@@ -441,7 +512,9 @@ export async function approveRegistration(eventId, userId) {
 }
 
 export async function cancelRegistration(eventId, userId) {
-  return transitionStatus(eventId, userId, 'cancel');
+  const result = await transitionStatus(eventId, userId, 'cancel');
+  await maybePromoteFromWaitlist(eventId);
+  return result;
 }
 
 export async function setStatus(eventId, userId, status, expectedStatus) {
@@ -449,12 +522,12 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
     `UPDATE registrations SET
        status = $4,
        checked_in_at = CASE
-         WHEN $4 IN ('pending', 'confirmed', 'cancelled') THEN NULL
+         WHEN $4 IN ('pending', 'confirmed', 'cancelled', 'waitlisted') THEN NULL
          WHEN $4 = 'checked_in' AND checked_in_at IS NULL THEN now()
          ELSE checked_in_at
        END,
        checked_out_at = CASE
-         WHEN $4 IN ('pending', 'confirmed', 'cancelled', 'checked_in') THEN NULL
+         WHEN $4 IN ('pending', 'confirmed', 'cancelled', 'waitlisted', 'checked_in') THEN NULL
          WHEN checked_out_at IS NULL THEN now()
          ELSE checked_out_at
        END
@@ -476,6 +549,23 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
     err.code = 'STATUS_CONFLICT';
     throw err;
   }
+
+  if (status === 'cancelled' && COUNTED_STATUSES.includes(expectedStatus)) {
+    await maybePromoteFromWaitlist(eventId);
+  }
+  if (expectedStatus === 'waitlisted' && status === 'pending') {
+    try {
+      const event = await getEvent(eventId);
+      const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
+      if (userRows[0]) {
+        const transport = await getTransporterAndFrom();
+        await sendWaitlistPromotedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event' }, transport);
+      }
+    } catch (err) {
+      logger.error('failed to send waitlist-promoted notification (manual)', { error: err.message, userId, eventId });
+    }
+  }
+
   return rows[0];
 }
 

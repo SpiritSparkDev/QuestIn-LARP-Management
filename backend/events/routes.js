@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEvent } from './repository.js';
+import { maybePromoteFromWaitlist } from '../registrations/repository.js';
 
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
@@ -35,9 +36,15 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   if (body.capacity !== undefined && body.capacity !== null && (!Number.isInteger(body.capacity) || body.capacity < 1)) {
     return { status: 400, body: { error: 'capacity must be a positive integer or null' } };
   }
+  const before = await getEvent(params.id);
+  if (!before) return { status: 404, body: { error: 'event not found' } };
   const event = await updateEvent(params.id, body);
-  if (!event) return { status: 404, body: { error: 'event not found' } };
-  return { status: 200, body: event };
+
+  const effective = (c) => (c === null ? Infinity : c);
+  if (effective(event.capacity) > effective(before.capacity)) {
+    await maybePromoteFromWaitlist(params.id);
+  }
+  return { status: 200, body: await getEvent(params.id) };
 })));
 
 router.post('/events/:id/activate', requireAuth(requireMenu('events')(async ({ params }) => {
