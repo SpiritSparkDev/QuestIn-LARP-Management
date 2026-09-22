@@ -4,7 +4,6 @@ import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 
 const SELECT_COLUMNS = 'id, user_id, class, name, data, is_gsc, created_at';
-const CHARACTER_LOCKING_STATUSES = ['confirmed', 'checked_in', 'checked_out'];
 
 async function schemaForClass(characterClass) {
   return characterClass === 'nsc' ? getNscProfileSchema() : getScCharacterSchema();
@@ -140,17 +139,33 @@ export async function updateCharacter(id, userId, { name, data, isGsc }, { isEle
   return rows[0] ?? null;
 }
 
+function characterInUseError() {
+  const err = new Error('Charakter ist mit einer Anmeldung verknüpft und kann nicht gelöscht werden.');
+  err.code = 'CHARACTER_IN_USE';
+  return err;
+}
+
 export async function deleteCharacter(id, userId) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
-  const { rows } = await query('SELECT status FROM registrations WHERE character_id = $1 OR nsc_character_id = $1', [id]);
-  if (rows.some((r) => CHARACTER_LOCKING_STATUSES.includes(r.status))) {
-    const err = new Error('Charakter ist mit einer bestätigten Anmeldung verknüpft und kann nicht gelöscht werden.');
-    err.code = 'CHARACTER_IN_USE';
-    throw err;
+  // registrations.character_id/nsc_character_id have no ON DELETE clause
+  // (plain REFERENCES, so Postgres defaults to blocking the delete) --
+  // ANY referencing row prevents deletion, not just ones in a "locking"
+  // status, so this must match that exactly or the DELETE below fails
+  // with a raw, unhandled foreign-key-violation error instead of the
+  // friendly one. The catch below is a defensive backstop for the same
+  // constraint, in case a future caller reaches this path some other way.
+  const { rows } = await query('SELECT 1 FROM registrations WHERE character_id = $1 OR nsc_character_id = $1', [id]);
+  if (rows.length > 0) {
+    throw characterInUseError();
   }
 
-  await query('DELETE FROM characters WHERE id = $1', [id]);
+  try {
+    await query('DELETE FROM characters WHERE id = $1', [id]);
+  } catch (err) {
+    if (err.code === '23503') throw characterInUseError();
+    throw err;
+  }
   return true;
 }

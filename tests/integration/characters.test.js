@@ -324,6 +324,39 @@ test('DELETE /characters/:id removes an unused character; owner-only; blocked on
   });
 });
 
+test('DELETE /characters/:id returns 409 (not a 500) for a pending, non-confirmed registration too', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    const eventId = await makeEvent();
+
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ name: 'PendingLink', data: { fraction: 'Nordmark' } }),
+    });
+    const { id } = await createRes.json();
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: id }),
+    });
+    // registerForEvent leaves a fresh registration as 'pending' -- this is
+    // NOT one of the old "locking" statuses, but registrations.character_id
+    // has no ON DELETE clause, so it still blocks the character delete at
+    // the database level. Without the app-level check catching this first,
+    // the DELETE fails with an unhandled foreign-key-violation error (500)
+    // instead of the same friendly 409 a confirmed registration gets.
+    const blockedDelete = await fetch(`http://localhost:${port}/characters/${id}`, {
+      method: 'DELETE', headers: { Cookie: owner.cookie },
+    });
+    assert.equal(blockedDelete.status, 409);
+    const body = await blockedDelete.json();
+    assert.match(body.error, /kann nicht gelöscht werden/);
+
+    const getAfter = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: owner.cookie } });
+    assert.equal(getAfter.status, 200);
+  });
+});
+
 test('PUT /characters/:id allows a canOverrideCheckinStatus group to edit another user\'s character', async () => {
   await withTestServer(async (port) => {
     const owner = await makeUserAndSession('mitglied');
