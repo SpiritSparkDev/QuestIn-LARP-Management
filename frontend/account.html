@@ -173,6 +173,7 @@
                 <div class="dashboard-main">
                   <button type="button" id="copy-character-btn" class="btn-ghost">Aus bestehendem Charakter
                     kopieren</button>
+                  <button type="button" id="new-character-btn" class="btn-ghost">Neuen Charakter anlegen</button>
 
                   <dialog id="copy-character-dialog">
                     <h3>Charakter kopieren</h3>
@@ -194,8 +195,7 @@
                       <label><input type="checkbox" id="character-is-gsc"> GSC (Gildensprecher-Charakter)</label>
                       <div id="character-dynamic-fields"></div>
                       <button type="submit">Speichern</button>
-                      <button type="button" id="character-cancel-edit" style="display:none;"
-                        class="btn-ghost">Abbrechen</button>
+                      <button type="button" id="character-cancel-edit" class="btn-ghost">Abbrechen</button>
                     </form>
                   </div>
                 </div>
@@ -220,14 +220,17 @@
               <div id="nsc-section" style="display:none;">
                 <div class="dashboard-layout">
                   <div class="dashboard-main">
-                    <form id="nsc-character-form">
-                      <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
-                      <input id="nsc-character-name" name="name" type="text" required>
-                      <label for="nsc-character-name">Charaktername</label>
-                      <div id="nsc-dynamic-fields"></div>
-                      <button type="submit">Speichern</button>
-                      <button type="button" id="nsc-cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
-                    </form>
+                    <button type="button" id="new-nsc-character-btn" class="btn-ghost">Neuen NSC-Charakter anlegen</button>
+                    <div id="nsc-form-section" style="display:none;">
+                      <form id="nsc-character-form">
+                        <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
+                        <input id="nsc-character-name" name="name" type="text" required>
+                        <label for="nsc-character-name">Charaktername</label>
+                        <div id="nsc-dynamic-fields"></div>
+                        <button type="submit">Speichern</button>
+                        <button type="button" id="nsc-cancel-edit" class="btn-ghost">Abbrechen</button>
+                      </form>
+                    </div>
                   </div>
                   <div>
                     <div id="nsc-character-list" class="char-grid"></div>
@@ -910,6 +913,14 @@
     });
 
     const scFormSection = document.getElementById("sc-form-section");
+    const newCharacterBtn = document.getElementById("new-character-btn");
+    function hideCharacterForm() {
+      scFormSection.style.display = "none";
+    }
+    function showCharacterForm() {
+      scFormSection.style.display = "";
+      scFormSection.scrollIntoView({ behavior: "smooth" });
+    }
     const characterForm = document.getElementById("character-form");
     attachLiveValidation(characterForm);
     const characterListBody = document.getElementById("character-list");
@@ -933,6 +944,15 @@
     let editingNscCharacterId = null;
 
     const nscSection = document.getElementById("nsc-section");
+    const nscFormSection = document.getElementById("nsc-form-section");
+    const newNscCharacterBtn = document.getElementById("new-nsc-character-btn");
+    function hideNscForm() {
+      nscFormSection.style.display = "none";
+    }
+    function showNscForm() {
+      nscFormSection.style.display = "";
+      nscFormSection.scrollIntoView({ behavior: "smooth" });
+    }
     const nscListBody = document.getElementById("nsc-character-list");
     const nscForm = document.getElementById("nsc-character-form");
     attachLiveValidation(nscForm);
@@ -1175,7 +1195,7 @@
       renderNscSchemaFields(character.data);
       nscForm.querySelector('button[type="submit"]').textContent =
         "Änderungen speichern";
-      nscCancelButton.style.display = "";
+      showNscForm();
     }
 
     function resetNscForm() {
@@ -1184,10 +1204,17 @@
       nscForm.reset();
       renderNscSchemaFields();
       nscForm.querySelector('button[type="submit"]').textContent = "Speichern";
-      nscCancelButton.style.display = "none";
     }
 
-    nscCancelButton.addEventListener("click", resetNscForm);
+    newNscCharacterBtn.addEventListener("click", () => {
+      resetNscForm();
+      showNscForm();
+    });
+
+    nscCancelButton.addEventListener("click", () => {
+      resetNscForm();
+      hideNscForm();
+    });
 
     nscForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1201,6 +1228,7 @@
         }
         notify("Gespeichert.", "success");
         resetNscForm();
+        hideNscForm();
         await loadCharacters();
       } catch (err) {
         notify(
@@ -1265,7 +1293,7 @@
       renderScSchemaFields(character.data);
       characterForm.querySelector('button[type="submit"]').textContent =
         "Änderungen speichern";
-      characterCancelButton.style.display = "";
+      showCharacterForm();
     }
 
     function resetCharacterForm() {
@@ -1276,10 +1304,17 @@
       renderScSchemaFields();
       characterForm.querySelector('button[type="submit"]').textContent =
         "Speichern";
-      characterCancelButton.style.display = "none";
     }
 
-    characterCancelButton.addEventListener("click", resetCharacterForm);
+    newCharacterBtn.addEventListener("click", () => {
+      resetCharacterForm();
+      showCharacterForm();
+    });
+
+    characterCancelButton.addEventListener("click", () => {
+      resetCharacterForm();
+      hideCharacterForm();
+    });
 
     const deleteCharacterDialog = document.getElementById("delete-character-dialog");
     const deleteCharacterNameEl = document.getElementById("delete-character-name");
@@ -1311,8 +1346,8 @@
       const characterId = deleteCharacterId;
       try {
         await api.delete(`/characters/${characterId}`);
-        if (editingCharacterId === characterId) resetCharacterForm();
-        if (editingNscCharacterId === characterId) resetNscForm();
+        if (editingCharacterId === characterId) { resetCharacterForm(); hideCharacterForm(); }
+        if (editingNscCharacterId === characterId) { resetNscForm(); hideNscForm(); }
         deleteCharacterDialog.close();
         deleteCharacterId = null;
         await loadCharacters();
@@ -1353,7 +1388,7 @@
         resetCharacterForm();
         characterForm.elements.name.value = source.name;
         renderScSchemaFields(source.data);
-        scFormSection.scrollIntoView({ behavior: "smooth" });
+        showCharacterForm();
       });
 
     characterForm.addEventListener("submit", async (event) => {
@@ -1369,6 +1404,7 @@
         }
         notify("Gespeichert.", "success");
         resetCharacterForm();
+        hideCharacterForm();
         await loadCharacters();
       } catch (err) {
         notify(
@@ -1419,7 +1455,6 @@
       renderOtFields();
       renderDashboardAccountHint(account);
 
-      scFormSection.style.display = "";
       scSchema = await api.get("/sc-schema");
       renderScSchemaFields();
       try {
