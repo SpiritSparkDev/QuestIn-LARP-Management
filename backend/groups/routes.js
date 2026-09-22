@@ -6,7 +6,7 @@ import { listGroups, getGroup, createGroup, updateGroup, deleteGroup } from './r
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 
-const MENU_KEYS = ['konto', 'mitglieder', 'events', 'checkin'];
+const MENU_KEYS = ['konto', 'mitglieder', 'events', 'checkin', 'dateien'];
 const KEY_PATTERN = /^[a-z0-9_]+$/;
 
 function isValidMenuList(value) {

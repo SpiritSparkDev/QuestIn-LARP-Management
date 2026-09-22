@@ -200,10 +200,6 @@
                         class="btn-ghost">Abbrechen</button>
                     </form>
                     <p id="character-message"></p>
-                    <div id="character-files-section" style="display:none;">
-                      <h3>Dateien</h3>
-                      <div id="character-files-target"></div>
-                    </div>
                   </div>
                 </div>
                 <div>
@@ -237,10 +233,6 @@
                       <button type="button" id="nsc-cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
                     </form>
                     <p id="nsc-message"></p>
-                    <div id="nsc-files-section" style="display:none;">
-                      <h3>Dateien</h3>
-                      <div id="nsc-files-target"></div>
-                    </div>
                   </div>
                   <div>
                     <div id="nsc-character-list" class="char-grid"></div>
@@ -250,9 +242,29 @@
             </div>
           </div>
         </div>
+
+        <div class="tab-panel" id="dateien-tab" hidden>
+          <h1>Dateien</h1>
+          <p class="sub">Bilder und Dokumente zu deinen Charakteren.</p>
+          <div id="dateien-character-sections"></div>
+        </div>
       </div>
     </div>
   </div>
+
+  <dialog id="photo-upload-dialog">
+    <h3>Foto hochladen</h3>
+    <form id="photo-upload-form">
+      <input type="file" id="photo-upload-input" accept="image/jpeg,image/png,image/webp" required>
+      <label><input type="checkbox" id="photo-upload-consent" required> Ich habe den Hinweis gelesen</label>
+      <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an diesem Bild besitzt und einverstanden bist, dass es im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>
+      <p id="photo-upload-status" class="error"></p>
+      <div class="dialog-actions">
+        <button type="submit">Hochladen</button>
+        <button type="button" id="photo-upload-cancel" class="btn-ghost">Abbrechen</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module">
     import { api } from "/js/api.js";
@@ -338,7 +350,7 @@
       });
     });
 
-    const TOP_TAB_HASHES = ["dashboard", "konto", "veranstaltung"];
+    const TOP_TAB_HASHES = ["dashboard", "konto", "veranstaltung", "dateien"];
 
     // Dashboard/Konto/Veranstaltung are rendered by the shared, role-driven
     // renderNavLinks() as three ordinary links (all pointing at this same
@@ -695,6 +707,24 @@
       populateRegistrationCharacterFields();
       renderCharacterList();
       renderDashboardCharacters();
+      renderDateienTab();
+    }
+
+    function renderDateienTab() {
+      const container = document.getElementById("dateien-character-sections");
+      if (characters.length === 0) {
+        container.innerHTML = '<p class="sub">Du hast noch keine Charaktere angelegt.</p>';
+        return;
+      }
+      container.innerHTML = characters
+        .map(
+          (c) => `<div class="card form-pad">
+      <h2>${escapeHtml(c.name)}${c.class === "nsc" ? ' <span class="tag">NSC</span>' : ""}</h2>
+      <div data-files-for="${c.id}"><p class="sub">Dateien werden geladen …</p></div>
+    </div>`,
+        )
+        .join("");
+      characters.forEach((c) => loadFilesInto(c.id));
     }
 
     let currentRegistrations = [];
@@ -1012,6 +1042,49 @@
       }
     }
 
+    const photoUploadDialog = document.getElementById("photo-upload-dialog");
+    const photoUploadForm = document.getElementById("photo-upload-form");
+    const photoUploadInput = document.getElementById("photo-upload-input");
+    const photoUploadConsent = document.getElementById("photo-upload-consent");
+    const photoUploadStatus = document.getElementById("photo-upload-status");
+    let photoUploadCharacterId = null;
+
+    function openPhotoUploadDialog(characterId) {
+      photoUploadCharacterId = characterId;
+      photoUploadForm.reset();
+      photoUploadStatus.textContent = "";
+      photoUploadDialog.showModal();
+    }
+
+    document.getElementById("photo-upload-cancel").addEventListener("click", () => {
+      photoUploadDialog.close();
+    });
+
+    photoUploadForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      photoUploadStatus.textContent = "";
+      const file = photoUploadInput.files[0];
+      if (!file) return;
+      try {
+        const dataBase64 = await readFileAsBase64(file);
+        await api.post(`/characters/${photoUploadCharacterId}/files`, {
+          kind: "image",
+          filename: file.name,
+          mimeType: file.type,
+          dataBase64,
+          isPublic: false,
+          gdprConsent: photoUploadConsent.checked,
+        });
+        photoUploadDialog.close();
+        await loadPhotoInto(photoUploadCharacterId);
+        if (!document.getElementById("dateien-tab").hidden) {
+          loadFilesInto(photoUploadCharacterId);
+        }
+      } catch (err) {
+        photoUploadStatus.textContent = err.message;
+      }
+    });
+
     async function loadFilesInto(characterId) {
       const container = document.querySelector(`[data-files-for="${characterId}"]`);
       if (!container) return;
@@ -1116,15 +1189,11 @@
       nscListBody.querySelectorAll(".char-photo-upload").forEach((button) => {
         button.addEventListener("click", (event) => {
           event.stopPropagation();
-          startNscEdit(button.closest("[data-card-for]").dataset.cardFor);
-          nscFilesSection.scrollIntoView({ behavior: "smooth", block: "start" });
+          openPhotoUploadDialog(button.closest("[data-card-for]").dataset.cardFor);
         });
       });
       nscCharacters.forEach((c) => loadPhotoInto(c.id));
     }
-
-    const nscFilesSection = document.getElementById("nsc-files-section");
-    const nscFilesTarget = document.getElementById("nsc-files-target");
 
     function startNscEdit(characterId) {
       const character = nscCharacters.find((c) => c.id === characterId);
@@ -1136,9 +1205,6 @@
       nscForm.querySelector('button[type="submit"]').textContent =
         "Änderungen speichern";
       nscCancelButton.style.display = "";
-      nscFilesSection.style.display = "";
-      nscFilesTarget.setAttribute("data-files-for", characterId);
-      loadFilesInto(characterId);
     }
 
     function resetNscForm() {
@@ -1148,9 +1214,6 @@
       renderNscSchemaFields();
       nscForm.querySelector('button[type="submit"]').textContent = "Speichern";
       nscCancelButton.style.display = "none";
-      nscFilesSection.style.display = "none";
-      nscFilesTarget.removeAttribute("data-files-for");
-      nscFilesTarget.innerHTML = "";
     }
 
     nscCancelButton.addEventListener("click", resetNscForm);
@@ -1212,8 +1275,7 @@
       characterListBody.querySelectorAll(".char-photo-upload").forEach((button) => {
         button.addEventListener("click", (event) => {
           event.stopPropagation();
-          startEdit(button.closest("[data-card-for]").dataset.cardFor);
-          characterFilesSection.scrollIntoView({ behavior: "smooth", block: "start" });
+          openPhotoUploadDialog(button.closest("[data-card-for]").dataset.cardFor);
         });
       });
       scCharacters.forEach((c) => loadPhotoInto(c.id));
@@ -1223,9 +1285,6 @@
         renderNscList();
       }
     }
-
-    const characterFilesSection = document.getElementById("character-files-section");
-    const characterFilesTarget = document.getElementById("character-files-target");
 
     function startEdit(characterId) {
       const character = characters.find((c) => c.id === characterId);
@@ -1238,9 +1297,6 @@
       characterForm.querySelector('button[type="submit"]').textContent =
         "Änderungen speichern";
       characterCancelButton.style.display = "";
-      characterFilesSection.style.display = "";
-      characterFilesTarget.setAttribute("data-files-for", characterId);
-      loadFilesInto(characterId);
     }
 
     function resetCharacterForm() {
@@ -1251,9 +1307,6 @@
       renderScSchemaFields();
       characterForm.querySelector('button[type="submit"]').textContent =
         "Speichern";
-      characterFilesSection.style.display = "none";
-      characterFilesTarget.removeAttribute("data-files-for");
-      characterFilesTarget.innerHTML = "";
       characterCancelButton.style.display = "none";
     }
 

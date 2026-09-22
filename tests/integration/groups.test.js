@@ -163,6 +163,25 @@ test('POST /groups rejects the retired charaktere/con-anmeldungen menu keys', as
   }
 });
 
+test('POST /groups accepts the dateien menu key', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ key: `dateien_${Date.now()}`, name: 'Dateien-Test', visibleMenus: ['dateien'] }),
+    });
+    assert.equal(res.status, 201);
+    const created = await res.json();
+    assert.deepEqual(created.visible_menus, ['dateien']);
+    await query('DELETE FROM groups WHERE id = $1', [created.id]);
+  } finally {
+    server.close();
+  }
+});
+
 test('PUT /groups/:id updates a non-protected group', async () => {
   const server = createServer().listen(0);
   try {

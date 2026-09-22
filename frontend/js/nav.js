@@ -9,6 +9,7 @@ const MENU_LINKS = [
   { key: 'konto', label: 'Dashboard', href: '/account.html#dashboard', icon: 'dashboard' },
   { key: 'konto', label: 'Konto', href: '/account.html#konto', icon: 'manage_accounts' },
   { key: 'konto', label: 'Veranstaltung', href: '/account.html#veranstaltung', icon: 'event' },
+  { key: 'dateien', label: 'Dateien', href: '/account.html#dateien', icon: 'folder' },
   { key: 'mitglieder', label: 'Mitglieder', href: '/admin/members.html', icon: 'group' },
   { key: 'events', label: 'Events', href: '/admin/events.html', icon: 'calendar_month' },
   { key: 'checkin', label: 'Check-In', href: '/admin/checkin.html', icon: 'qr_code_scanner' },
