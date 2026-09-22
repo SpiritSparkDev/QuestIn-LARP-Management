@@ -99,6 +99,8 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
        <label><input type="checkbox" class="schema-staff-only" ${field.staffOnly ? 'checked' : ''}> Nur Staff darf bearbeiten</label>`
     : '';
   row.innerHTML = `
+    <button type="button" class="move-up" aria-label="Nach oben verschieben">▲</button>
+    <button type="button" class="move-down" aria-label="Nach unten verschieben">▼</button>
     <input type="text" placeholder="key" class="schema-key" value="${escapeHtml(field.key)}">
     <input type="text" placeholder="Label" class="schema-label" value="${escapeHtml(field.label)}">
     <select class="schema-type">
@@ -112,10 +114,11 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
       <option value="date" ${field.type === 'date' ? 'selected' : ''}>Datum</option>
     </select>
     <input type="text" placeholder="Optionen (kommagetrennt, nur bei Auswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
-    <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
-    ${publicCheckboxHtml}
-    <button type="button" class="move-up" aria-label="Nach oben verschieben">▲</button>
-    <button type="button" class="move-down" aria-label="Nach unten verschieben">▼</button>
+    <div class="schema-checkboxes">
+      <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
+      ${publicCheckboxHtml}
+    </div>
+    
     <button type="button" class="remove-row">Entfernen</button>
   `;
   row.querySelector('.remove-row').addEventListener('click', () => row.remove());
