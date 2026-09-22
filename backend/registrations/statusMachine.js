@@ -4,6 +4,7 @@ const TRANSITIONS = {
   checked_in: { checkout: 'checked_out' },
   checked_out: {},
   cancelled: {},
+  waitlisted: { cancel: 'cancelled' },
 };
 
 export function applyTransition(currentStatus, action) {

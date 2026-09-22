@@ -52,3 +52,13 @@ test('the thrown error carries a machine-readable code', () => {
     assert.equal(err.code, 'INVALID_TRANSITION');
   }
 });
+
+test('waitlisted -> cancelled via cancel', () => {
+  assert.equal(applyTransition('waitlisted', 'cancel'), 'cancelled');
+});
+
+test('checkin/checkout/approve from waitlisted are rejected', () => {
+  assert.throws(() => applyTransition('waitlisted', 'checkin'));
+  assert.throws(() => applyTransition('waitlisted', 'checkout'));
+  assert.throws(() => applyTransition('waitlisted', 'approve'));
+});
