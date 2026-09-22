@@ -7,11 +7,14 @@ import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEv
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, code } = body;
+  const { name, eventDate, code, capacity } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
-  const event = await createEvent({ name, eventDate, code });
+  if (capacity !== undefined && capacity !== null && (!Number.isInteger(capacity) || capacity < 1)) {
+    return { status: 400, body: { error: 'capacity must be a positive integer or null' } };
+  }
+  const event = await createEvent({ name, eventDate, code, capacity });
   return { status: 201, body: event };
 })));
 
@@ -29,6 +32,9 @@ router.get('/events/:id', requireAuth(async ({ params }) => {
 router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (body.capacity !== undefined && body.capacity !== null && (!Number.isInteger(body.capacity) || body.capacity < 1)) {
+    return { status: 400, body: { error: 'capacity must be a positive integer or null' } };
+  }
   const event = await updateEvent(params.id, body);
   if (!event) return { status: 404, body: { error: 'event not found' } };
   return { status: 200, body: event };

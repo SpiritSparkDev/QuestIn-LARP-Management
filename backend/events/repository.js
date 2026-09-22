@@ -1,13 +1,13 @@
 import { query } from '../db.js';
 
-const SELECT_COLUMNS = 'id, name, event_date, code, is_active, created_at';
+const SELECT_COLUMNS = 'id, name, event_date, code, capacity, is_active, created_at';
 
-export async function createEvent({ name, eventDate, code }) {
+export async function createEvent({ name, eventDate, code, capacity }) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, code)
-     VALUES ($1, $2, $3)
+    `INSERT INTO events (name, event_date, code, capacity)
+     VALUES ($1, $2, $3, $4)
      RETURNING ${SELECT_COLUMNS}`,
-    [name, eventDate, code ?? null]
+    [name, eventDate, code ?? null, capacity ?? null]
   );
   return rows[0];
 }
@@ -27,20 +27,21 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { name, eventDate, code }) {
-  // code is the one optional field a caller can legitimately want to CLEAR
-  // (an empty string from a form), not just omit -- COALESCE alone can't
-  // tell those apart, since both arrive as a falsy value bound to $4. $5
-  // carries that distinction explicitly: only skip the write when the
-  // field was genuinely absent from the call.
+export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity }) {
+  // code/capacity are the fields a caller can legitimately want to CLEAR
+  // (empty string / "unbegrenzt") rather than just omit -- COALESCE alone
+  // can't tell those apart, since both arrive as a falsy value. $6/$7
+  // carry that distinction explicitly: only skip the write when the field
+  // was genuinely absent from the call.
   const { rows } = await query(
     `UPDATE events SET
        name = COALESCE($2, name),
        event_date = COALESCE($3, event_date),
-       code = CASE WHEN $5 THEN $4 ELSE code END
+       code = CASE WHEN $6 THEN $4 ELSE code END,
+       capacity = CASE WHEN $7 THEN $5 ELSE capacity END
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
-    [id, name ?? null, eventDate ?? null, code ?? null, code !== undefined]
+    [id, name ?? null, eventDate ?? null, code ?? null, capacity ?? null, code !== undefined, capacity !== undefined || Boolean(clearCapacity)]
   );
   return rows[0] ?? null;
 }

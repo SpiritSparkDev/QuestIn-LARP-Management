@@ -261,6 +261,49 @@ test('admin can delete an event with no registrations; cannot delete one that ha
   });
 });
 
+test('capacity can be set on create, updated, and cleared back to unlimited', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+
+    const createRes = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Kapazitäts-Con', eventDate: '2027-09-01', capacity: 30 }),
+    });
+    const created = await createRes.json();
+    assert.equal(created.capacity, 30);
+
+    const raiseRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ capacity: 50 }),
+    });
+    const raised = await raiseRes.json();
+    assert.equal(raised.capacity, 50);
+
+    const clearRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ capacity: null, clearCapacity: true }),
+    });
+    const cleared = await clearRes.json();
+    assert.equal(cleared.capacity, null);
+  });
+});
+
+test('an event created without capacity defaults to unlimited (null)', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Unbegrenzt-Con', eventDate: '2027-09-02' }),
+    });
+    const created = await res.json();
+    assert.equal(created.capacity, null);
+  });
+});
+
 test.after(async () => {
   await closePool();
 });
