@@ -200,6 +200,10 @@
                         class="btn-ghost">Abbrechen</button>
                     </form>
                     <p id="character-message"></p>
+                    <div id="character-files-section" style="display:none;">
+                      <h3>Dateien</h3>
+                      <div id="character-files-target"></div>
+                    </div>
                   </div>
                 </div>
                 <div>
@@ -233,6 +237,10 @@
                       <button type="button" id="nsc-cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
                     </form>
                     <p id="nsc-message"></p>
+                    <div id="nsc-files-section" style="display:none;">
+                      <h3>Dateien</h3>
+                      <div id="nsc-files-target"></div>
+                    </div>
                   </div>
                   <div>
                     <div id="nsc-character-list" class="char-grid"></div>
@@ -989,6 +997,21 @@
     <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an dieser Datei besitzt und einverstanden bist, dass sie im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>`;
     }
 
+    async function loadPhotoInto(characterId) {
+      const container = document.querySelector(`[data-photo-for="${characterId}"]`);
+      if (!container) return;
+      const imageSlot = container.querySelector("[data-photo-image]");
+      try {
+        const files = await api.get(`/characters/${characterId}/files`);
+        const photo = files.find((f) => f.kind === "image");
+        if (photo) {
+          imageSlot.innerHTML = `<img src="/characters/${characterId}/files/${photo.id}" alt="">`;
+        }
+      } catch {
+        // fail-quiet: card keeps its placeholder icon
+      }
+    }
+
     async function loadFilesInto(characterId) {
       const container = document.querySelector(`[data-files-for="${characterId}"]`);
       if (!container) return;
@@ -1060,46 +1083,6 @@
       });
     }
 
-    function tagValueForField(field, rawValue) {
-      if (field.type === "multiselect") {
-        return Array.isArray(rawValue) && rawValue.length > 0
-          ? rawValue.join(", ")
-          : undefined;
-      }
-      if (field.type === "boolean") {
-        return rawValue ? "Ja" : undefined;
-      }
-      if (rawValue === undefined || rawValue === null || rawValue === "") {
-        return undefined;
-      }
-      return rawValue;
-    }
-
-    function tagsForCharacter(c) {
-      const dataTags = Object.entries(c.data ?? {})
-        .map(([key, value]) => ({
-          key,
-          value: tagValueForField(
-            {
-              type:
-                typeof value === "boolean"
-                  ? "boolean"
-                  : Array.isArray(value)
-                    ? "multiselect"
-                    : "text",
-            },
-            value,
-          ),
-        }))
-        .filter(({ value }) => value !== undefined)
-        .map(
-          ({ key, value }) =>
-            `<span class="tag">${escapeHtml(key)}: ${escapeHtml(value)}</span>`,
-        )
-        .join("");
-      return c.is_gsc ? `<span class="tag">GSC</span>${dataTags}` : dataTags;
-    }
-
     function renderNscSchemaFields(data = {}) {
       nscDynamicFields.innerHTML = nscSchema
         .map((field) => `<div class="form-group">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true })}</div>`)
@@ -1107,47 +1090,34 @@
       attachLiveValidation(nscDynamicFields);
     }
 
-    function tagsForNscCharacter(c) {
-      return nscSchema
-        .map((field) => ({
-          field,
-          value: tagValueForField(field, c.data[field.key]),
-        }))
-        .filter(({ value }) => value !== undefined)
-        .map(
-          ({ field, value }) =>
-            `<span class="tag">${escapeHtml(field.label || field.key)}: ${escapeHtml(value)}</span>`,
-        )
-        .join("");
-    }
-
     function renderNscList() {
       nscListBody.innerHTML = nscCharacters
         .map(
-          (c) => `<div class="char-card">
-      <h3>${escapeHtml(c.name)}</h3>
-      <div class="char-tags">${tagsForNscCharacter(c)}</div>
-      <button type="button" data-nsc-edit="${c.id}" class="btn-ghost" style="margin-top:14px;">Bearbeiten</button>
-      <button type="button" data-nsc-delete="${c.id}" class="btn-ghost">Löschen</button>
-      <div class="char-files" data-files-for="${c.id}">
-        <p class="sub">Dateien werden geladen …</p>
+          (c) => `<div class="char-card" data-card-for="${c.id}">
+      <button type="button" class="char-card-delete" data-delete="${c.id}" aria-label="Charakter löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+      <div class="char-photo" data-photo-for="${c.id}">
+        <div class="char-photo-image" data-photo-image><span class="char-photo-placeholder material-symbols-outlined" aria-hidden="true">person</span></div>
+        <button type="button" class="char-photo-upload" aria-label="Foto hochladen"><span class="material-symbols-outlined" aria-hidden="true">photo_camera</span></button>
       </div>
+      <h3>${escapeHtml(c.name)}</h3>
     </div>`,
         )
         .join("");
 
-      nscListBody.querySelectorAll("[data-nsc-edit]").forEach((button) => {
-        button.addEventListener("click", () =>
-          startNscEdit(button.dataset.nscEdit),
-        );
+      nscListBody.querySelectorAll("[data-card-for]").forEach((card) => {
+        card.addEventListener("click", () => startNscEdit(card.dataset.cardFor));
       });
-      nscListBody.querySelectorAll("[data-nsc-delete]").forEach((button) => {
-        button.addEventListener("click", () =>
-          openDeleteCharacterDialog(button.dataset.nscDelete),
-        );
+      nscListBody.querySelectorAll("[data-delete]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openDeleteCharacterDialog(button.dataset.delete);
+        });
       });
-      nscCharacters.forEach((c) => loadFilesInto(c.id));
+      nscCharacters.forEach((c) => loadPhotoInto(c.id));
     }
+
+    const nscFilesSection = document.getElementById("nsc-files-section");
+    const nscFilesTarget = document.getElementById("nsc-files-target");
 
     function startNscEdit(characterId) {
       const character = nscCharacters.find((c) => c.id === characterId);
@@ -1159,6 +1129,9 @@
       nscForm.querySelector('button[type="submit"]').textContent =
         "Änderungen speichern";
       nscCancelButton.style.display = "";
+      nscFilesSection.style.display = "";
+      nscFilesTarget.setAttribute("data-files-for", characterId);
+      loadFilesInto(characterId);
     }
 
     function resetNscForm() {
@@ -1168,6 +1141,9 @@
       renderNscSchemaFields();
       nscForm.querySelector('button[type="submit"]').textContent = "Speichern";
       nscCancelButton.style.display = "none";
+      nscFilesSection.style.display = "none";
+      nscFilesTarget.removeAttribute("data-files-for");
+      nscFilesTarget.innerHTML = "";
     }
 
     nscCancelButton.addEventListener("click", resetNscForm);
@@ -1207,36 +1183,35 @@
     function renderCharacterList() {
       const scCharacters = characters.filter((c) => c.class !== "nsc");
       characterListBody.innerHTML = scCharacters
-        .map((c) => {
-          const tagsHtml = tagsForCharacter(c);
-          return `<div class="char-card">
-      <h3>${escapeHtml(c.name)}</h3>
-      <p class="sub">${statusLineForCharacter(c)}</p>
-      <div class="char-tags">${tagsHtml}</div>
-      <button type="button" data-edit="${c.id}" class="btn-ghost" style="margin-top:14px;">Bearbeiten</button>
-      <button type="button" data-delete="${c.id}" class="btn-ghost">Löschen</button>
-      <div class="char-files" data-files-for="${c.id}">
-        <p class="sub">Dateien werden geladen …</p>
+        .map((c) => `<div class="char-card" data-card-for="${c.id}">
+      <button type="button" class="char-card-delete" data-delete="${c.id}" aria-label="Charakter löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+      <div class="char-photo" data-photo-for="${c.id}">
+        <div class="char-photo-image" data-photo-image><span class="char-photo-placeholder material-symbols-outlined" aria-hidden="true">person</span></div>
+        <button type="button" class="char-photo-upload" aria-label="Foto hochladen"><span class="material-symbols-outlined" aria-hidden="true">photo_camera</span></button>
       </div>
-    </div>`;
-        })
+      <h3>${escapeHtml(c.name)}</h3>
+    </div>`)
         .join("");
 
-      characterListBody.querySelectorAll("[data-edit]").forEach((button) => {
-        button.addEventListener("click", () => startEdit(button.dataset.edit));
+      characterListBody.querySelectorAll("[data-card-for]").forEach((card) => {
+        card.addEventListener("click", () => startEdit(card.dataset.cardFor));
       });
       characterListBody.querySelectorAll("[data-delete]").forEach((button) => {
-        button.addEventListener("click", () =>
-          openDeleteCharacterDialog(button.dataset.delete),
-        );
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openDeleteCharacterDialog(button.dataset.delete);
+        });
       });
-      scCharacters.forEach((c) => loadFilesInto(c.id));
+      scCharacters.forEach((c) => loadPhotoInto(c.id));
 
       if (nscSection.style.display !== "none") {
         nscCharacters = characters.filter((c) => c.class === "nsc");
         renderNscList();
       }
     }
+
+    const characterFilesSection = document.getElementById("character-files-section");
+    const characterFilesTarget = document.getElementById("character-files-target");
 
     function startEdit(characterId) {
       const character = characters.find((c) => c.id === characterId);
@@ -1249,6 +1224,9 @@
       characterForm.querySelector('button[type="submit"]').textContent =
         "Änderungen speichern";
       characterCancelButton.style.display = "";
+      characterFilesSection.style.display = "";
+      characterFilesTarget.setAttribute("data-files-for", characterId);
+      loadFilesInto(characterId);
     }
 
     function resetCharacterForm() {
@@ -1259,6 +1237,9 @@
       renderScSchemaFields();
       characterForm.querySelector('button[type="submit"]').textContent =
         "Speichern";
+      characterFilesSection.style.display = "none";
+      characterFilesTarget.removeAttribute("data-files-for");
+      characterFilesTarget.innerHTML = "";
       characterCancelButton.style.display = "none";
     }
 
