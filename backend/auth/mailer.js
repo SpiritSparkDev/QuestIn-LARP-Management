@@ -80,3 +80,21 @@ export async function sendRegistrationOtFieldsChangedEmail(to, { userName, event
     text: `Die Con-Tage/Unterbringung/Handwerk/Anreise/Opt-Out-Angaben der Anmeldung von ${userName} für "${eventName}" wurden nachträglich geändert.`,
   });
 }
+
+export async function sendWaitlistedEmail(to, { eventName }, { transporter, from }) {
+  return transporter.sendMail({
+    to,
+    from,
+    subject: `Warteliste: ${eventName}`,
+    text: `Deine Anmeldung für "${eventName}" ist eingegangen, das Event ist aber bereits ausgebucht. Du stehst auf der Warteliste und wirst benachrichtigt, sobald ein Platz frei wird.`,
+  });
+}
+
+export async function sendWaitlistPromotedEmail(to, { eventName }, { transporter, from }) {
+  return transporter.sendMail({
+    to,
+    from,
+    subject: `Ein Platz ist frei geworden: ${eventName}`,
+    text: `Für "${eventName}" ist ein Platz frei geworden — deine Anmeldung wurde von der Warteliste in die reguläre Anmeldung übernommen und wird nun wie gewohnt von der Orga bearbeitet.`,
+  });
+}

@@ -30,7 +30,7 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, hasUploadedLogo: false, hasUploadedTicketBackground: false });
   });
 });
 
@@ -49,7 +49,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, hasUploadedLogo: false, hasUploadedTicketBackground: false });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
@@ -289,6 +289,42 @@ test('PUT /app-settings can change characterBrowsingEnabled independently of oth
       body: JSON.stringify({ characterBrowsingEnabled: true }),
     });
     assert.equal((await reenableRes.json()).characterBrowsingEnabled, true);
+  });
+});
+
+test('PUT /app-settings sets waitlistAutoPromote without touching unrelated fields (COALESCE regression)', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ appTitle: 'Vor der Änderung', eventName: 'P17/2027' }),
+    });
+
+    const putRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ waitlistAutoPromote: false }),
+    });
+    assert.equal(putRes.status, 200);
+    const body = await putRes.json();
+    assert.equal(body.waitlistAutoPromote, false);
+    // The unrelated fields from the earlier PUT must survive untouched.
+    assert.equal(body.appTitle, 'Vor der Änderung');
+    assert.equal(body.eventName, 'P17/2027');
+  });
+});
+
+test('PUT /app-settings rejects a non-boolean waitlistAutoPromote', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ waitlistAutoPromote: 'yes' }),
+    });
+    assert.equal(res.status, 400);
   });
 });
 

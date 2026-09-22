@@ -1,8 +1,8 @@
 import { query } from '../db.js';
 
 export async function getAppSettings() {
-  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background FROM app_settings LIMIT 1');
-  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, hasUploadedLogo: false, hasUploadedTicketBackground: false };
+  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, waitlist_auto_promote, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background FROM app_settings LIMIT 1');
+  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, hasUploadedLogo: false, hasUploadedTicketBackground: false };
   return {
     logoUrl: rows[0].logo_url,
     appTitle: rows[0].app_title,
@@ -10,16 +10,17 @@ export async function getAppSettings() {
     quotaMbPerCharacter: rows[0].quota_mb_per_character,
     invitationTtlDays: rows[0].invitation_ttl_days,
     characterBrowsingEnabled: rows[0].character_browsing_enabled,
+    waitlistAutoPromote: rows[0].waitlist_auto_promote,
     hasUploadedLogo: rows[0].has_uploaded_logo,
     hasUploadedTicketBackground: rows[0].has_uploaded_ticket_background,
   };
 }
 
-export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled }) {
+export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote }) {
   const id = await ensureSettingsRow();
   await query(
-    'UPDATE app_settings SET logo_url = COALESCE($2, logo_url), app_title = COALESCE($3, app_title), event_name = COALESCE($4, event_name), quota_mb_per_character = COALESCE($5, quota_mb_per_character), invitation_ttl_days = COALESCE($6, invitation_ttl_days), character_browsing_enabled = COALESCE($7, character_browsing_enabled) WHERE id = $1',
-    [id, logoUrl ?? null, appTitle ?? null, eventName ?? null, quotaMbPerCharacter ?? null, invitationTtlDays ?? null, characterBrowsingEnabled ?? null]
+    'UPDATE app_settings SET logo_url = COALESCE($2, logo_url), app_title = COALESCE($3, app_title), event_name = COALESCE($4, event_name), quota_mb_per_character = COALESCE($5, quota_mb_per_character), invitation_ttl_days = COALESCE($6, invitation_ttl_days), character_browsing_enabled = COALESCE($7, character_browsing_enabled), waitlist_auto_promote = COALESCE($8, waitlist_auto_promote) WHERE id = $1',
+    [id, logoUrl ?? null, appTitle ?? null, eventName ?? null, quotaMbPerCharacter ?? null, invitationTtlDays ?? null, characterBrowsingEnabled ?? null, waitlistAutoPromote ?? null]
   );
   return getAppSettings();
 }
