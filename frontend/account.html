@@ -171,34 +171,40 @@
             </div>
 
             <div class="tab-panel" id="sc-tab">
-              <div id="character-list" class="char-grid"></div>
-              <button type="button" id="copy-character-btn" class="btn-ghost">Aus bestehendem Charakter
-                kopieren</button>
+              <div class="dashboard-layout">
+                <div class="dashboard-main">
+                  <button type="button" id="copy-character-btn" class="btn-ghost">Aus bestehendem Charakter
+                    kopieren</button>
 
-              <dialog id="copy-character-dialog">
-                <h3>Charakter kopieren</h3>
-                <p class="lede">Übernimmt Name und Sheet-Daten in einen neuen, unabhängigen Charakter.</p>
-                <label for="copy-character-select">Vorlage</label>
-                <select id="copy-character-select"></select>
-                <div class="dialog-actions">
-                  <button type="button" id="copy-character-confirm">Kopieren</button>
-                  <button type="button" id="copy-character-cancel" class="btn-ghost">Abbrechen</button>
+                  <dialog id="copy-character-dialog">
+                    <h3>Charakter kopieren</h3>
+                    <p class="lede">Übernimmt Name und Sheet-Daten in einen neuen, unabhängigen Charakter.</p>
+                    <label for="copy-character-select">Vorlage</label>
+                    <select id="copy-character-select"></select>
+                    <div class="dialog-actions">
+                      <button type="button" id="copy-character-confirm">Kopieren</button>
+                      <button type="button" id="copy-character-cancel" class="btn-ghost">Abbrechen</button>
+                    </div>
+                  </dialog>
+
+                  <div id="sc-form-section" style="display:none;">
+                    <h3 id="form-title">Neuen Charakter anlegen</h3>
+                    <hr>
+                    <form id="character-form">
+                      <input id="character-name" name="name" type="text" required>
+                      <label for="character-name">Charaktername</label>
+                      <label><input type="checkbox" id="character-is-gsc"> GSC (Gildensprecher-Charakter)</label>
+                      <div id="character-dynamic-fields"></div>
+                      <button type="submit">Speichern</button>
+                      <button type="button" id="character-cancel-edit" style="display:none;"
+                        class="btn-ghost">Abbrechen</button>
+                    </form>
+                    <p id="character-message"></p>
+                  </div>
                 </div>
-              </dialog>
-
-              <div id="sc-form-section" style="display:none;">
-                <h3 id="form-title">Neuen Charakter anlegen</h3>
-                <hr>
-                <form id="character-form">
-                  <input id="character-name" name="name" type="text" required>
-                  <label for="character-name">Charaktername</label>
-                  <label><input type="checkbox" id="character-is-gsc"> GSC (Gildensprecher-Charakter)</label>
-                  <div id="character-dynamic-fields"></div>
-                  <button type="submit">Speichern</button>
-                  <button type="button" id="character-cancel-edit" style="display:none;"
-                    class="btn-ghost">Abbrechen</button>
-                </form>
-                <p id="character-message"></p>
+                <div>
+                  <div id="character-list" class="char-grid"></div>
+                </div>
               </div>
             </div>
 
@@ -216,17 +222,22 @@
 
             <div class="tab-panel" id="nsc-tab" hidden>
               <div id="nsc-section" style="display:none;">
-                <div id="nsc-character-list" class="char-grid"></div>
-
-                <form id="nsc-character-form">
-                  <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
-                  <input id="nsc-character-name" name="name" type="text" required>
-                  <label for="nsc-character-name">Charaktername</label>
-                  <div id="nsc-dynamic-fields"></div>
-                  <button type="submit">Speichern</button>
-                  <button type="button" id="nsc-cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
-                </form>
-                <p id="nsc-message"></p>
+                <div class="dashboard-layout">
+                  <div class="dashboard-main">
+                    <form id="nsc-character-form">
+                      <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
+                      <input id="nsc-character-name" name="name" type="text" required>
+                      <label for="nsc-character-name">Charaktername</label>
+                      <div id="nsc-dynamic-fields"></div>
+                      <button type="submit">Speichern</button>
+                      <button type="button" id="nsc-cancel-edit" style="display:none;" class="btn-ghost">Abbrechen</button>
+                    </form>
+                    <p id="nsc-message"></p>
+                  </div>
+                  <div>
+                    <div id="nsc-character-list" class="char-grid"></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
