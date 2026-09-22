@@ -32,7 +32,7 @@
 - Modify: `tests/unit/statusMachine.test.js`
 
 **Interfaces:**
-- Produces: `events.capacity` (integer, nullable), `app_settings.waitlist_auto_promote` (boolean, default true), `registrations.status` CHECK-Constraint erweitert um `'waitlisted'`, `statusMachine.js` neue Transitions `waitlisted: { cancel: 'cancelled', promote: 'pending' }`.
+- Produces: `events.capacity` (integer, nullable), `app_settings.waitlist_auto_promote` (boolean, default true), `registrations.status` CHECK-Constraint erweitert um `'waitlisted'`, `statusMachine.js` neue Transition `waitlisted: { cancel: 'cancelled' }`. (Promotion `waitlisted → pending` läuft in Task 5 bewusst NICHT über `applyTransition` — weder die automatische Promotion noch die manuelle über den bestehenden `setStatus`-Override rufen diese Funktion auf, siehe Task 5 — daher gibt es keine `promote`-Aktion in der Statusmaschine, das wäre toter Code.)
 
 - [ ] **Step 1: Migration schreiben**
 
@@ -61,7 +61,7 @@ const TRANSITIONS = {
   checked_in: { checkout: 'checked_out' },
   checked_out: {},
   cancelled: {},
-  waitlisted: { cancel: 'cancelled', promote: 'pending' },
+  waitlisted: { cancel: 'cancelled' },
 };
 
 export function applyTransition(currentStatus, action) {
@@ -80,10 +80,6 @@ export function applyTransition(currentStatus, action) {
 Anhängen an `tests/unit/statusMachine.test.js`:
 
 ```javascript
-test('waitlisted -> pending via promote', () => {
-  assert.equal(applyTransition('waitlisted', 'promote'), 'pending');
-});
-
 test('waitlisted -> cancelled via cancel', () => {
   assert.equal(applyTransition('waitlisted', 'cancel'), 'cancelled');
 });
@@ -913,20 +909,37 @@ export async function maybePromoteFromWaitlist(eventId) {
 
 - [ ] **Step 4: `registerForEvent` verschickt `sendWaitlistedEmail`, wenn die Anmeldung auf der Warteliste landet**
 
-Am Ende von `registerForEvent` (nach dem `withTransaction`-Block, vor dem `catch`), den Rückgabewert abfangen und bei Bedarf mailen:
+Ersetzt den `try`/`catch`-Block am Ende von `registerForEvent` (alles davor — die Validierung von `conRole`/`resolveCharacterId`/`resolveNscAvailability`/`schema`/`data` aus Task 4 Step 3 — bleibt unverändert):
 
 ```javascript
   try {
     const registration = await withTransaction(async (client) => {
-      /* ... unverändert aus Task 4 Step 3 ... */
+      const { rows: eventRows } = await client.query('SELECT capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+      const capacity = eventRows[0]?.capacity ?? null;
+      let status = 'pending';
+      if (capacity !== null) {
+        const { rows: countRows } = await client.query(
+          'SELECT count(*)::int AS count FROM registrations WHERE event_id = $1 AND status = ANY($2::text[])',
+          [eventId, COUNTED_STATUSES]
+        );
+        if (countRows[0].count >= capacity) status = 'waitlisted';
+      }
+      const { rows } = await client.query(
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, registration_data_enc, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, checked_in_at, checked_out_at`,
+        [userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, encryptFieldBlob(data), status]
+      );
+      return rows[0];
     });
     if (registration.status === 'waitlisted') {
       try {
-        const event2 = await getEvent(eventId);
+        // `event` is already in scope from the EVENT_NOT_FOUND check at the
+        // top of this function -- no second getEvent() call needed.
         const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
         if (userRows[0]) {
           const transport = await getTransporterAndFrom();
-          await sendWaitlistedEmail(userRows[0].email, { eventName: event2?.name ?? 'Unbekanntes Event' }, transport);
+          await sendWaitlistedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event' }, transport);
         }
       } catch (err) {
         logger.error('failed to send waitlisted notification', { error: err.message, userId, eventId });
