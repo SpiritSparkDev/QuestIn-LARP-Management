@@ -674,7 +674,10 @@
       updateNscCharacterWrapVisibility();
     }
 
-    nscAvailableToggle.addEventListener("change", updateNscCharacterWrapVisibility);
+    nscAvailableToggle.addEventListener("change", () => {
+      updateNscCharacterWrapVisibility();
+      updateNscMenuVisibility();
+    });
     eventSelect.addEventListener("change", updateRegisterButtonLabel);
 
     document
@@ -970,7 +973,8 @@
     function updateNscMenuVisibility() {
       const wantsNsc =
         nscSchemaAvailable &&
-        currentRegistrations.some((r) => r.conRole === "nsc" || r.nscAvailable);
+        (nscAvailableToggle.checked ||
+          currentRegistrations.some((r) => r.conRole === "nsc" || r.nscAvailable));
       nscSection.style.display = wantsNsc ? "" : "none";
       nscTabButton.style.display = wantsNsc ? "" : "none";
     }
