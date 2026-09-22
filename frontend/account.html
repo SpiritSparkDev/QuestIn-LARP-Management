@@ -1090,21 +1090,9 @@
     }
 
     function renderNscSchemaFields(data = {}) {
-
-      let nscSchemaType = nscSchema.map((f) => f.type).length()
-
-    console.log(nscSchemaType)
-
-      if (nscSchema.map((f) => f.type) === "multiselect") {
-        nscDynamicFields.innerHTML = nscSchema
-          .map((field) => `<div class="form-group multiselect">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true })}</div>`)
-          .join("");
-      } else {
-        nscDynamicFields.innerHTML = nscSchema
-          .map((field) => `<div class="form-group">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true })}</div>`)
-          .join("");
-      }
-
+      nscDynamicFields.innerHTML = nscSchema
+        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true })}</div>`)
+        .join("");
       attachLiveValidation(nscDynamicFields);
     }
 
