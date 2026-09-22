@@ -1312,22 +1312,6 @@
 
     characterCancelButton.addEventListener("click", resetCharacterForm);
 
-    async function deleteCharacterCard(characterId) {
-      const character = characters.find((c) => c.id === characterId);
-      const message = character?.class === "nsc" ? nscMessage : characterMessage;
-      message.textContent = "";
-      message.className = "";
-      try {
-        await api.delete(`/characters/${characterId}`);
-        if (editingCharacterId === characterId) resetCharacterForm();
-        if (editingNscCharacterId === characterId) resetNscForm();
-        await loadCharacters();
-      } catch (err) {
-        message.textContent = err.message;
-        message.className = "error";
-      }
-    }
-
     const deleteCharacterDialog = document.getElementById("delete-character-dialog");
     const deleteCharacterNameEl = document.getElementById("delete-character-name");
     const deleteCharacterInput = document.getElementById("delete-character-input");
@@ -1360,9 +1344,23 @@
         return;
       }
       const characterId = deleteCharacterId;
-      deleteCharacterDialog.close();
-      deleteCharacterId = null;
-      await deleteCharacterCard(characterId);
+      deleteCharacterError.hidden = true;
+      deleteCharacterError.textContent = "";
+      try {
+        await api.delete(`/characters/${characterId}`);
+        if (editingCharacterId === characterId) resetCharacterForm();
+        if (editingNscCharacterId === characterId) resetNscForm();
+        deleteCharacterDialog.close();
+        deleteCharacterId = null;
+        await loadCharacters();
+      } catch (err) {
+        // Keep the dialog open on failure (e.g. a confirmed/checked-in
+        // registration blocking deletion) so the reason is visible right
+        // where the user is looking, instead of closing the dialog and
+        // reporting it in a message element elsewhere on the page.
+        deleteCharacterError.textContent = err.message;
+        deleteCharacterError.hidden = false;
+      }
     });
 
     document.getElementById("copy-character-btn").addEventListener("click", () => {
