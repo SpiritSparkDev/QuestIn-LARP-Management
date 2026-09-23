@@ -108,6 +108,24 @@ test('a participant can register and unregister for an event', async () => {
   });
 });
 
+test('listed registrations include payment fields', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const characterId = await makeCharacter(port, cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: cookie } });
+    const [registration] = await res.json();
+    assert.equal(registration.amountDueCents, null);
+    assert.equal(registration.paidAt, null);
+    assert.match(registration.paymentReference, /^P-[0-9A-F]{8}-[0-9A-F]{8}$/);
+  });
+});
+
 test('the same sc character cannot be used to register for a second event; freed again after unregistering', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession();

@@ -137,6 +137,40 @@ test('checkin_helper sees the participant list with characters and no encrypted 
   });
 });
 
+test('participant list includes payment fields after amountDueCents and markPaid', async () => {
+  await withTestServer(async (port) => {
+    const helper = await makeUserAndSession('moderator');
+    const attendee = await makeUserAndSession('mitglied');
+    const eventId = await makeEvent();
+
+    await query(
+      "INSERT INTO registrations (user_id, event_id, status, con_role) VALUES ($1, $2, 'confirmed', 'helfer')",
+      [attendee.userId, eventId]
+    );
+
+    const setAmountRes = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${attendee.userId}/payment`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
+      body: JSON.stringify({ amountDueCents: 4200 }),
+    });
+    assert.equal(setAmountRes.status, 200);
+
+    const markPaidRes = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${attendee.userId}/payment`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
+      body: JSON.stringify({ markPaid: true }),
+    });
+    assert.equal(markPaidRes.status, 200);
+
+    const listRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
+    assert.equal(listRes.status, 200);
+    const list = await listRes.json();
+    const entry = list.find((p) => p.userId === attendee.userId);
+    assert.ok(entry);
+    assert.equal(entry.amountDueCents, 4200);
+    assert.ok(entry.paidAt);
+    assert.equal(entry.paymentMethod, 'bank_transfer');
+  });
+});
+
 test('GET /events/:id/participants for an unknown event returns 404', async () => {
   await withTestServer(async (port) => {
     const helper = await makeUserAndSession('moderator');
