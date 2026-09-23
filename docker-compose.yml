@@ -20,7 +20,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       UPLOADS_DIR: /app/uploads
       NODE_ENV: production
-      PORT: 3000
+      PORT: ${PORT}
       LOG_LEVEL: ${LOG_LEVEL}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       SMTP_HOST: ${SMTP_HOST}
@@ -42,7 +42,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${PORT}:3000"
     volumes:
       - uploads-data:/app/uploads
     restart: unless-stopped
