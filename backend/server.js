@@ -23,6 +23,7 @@ import './accountFieldSchema/routes.js';
 import './registrationFieldSchema/routes.js';
 import './smtpSettings/routes.js';
 import './appSettings/routes.js';
+import './paymentSettings/routes.js';
 import './storageSettings/routes.js';
 
 // Route modules import `router` from ./routes.js directly (importing it from
