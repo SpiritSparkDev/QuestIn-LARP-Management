@@ -27,3 +27,27 @@ export function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
     });
   });
 }
+
+export function readRawBody(req, maxBytes = MAX_BODY_BYTES) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    let size = 0;
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    req.on('error', () => finish(null));
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        finish(null);
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => finish(Buffer.concat(chunks)));
+  });
+}
