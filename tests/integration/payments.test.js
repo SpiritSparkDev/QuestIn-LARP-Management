@@ -91,6 +91,22 @@ test('markPaidManually rejects a registration with no amount due', async () => {
   );
 });
 
+test('markPaidManually is idempotent when called twice on the same registration', async () => {
+  const eventId = await makeEvent();
+  const userId = await makeUser();
+  const adminId = await makeUser();
+  await makeRegistration(eventId, userId);
+  await setAmountDue(eventId, userId, 4500);
+
+  await markPaidManually(eventId, userId, adminId);
+  // A double-click on "Als bezahlt markieren", a retried PATCH, or two admin
+  // tabs must not add a second audit-trail row.
+  await markPaidManually(eventId, userId, adminId);
+
+  const { rows } = await query('SELECT count(*)::int AS count FROM payments WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+  assert.equal(rows[0].count, 1);
+});
+
 test('markUnpaid clears paidAt without deleting the payment history', async () => {
   const eventId = await makeEvent();
   const userId = await makeUser();

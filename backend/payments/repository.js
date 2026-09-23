@@ -39,11 +39,18 @@ export async function markPaidManually(eventId, userId, confirmedByUserId) {
       err.code = 'NO_AMOUNT_DUE';
       throw err;
     }
-    await client.query(
-      `INSERT INTO payments (user_id, event_id, method, amount_cents, confirmed_by)
-       VALUES ($1, $2, 'bank_transfer', $3, $4)`,
-      [userId, eventId, registration.amount_due_cents, confirmedByUserId]
-    );
+    // A double-click on "Als bezahlt markieren", a retried PATCH, or two
+    // admin tabs acting on the same registration must not add a second
+    // audit-trail row -- same idempotency concern as the Stripe webhook
+    // path below, just gated on paid_at instead of provider_reference
+    // since manual entries have no unique external reference to conflict on.
+    if (registration.paid_at == null) {
+      await client.query(
+        `INSERT INTO payments (user_id, event_id, method, amount_cents, confirmed_by)
+         VALUES ($1, $2, 'bank_transfer', $3, $4)`,
+        [userId, eventId, registration.amount_due_cents, confirmedByUserId]
+      );
+    }
     const { rows } = await client.query(
       `UPDATE registrations SET paid_at = COALESCE(paid_at, now()) WHERE event_id = $1 AND user_id = $2
        RETURNING user_id, event_id, amount_due_cents, paid_at`,
