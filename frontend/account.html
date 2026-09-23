@@ -72,6 +72,8 @@
                 <button type="button" id="ticket-download-png">Ticket herunterladen (PNG)</button>
                 <button type="button" id="ticket-download-pdf" class="btn-secondary">Als PDF</button>
               </div>
+              <p class="sub" id="ticket-payment-hint" style="display:none;"></p>
+              <button type="button" id="ticket-pay-btn" style="display:none;">Jetzt zahlen</button>
             </div>
           </div>
         </div>
@@ -263,6 +265,27 @@
     </form>
   </dialog>
 
+  <dialog id="payment-dialog">
+    <h3>Zahlung</h3>
+    <p class="lede">Zu zahlen: <strong id="payment-dialog-amount"></strong></p>
+    <div class="dialog-actions">
+      <button type="button" id="payment-paypal-btn">Per PayPal</button>
+      <button type="button" id="payment-card-btn">Per Kreditkarte</button>
+      <button type="button" id="payment-bank-btn" class="btn-ghost">Überweisungsinformationen anzeigen</button>
+      <button type="button" id="payment-girocode-btn" class="btn-ghost">Girocode anzeigen</button>
+    </div>
+    <div id="payment-bank-info" style="display:none;">
+      <p>IBAN: <span id="payment-bank-iban"></span></p>
+      <p>BIC: <span id="payment-bank-bic"></span></p>
+      <p>Kontoinhaber: <span id="payment-bank-holder"></span></p>
+      <p>Verwendungszweck: <strong id="payment-bank-reference"></strong></p>
+    </div>
+    <div id="payment-girocode-wrap" style="display:none;">
+      <canvas id="payment-girocode-canvas"></canvas>
+    </div>
+    <button type="button" id="payment-dialog-close" class="btn-ghost">Schließen</button>
+  </dialog>
+
   <script type="module">
     import { api } from "/js/api.js";
     import { applyBranding } from "/js/branding.js";
@@ -285,6 +308,7 @@
       otFieldValuesEqual,
     } from "/js/formFields.js";
     import { buildScanCode } from "/js/qrCode.js";
+    import { buildEpcQrPayload } from "/js/epcQr.js";
     import { notify } from "/js/notifications.js";
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -483,6 +507,103 @@
       window.location.href = "/login.html";
     });
 
+    function renderQrToCanvas(text, canvas) {
+      const qr = qrcode(0, "M");
+      qr.addData(text);
+      qr.make();
+      const moduleCount = qr.getModuleCount();
+      const cellSize = 6;
+      canvas.width = moduleCount * cellSize;
+      canvas.height = moduleCount * cellSize;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#000000";
+      for (let row = 0; row < moduleCount; row++) {
+        for (let col = 0; col < moduleCount; col++) {
+          if (qr.isDark(row, col)) ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+
+    function formatEuro(cents) {
+      return `${(cents / 100).toFixed(2).replace(".", ",")} €`;
+    }
+
+    function applyPaymentGate(eventId, registration) {
+      const gated = registration.amountDueCents != null && !registration.paidAt;
+      document.getElementById("ticket-download-png").disabled = gated;
+      document.getElementById("ticket-download-pdf").disabled = gated;
+      const hint = document.getElementById("ticket-payment-hint");
+      const payButton = document.getElementById("ticket-pay-btn");
+      hint.style.display = gated ? "" : "none";
+      payButton.style.display = gated ? "" : "none";
+      if (gated) {
+        hint.textContent = `Zahlung offen: ${formatEuro(registration.amountDueCents)}`;
+        payButton.onclick = () => openPaymentDialog(eventId, registration);
+      }
+    }
+
+    const paymentDialog = document.getElementById("payment-dialog");
+    let payingEventId = null;
+    let payingRegistration = null;
+
+    function openPaymentDialog(eventId, registration) {
+      payingEventId = eventId;
+      payingRegistration = registration;
+      document.getElementById("payment-dialog-amount").textContent = formatEuro(registration.amountDueCents);
+      document.getElementById("payment-bank-info").style.display = "none";
+      document.getElementById("payment-girocode-wrap").style.display = "none";
+      paymentDialog.showModal();
+    }
+
+    async function startCheckout(method) {
+      try {
+        const { url } = await api.post(
+          `/events/${payingEventId}/registrations/${currentUserId}/checkout-session`,
+          { method },
+        );
+        window.location.href = url;
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    }
+
+    document.getElementById("payment-paypal-btn").addEventListener("click", () => startCheckout("paypal"));
+    document.getElementById("payment-card-btn").addEventListener("click", () => startCheckout("card"));
+
+    document.getElementById("payment-bank-btn").addEventListener("click", async () => {
+      try {
+        const settings = await api.get("/payment-settings");
+        document.getElementById("payment-bank-iban").textContent = settings.bankIban ?? "–";
+        document.getElementById("payment-bank-bic").textContent = settings.bankBic ?? "–";
+        document.getElementById("payment-bank-holder").textContent = settings.bankAccountHolder ?? "–";
+        document.getElementById("payment-bank-reference").textContent = payingRegistration.paymentReference;
+        document.getElementById("payment-bank-info").style.display = "";
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    document.getElementById("payment-girocode-btn").addEventListener("click", async () => {
+      try {
+        const settings = await api.get("/payment-settings");
+        const payload = buildEpcQrPayload({
+          iban: settings.bankIban,
+          bic: settings.bankBic,
+          name: settings.bankAccountHolder,
+          amountCents: payingRegistration.amountDueCents,
+          reference: payingRegistration.paymentReference,
+        });
+        renderQrToCanvas(payload, document.getElementById("payment-girocode-canvas"));
+        document.getElementById("payment-girocode-wrap").style.display = "";
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    document.getElementById("payment-dialog-close").addEventListener("click", () => paymentDialog.close());
+
     function showTicketHint(message) {
       document.getElementById("ticket-panel").style.display = "";
       document.getElementById("ticket-card").style.display = "none";
@@ -513,29 +634,14 @@
           return;
         }
 
+        applyPaymentGate(activeEvent.id, registration);
+
         const code = buildScanCode({
           eventCode: activeEvent.code,
           groupKey: account.group.key,
           userId: account.id,
         });
-        const qr = qrcode(0, "M");
-        qr.addData(code);
-        qr.make();
-        const moduleCount = qr.getModuleCount();
-        const cellSize = 6;
-        const canvas = document.getElementById("qr-canvas");
-        canvas.width = moduleCount * cellSize;
-        canvas.height = moduleCount * cellSize;
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#000000";
-        for (let row = 0; row < moduleCount; row++) {
-          for (let col = 0; col < moduleCount; col++) {
-            if (qr.isDark(row, col))
-              ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-          }
-        }
+        renderQrToCanvas(code, document.getElementById("qr-canvas"));
 
         document.getElementById("ticket-event-name").textContent = activeEvent.name;
         document.getElementById("ticket-participant").textContent =
