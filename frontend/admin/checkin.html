@@ -168,7 +168,7 @@ function renderTableHead() {
   const otLabels = selectedColumns.ot.map((key) => otFieldsByKey.get(key)?.label ?? key);
   const extraLabels = [...itLabels, ...otLabels];
   const extraTh = extraLabels.map((label) => `<div class="grid-cell" role="columnheader">${escapeHtml(label)}</div>`).join('');
-  tableHeadRow.innerHTML = `<div class="grid-cell" role="columnheader">Name</div><div class="grid-cell" role="columnheader">Charaktere</div><div class="grid-cell" role="columnheader">Rolle</div>${extraTh}<div class="grid-cell" role="columnheader">Status</div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader">Override</div>`;
+  tableHeadRow.innerHTML = `<div class="grid-cell" role="columnheader">Name</div><div class="grid-cell" role="columnheader">Charaktere</div><div class="grid-cell" role="columnheader">Rolle</div>${extraTh}<div class="grid-cell" role="columnheader">Betrag</div><div class="grid-cell" role="columnheader">Zahlung</div><div class="grid-cell" role="columnheader">Status</div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader">Override</div>`;
   // grid-template-columns (sahara.css) splices this track-list string in
   // between its fixed tracks -- built here rather than passing a bare
   // count, since repeat()'s count must be >=1 and this needs to handle 0
@@ -457,6 +457,24 @@ function renderConRoleCell(p) {
   return `<select data-con-role="${escapeHtml(p.userId)}" aria-label="Rolle ändern">${options}</select>${badge}`;
 }
 
+const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', bank_transfer: 'Überweisung' };
+
+function renderAmountDueCell(p) {
+  if (!p.userId) return '';
+  const value = p.amountDueCents != null ? (p.amountDueCents / 100).toFixed(2) : '';
+  return `<input type="number" min="0" step="0.01" data-amount-due="${escapeHtml(p.userId)}" value="${escapeHtml(value)}" placeholder="kein Betrag" style="width:90px;">`;
+}
+
+function renderPaymentStatusCell(p) {
+  if (!p.userId) return '';
+  if (p.amountDueCents == null) return '<span class="sub">–</span>';
+  if (p.paidAt) {
+    const label = PAYMENT_METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod ?? 'manuell';
+    return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <button type="button" class="btn-ghost" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
+  }
+  return `<span class="status-pill status-pending">Offen</span> <button type="button" class="btn-ghost" data-mark-paid="${escapeHtml(p.userId)}">Als bezahlt markieren</button>`;
+}
+
 searchInput.addEventListener('input', () => {
   currentSearch = searchInput.value;
   applySearchFilter();
@@ -514,6 +532,8 @@ async function loadParticipants(eventId) {
     <div class="grid-cell">${escapeHtml(p.characters.map((c) => c.name).join(', '))}</div>
     <div class="grid-cell">${renderConRoleCell(p)}</div>
     ${renderExtraCells(p)}
+    <div class="grid-cell">${renderAmountDueCell(p)}</div>
+    <div class="grid-cell">${renderPaymentStatusCell(p)}</div>
     <div class="grid-cell"><span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span></div>
     <div class="grid-cell">${renderApproveCell(p)}</div>
     <div class="grid-cell">${renderCheckinCell(p)}</div>
@@ -546,6 +566,15 @@ async function loadParticipants(eventId) {
   });
   listBody.querySelectorAll('[data-con-role]').forEach((select) => {
     select.addEventListener('change', () => promoteConRole(eventId, select.dataset.conRole, select.value));
+  });
+  listBody.querySelectorAll('[data-amount-due]').forEach((input) => {
+    input.addEventListener('change', () => setAmountDue(eventId, input.dataset.amountDue, input.value));
+  });
+  listBody.querySelectorAll('[data-mark-paid]').forEach((button) => {
+    button.addEventListener('click', () => setPaymentStatus(eventId, button.dataset.markPaid, true));
+  });
+  listBody.querySelectorAll('[data-mark-unpaid]').forEach((button) => {
+    button.addEventListener('click', () => setPaymentStatus(eventId, button.dataset.markUnpaid, false));
   });
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => openEditDialog(button.dataset.edit));
@@ -600,6 +629,27 @@ async function promoteConRole(eventId, userId, conRole) {
   }
   try {
     await api.put(`/events/${eventId}/registrations/${userId}/con-role`, { conRole });
+    await loadParticipants(eventId);
+  } catch (err) {
+    notify(err.message, 'error');
+    await loadParticipants(eventId);
+  }
+}
+
+async function setAmountDue(eventId, userId, euroValue) {
+  const amountDueCents = euroValue === '' ? null : Math.round(Number(euroValue) * 100);
+  try {
+    await api.patch(`/events/${eventId}/registrations/${userId}/payment`, { amountDueCents });
+    await loadParticipants(eventId);
+  } catch (err) {
+    notify(err.message, 'error');
+    await loadParticipants(eventId);
+  }
+}
+
+async function setPaymentStatus(eventId, userId, markPaid) {
+  try {
+    await api.patch(`/events/${eventId}/registrations/${userId}/payment`, { markPaid });
     await loadParticipants(eventId);
   } catch (err) {
     notify(err.message, 'error');
