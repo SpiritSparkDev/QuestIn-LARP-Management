@@ -85,6 +85,29 @@
       <label><input type="checkbox" id="waitlist-auto-promote-toggle"> Automatisch nachrücken lassen</label>
     </div>
     <div class="card form-pad">
+      <h2>Zahlungen</h2>
+      <p class="sub">Stripe verarbeitet PayPal- und Kreditkartenzahlungen. Für die manuelle Überweisung werden Kontodaten angezeigt.</p>
+      <form id="payment-settings-form">
+        <label for="stripe-secret-key">Stripe Secret Key</label>
+        <input id="stripe-secret-key" name="stripeSecretKey" type="password" placeholder="Leer lassen, um den bestehenden Key zu behalten">
+        <label for="stripe-webhook-secret">Stripe Webhook Signing Secret</label>
+        <input id="stripe-webhook-secret" name="stripeWebhookSecret" type="password" placeholder="Leer lassen, um das bestehende Secret zu behalten">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label for="bank-iban">IBAN</label>
+            <input id="bank-iban" name="bankIban" type="text">
+          </div>
+          <div>
+            <label for="bank-bic">BIC</label>
+            <input id="bank-bic" name="bankBic" type="text">
+          </div>
+        </div>
+        <label for="bank-account-holder">Kontoinhaber</label>
+        <input id="bank-account-holder" name="bankAccountHolder" type="text">
+        <button type="submit">Speichern</button>
+      </form>
+    </div>
+    <div class="card form-pad">
       <h2>Charaktere durchsuchen</h2>
       <p class="sub">Schaltet die öffentliche "Charaktere anderer Spieler durchsuchen"-Seite für alle Nutzer ein oder aus.</p>
       <label><input type="checkbox" id="character-browsing-toggle"> Charaktere durchsuchen aktiviert</label>
@@ -186,6 +209,33 @@ async function loadWaitlistSetting() {
   document.getElementById('waitlist-auto-promote-toggle').checked = settings.waitlistAutoPromote;
 }
 
+const paymentSettingsForm = document.getElementById('payment-settings-form');
+
+async function loadPaymentSettings() {
+  const settings = await api.get('/admin/settings/payments');
+  paymentSettingsForm.elements.bankIban.value = settings.bankIban ?? '';
+  paymentSettingsForm.elements.bankBic.value = settings.bankBic ?? '';
+  paymentSettingsForm.elements.bankAccountHolder.value = settings.bankAccountHolder ?? '';
+  paymentSettingsForm.elements.stripeSecretKey.placeholder = settings.hasStripeSecretKey
+    ? 'Gesetzt — leer lassen, um ihn zu behalten' : 'Leer lassen, um den bestehenden Key zu behalten';
+  paymentSettingsForm.elements.stripeWebhookSecret.placeholder = settings.hasStripeWebhookSecret
+    ? 'Gesetzt — leer lassen, um es zu behalten' : 'Leer lassen, um das bestehende Secret zu behalten';
+}
+
+paymentSettingsForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(paymentSettingsForm));
+  try {
+    await api.put('/admin/settings/payments', data);
+    notify('Gespeichert.', 'success');
+    paymentSettingsForm.elements.stripeSecretKey.value = '';
+    paymentSettingsForm.elements.stripeWebhookSecret.value = '';
+    await loadPaymentSettings();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
 document.getElementById('waitlist-auto-promote-toggle').addEventListener('change', async (event) => {
   try {
     await api.put('/app-settings', { waitlistAutoPromote: event.target.checked });
@@ -233,6 +283,7 @@ try {
   await loadInvitationSettings();
   await loadCharacterBrowsingSetting();
   await loadWaitlistSetting();
+  await loadPaymentSettings();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
   else if (err.status === 403) { notify('Kein Zugriff – nur für Admins.', 'error'); }

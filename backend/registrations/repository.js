@@ -10,6 +10,7 @@ import { encryptFieldBlob, decryptFieldBlob } from '../registrationFields.js';
 import { sendRegistrationOtFieldsChangedEmail, sendWaitlistedEmail, sendWaitlistPromotedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 import { getAppSettings } from '../appSettings/repository.js';
+import { buildPaymentReference } from '../payments/reference.js';
 
 const SELF_SERVICE_CON_ROLES = ['sc', 'nsc', 'helfer'];
 const STAFF_CON_ROLES = ['orga', 'hilfs_orga'];
@@ -360,9 +361,15 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
 
   const { rows: registrations } = await query(
     `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.checked_in_at, r.checked_out_at,
+            r.amount_due_cents, r.paid_at, latest_payment.method AS payment_method,
             u.account_data_enc, r.registration_data_enc
      FROM registrations r
      JOIN users u ON u.id = r.user_id
+     LEFT JOIN LATERAL (
+       SELECT method FROM payments p
+       WHERE p.event_id = r.event_id AND p.user_id = r.user_id
+       ORDER BY p.created_at DESC LIMIT 1
+     ) latest_payment ON true
      WHERE r.event_id = $1
      ORDER BY u.last_name, u.first_name`,
     [eventId]
@@ -403,6 +410,9 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       nscCharacterId: r.nsc_character_id,
       checkedInAt: r.checked_in_at,
       checkedOutAt: r.checked_out_at,
+      amountDueCents: r.amount_due_cents,
+      paidAt: r.paid_at,
+      paymentMethod: r.payment_method,
       characters: charactersByUser.get(r.user_id) ?? [],
       otFields,
     };
@@ -415,6 +425,9 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     status: 'notified',
     checkedInAt: null,
     checkedOutAt: null,
+    amountDueCents: null,
+    paidAt: null,
+    paymentMethod: null,
     characters: [],
     otFields: {},
   }));
@@ -454,6 +467,7 @@ export async function getScanLookup(eventId, userId) {
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
     `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.checked_in_at, r.checked_out_at,
+            r.amount_due_cents, r.paid_at,
             r.registration_data_enc, c.name AS character_name, nc.name AS nsc_character_name
      FROM registrations r
      JOIN events e ON e.id = r.event_id
@@ -476,6 +490,9 @@ export async function listRegistrationsForUser(userId) {
     nscCharacterName: r.nsc_character_name,
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,
+    amountDueCents: r.amount_due_cents,
+    paidAt: r.paid_at,
+    paymentReference: buildPaymentReference(r.event_id, userId),
     ...decryptFieldBlob(r.registration_data_enc),
   }));
 }

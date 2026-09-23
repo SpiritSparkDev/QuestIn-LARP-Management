@@ -65,6 +65,33 @@ ALTER TABLE app_settings ADD COLUMN bank_account_holder text;
 `amount_due_cents IS NOT NULL AND paid_at IS NULL` ⇒ Ticket gesperrt.
 `amount_due_cents IS NULL` ⇒ kein Gate, unabhängig von `paid_at`.
 
+### Abweichungen der tatsächlichen Umsetzung von diesem Entwurf
+
+Während der Implementierung (Plan vom 2026-09-23) wurden folgende bewusste
+Vereinfachungen gegenüber dem obigen Entwurf getroffen:
+
+- **Kein `status`-Feld auf `payments`.** Es wird ausschließlich bei
+  erfolgreichen Zahlungen eine Zeile eingefügt (Stripe-Webhook oder manuelle
+  Bestätigung) — ein `'failed'`-Zustand wird nirgends geschrieben oder
+  gelesen, daher entfiel die Spalte (YAGNI).
+- **`payment_settings` ist eine eigene Tabelle**, nicht Teil von
+  `app_settings` — folgt damit demselben Muster wie `smtp_settings` und
+  `storage_settings` (eigenes Modul, eigene Tabelle) statt einer
+  Erweiterung der gemeinsam genutzten, unauthentifiziert lesbaren
+  `app_settings`-Tabelle. Kein `stripe_publishable_key`-Feld, da der
+  Checkout-Flow rein serverseitig eine Checkout-Session erstellt und per
+  Redirect-URL an den Client zurückgibt — ein Publishable Key wird dafür
+  nicht gebraucht.
+- **`markUnpaid` löscht die zugehörige `payments`-Zeile nicht** (anders als
+  hier ursprünglich beschrieben) — es wird nur `paid_at` zurückgesetzt, die
+  Zahlungshistorie bleibt für den Admin nachvollziehbar erhalten. Bewusst so
+  entschieden und über einen Testnamen festgeschrieben.
+- **`ON CONFLICT (provider_reference) DO NOTHING`** musste zu
+  `ON CONFLICT (provider_reference) WHERE provider_reference IS NOT NULL DO NOTHING`
+  korrigiert werden — Postgres akzeptiert einen Unique Index mit `WHERE`-
+  Klausel nur als Konflikt-Arbiter, wenn die Klausel im `ON CONFLICT`
+  wiederholt wird.
+
 ## Backend
 
 Neues Modul `backend/payments/` (repository.js + routes.js), gleiches Muster

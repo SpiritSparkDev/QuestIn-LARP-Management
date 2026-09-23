@@ -137,6 +137,74 @@ test('checkin_helper sees the participant list with characters and no encrypted 
   });
 });
 
+test('participant list includes payment fields after amountDueCents and markPaid', async () => {
+  await withTestServer(async (port) => {
+    const helper = await makeUserAndSession('moderator');
+    const attendee = await makeUserAndSession('mitglied');
+    const eventId = await makeEvent();
+
+    await query(
+      "INSERT INTO registrations (user_id, event_id, status, con_role) VALUES ($1, $2, 'confirmed', 'helfer')",
+      [attendee.userId, eventId]
+    );
+
+    const setAmountRes = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${attendee.userId}/payment`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
+      body: JSON.stringify({ amountDueCents: 4200 }),
+    });
+    assert.equal(setAmountRes.status, 200);
+
+    const markPaidRes = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${attendee.userId}/payment`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
+      body: JSON.stringify({ markPaid: true }),
+    });
+    assert.equal(markPaidRes.status, 200);
+
+    const listRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
+    assert.equal(listRes.status, 200);
+    const list = await listRes.json();
+    const entry = list.find((p) => p.userId === attendee.userId);
+    assert.ok(entry);
+    assert.equal(entry.amountDueCents, 4200);
+    assert.ok(entry.paidAt);
+    assert.equal(entry.paymentMethod, 'bank_transfer');
+  });
+});
+
+test('participant list reports the most recent payment method when multiple payments exist', async () => {
+  await withTestServer(async (port) => {
+    const helper = await makeUserAndSession('moderator');
+    const attendee = await makeUserAndSession('mitglied');
+    const eventId = await makeEvent();
+
+    await query(
+      "INSERT INTO registrations (user_id, event_id, status, con_role, amount_due_cents) VALUES ($1, $2, 'confirmed', 'helfer', 4200)",
+      [attendee.userId, eventId]
+    );
+    // Two payments rows with explicit, distinct created_at values -- the
+    // earlier one is 'bank_transfer', the later one is 'stripe_card' -- so
+    // the assertion below can only pass if listParticipantsForEvent's
+    // LATERAL join really orders by created_at DESC LIMIT 1 rather than,
+    // say, picking an arbitrary or first-inserted row.
+    await query(
+      `INSERT INTO payments (user_id, event_id, method, amount_cents, created_at)
+       VALUES ($1, $2, 'bank_transfer', 4200, now() - interval '1 hour')`,
+      [attendee.userId, eventId]
+    );
+    await query(
+      `INSERT INTO payments (user_id, event_id, method, amount_cents, created_at)
+       VALUES ($1, $2, 'stripe_card', 4200, now())`,
+      [attendee.userId, eventId]
+    );
+
+    const listRes = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: helper.cookie } });
+    assert.equal(listRes.status, 200);
+    const entry = (await listRes.json()).find((p) => p.userId === attendee.userId);
+    assert.ok(entry);
+    assert.equal(entry.paymentMethod, 'stripe_card');
+  });
+});
+
 test('GET /events/:id/participants for an unknown event returns 404', async () => {
   await withTestServer(async (port) => {
     const helper = await makeUserAndSession('moderator');
