@@ -2,14 +2,32 @@ import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELECT_COLUMNS = 'id, name, event_date, code, capacity, is_active, created_at';
+const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, is_active, created_at';
 
-export async function createEvent({ name, eventDate, code, capacity }) {
+// Trims, drops empty strings, and deduplicates while preserving first-seen
+// order -- the admin-facing comma-separated textfield can easily produce
+// stray whitespace or repeats, and this is the one place that cleans it up
+// before it ever reaches a registration's validation.
+function normalizeFlags(flags) {
+  if (!Array.isArray(flags)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const f of flags) {
+    if (typeof f !== 'string') continue;
+    const trimmed = f.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+export async function createEvent({ name, eventDate, code, capacity, flags }) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, code, capacity)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO events (name, event_date, code, capacity, flags)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING ${SELECT_COLUMNS}`,
-    [name, eventDate, code ?? null, capacity ?? null]
+    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags)]
   );
   return rows[0];
 }
@@ -29,21 +47,28 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity }) {
+export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity, flags }) {
   // code/capacity are the fields a caller can legitimately want to CLEAR
   // (empty string / "unbegrenzt") rather than just omit -- COALESCE alone
   // can't tell those apart, since both arrive as a falsy value. $6/$7
   // carry that distinction explicitly: only skip the write when the field
-  // was genuinely absent from the call.
+  // was genuinely absent from the call. flags doesn't need this: an empty
+  // array is not falsy in JS, so `flags !== undefined` alone tells omitted
+  // apart from explicitly-cleared.
   const { rows } = await query(
     `UPDATE events SET
        name = COALESCE($2, name),
        event_date = COALESCE($3, event_date),
        code = CASE WHEN $6 THEN $4 ELSE code END,
-       capacity = CASE WHEN $7 THEN $5 ELSE capacity END
+       capacity = CASE WHEN $7 THEN $5 ELSE capacity END,
+       flags = COALESCE($8, flags)
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
-    [id, name ?? null, eventDate ?? null, code ?? null, capacity ?? null, code !== undefined, capacity !== undefined || Boolean(clearCapacity)]
+    [
+      id, name ?? null, eventDate ?? null, code ?? null, capacity ?? null,
+      code !== undefined, capacity !== undefined || Boolean(clearCapacity),
+      flags !== undefined ? normalizeFlags(flags) : null,
+    ]
   );
   return rows[0] ?? null;
 }

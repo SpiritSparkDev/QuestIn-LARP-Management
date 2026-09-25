@@ -347,6 +347,74 @@ test('an event created without capacity defaults to unlimited (null)', async () 
   });
 });
 
+test('flags can be set on create, updated, and cleared back to empty', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+
+    const createRes = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Flags-Con', eventDate: '2027-09-03', flags: ['GSC', ' VP ', 'GSC', ''] }),
+    });
+    assert.equal(createRes.status, 201);
+    const created = await createRes.json();
+    // Trimmed, deduplicated, empty strings dropped, order preserved.
+    assert.deepEqual(created.flags, ['GSC', 'VP']);
+
+    const updateRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ flags: ['Ersthelfer'] }),
+    });
+    const updated = await updateRes.json();
+    assert.deepEqual(updated.flags, ['Ersthelfer']);
+
+    // A PUT that omits flags entirely must preserve it (same partial-update
+    // contract every other optional field on this route already has).
+    const untouchedRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Flags-Con Renamed' }),
+    });
+    const untouched = await untouchedRes.json();
+    assert.deepEqual(untouched.flags, ['Ersthelfer']);
+
+    // An explicit empty array clears it -- distinct from omitting the field.
+    const clearRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ flags: [] }),
+    });
+    const cleared = await clearRes.json();
+    assert.deepEqual(cleared.flags, []);
+  });
+});
+
+test('an event created without flags defaults to an empty array', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Flaglos-Con', eventDate: '2027-09-04' }),
+    });
+    const created = await res.json();
+    assert.deepEqual(created.flags, []);
+  });
+});
+
+test('creating an event with a non-array flags value is rejected', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Kaputt-Con', eventDate: '2027-09-05', flags: 'GSC' }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
 test.after(async () => {
   await closePool();
 });

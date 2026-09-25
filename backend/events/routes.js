@@ -8,14 +8,17 @@ import { maybePromoteFromWaitlist } from '../registrations/repository.js';
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, code, capacity } = body;
+  const { name, eventDate, code, capacity, flags } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
   if (capacity !== undefined && capacity !== null && (!Number.isInteger(capacity) || capacity < 1)) {
     return { status: 400, body: { error: 'capacity must be a positive integer or null' } };
   }
-  const event = await createEvent({ name, eventDate, code, capacity });
+  if (flags !== undefined && (!Array.isArray(flags) || flags.some((f) => typeof f !== 'string'))) {
+    return { status: 400, body: { error: 'flags must be an array of strings' } };
+  }
+  const event = await createEvent({ name, eventDate, code, capacity, flags });
   return { status: 201, body: event };
 })));
 
@@ -35,6 +38,9 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (body.capacity !== undefined && body.capacity !== null && (!Number.isInteger(body.capacity) || body.capacity < 1)) {
     return { status: 400, body: { error: 'capacity must be a positive integer or null' } };
+  }
+  if (body.flags !== undefined && (!Array.isArray(body.flags) || body.flags.some((f) => typeof f !== 'string'))) {
+    return { status: 400, body: { error: 'flags must be an array of strings' } };
   }
   const before = await getEvent(params.id);
   if (!before) return { status: 404, body: { error: 'event not found' } };
