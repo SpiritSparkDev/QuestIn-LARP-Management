@@ -3,13 +3,13 @@ import { validateCharacterData } from '../events/schemaValidation.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 
-const SELECT_COLUMNS = 'id, user_id, class, name, data, is_gsc, created_at';
+const SELECT_COLUMNS = 'id, user_id, class, name, data, created_at';
 
 async function schemaForClass(characterClass) {
   return characterClass === 'nsc' ? getNscProfileSchema() : getScCharacterSchema();
 }
 
-export async function createCharacter(userId, { characterClass = 'sc', name, data, isGsc = false }) {
+export async function createCharacter(userId, { characterClass = 'sc', name, data }) {
   const schema = await schemaForClass(characterClass);
   const errors = validateCharacterData(schema, data ?? {});
   if (errors.length > 0) {
@@ -18,15 +18,11 @@ export async function createCharacter(userId, { characterClass = 'sc', name, dat
     err.details = errors;
     throw err;
   }
-  // isGsc is a system flag meaningful only for SC characters -- silently
-  // dropped for nsc rather than rejected, so the frontend never needs a
-  // conditional check before sending it.
-  const gscFlag = characterClass === 'sc' && Boolean(isGsc);
   const { rows } = await query(
-    `INSERT INTO characters (user_id, class, name, data, is_gsc)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO characters (user_id, class, name, data)
+     VALUES ($1, $2, $3, $4)
      RETURNING ${SELECT_COLUMNS}`,
-    [userId, characterClass, name, JSON.stringify(data ?? {}), gscFlag]
+    [userId, characterClass, name, JSON.stringify(data ?? {})]
   );
   return rows[0];
 }
@@ -44,7 +40,7 @@ export async function getCharacter(id) {
 // list entries.
 export async function listCharactersForUser(userId) {
   const { rows } = await query(
-    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.is_gsc, c.created_at,
+    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.created_at,
             reg.event_id AS registered_event_id, reg.con_role AS registered_con_role,
             ev.name AS registered_event_name
      FROM characters c
@@ -66,7 +62,6 @@ export async function listCharactersForUser(userId) {
     class: row.class,
     name: row.name,
     data: row.data,
-    is_gsc: row.is_gsc,
     created_at: row.created_at,
     registeredFor: row.registered_event_id
       ? { eventId: row.registered_event_id, eventName: row.registered_event_name, conRole: row.registered_con_role }
@@ -78,7 +73,7 @@ export async function listCharactersForUser(userId) {
 // (not a direct column -- see design spec section 4.3).
 export async function listCharactersForEvent(eventId) {
   const { rows } = await query(
-    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.is_gsc, c.created_at
+    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.created_at
      FROM characters c
      JOIN registrations r ON r.character_id = c.id
      WHERE r.event_id = $1 AND c.class = 'sc'
@@ -95,7 +90,7 @@ export async function listCharactersForEvent(eventId) {
 // permissions they happen to hold as a person (e.g. an admin editing their
 // own character). Only a genuinely different elevated staff member (e.g.
 // via the check-in dialog) may write them.
-export async function updateCharacter(id, userId, { name, data, isGsc }, { isElevated = false } = {}) {
+export async function updateCharacter(id, userId, { name, data }, { isElevated = false } = {}) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
@@ -123,18 +118,13 @@ export async function updateCharacter(id, userId, { name, data, isGsc }, { isEle
     newData = effectiveData;
   }
 
-  // Same "sc only" rule as createCharacter; NULL (not false) means "don't
-  // touch is_gsc" so COALESCE below preserves the existing value.
-  const gscFlag = isGsc !== undefined && character.class === 'sc' ? Boolean(isGsc) : null;
-
   const { rows } = await query(
     `UPDATE characters SET
        name = COALESCE($3, name),
-       data = COALESCE($4, data),
-       is_gsc = COALESCE($5, is_gsc)
+       data = COALESCE($4, data)
      WHERE id = $1 AND user_id = $2
      RETURNING ${SELECT_COLUMNS}`,
-    [id, userId, name ?? null, newData !== undefined ? JSON.stringify(newData) : null, gscFlag]
+    [id, userId, name ?? null, newData !== undefined ? JSON.stringify(newData) : null]
   );
   return rows[0] ?? null;
 }

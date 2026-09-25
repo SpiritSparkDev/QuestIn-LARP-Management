@@ -121,15 +121,20 @@
                   <label for="event-select">Event</label>
 
                   <div id="character-select-wrap">
-                    <select id="character-select"></select>
-                    <label for="character-select">Als welcher Charakter kommst du?</label>
-                    <p id="no-character-hint" style="display:none;">Du hast noch keinen passenden Charakter. <button
-                        type="button" id="no-character-hint-btn">Charakter anlegen</button></p>
+                    <div class="tabs tabs--sub" id="registration-role-tabs">
+                      <button type="button" class="tab-btn active" data-role="sc">SC</button>
+                      <button type="button" class="tab-btn" data-role="nsc">NSC</button>
+                    </div>
 
-                    <label><input type="checkbox" id="nsc-available-toggle"> Ich stehe zusätzlich als NSC zur
-                      Verfügung</label>
+                    <div id="sc-role-panel">
+                      <select id="character-select"></select>
+                      <label for="character-select">Als welcher Charakter kommst du?</label>
+                      <p id="no-character-hint" class="sub" style="display:none;">Du hast noch keinen passenden Charakter. <button
+                          type="button" id="no-character-hint-btn" class="btn-sm btn-ghost">Charakter anlegen</button></p>
+                      <label><input type="checkbox" id="gsc-toggle"> Als GSC anmelden</label>
+                    </div>
 
-                    <div id="nsc-character-wrap" style="display:none;">
+                    <div id="nsc-role-panel" hidden>
                       <select id="nsc-character-select"></select>
                       <label for="nsc-character-select">NSC-Charakter (optional)</label>
                     </div>
@@ -173,9 +178,9 @@
             <div class="tab-panel" id="sc-tab">
               <div class="dashboard-layout">
                 <div class="dashboard-main">
-                  <button type="button" id="copy-character-btn" class="btn-ghost">Aus bestehendem Charakter
+                  <button type="button" id="new-character-btn">Neuen Charakter anlegen</button>
+                  <button type="button" id="copy-character-btn">Aus bestehendem Charakter
                     kopieren</button>
-                  <button type="button" id="new-character-btn" class="btn-ghost">Neuen Charakter anlegen</button>
 
                   <dialog id="copy-character-dialog">
                     <h3>Charakter kopieren</h3>
@@ -194,7 +199,6 @@
                     <form id="character-form">
                       <input id="character-name" name="name" type="text" required>
                       <label for="character-name">Charaktername</label>
-                      <label><input type="checkbox" id="character-is-gsc"> GSC (Gildensprecher-Charakter)</label>
                       <div id="character-dynamic-fields"></div>
                       <button type="submit">Speichern</button>
                       <button type="button" id="character-cancel-edit" class="btn-ghost">Abbrechen</button>
@@ -310,31 +314,6 @@
     import { buildScanCode } from "/js/qrCode.js";
     import { buildEpcQrPayload } from "/js/epcQr.js";
     import { notify } from "/js/notifications.js";
-
-    document.addEventListener("DOMContentLoaded", () => {
-      initViewport();
-    });
-
-    async function initViewport() {
-      console.log("Init Viewport");
-      const characterSelectWrapElement = document.getElementById("character-select");
-      console.log(characterSelectWrapElement)
-      let character = {};
-      try {
-        character = await api.get("/characters");
-      } catch (err) {
-        console.log(err)
-      }
-      console.log(character.filter((c) => c.class === "sc"));
-
-      if(character.filter((c) => c.class === "sc").length) {
-        characterSelectWrapElement.classList.add("hide");
-      } else {
-        characterSelectWrapElement.classList.remove("hide");
-      }
-      
-      
-    };
 
     function initTabs(tabsEl) {
       const buttons = [...tabsEl.querySelectorAll(".tab-btn")];
@@ -719,14 +698,31 @@
     const registrationForm = document.getElementById("registration-form");
     attachLiveValidation(registrationForm);
     const eventSelect = document.getElementById("event-select");
-    const characterSelectWrap = document.getElementById("character-select-wrap");
     const characterSelect = document.getElementById("character-select");
     const noCharacterHint = document.getElementById("no-character-hint");
-    const nscAvailableToggle = document.getElementById("nsc-available-toggle");
-    const nscCharacterWrap = document.getElementById("nsc-character-wrap");
+    const gscToggle = document.getElementById("gsc-toggle");
+    const scRolePanel = document.getElementById("sc-role-panel");
+    const nscRolePanel = document.getElementById("nsc-role-panel");
+    const roleTabButtons = [...document.querySelectorAll("#registration-role-tabs .tab-btn")];
     const nscCharacterSelect = document.getElementById("nsc-character-select");
     const registerButton = document.getElementById("register-button");
     const otFieldsContainer = document.getElementById("ot-fields");
+
+    let selectedRegistrationRole = "sc";
+
+    function isNscRoleSelected() {
+      return selectedRegistrationRole === "nsc";
+    }
+
+    roleTabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedRegistrationRole = btn.dataset.role;
+        roleTabButtons.forEach((b) => b.classList.toggle("active", b === btn));
+        scRolePanel.hidden = isNscRoleSelected();
+        nscRolePanel.hidden = !isNscRoleSelected();
+        updateNscMenuVisibility();
+      });
+    });
 
     let events = [];
     let characters = [];
@@ -753,20 +749,21 @@
         : "Anmelden";
     }
 
-    function updateNscCharacterWrapVisibility() {
-      nscCharacterWrap.style.display = nscAvailableToggle.checked ? "" : "none";
+    function updateNoCharacterHintVisibility() {
+      const matchingSc = characters.filter((c) => c.class === "sc" && !c.registeredFor);
+      noCharacterHint.style.display = matchingSc.length === 0 ? "" : "none";
     }
 
     function populateRegistrationCharacterFields() {
       const matchingSc = characters.filter((c) => c.class === "sc" && !c.registeredFor);
-      characterSelect.innerHTML = ['<option value="">Kein SC-Charakter</option>']
+      characterSelect.innerHTML = ['<option value="">Bitte wählen</option>']
         .concat(
           matchingSc.map(
             (c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`,
           ),
         )
         .join("");
-      noCharacterHint.style.display = matchingSc.length === 0 ? "" : "none";
+      updateNoCharacterHintVisibility();
 
       const matchingNsc = characters.filter((c) => c.class === "nsc");
       nscCharacterSelect.innerHTML = ['<option value="">Kein bestimmter NSC-Charakter</option>']
@@ -776,14 +773,8 @@
           ),
         )
         .join("");
-
-      updateNscCharacterWrapVisibility();
     }
 
-    nscAvailableToggle.addEventListener("change", () => {
-      updateNscCharacterWrapVisibility();
-      updateNscMenuVisibility();
-    });
     eventSelect.addEventListener("change", updateRegisterButtonLabel);
 
     document
@@ -892,7 +883,7 @@
     }
 
     function labelForRegisteredAs(r) {
-      if (r.conRole === "sc") return `Angemeldet als SC: ${r.characterName}`;
+      if (r.conRole === "sc") return `Angemeldet als SC${r.isGsc ? " (GSC)" : ""}: ${r.characterName}`;
       if (r.conRole === "nsc") {
         return r.characterName
           ? `Angemeldet als NSC: ${r.characterName}`
@@ -978,33 +969,26 @@
       event.preventDefault();
       const eventId = eventSelect.value;
 
-      const scCharacterId = characterSelect.value || undefined;
-      const nscToggleOn = nscAvailableToggle.checked;
-      const pickedNscCharacterId = nscToggleOn ? nscCharacterSelect.value || undefined : undefined;
-      if (!scCharacterId && !nscToggleOn) {
-        notify("Wähle einen Charakter oder aktiviere die NSC-Verfügbarkeit.", "error");
-        return;
-      }
-
-      let conRole, characterId, nscAvailable, nscCharacterId;
-      if (scCharacterId) {
-        conRole = "sc";
-        characterId = scCharacterId;
-        nscAvailable = nscToggleOn;
-        nscCharacterId = pickedNscCharacterId;
-      } else {
+      let conRole, characterId, isGsc;
+      if (isNscRoleSelected()) {
         conRole = "nsc";
-        characterId = pickedNscCharacterId;
-        nscAvailable = false;
-        nscCharacterId = undefined;
+        characterId = nscCharacterSelect.value || undefined;
+        isGsc = false;
+      } else {
+        characterId = characterSelect.value || undefined;
+        if (!characterId) {
+          notify("Wähle einen Charakter.", "error");
+          return;
+        }
+        conRole = "sc";
+        isGsc = gscToggle.checked;
       }
 
       try {
         await api.post(`/events/${eventId}/register`, {
           conRole,
           characterId,
-          nscAvailable,
-          nscCharacterId,
+          isGsc,
           otFields: collectOtFields(),
         });
         notify("Angemeldet.", "success");
@@ -1071,15 +1055,17 @@
     const nscTabButton = document.getElementById("nsc-tab-btn");
 
     // The NSC-Charaktere tab/section is only useful to someone who has
-    // actually said they're available as NSC somewhere -- shown only once
-    // both the schema loaded successfully AND at least one current
-    // registration qualifies (con_role='nsc', or the sc-bolt-on
-    // nsc_available=true). Called after loadRegistrations() populates
-    // currentRegistrations, and again after the registration form submits.
+    // actually said they're available as NSC somewhere -- shown once both
+    // the schema loaded successfully AND either the registration form's
+    // NSC role is currently selected, or at least one existing registration
+    // qualifies (con_role='nsc', or the old sc-bolt-on nsc_available=true,
+    // kept for previously saved registrations). Called after
+    // loadRegistrations() populates currentRegistrations, and again when
+    // the registration form's role tab changes.
     function updateNscMenuVisibility() {
       const wantsNsc =
         nscSchemaAvailable &&
-        (nscAvailableToggle.checked ||
+        (isNscRoleSelected() ||
           currentRegistrations.some((r) => r.conRole === "nsc" || r.nscAvailable));
       nscSection.style.display = wantsNsc ? "" : "none";
       nscTabButton.style.display = wantsNsc ? "" : "none";
@@ -1359,6 +1345,7 @@
 
     function renderCharacterList() {
       const scCharacters = characters.filter((c) => c.class !== "nsc");
+      document.getElementById("copy-character-btn").style.display = scCharacters.length === 0 ? "none" : "";
       characterListBody.innerHTML = scCharacters
         .map((c) => `<div class="char-card" data-card-for="${c.id}">
       <button type="button" class="char-card-delete" data-delete="${c.id}" aria-label="Charakter löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
@@ -1399,7 +1386,6 @@
       editingCharacterId = characterId;
       characterFormTitle.textContent = `Charakter bearbeiten: ${character.name}`;
       characterForm.elements.name.value = character.name;
-      document.getElementById("character-is-gsc").checked = character.is_gsc ?? false;
       renderScSchemaFields(character.data);
       characterForm.querySelector('button[type="submit"]').textContent =
         "Änderungen speichern";
@@ -1410,7 +1396,6 @@
       editingCharacterId = null;
       characterFormTitle.textContent = "Neuen Charakter anlegen";
       characterForm.reset();
-      document.getElementById("character-is-gsc").checked = false;
       renderScSchemaFields();
       characterForm.querySelector('button[type="submit"]').textContent =
         "Speichern";
@@ -1505,12 +1490,11 @@
       event.preventDefault();
       const name = characterForm.elements.name.value;
       const data = collectFieldValues(characterForm, scSchema);
-      const isGsc = document.getElementById("character-is-gsc").checked;
       try {
         if (editingCharacterId) {
-          await api.put(`/characters/${editingCharacterId}`, { name, data, isGsc });
+          await api.put(`/characters/${editingCharacterId}`, { name, data });
         } else {
-          await api.post("/characters", { class: "sc", name, data, isGsc });
+          await api.post("/characters", { class: "sc", name, data });
         }
         notify("Gespeichert.", "success");
         resetCharacterForm();

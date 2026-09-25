@@ -11,7 +11,7 @@ import { getAppSettings } from '../appSettings/repository.js';
 router.post('/characters', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { class: characterClass = 'sc', name, data, isGsc } = body;
+  const { class: characterClass = 'sc', name, data } = body;
   if (characterClass !== 'sc' && characterClass !== 'nsc') {
     return { status: 400, body: { error: 'class must be "sc" or "nsc"' } };
   }
@@ -20,7 +20,7 @@ router.post('/characters', requireAuth(async ({ req, user }) => {
   }
 
   try {
-    const character = await createCharacter(user.id, { characterClass, name, data, isGsc });
+    const character = await createCharacter(user.id, { characterClass, name, data });
     return { status: 201, body: character };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {

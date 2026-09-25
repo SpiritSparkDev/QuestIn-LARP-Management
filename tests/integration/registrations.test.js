@@ -533,6 +533,36 @@ test('registering with con_role helfer and a characterId set is rejected', async
   });
 });
 
+test('registering with con_role sc and isGsc true stores the flag but keeps con_role "sc"', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const characterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId, isGsc: true }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.con_role, 'sc');
+    assert.equal(body.is_gsc, true);
+    assert.equal(body.character_id, characterId);
+  });
+});
+
+test('isGsc is rejected for any con_role other than sc', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'nsc', isGsc: true }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
 test('registering with con_role nsc and no characterId now succeeds', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession();
