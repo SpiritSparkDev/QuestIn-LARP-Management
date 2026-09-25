@@ -108,6 +108,7 @@
                 <dialog id="edit-ot-dialog">
                   <h3>Anmeldungsdaten bearbeiten</h3>
                   <p class="lede">Diese Änderung benachrichtigt die Orga und Admin dieses Events per E-Mail.</p>
+                  <div id="edit-flags"></div>
                   <div id="edit-ot-fields"></div>
                   <div class="dialog-actions">
                     <button type="button" id="edit-ot-save">Speichern</button>
@@ -849,10 +850,17 @@
     const editOtFieldsContainer = document.getElementById("edit-ot-fields");
     let editingEventId = null;
 
+    const editFlagsContainer = document.getElementById("edit-flags");
+
     function openEditOtDialog(eventId) {
       const registration = currentRegistrations.find((r) => r.eventId === eventId);
       if (!registration) return;
       editingEventId = eventId;
+      const event = events.find((e) => e.id === eventId);
+      const flagsField = flagsFieldFor(event);
+      editFlagsContainer.innerHTML = flagsField.options.length > 0
+        ? renderAccountFieldInput(flagsField, registration.flags ?? [], { idPrefix: "edit-" })
+        : "";
       editOtFieldsContainer.innerHTML = registrationSchema
         .map((field) => renderAccountFieldInput(field, registration[field.key], { idPrefix: "edit-" }))
         .join("");
@@ -880,6 +888,13 @@
         if (otFieldValuesEqual(field, originalValue, newValue)) continue;
         payload[field.key] = newValue;
       }
+
+      const flagsField = flagsFieldFor(events.find((e) => e.id === editingEventId));
+      const collectedFlags = collectAccountFieldValues(editFlagsContainer, [flagsField]).flags;
+      if (!otFieldValuesEqual(flagsField, registration?.flags ?? [], collectedFlags ?? [])) {
+        payload.flags = collectedFlags ?? [];
+      }
+
       if (Object.keys(payload).length === 0) {
         editOtDialog.close();
         return;
