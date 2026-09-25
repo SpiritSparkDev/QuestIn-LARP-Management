@@ -131,7 +131,6 @@
                       <label for="character-select">Als welcher Charakter kommst du?</label>
                       <p id="no-character-hint" class="sub" style="display:none;">Du hast noch keinen passenden Charakter. <button
                           type="button" id="no-character-hint-btn" class="btn-sm btn-ghost">Charakter anlegen</button></p>
-                      <label><input type="checkbox" id="gsc-toggle"> Als GSC anmelden</label>
                     </div>
 
                     <div id="nsc-role-panel" hidden>
@@ -139,6 +138,8 @@
                       <label for="nsc-character-select">NSC-Charakter (optional)</label>
                     </div>
                   </div>
+
+                  <div id="registration-flags"></div>
 
                   <h3>Weitere Angaben zu dieser Anmeldung</h3>
                   <div id="ot-fields"></div>
@@ -700,13 +701,33 @@
     const eventSelect = document.getElementById("event-select");
     const characterSelect = document.getElementById("character-select");
     const noCharacterHint = document.getElementById("no-character-hint");
-    const gscToggle = document.getElementById("gsc-toggle");
     const scRolePanel = document.getElementById("sc-role-panel");
     const nscRolePanel = document.getElementById("nsc-role-panel");
     const roleTabButtons = [...document.querySelectorAll("#registration-role-tabs .tab-btn")];
     const nscCharacterSelect = document.getElementById("nsc-character-select");
     const registerButton = document.getElementById("register-button");
     const otFieldsContainer = document.getElementById("ot-fields");
+    const registrationFlagsContainer = document.getElementById("registration-flags");
+
+    // A synthetic OT-field definition so the event's flag vocabulary can be
+    // rendered/collected with the exact same generic machinery the
+    // "Weitere Angaben"-OT-fields already use, instead of a second
+    // hand-rolled checkbox renderer.
+    function flagsFieldFor(event) {
+      return { key: "flags", label: "Sonderrollen", type: "multiselect", options: event?.flags ?? [] };
+    }
+
+    function renderRegistrationFlags() {
+      const event = events.find((e) => e.id === eventSelect.value);
+      const field = flagsFieldFor(event);
+      registrationFlagsContainer.innerHTML = field.options.length > 0
+        ? renderAccountFieldInput(field, [], { idPrefix: "register-" })
+        : "";
+    }
+
+    function collectRegistrationFlags() {
+      return collectAccountFieldValues(registrationFlagsContainer, [flagsFieldFor(events.find((e) => e.id === eventSelect.value))]).flags ?? [];
+    }
 
     let selectedRegistrationRole = "sc";
 
@@ -775,7 +796,10 @@
         .join("");
     }
 
-    eventSelect.addEventListener("change", updateRegisterButtonLabel);
+    eventSelect.addEventListener("change", () => {
+      updateRegisterButtonLabel();
+      renderRegistrationFlags();
+    });
 
     document
       .getElementById("no-character-hint-btn")
@@ -787,6 +811,7 @@
         : events.filter((e) => e.is_active);
       eventSelect.innerHTML = renderEventOptions(visibleEvents);
       updateRegisterButtonLabel();
+      renderRegistrationFlags();
     }
 
     async function loadEvents() {
@@ -883,13 +908,14 @@
     }
 
     function labelForRegisteredAs(r) {
-      if (r.conRole === "sc") return `Angemeldet als SC${r.isGsc ? " (GSC)" : ""}: ${r.characterName}`;
+      const flagsSuffix = r.flags && r.flags.length > 0 ? ` (${r.flags.join(", ")})` : "";
+      if (r.conRole === "sc") return `Angemeldet als SC${flagsSuffix}: ${r.characterName}`;
       if (r.conRole === "nsc") {
         return r.characterName
-          ? `Angemeldet als NSC: ${r.characterName}`
-          : "Angemeldet als NSC";
+          ? `Angemeldet als NSC${flagsSuffix}: ${r.characterName}`
+          : `Angemeldet als NSC${flagsSuffix}`;
       }
-      return `Angemeldet als ${CON_ROLE_LABELS[r.conRole] ?? r.conRole}`;
+      return `Angemeldet als ${CON_ROLE_LABELS[r.conRole] ?? r.conRole}${flagsSuffix}`;
     }
 
     async function renderActiveRegistrationPanel() {
@@ -969,11 +995,10 @@
       event.preventDefault();
       const eventId = eventSelect.value;
 
-      let conRole, characterId, isGsc;
+      let conRole, characterId;
       if (isNscRoleSelected()) {
         conRole = "nsc";
         characterId = nscCharacterSelect.value || undefined;
-        isGsc = false;
       } else {
         characterId = characterSelect.value || undefined;
         if (!characterId) {
@@ -981,14 +1006,13 @@
           return;
         }
         conRole = "sc";
-        isGsc = gscToggle.checked;
       }
 
       try {
         await api.post(`/events/${eventId}/register`, {
           conRole,
           characterId,
-          isGsc,
+          flags: collectRegistrationFlags(),
           otFields: collectOtFields(),
         });
         notify("Angemeldet.", "success");
