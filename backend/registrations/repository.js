@@ -275,7 +275,25 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
   const event = await getEvent(eventId);
   const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
   const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId);
-  const resolvedFlags = resolveFlags(event?.flags ?? [], flags);
+
+  // Unlike nscAvailable (legitimately role-coupled -- resolveNscAvailability
+  // itself rejects it outside con_role='sc'), flags are explicitly
+  // role-independent (plan Global Constraints). Omitting flags from this
+  // call must preserve whatever is currently stored, not wipe it -- same
+  // "only touch what's explicitly sent" contract updateRegistrationOtFields
+  // already has for the OT-schema fields. The only production caller
+  // (admin/checkin.html's con-role promotion dropdown) never sends flags at
+  // all, so without this guard every promotion silently cleared them.
+  let resolvedFlags;
+  if (flags !== undefined) {
+    resolvedFlags = resolveFlags(event?.flags ?? [], flags);
+  } else {
+    const { rows: currentFlagsRows } = await query(
+      'SELECT flags FROM registrations WHERE event_id = $1 AND user_id = $2',
+      [eventId, userId]
+    );
+    resolvedFlags = currentFlagsRows[0]?.flags ?? [];
+  }
 
   const { rows } = await query(
     `UPDATE registrations SET con_role = $3, character_id = $4, nsc_available = $5, nsc_character_id = $6, flags = $7

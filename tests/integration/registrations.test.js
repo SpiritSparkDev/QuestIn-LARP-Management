@@ -447,6 +447,50 @@ test('a user can change their own registration\'s con_role to a self-service val
   });
 });
 
+test('PUT .../con-role without flags preserves the registration\'s existing flags (role promotion must not wipe them)', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await makeUserAndSession();
+    const { cookie: modCookie } = await makeUserAndSession('moderator');
+    const eventId = await makeEventWithFlags(['VP']);
+
+    const registerRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer', flags: ['VP'] }),
+    });
+    assert.equal(registerRes.status, 201);
+
+    // Promote helfer -> hilfs_orga the way admin/checkin.html's dropdown does: conRole only, no flags.
+    const promoteRes = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/con-role`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
+      body: JSON.stringify({ conRole: 'hilfs_orga' }),
+    });
+    assert.equal(promoteRes.status, 200);
+    const body = await promoteRes.json();
+    assert.equal(body.con_role, 'hilfs_orga');
+    assert.deepEqual(body.flags, ['VP']);
+  });
+});
+
+test('PUT .../con-role with flags provided replaces the previous selection', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await makeUserAndSession();
+    const { cookie: modCookie } = await makeUserAndSession('moderator');
+    const eventId = await makeEventWithFlags(['VP', 'Ersthelfer']);
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer', flags: ['VP'] }),
+    });
+
+    const promoteRes = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/con-role`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: modCookie },
+      body: JSON.stringify({ conRole: 'hilfs_orga', flags: ['Ersthelfer'] }),
+    });
+    assert.equal(promoteRes.status, 200);
+    assert.deepEqual((await promoteRes.json()).flags, ['Ersthelfer']);
+  });
+});
+
 test('approving a registration with con_role helfer succeeds without a character', async () => {
   await withTestServer(async (port) => {
     const { query } = await import('../../backend/db.js');

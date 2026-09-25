@@ -891,7 +891,15 @@
 
       const flagsField = flagsFieldFor(events.find((e) => e.id === editingEventId));
       const collectedFlags = collectAccountFieldValues(editFlagsContainer, [flagsField]).flags;
-      if (!otFieldValuesEqual(flagsField, registration?.flags ?? [], collectedFlags ?? [])) {
+      // Compare against only the subset of the stored flags that's still
+      // representable in the event's current vocabulary -- an orphaned flag
+      // (one an admin later removed from the event) has no checkbox to
+      // represent it, so comparing against the raw stored array would make
+      // every save look "changed" and silently drop the orphaned value on
+      // an unrelated edit, contradicting the spec's "orphaned values are
+      // never actively cleaned up" guarantee.
+      const representableCurrentFlags = (registration?.flags ?? []).filter((f) => flagsField.options.includes(f));
+      if (!otFieldValuesEqual(flagsField, representableCurrentFlags, collectedFlags ?? [])) {
         payload.flags = collectedFlags ?? [];
       }
 
