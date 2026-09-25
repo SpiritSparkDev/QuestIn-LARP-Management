@@ -41,6 +41,14 @@ async function makeEventNamed(name, eventDate) {
   return rows[0].id;
 }
 
+async function makeEventWithFlags(flags) {
+  const { rows } = await query(
+    "INSERT INTO events (name, event_date, is_active, flags) VALUES ('Reg Test Con', '2027-08-01', true, $1) RETURNING id",
+    [flags]
+  );
+  return rows[0].id;
+}
+
 // The 3 seeded groups have no "mitglieder-menu access but restricted
 // accountFields" combination (moderator/admin both get full accountFields by
 // default) -- Finding-3-style tests need exactly that, same throwaway-group
@@ -533,33 +541,79 @@ test('registering with con_role helfer and a characterId set is rejected', async
   });
 });
 
-test('registering with con_role sc and isGsc true stores the flag but keeps con_role "sc"', async () => {
+test('registering with a flag defined on the event stores it', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession();
-    const eventId = await makeEvent();
+    const eventId = await makeEventWithFlags(['GSC', 'VP']);
     const characterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
 
     const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'sc', characterId, isGsc: true }),
+      body: JSON.stringify({ conRole: 'sc', characterId, flags: ['GSC'] }),
     });
     assert.equal(res.status, 201);
     const body = await res.json();
     assert.equal(body.con_role, 'sc');
-    assert.equal(body.is_gsc, true);
-    assert.equal(body.character_id, characterId);
+    assert.deepEqual(body.flags, ['GSC']);
   });
 });
 
-test('isGsc is rejected for any con_role other than sc', async () => {
+test('registering with con_role nsc and a flag defined on the event stores it too (flags are role-independent)', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEventWithFlags(['Ersthelfer']);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'nsc', flags: ['Ersthelfer'] }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.con_role, 'nsc');
+    assert.deepEqual(body.flags, ['Ersthelfer']);
+  });
+});
+
+test('registering with multiple flags stores all of them, normalized to the event\'s flag order', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEventWithFlags(['GSC', 'VP', 'Ersthelfer']);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'nsc', flags: ['Ersthelfer', 'GSC'] }),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.deepEqual(body.flags, ['GSC', 'Ersthelfer']);
+  });
+});
+
+test('registering with a flag not defined on the event is rejected', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const eventId = await makeEventWithFlags(['GSC']);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'nsc', flags: ['Nicht-Definiert'] }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+test('registering with no flags on an event that has none defaults to an empty array', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession();
     const eventId = await makeEvent();
+
     const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'nsc', isGsc: true }),
+      body: JSON.stringify({ conRole: 'nsc' }),
     });
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.deepEqual(body.flags, []);
   });
 });
 

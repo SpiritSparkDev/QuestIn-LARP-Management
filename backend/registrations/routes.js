@@ -38,7 +38,7 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.isGsc, body.otFields, user);
+    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.otFields, user);
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
@@ -50,7 +50,7 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
       return { status: 400, body: { error: err.message } };
     }
     if (err.code === 'INVALID_NSC_AVAILABILITY') return { status: 400, body: { error: err.message } };
-    if (err.code === 'INVALID_GSC_FLAG') return { status: 400, body: { error: err.message } };
+    if (err.code === 'INVALID_FLAG') return { status: 400, body: { error: err.message } };
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
     if (err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
@@ -190,7 +190,7 @@ router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ re
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await setConRole(params.id, params.userId, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.isGsc, user);
+    const registration = await setConRole(params.id, params.userId, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, user);
     return { status: 200, body: registration };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
@@ -200,7 +200,7 @@ router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ re
       return { status: 400, body: { error: err.message } };
     }
     if (err.code === 'INVALID_NSC_AVAILABILITY') return { status: 400, body: { error: err.message } };
-    if (err.code === 'INVALID_GSC_FLAG') return { status: 400, body: { error: err.message } };
+    if (err.code === 'INVALID_FLAG') return { status: 400, body: { error: err.message } };
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
     if (err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
