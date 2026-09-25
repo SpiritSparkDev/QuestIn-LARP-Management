@@ -1,4 +1,6 @@
 import { query } from '../db.js';
+import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
+import { logger } from '../logger.js';
 
 const SELECT_COLUMNS = 'id, name, event_date, code, capacity, is_active, created_at';
 
@@ -57,15 +59,39 @@ export async function activateEvent(id) {
   return getEvent(id);
 }
 
-export async function deleteEvent(id) {
+export async function deleteEvent(id, { force = false, notify = false } = {}) {
   const existing = await getEvent(id);
   if (!existing) return false;
   const { rows } = await query('SELECT 1 FROM registrations WHERE event_id = $1 LIMIT 1', [id]);
-  if (rows.length > 0) {
+  if (rows.length > 0 && !force) {
     const err = new Error('Event hat noch Anmeldungen und kann nicht gelöscht werden.');
     err.code = 'EVENT_HAS_REGISTRATIONS';
     throw err;
   }
+
+  let participantEmails = [];
+  if (rows.length > 0 && notify) {
+    const { rows: emailRows } = await query(
+      'SELECT u.email FROM users u JOIN registrations r ON r.user_id = u.id WHERE r.event_id = $1',
+      [id]
+    );
+    participantEmails = emailRows.map((r) => r.email);
+  }
+
+  // events.registrations has ON DELETE CASCADE, so removing the event row
+  // also removes its registrations (and their payments) in one statement.
   await query('DELETE FROM events WHERE id = $1', [id]);
+
+  if (participantEmails.length > 0) {
+    const transport = await getTransporterAndFrom();
+    for (const to of participantEmails) {
+      try {
+        await sendEventDeletedEmail(to, { eventName: existing.name }, transport);
+      } catch (err) {
+        logger.error('failed to send event-deleted notification', { error: err.message, to, eventId: id });
+      }
+    }
+  }
+
   return true;
 }

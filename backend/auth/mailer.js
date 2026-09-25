@@ -98,3 +98,12 @@ export async function sendWaitlistPromotedEmail(to, { eventName }, { transporter
     text: `Für "${eventName}" ist ein Platz frei geworden — deine Anmeldung wurde von der Warteliste in die reguläre Anmeldung übernommen und wird nun wie gewohnt von der Orga bearbeitet.`,
   });
 }
+
+export async function sendEventDeletedEmail(to, { eventName }, { transporter, from }) {
+  return transporter.sendMail({
+    to,
+    from,
+    subject: `Event abgesagt: ${eventName}`,
+    text: `Das Event "${eventName}" wurde abgesagt und gelöscht. Deine Anmeldung dafür wurde entfernt.`,
+  });
+}

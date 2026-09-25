@@ -35,6 +35,15 @@
       </div>
     </div>
 
+    <dialog id="force-delete-dialog">
+      <h2>Event erzwungen löschen</h2>
+      <p id="force-delete-warning"></p>
+      <p><strong>Alle Teilnehmer werden vom Event abgemeldet. Das kann nicht rückgängig gemacht werden.</strong></p>
+      <label><input type="checkbox" id="force-delete-notify"> Teilnehmer per E-Mail über die Absage informieren</label>
+      <button type="button" id="force-delete-confirm" class="btn-danger">Endgültig löschen</button>
+      <button type="button" id="force-delete-cancel" class="btn-ghost">Abbrechen</button>
+    </dialog>
+
     <div class="card form-pad">
       <h2 id="form-title">Neues Event anlegen</h2>
       <form id="event-form">
@@ -65,6 +74,30 @@ initSidebarToggle();
 const listBody = document.querySelector('#event-list tbody');
 const form = document.getElementById('event-form');
 const formTitle = document.getElementById('form-title');
+const forceDeleteDialog = document.getElementById('force-delete-dialog');
+const forceDeleteWarning = document.getElementById('force-delete-warning');
+const forceDeleteNotify = document.getElementById('force-delete-notify');
+
+document.getElementById('force-delete-cancel').addEventListener('click', () => forceDeleteDialog.close());
+
+function openForceDeleteDialog(eventData) {
+  forceDeleteWarning.textContent = `"${eventData.name}" hat noch Anmeldungen.`;
+  forceDeleteNotify.checked = false;
+  forceDeleteDialog.dataset.eventId = eventData.id;
+  forceDeleteDialog.showModal();
+}
+
+document.getElementById('force-delete-confirm').addEventListener('click', async () => {
+  const eventId = forceDeleteDialog.dataset.eventId;
+  try {
+    await api.delete(`/events/${eventId}`, { force: true, notify: forceDeleteNotify.checked });
+    forceDeleteDialog.close();
+    notify('Gelöscht.', 'success');
+    await loadEvents();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
 
 let editingEventId = null;
 
@@ -110,7 +143,8 @@ async function loadEvents() {
         notify('Gelöscht.', 'success');
         await loadEvents();
       } catch (err) {
-        notify(err.status === 409 ? err.body.error : err.message, 'error');
+        if (err.status === 409) { openForceDeleteDialog(eventData); return; }
+        notify(err.message, 'error');
       }
     });
   });

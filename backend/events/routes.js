@@ -53,9 +53,10 @@ router.post('/events/:id/activate', requireAuth(requireMenu('events')(async ({ p
   return { status: 200, body: event };
 })));
 
-router.delete('/events/:id', requireAuth(requireMenu('events')(async ({ params }) => {
+router.delete('/events/:id', requireAuth(requireMenu('events')(async ({ req, params }) => {
+  const body = (await readJsonBody(req)) ?? {};
   try {
-    const deleted = await deleteEvent(params.id);
+    const deleted = await deleteEvent(params.id, { force: !!body.force, notify: !!body.notify });
     if (!deleted) return { status: 404, body: { error: 'event not found' } };
     return { status: 200, body: { deleted: true } };
   } catch (err) {

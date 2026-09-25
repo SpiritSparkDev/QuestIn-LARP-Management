@@ -261,6 +261,49 @@ test('admin can delete an event with no registrations; cannot delete one that ha
   });
 });
 
+test('admin can force-delete an event with registrations; registrations are cascaded away and notify does not throw', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const participant = await makeUserAndSession('mitglied');
+
+    const createRes = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ name: 'Erzwungen löschbares Event', eventDate: '2027-11-02' }),
+    });
+    const { id } = await createRes.json();
+    await fetch(`http://localhost:${port}/events/${id}/activate`, { method: 'POST', headers: { Cookie: admin.cookie } });
+    const registerRes = await fetch(`http://localhost:${port}/events/${id}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: participant.cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    assert.equal(registerRes.status, 201);
+
+    // Without force, still blocked -- force is opt-in, not the new default.
+    const blockedDelete = await fetch(`http://localhost:${port}/events/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ force: false }),
+    });
+    assert.equal(blockedDelete.status, 409);
+
+    const forceDelete = await fetch(`http://localhost:${port}/events/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ force: true, notify: true }),
+    });
+    assert.equal(forceDelete.status, 200);
+    assert.deepEqual(await forceDelete.json(), { deleted: true });
+
+    const getAfter = await fetch(`http://localhost:${port}/events/${id}`, { headers: { Cookie: admin.cookie } });
+    assert.equal(getAfter.status, 404);
+
+    const { rows: remainingRegistrations } = await query('SELECT 1 FROM registrations WHERE event_id = $1', [id]);
+    assert.equal(remainingRegistrations.length, 0);
+  });
+});
+
 test('capacity can be set on create, updated, and cleared back to unlimited', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
