@@ -847,6 +847,63 @@ test('PUT .../ot-fields updates fields for the registration owner and does not t
   });
 });
 
+test('PUT .../ot-fields updates flags for an event that defines them', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await makeUserAndSession();
+    const eventId = await makeEventWithFlags(['VP', 'Ersthelfer']);
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/ot-fields`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ flags: ['VP'] }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual(body.flags, ['VP']);
+  });
+});
+
+test('PUT .../ot-fields omitting flags leaves the existing selection unchanged', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await makeUserAndSession();
+    const eventId = await makeEventWithFlags(['VP']);
+
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer', flags: ['VP'] }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/ot-fields`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conTage: '2' }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual(body.flags, ['VP']);
+  });
+});
+
+test('PUT .../ot-fields with a flag not defined on the event is rejected', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await makeUserAndSession();
+    const eventId = await makeEventWithFlags(['VP']);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/ot-fields`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ flags: ['Unbekannt'] }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
 test('PUT .../ot-fields is forbidden for a non-owner without mitglieder menu access', async () => {
   await withTestServer(async (port) => {
     const owner = await makeUserAndSession();

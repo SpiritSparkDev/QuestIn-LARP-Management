@@ -165,7 +165,7 @@ const VALID_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out', 'ca
 
 // Structural keys updateRegistrationOtFields always returns, as opposed to
 // OT-schema-driven ones -- see the strip loop below.
-const STRUCTURAL_REGISTRATION_KEYS = ['userId', 'eventId', 'status', 'conRole', 'characterId', 'checkedInAt', 'checkedOutAt'];
+const STRUCTURAL_REGISTRATION_KEYS = ['userId', 'eventId', 'status', 'conRole', 'characterId', 'flags', 'checkedInAt', 'checkedOutAt'];
 
 router.put('/events/:id/checkin/:userId', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
   if (!user.group.canOverrideCheckinStatus) {
@@ -230,9 +230,10 @@ router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ r
 
   let registration;
   try {
-    registration = await updateRegistrationOtFields(params.id, params.userId, body);
+    registration = await updateRegistrationOtFields(params.id, params.userId, body, body.flags);
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
+    if (err.code === 'INVALID_FLAG') return { status: 400, body: { error: err.message } };
     throw err;
   }
   // Fire-and-forget: notifyRegistrationOtFieldsChanged never throws (own

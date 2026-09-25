@@ -652,10 +652,10 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
   return rows[0];
 }
 
-export async function updateRegistrationOtFields(eventId, userId, otFields) {
+export async function updateRegistrationOtFields(eventId, userId, otFields, flags) {
   const schema = await getRegistrationFieldSchema();
   const { rows: currentRows } = await query(
-    'SELECT registration_data_enc FROM registrations WHERE event_id = $1 AND user_id = $2',
+    'SELECT registration_data_enc, flags FROM registrations WHERE event_id = $1 AND user_id = $2',
     [eventId, userId]
   );
   if (currentRows.length === 0) {
@@ -668,11 +668,20 @@ export async function updateRegistrationOtFields(eventId, userId, otFields) {
     if (otFields[field.key] !== undefined) nextData[field.key] = otFields[field.key];
   }
 
+  // Flags aren't part of the OT-schema blob above (they're event-scoped,
+  // not a global schema field) -- only touched when the caller explicitly
+  // sent them, same "only what's sent" contract as the schema fields loop.
+  let nextFlags = currentRows[0].flags;
+  if (flags !== undefined) {
+    const event = await getEvent(eventId);
+    nextFlags = resolveFlags(event?.flags ?? [], flags);
+  }
+
   const { rows } = await query(
-    `UPDATE registrations SET registration_data_enc = $3
+    `UPDATE registrations SET registration_data_enc = $3, flags = $4
      WHERE event_id = $1 AND user_id = $2
-     RETURNING user_id, event_id, status, con_role, character_id, checked_in_at, checked_out_at, registration_data_enc`,
-    [eventId, userId, encryptFieldBlob(nextData)]
+     RETURNING user_id, event_id, status, con_role, character_id, flags, checked_in_at, checked_out_at, registration_data_enc`,
+    [eventId, userId, encryptFieldBlob(nextData), nextFlags]
   );
   const r = rows[0];
   return {
@@ -681,6 +690,7 @@ export async function updateRegistrationOtFields(eventId, userId, otFields) {
     status: r.status,
     conRole: r.con_role,
     characterId: r.character_id,
+    flags: r.flags,
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,
     ...decryptFieldBlob(r.registration_data_enc),
