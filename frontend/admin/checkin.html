@@ -279,7 +279,8 @@ async function handleScannedCode(rawCode) {
 function openScanDialog(eventId, lookup) {
   dialogOpenForEventId = eventId;
   document.getElementById('scan-name').textContent = lookup.name;
-  document.getElementById('scan-group').textContent = `Kategorie: ${CON_ROLE_LABELS[lookup.conRole] ?? lookup.conRole}${lookup.isGsc ? ' (GSC)' : ''}${lookup.nscAvailable ? ' (auch NSC-bereit)' : ''}`;
+  const scanFlagsSuffix = (lookup.flags ?? []).length > 0 ? ` (${lookup.flags.join(', ')})` : '';
+  document.getElementById('scan-group').textContent = `Kategorie: ${CON_ROLE_LABELS[lookup.conRole] ?? lookup.conRole}${scanFlagsSuffix}${lookup.nscAvailable ? ' (auch NSC-bereit)' : ''}`;
   document.getElementById('scan-status-line').textContent = `Status: ${STATUS_LABELS[lookup.status] ?? lookup.status}`;
   document.getElementById('scan-characters').textContent = lookup.characters.length > 0
     ? `Charaktere: ${lookup.characters.map((c) => c.name).join(', ')}`
@@ -449,7 +450,8 @@ function renderOverrideCell(p) {
 
 function renderConRoleCell(p) {
   const label = CON_ROLE_LABELS[p.conRole] ?? p.conRole ?? '–';
-  const badge = (p.isGsc ? ' <span class="tag">GSC</span>' : '') + (p.nscAvailable ? ' <span class="tag">auch NSC-bereit</span>' : '');
+  const flagBadges = (p.flags ?? []).map((f) => ` <span class="tag">${escapeHtml(f)}</span>`).join('');
+  const badge = flagBadges + (p.nscAvailable ? ' <span class="tag">auch NSC-bereit</span>' : '');
   if (!canOverride || !p.userId) {
     return escapeHtml(label) + badge;
   }
