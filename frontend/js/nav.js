@@ -1,14 +1,15 @@
 import { escapeHtml } from './formFields.js';
 
-// Dashboard/Konto/Veranstaltung are three facets of the same 'konto'
+// Dashboard/Konto/Anmelden/Charaktere are facets of the same 'konto'
 // permission and the same page (account.html) -- distinguished only by
 // hash, so they render identically (and consistently, on every page,
 // admin pages included) to every other role-gated nav item. account.html
-// itself reads location.hash to decide which of the three panels shows.
+// itself reads location.hash to decide which of the panels shows.
 const MENU_LINKS = [
   { key: 'konto', label: 'Dashboard', href: '/account.html#dashboard', icon: 'dashboard' },
   { key: 'konto', label: 'Konto', href: '/account.html#konto', icon: 'manage_accounts' },
-  { key: 'konto', label: 'Veranstaltung', href: '/account.html#veranstaltung', icon: 'event' },
+  { key: 'konto', label: 'Anmelden', href: '/account.html#anmelden', icon: 'event' },
+  { key: 'konto', label: 'Charaktere', href: '/account.html#charaktere', icon: 'theater_comedy' },
   { key: 'dateien', label: 'Dateien', href: '/account.html#dateien', icon: 'folder' },
   { key: 'mitglieder', label: 'Mitglieder', href: '/admin/members.html', icon: 'group' },
   { key: 'events', label: 'Events', href: '/admin/events.html', icon: 'calendar_month' },

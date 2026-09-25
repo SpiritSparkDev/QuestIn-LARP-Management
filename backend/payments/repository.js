@@ -31,6 +31,32 @@ export async function setAmountDue(eventId, userId, amountDueCents) {
   return mapRegistrationRow(rows[0]);
 }
 
+// Sets a per-participant discount and, when this registration has a
+// computed list price (price_list_cents, from an event's pricing config),
+// recomputes amount_due_cents from it right away -- so an admin granting a
+// discount sees the effective amount update immediately without a second
+// step. A registration with no list price (event has no pricing configured,
+// or the pricing table was exhausted at registration time) leaves
+// amount_due_cents untouched: it's whatever the admin already entered
+// manually via setAmountDue, and a discount on top of a manual entry isn't
+// this function's job.
+export async function setDiscount(eventId, userId, discountCents) {
+  const { rows } = await query(
+    `UPDATE registrations SET
+       discount_cents = $3,
+       amount_due_cents = CASE WHEN price_list_cents IS NOT NULL THEN GREATEST(price_list_cents - $3, 0) ELSE amount_due_cents END
+     WHERE event_id = $1 AND user_id = $2
+     RETURNING user_id, event_id, amount_due_cents, paid_at, discount_cents`,
+    [eventId, userId, discountCents]
+  );
+  if (rows.length === 0) {
+    const err = new Error('registration not found');
+    err.code = 'REGISTRATION_NOT_FOUND';
+    throw err;
+  }
+  return { ...mapRegistrationRow(rows[0]), discountCents: rows[0].discount_cents };
+}
+
 export async function markPaidManually(eventId, userId, confirmedByUserId) {
   return withTransaction(async (client) => {
     const registration = await getRegistrationOrThrow(client, eventId, userId);

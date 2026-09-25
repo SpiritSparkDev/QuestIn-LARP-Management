@@ -97,9 +97,8 @@
           </form>
         </div>
 
-        <div class="tab-panel" id="veranstaltung-tab" hidden>
-          <div class="tab-panel" id="anmelden-subtab">
-            <div class="dashboard-layout">
+        <div class="tab-panel" id="anmelden-tab" hidden>
+          <div class="dashboard-layout">
               <div class="dashboard-main">
                 <h2>Meine Anmeldungen</h2>
                 <table id="registration-list">
@@ -116,37 +115,68 @@
                   </div>
                 </dialog>
 
-                <h2>Neu anmelden</h2>
-                <form id="registration-form">
-                  <select id="event-select" required></select>
-                  <label for="event-select">Event</label>
+                <div id="registration-card" class="card">
+                  <p class="eyebrow">Kodex der Anmeldung</p>
+                  <h2>Neu anmelden</h2>
+                  <p class="sub">Melde dich für ein anstehendes Event an &ndash; du kannst deine Angaben danach jederzeit hier bearbeiten.</p>
+                  <hr class="rule">
 
-                  <div id="character-select-wrap">
-                    <div class="tabs tabs--sub" id="registration-role-tabs">
-                      <button type="button" class="tab-btn active" data-role="sc">SC</button>
-                      <button type="button" class="tab-btn" data-role="nsc">NSC</button>
+                  <form id="registration-form">
+                    <div class="section-head">
+                      <h3>1. Veranstaltung</h3>
+                      <span class="badge" id="event-status-badge"></span>
+                    </div>
+                    <select id="event-select" required></select>
+                    <label for="event-select" id="event-select-label">Event</label>
+                    <p class="event-display" id="event-display" style="display:none;"></p>
+
+                    <div id="character-select-wrap">
+                      <h3>2. Wie nimmst du am Event teil?</h3>
+                      <div class="role-cards" id="registration-role-tabs">
+                        <button type="button" class="role-card active" data-role="sc">
+                          <span class="material-symbols-outlined role-card-icon" aria-hidden="true">theater_comedy</span>
+                          <span class="role-card-title">Als Spielercharakter (SC)</span>
+                          <span class="role-card-desc">Du reist mit eigenem Charakter an.</span>
+                          <span class="role-card-selected"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span> Ausgewählt</span>
+                        </button>
+                        <button type="button" class="role-card" data-role="nsc">
+                          <span class="material-symbols-outlined role-card-icon" aria-hidden="true">support_agent</span>
+                          <span class="role-card-title">Als Nichtspieler (NSC)</span>
+                          <span class="role-card-desc">Du unterstützt die Spielleitung, ob in einer Festrolle oder bei der Umsetzung einer Quest.</span>
+                          <span class="role-card-selected"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span> Ausgewählt</span>
+                        </button>
+                      </div>
+
+                      <div id="sc-role-panel">
+                        <select id="character-select" style="display:none;"></select>
+                        <label for="character-select" id="character-select-label" style="display:none;">Als welcher Charakter kommst du?</label>
+                        <p id="no-character-hint" class="sub" style="display:none;">Du hast noch keinen passenden Charakter. <button
+                            type="button" id="no-character-hint-btn" class="btn-sm btn-ghost">Charakter anlegen</button></p>
+                      </div>
+
+                      <div id="nsc-role-panel" hidden>
+                        <select id="nsc-character-select"></select>
+                        <label for="nsc-character-select">NSC-Charakter (optional)</label>
+                        <p class="sub"><button type="button" id="no-nsc-character-hint-btn" class="btn-sm btn-ghost">Neuen NSC-Charakter anlegen</button></p>
+                      </div>
                     </div>
 
-                    <div id="sc-role-panel">
-                      <select id="character-select"></select>
-                      <label for="character-select">Als welcher Charakter kommst du?</label>
-                      <p id="no-character-hint" class="sub" style="display:none;">Du hast noch keinen passenden Charakter. <button
-                          type="button" id="no-character-hint-btn" class="btn-sm btn-ghost">Charakter anlegen</button></p>
+                    <div id="registration-price-group"></div>
+                    <div id="registration-flags"></div>
+
+                    <h3>3. Weitere Angaben zu dieser Anmeldung</h3>
+                    <div id="ot-fields" class="field-grid"></div>
+
+                    <div class="note-box">
+                      <span class="material-symbols-outlined" aria-hidden="true">info</span>
+                      <p>Mit dem Absenden meldest du dich verbindlich für dieses Event an. Deine Angaben kannst du danach jederzeit hier bearbeiten.</p>
                     </div>
 
-                    <div id="nsc-role-panel" hidden>
-                      <select id="nsc-character-select"></select>
-                      <label for="nsc-character-select">NSC-Charakter (optional)</label>
+                    <div class="dialog-actions">
+                      <button type="submit" id="register-button">Anmelden</button>
                     </div>
-                  </div>
-
-                  <div id="registration-flags"></div>
-
-                  <h3>Weitere Angaben zu dieser Anmeldung</h3>
-                  <div id="ot-fields"></div>
-
-                  <button type="submit" id="register-button">Anmelden</button>
-                </form>
+                  </form>
+                </div>
               </div>
 
               <div class="card" id="active-registration-panel" style="display:none;">
@@ -167,7 +197,7 @@
             </div>
           </div>
 
-          <div class="tab-panel" id="charaktere-subtab" hidden>
+          <div class="tab-panel" id="charaktere-tab" hidden>
             <h2>Meine Charaktere</h2>
             <p id="browse-characters-link"><a href="/characters-browse.html">Charaktere anderer Spieler durchsuchen</a></p>
 
@@ -180,9 +210,11 @@
             <div class="tab-panel" id="sc-tab">
               <div class="dashboard-layout">
                 <div class="dashboard-main">
-                  <button type="button" id="new-character-btn">Neuen Charakter anlegen</button>
-                  <button type="button" id="copy-character-btn">Aus bestehendem Charakter
-                    kopieren</button>
+                  <div class="action-row">
+                    <button type="button" id="new-character-btn">Neuen Charakter anlegen</button>
+                    <button type="button" id="copy-character-btn">Aus bestehendem Charakter
+                      kopieren</button>
+                  </div>
 
                   <dialog id="copy-character-dialog">
                     <h3>Charakter kopieren</h3>
@@ -195,15 +227,28 @@
                     </div>
                   </dialog>
 
-                  <div id="sc-form-section" style="display:none;">
+                  <div id="sc-form-section" class="card" style="display:none;">
+                    <p class="eyebrow">Chronik-Register</p>
                     <h3 id="form-title">Neuen Charakter anlegen</h3>
-                    <hr>
+                    <p class="sub">Trage die Grunddaten deines Helden ein &ndash; weitere Details kannst du jederzeit hier nachtragen.</p>
+                    <hr class="rule">
                     <form id="character-form">
+                      <h3>1. Charaktername</h3>
                       <input id="character-name" name="name" type="text" required>
                       <label for="character-name">Charaktername</label>
-                      <div id="character-dynamic-fields"></div>
-                      <button type="submit">Speichern</button>
-                      <button type="button" id="character-cancel-edit" class="btn-ghost">Abbrechen</button>
+
+                      <h3>2. Charakterdaten</h3>
+                      <div id="character-dynamic-fields" class="field-grid"></div>
+
+                      <div class="note-box">
+                        <span class="material-symbols-outlined" aria-hidden="true">info</span>
+                        <p>Diese Angaben bilden die Grundlage für deinen Charakterbogen und lassen sich jederzeit hier bearbeiten.</p>
+                      </div>
+
+                      <div class="dialog-actions">
+                        <button type="submit">Speichern</button>
+                        <button type="button" id="character-cancel-edit" class="btn-ghost">Abbrechen</button>
+                      </div>
                     </form>
                   </div>
                 </div>
@@ -228,15 +273,26 @@
               <div id="nsc-section" style="display:none;">
                 <div class="dashboard-layout">
                   <div class="dashboard-main">
-                    <button type="button" id="new-nsc-character-btn" class="btn-ghost">Neuen NSC-Charakter anlegen</button>
-                    <div id="nsc-form-section" style="display:none;">
+                    <div class="action-row">
+                      <button type="button" id="new-nsc-character-btn" class="btn-ghost">Neuen NSC-Charakter anlegen</button>
+                    </div>
+                    <div id="nsc-form-section" class="card" style="display:none;">
+                      <p class="eyebrow">Chronik-Register</p>
+                      <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
+                      <p class="sub">Diese Angaben gelten für deinen NSC-Charakter und lassen sich jederzeit hier bearbeiten.</p>
+                      <hr class="rule">
                       <form id="nsc-character-form">
-                        <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
+                        <h3>1. Charaktername</h3>
                         <input id="nsc-character-name" name="name" type="text" required>
                         <label for="nsc-character-name">Charaktername</label>
-                        <div id="nsc-dynamic-fields"></div>
-                        <button type="submit">Speichern</button>
-                        <button type="button" id="nsc-cancel-edit" class="btn-ghost">Abbrechen</button>
+
+                        <h3>2. Charakterdaten</h3>
+                        <div id="nsc-dynamic-fields" class="field-grid"></div>
+
+                        <div class="dialog-actions">
+                          <button type="submit">Speichern</button>
+                          <button type="button" id="nsc-cancel-edit" class="btn-ghost">Abbrechen</button>
+                        </div>
                       </form>
                     </div>
                   </div>
@@ -247,7 +303,6 @@
               </div>
             </div>
           </div>
-        </div>
 
         <div class="tab-panel" id="dateien-tab" hidden>
           <h1>Dateien</h1>
@@ -332,37 +387,16 @@
     initTabs(document.getElementById("char-class-tabs"));
     initSidebarToggle();
 
-    const veranstaltungSubnav = document.createElement("div");
-    veranstaltungSubnav.className = "sidebar-nav-nested";
-    veranstaltungSubnav.id = "veranstaltung-subnav";
-    veranstaltungSubnav.hidden = true;
-    veranstaltungSubnav.innerHTML = `
-  <button type="button" class="sidebar-nav-item active" data-tab="anmelden-subtab">Anmelden</button>
-  <button type="button" class="sidebar-nav-item" data-tab="charaktere-subtab">Charaktere</button>
-      `;
+    const TOP_TAB_HASHES = ["dashboard", "konto", "anmelden", "charaktere", "dateien"];
 
-    const subButtons = [
-      ...veranstaltungSubnav.querySelectorAll(".sidebar-nav-item"),
-    ];
-    subButtons.forEach((btn) => {
-      btn.addEventListener("click", () => {
-        subButtons.forEach((b) => {
-          b.classList.toggle("active", b === btn);
-          document.getElementById(b.dataset.tab).hidden = b !== btn;
-        });
-      });
-    });
-
-    const TOP_TAB_HASHES = ["dashboard", "konto", "veranstaltung", "dateien"];
-
-    // Dashboard/Konto/Veranstaltung are rendered by the shared, role-driven
-    // renderNavLinks() as three ordinary links (all pointing at this same
-    // page, distinguished only by hash) -- exactly like every other
+    // Dashboard/Konto/Anmelden/Charaktere/Dateien are rendered by the shared,
+    // role-driven renderNavLinks() as ordinary links (all pointing at this
+    // same page, distinguished only by hash) -- exactly like every other
     // sidebar item, on every page. This is the one place that reacts to
-    // the hash to decide which of the three panels shows; it runs once on
-    // load and again on every hashchange, so clicking one of these links
-    // behaves identically whether you were already on this page or just
-    // navigated here from somewhere else.
+    // the hash to decide which panel shows; it runs once on load and again
+    // on every hashchange, so clicking one of these links behaves
+    // identically whether you were already on this page or just navigated
+    // here from somewhere else.
     function applyHashTab() {
       const requested = (window.location.hash || "#dashboard").slice(1);
       const activeHash = TOP_TAB_HASHES.includes(requested)
@@ -375,37 +409,18 @@
         );
         if (link) link.classList.toggle("current", hash === activeHash);
       });
-      veranstaltungSubnav.hidden = activeHash !== "veranstaltung";
     }
 
     window.addEventListener("hashchange", applyHashTab);
-
-    // The nested Anmelden/Charaktere items aren't role-gated MENU_LINKS
-    // entries (they only ever make sense as a sub-section of THIS page's
-    // Veranstaltung tab), so they're not rendered by renderNavLinks --
-    // insert them into the DOM right after the Veranstaltung link once it
-    // exists.
-    function mountVeranstaltungSubnav() {
-      document
-        .querySelector('#nav-links a[href="/account.html#veranstaltung"]')
-        ?.insertAdjacentElement("afterend", veranstaltungSubnav);
-    }
 
     function goToTab(hash) {
       window.location.hash = hash;
       applyHashTab();
     }
 
-    function goToVeranstaltungSubtab(subTab) {
-      goToTab("veranstaltung");
-      document
-        .querySelector(`#veranstaltung-subnav [data-tab="${subTab}"]`)
-        .click();
-    }
-
     document
       .getElementById("dashboard-characters-link")
-      .addEventListener("click", () => goToVeranstaltungSubtab("charaktere-subtab"));
+      .addEventListener("click", () => goToTab("charaktere"));
 
     function renderDashboardEventCard() {
       const card = document.getElementById("dashboard-event-card");
@@ -425,9 +440,7 @@
       <button type="button" id="dashboard-register-btn">Jetzt anmelden</button>`;
         document
           .getElementById("dashboard-register-btn")
-          .addEventListener("click", () =>
-            goToVeranstaltungSubtab("anmelden-subtab"),
-          );
+          .addEventListener("click", () => goToTab("anmelden"));
         return;
       }
       const label = STATUS_LABELS[registration.status] ?? registration.status;
@@ -700,15 +713,19 @@
     const registrationForm = document.getElementById("registration-form");
     attachLiveValidation(registrationForm);
     const eventSelect = document.getElementById("event-select");
+    const eventSelectLabel = document.getElementById("event-select-label");
+    const eventDisplay = document.getElementById("event-display");
     const characterSelect = document.getElementById("character-select");
+    const characterSelectLabel = document.getElementById("character-select-label");
     const noCharacterHint = document.getElementById("no-character-hint");
     const scRolePanel = document.getElementById("sc-role-panel");
     const nscRolePanel = document.getElementById("nsc-role-panel");
-    const roleTabButtons = [...document.querySelectorAll("#registration-role-tabs .tab-btn")];
+    const roleTabButtons = [...document.querySelectorAll("#registration-role-tabs .role-card")];
     const nscCharacterSelect = document.getElementById("nsc-character-select");
     const registerButton = document.getElementById("register-button");
     const otFieldsContainer = document.getElementById("ot-fields");
     const registrationFlagsContainer = document.getElementById("registration-flags");
+    const registrationPriceGroupContainer = document.getElementById("registration-price-group");
 
     // A synthetic OT-field definition so the event's flag vocabulary can be
     // rendered/collected with the exact same generic machinery the
@@ -728,6 +745,27 @@
 
     function collectRegistrationFlags() {
       return collectAccountFieldValues(registrationFlagsContainer, [flagsFieldFor(events.find((e) => e.id === eventSelect.value))]).flags ?? [];
+    }
+
+    // Same synthetic-field trick as flagsFieldFor, for the event's
+    // configured price groups (if any). Only rendered/required when the
+    // event actually has pricing configured -- most events won't.
+    function priceGroupFieldFor(event) {
+      const groups = event?.pricing?.groups ?? [];
+      return { key: "priceGroup", label: "Teilnahmegruppe", type: "select", options: groups, required: groups.length > 0 };
+    }
+
+    function renderRegistrationPriceGroup() {
+      const event = events.find((e) => e.id === eventSelect.value);
+      const field = priceGroupFieldFor(event);
+      registrationPriceGroupContainer.innerHTML = field.options.length > 0
+        ? renderAccountFieldInput(field, "", { idPrefix: "register-" })
+        : "";
+    }
+
+    function collectRegistrationPriceGroup() {
+      const value = collectAccountFieldValues(registrationPriceGroupContainer, [priceGroupFieldFor(events.find((e) => e.id === eventSelect.value))]).priceGroup;
+      return value || undefined;
     }
 
     let selectedRegistrationRole = "sc";
@@ -771,9 +809,24 @@
         : "Anmelden";
     }
 
+    const eventStatusBadge = document.getElementById("event-status-badge");
+    function updateEventStatusBadge() {
+      const event = events.find((e) => e.id === eventSelect.value);
+      if (!event) {
+        eventStatusBadge.textContent = "";
+        eventStatusBadge.className = "badge";
+        return;
+      }
+      eventStatusBadge.textContent = event.is_active ? "Offene Registrierung" : "Registrierung geschlossen";
+      eventStatusBadge.className = `badge ${event.is_active ? "badge-active" : "badge-inactive"}`;
+    }
+
     function updateNoCharacterHintVisibility() {
       const matchingSc = characters.filter((c) => c.class === "sc" && !c.registeredFor);
-      noCharacterHint.style.display = matchingSc.length === 0 ? "" : "none";
+      const hasNone = matchingSc.length === 0;
+      noCharacterHint.style.display = hasNone ? "" : "none";
+      characterSelect.style.display = hasNone ? "none" : "";
+      characterSelectLabel.style.display = hasNone ? "none" : "";
     }
 
     function populateRegistrationCharacterFields() {
@@ -799,12 +852,39 @@
 
     eventSelect.addEventListener("change", () => {
       updateRegisterButtonLabel();
+      updateEventStatusBadge();
       renderRegistrationFlags();
+      renderRegistrationPriceGroup();
     });
 
     document
       .getElementById("no-character-hint-btn")
-      .addEventListener("click", () => goToVeranstaltungSubtab("charaktere-subtab"));
+      .addEventListener("click", () => goToTab("charaktere"));
+
+    document
+      .getElementById("no-nsc-character-hint-btn")
+      .addEventListener("click", () => {
+        goToTab("charaktere");
+        document.getElementById("nsc-tab-btn").click();
+      });
+
+    // Regular participants only ever have one open event to register for, so
+    // a <select> for them is a selector with nothing to select -- show the
+    // (single) active event as plain text instead and keep the real <select>
+    // (hidden, but still populated/valued) so the rest of this form's logic
+    // keeps reading eventSelect.value unchanged. Staff with canEditCharacters
+    // still get the real dropdown, since they also register for events that
+    // aren't currently active.
+    function updateEventSelectVisibility() {
+      eventSelect.style.display = canEditCharacters ? "" : "none";
+      eventSelectLabel.style.display = canEditCharacters ? "" : "none";
+      eventDisplay.style.display = canEditCharacters ? "none" : "";
+      if (canEditCharacters) return;
+      const event = events.find((e) => e.id === eventSelect.value);
+      eventDisplay.textContent = event
+        ? `${event.name} (${event.event_date})`
+        : "Aktuell ist kein Event für die Anmeldung geöffnet.";
+    }
 
     function populateEventOptions() {
       const visibleEvents = canEditCharacters
@@ -812,7 +892,10 @@
         : events.filter((e) => e.is_active);
       eventSelect.innerHTML = renderEventOptions(visibleEvents);
       updateRegisterButtonLabel();
+      updateEventStatusBadge();
+      updateEventSelectVisibility();
       renderRegistrationFlags();
+      renderRegistrationPriceGroup();
     }
 
     async function loadEvents() {
@@ -1036,6 +1119,7 @@
           conRole,
           characterId,
           flags: collectRegistrationFlags(),
+          priceGroup: collectRegistrationPriceGroup(),
           otFields: collectOtFields(),
         });
         notify("Angemeldet.", "success");
@@ -1072,7 +1156,7 @@
 
     function renderScSchemaFields(data = {}) {
       characterDynamicFields.innerHTML = scSchema
-        .map((field) => renderField(field, data[field.key], "sc-char-", { readOnly: field.staffOnly === true }))
+        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "sc-char-", { readOnly: field.staffOnly === true })}</div>`)
         .join("");
       attachLiveValidation(characterDynamicFields);
     }
@@ -1564,7 +1648,6 @@
         account,
         window.location.pathname + window.location.hash,
       );
-      mountVeranstaltungSubnav();
       applyHashTab();
       document.getElementById("sidebar-user-info").innerHTML =
         renderSidebarUser(account);
@@ -1605,7 +1688,7 @@
       } catch {
         // NSC schema is optional-ish for this bootstrap: leave the NSC tab button
         // hidden (its pre-fetch default state) rather than aborting the rest of
-        // the Veranstaltung tab's data load over an NSC-schema-only failure.
+        // this page's data load over an NSC-schema-only failure.
       }
 
       await loadEvents();

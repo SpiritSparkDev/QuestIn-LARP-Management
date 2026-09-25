@@ -57,6 +57,14 @@
         <input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt">
         <label for="event-flags">Sonderrollen <span style="opacity:0.6;font-size:12px;">optional, Komma-getrennt, z.B. GSC, VP, Ersthelfer</span></label>
         <input id="event-flags" name="flags" type="text" placeholder="GSC, VP, Ersthelfer">
+
+        <h3>Preisstufen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
+        <p class="sub">Lege Teilnahmegruppen (z.B. Erwachsene, Kinder) und terminierte Preisstufen (z.B. Frühbucher) an. Bei der Anmeldung wird automatisch die erste noch gültige Stufe verwendet.</p>
+        <label for="event-price-groups">Teilnahmegruppen <span style="opacity:0.6;font-size:12px;">Komma-getrennt, z.B. Erwachsene, Kinder</span></label>
+        <input id="event-price-groups" type="text" placeholder="Erwachsene, Kinder">
+        <div id="price-tiers"></div>
+        <button type="button" id="add-price-tier" class="btn-sm btn-ghost">+ Preisstufe hinzufügen</button>
+
         <button type="submit">Speichern</button>
         <button type="button" id="event-cancel-edit" class="btn-ghost">Abbrechen</button>
       </form>
@@ -79,6 +87,85 @@ const formTitle = document.getElementById('form-title');
 const forceDeleteDialog = document.getElementById('force-delete-dialog');
 const forceDeleteWarning = document.getElementById('force-delete-warning');
 const forceDeleteNotify = document.getElementById('force-delete-notify');
+
+// Preisstufen-Editor: `priceTiers` is the working state (one entry per
+// tier row), rendered into #price-tiers. Amounts are kept in euros (as
+// typed) here and only converted to cents on submit -- re-rendering on
+// every group-list change is simpler than tracking cents through partial
+// edits.
+const priceGroupsInput = document.getElementById('event-price-groups');
+const priceTiersContainer = document.getElementById('price-tiers');
+let priceTiers = [];
+
+function currentPriceGroups() {
+  return priceGroupsInput.value.split(',').map((g) => g.trim()).filter(Boolean);
+}
+
+function renderPriceTiers() {
+  const groups = currentPriceGroups();
+  priceTiersContainer.innerHTML = priceTiers.map((tier, i) => `
+    <div data-tier-row="${i}" style="display:flex;flex-wrap:wrap;align-items:end;gap:8px 16px;">
+      <div style="min-width:160px;"><input type="text" data-tier-name value="${escapeHtml(tier.name)}" placeholder="Name, z.B. Frühbucher"><label>Preisstufe</label></div>
+      <div style="min-width:160px;"><input type="date" data-tier-until value="${escapeHtml(tier.until ?? '')}"><label>Gültig bis <span style="opacity:0.6;font-size:12px;">leer = letzte Stufe</span></label></div>
+      ${groups.map((g) => `
+        <div style="min-width:120px;"><input type="number" min="0" step="0.01" data-tier-amount="${escapeHtml(g)}" value="${escapeHtml(tier.amounts[g] ?? '')}"><label>${escapeHtml(g)} (€)</label></div>
+      `).join('')}
+      <div><button type="button" class="btn-sm btn-ghost" data-remove-tier="${i}">Entfernen</button></div>
+    </div>
+  `).join('') || (groups.length === 0
+    ? '<p class="sub">Erst Teilnahmegruppen eintragen, dann Preisstufen hinzufügen.</p>'
+    : '');
+
+  priceTiersContainer.querySelectorAll('[data-tier-row]').forEach((row) => {
+    const i = Number(row.dataset.tierRow);
+    row.querySelector('[data-tier-name]').addEventListener('input', (e) => { priceTiers[i].name = e.target.value; });
+    row.querySelector('[data-tier-until]').addEventListener('input', (e) => { priceTiers[i].until = e.target.value || null; });
+    row.querySelectorAll('[data-tier-amount]').forEach((input) => {
+      input.addEventListener('input', (e) => { priceTiers[i].amounts[e.target.dataset.tierAmount] = e.target.value; });
+    });
+  });
+  priceTiersContainer.querySelectorAll('[data-remove-tier]').forEach((button) => {
+    button.addEventListener('click', () => {
+      priceTiers.splice(Number(button.dataset.removeTier), 1);
+      renderPriceTiers();
+    });
+  });
+}
+
+// Re-syncs each tier's amount columns to the current group list whenever
+// groups change, keeping already-entered amounts matched by group name.
+priceGroupsInput.addEventListener('change', () => {
+  const groups = currentPriceGroups();
+  for (const tier of priceTiers) {
+    const amounts = {};
+    for (const g of groups) amounts[g] = tier.amounts[g] ?? '';
+    tier.amounts = amounts;
+  }
+  renderPriceTiers();
+});
+
+document.getElementById('add-price-tier').addEventListener('click', () => {
+  const amounts = {};
+  for (const g of currentPriceGroups()) amounts[g] = '';
+  priceTiers.push({ name: '', until: null, amounts });
+  renderPriceTiers();
+});
+
+function collectPricing() {
+  const groups = currentPriceGroups();
+  return {
+    groups,
+    tiers: priceTiers
+      .filter((t) => t.name.trim())
+      .map((t) => ({
+        name: t.name.trim(),
+        until: t.until || null,
+        amounts: Object.fromEntries(groups.map((g) => [g, Math.round(Number(t.amounts[g] || 0) * 100)])),
+      })),
+  };
+}
+
+renderPriceTiers();
 
 document.getElementById('force-delete-cancel').addEventListener('click', () => forceDeleteDialog.close());
 
@@ -160,6 +247,13 @@ function startEdit(eventData) {
   form.elements.code.value = eventData.code ?? '';
   form.elements.capacity.value = eventData.capacity ?? '';
   form.elements.flags.value = (eventData.flags ?? []).join(', ');
+  priceGroupsInput.value = (eventData.pricing?.groups ?? []).join(', ');
+  priceTiers = (eventData.pricing?.tiers ?? []).map((t) => ({
+    name: t.name,
+    until: t.until,
+    amounts: Object.fromEntries(Object.entries(t.amounts ?? {}).map(([g, cents]) => [g, (cents / 100).toString()])),
+  }));
+  renderPriceTiers();
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
 }
 
@@ -167,6 +261,8 @@ function resetForm() {
   editingEventId = null;
   formTitle.textContent = 'Neues Event anlegen';
   form.reset();
+  priceTiers = [];
+  renderPriceTiers();
   form.querySelector('button[type="submit"]').textContent = 'Speichern';
 }
 
@@ -180,6 +276,7 @@ form.addEventListener('submit', async (event) => {
     capacity: capacityValue ? Number(capacityValue) : null,
     clearCapacity: true,
     flags: form.elements.flags.value.split(',').map((f) => f.trim()).filter(Boolean),
+    pricing: collectPricing(),
   };
   try {
     if (editingEventId) {

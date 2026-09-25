@@ -209,19 +209,6 @@ h1, h2, h3 {
   font-size: 20px;
 }
 
-.sidebar-nav-nested {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 2px 0 6px 20px;
-  padding-left: 12px;
-  border-left: 1px solid var(--outline-variant);
-}
-
-.sidebar-nav-nested[hidden] {
-  display: none;
-}
-
 .sidebar-nav-divider {
   border: none;
   height: 1px;
@@ -520,6 +507,14 @@ input[type="checkbox"] {
   margin-bottom: 16px;
 }
 
+.event-display {
+  font-family: "EB Garamond", serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--on-surface);
+  margin: 6px 0 18px;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--outline);
@@ -580,6 +575,119 @@ textarea.invalid {
   display: flex;
   flex-direction: column;
   margin-bottom: 18px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 2rem 0 1rem;
+}
+
+.section-head h3 {
+  margin: 0;
+}
+
+.role-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 8px 0 20px;
+}
+
+@media (max-width: 560px) {
+  .role-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.role-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  text-align: left;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  padding: 18px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.role-card:hover {
+  background: var(--surface-container-lowest);
+  border-color: var(--primary);
+}
+
+.role-card.active {
+  border-color: var(--primary);
+  border-width: 2px;
+  padding: 17px;
+}
+
+.role-card-icon {
+  color: var(--primary-deep);
+  font-size: 26px;
+}
+
+.role-card-title {
+  font-family: "EB Garamond", serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.role-card-desc {
+  font-size: 13px;
+  color: var(--on-surface-variant);
+}
+
+.role-card-selected {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.role-card-selected .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.role-card.active .role-card-selected {
+  display: inline-flex;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.note-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--primary-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 8px 0 20px;
+}
+
+.note-box .material-symbols-outlined {
+  flex: none;
+  color: var(--primary-deep);
+}
+
+.note-box p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--on-primary-container);
 }
 
 .checkbox-group {

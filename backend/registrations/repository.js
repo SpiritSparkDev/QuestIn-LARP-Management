@@ -1,5 +1,5 @@
 import { query, withTransaction } from '../db.js';
-import { getEvent } from '../events/repository.js';
+import { getEvent, resolvePriceForGroup } from '../events/repository.js';
 import { applyTransition } from './statusMachine.js';
 import { displayName } from '../displayName.js';
 import { decryptFieldBlob as decryptAccountFieldBlob } from '../accountFields.js';
@@ -152,9 +152,33 @@ function resolveFlags(eventFlags, flags) {
   return eventFlags.filter((f) => requested.includes(f));
 }
 
+// Resolves the requested price group against the event's configured
+// pricing (if any) into what gets stored on the registration. An event
+// with no groups configured ignores priceGroup entirely (amount stays
+// unset, same as before this feature existed -- an admin sets it
+// manually). If a tier can't be resolved (every tier's cutoff has already
+// passed), the group is still recorded but priceListCents stays null --
+// registration must never be blocked by an exhausted pricing table, the
+// admin just sets the amount manually afterwards.
+function resolvePriceGroup(event, priceGroup) {
+  const groups = event.pricing?.groups ?? [];
+  if (groups.length === 0) return { priceGroup: null, priceTier: null, priceListCents: null };
+  if (!groups.includes(priceGroup)) {
+    const err = new Error(`priceGroup must be one of: ${groups.join(', ')}`);
+    err.code = 'INVALID_PRICE_GROUP';
+    throw err;
+  }
+  const resolved = resolvePriceForGroup(event.pricing, priceGroup);
+  return {
+    priceGroup,
+    priceTier: resolved?.tierName ?? null,
+    priceListCents: resolved?.amountCents ?? null,
+  };
+}
+
 export const COUNTED_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out'];
 
-export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, otFields, requestingUser) {
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -186,6 +210,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
   const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId);
   const resolvedFlags = resolveFlags(event.flags, flags);
+  const resolvedPrice = resolvePriceGroup(event, priceGroup);
 
   const schema = await getRegistrationFieldSchema();
   const data = {};
@@ -206,10 +231,14 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
         if (countRows[0].count >= capacity) status = 'waitlisted';
       }
       const { rows } = await client.query(
-        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, registration_data_enc, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12)
          RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at`,
-        [userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags, encryptFieldBlob(data), status]
+        [
+          userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags,
+          resolvedPrice.priceGroup, resolvedPrice.priceTier, resolvedPrice.priceListCents,
+          encryptFieldBlob(data), status,
+        ]
       );
       return rows[0];
     });
@@ -404,7 +433,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
 
   const { rows: registrations } = await query(
     `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at, latest_payment.method AS payment_method,
+            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.discount_cents, latest_payment.method AS payment_method,
             u.account_data_enc, r.registration_data_enc
      FROM registrations r
      JOIN users u ON u.id = r.user_id
@@ -456,6 +485,9 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       checkedOutAt: r.checked_out_at,
       amountDueCents: r.amount_due_cents,
       paidAt: r.paid_at,
+      priceGroup: r.price_group,
+      priceTier: r.price_tier,
+      discountCents: r.discount_cents,
       paymentMethod: r.payment_method,
       characters: charactersByUser.get(r.user_id) ?? [],
       otFields,
@@ -471,6 +503,9 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     checkedOutAt: null,
     amountDueCents: null,
     paidAt: null,
+    priceGroup: null,
+    priceTier: null,
+    discountCents: 0,
     paymentMethod: null,
     characters: [],
     otFields: {},
@@ -512,7 +547,7 @@ export async function getScanLookup(eventId, userId) {
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
     `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at,
+            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier,
             r.registration_data_enc, c.name AS character_name, nc.name AS nsc_character_name
      FROM registrations r
      JOIN events e ON e.id = r.event_id
@@ -538,6 +573,8 @@ export async function listRegistrationsForUser(userId) {
     checkedOutAt: r.checked_out_at,
     amountDueCents: r.amount_due_cents,
     paidAt: r.paid_at,
+    priceGroup: r.price_group,
+    priceTier: r.price_tier,
     paymentReference: buildPaymentReference(r.event_id, userId),
     ...decryptFieldBlob(r.registration_data_enc),
   }));

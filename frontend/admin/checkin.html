@@ -464,7 +464,18 @@ const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', b
 function renderAmountDueCell(p) {
   if (!p.userId) return '';
   const value = p.amountDueCents != null ? (p.amountDueCents / 100).toFixed(2) : '';
-  return `<input type="number" min="0" step="0.01" data-amount-due="${escapeHtml(p.userId)}" value="${escapeHtml(value)}" placeholder="kein Betrag" style="width:90px;">`;
+  const discountValue = p.discountCents ? (p.discountCents / 100).toFixed(2) : '';
+  const priceLabel = p.priceGroup
+    ? `<div class="sub" style="white-space:normal;">${escapeHtml(p.priceGroup)}${p.priceTier ? ` · ${escapeHtml(p.priceTier)}` : ''}</div>`
+    : '';
+  // Stacked in a column (rather than laid out inline like the rest of this
+  // flex .grid-cell) so the label plus two number inputs fit the narrow
+  // BETRAG track instead of overflowing into the ZAHLUNG column next to it.
+  return `<div style="display:flex;flex-direction:column;gap:4px;width:100%;">
+    ${priceLabel}
+    <input type="number" min="0" step="0.01" data-amount-due="${escapeHtml(p.userId)}" value="${escapeHtml(value)}" placeholder="kein Betrag" style="width:100%;">
+    <input type="number" min="0" step="0.01" data-discount="${escapeHtml(p.userId)}" value="${escapeHtml(discountValue)}" placeholder="Rabatt (€)" title="Rabatt (€)" style="width:100%;">
+  </div>`;
 }
 
 function renderPaymentStatusCell(p) {
@@ -572,6 +583,9 @@ async function loadParticipants(eventId) {
   listBody.querySelectorAll('[data-amount-due]').forEach((input) => {
     input.addEventListener('change', () => setAmountDue(eventId, input.dataset.amountDue, input.value));
   });
+  listBody.querySelectorAll('[data-discount]').forEach((input) => {
+    input.addEventListener('change', () => setDiscount(eventId, input.dataset.discount, input.value));
+  });
   listBody.querySelectorAll('[data-mark-paid]').forEach((button) => {
     button.addEventListener('click', () => setPaymentStatus(eventId, button.dataset.markPaid, true));
   });
@@ -642,6 +656,17 @@ async function setAmountDue(eventId, userId, euroValue) {
   const amountDueCents = euroValue === '' ? null : Math.round(Number(euroValue) * 100);
   try {
     await api.patch(`/events/${eventId}/registrations/${userId}/payment`, { amountDueCents });
+    await loadParticipants(eventId);
+  } catch (err) {
+    notify(err.message, 'error');
+    await loadParticipants(eventId);
+  }
+}
+
+async function setDiscount(eventId, userId, euroValue) {
+  const discountCents = euroValue === '' ? 0 : Math.round(Number(euroValue) * 100);
+  try {
+    await api.patch(`/events/${eventId}/registrations/${userId}/payment`, { discountCents });
     await loadParticipants(eventId);
   } catch (err) {
     notify(err.message, 'error');

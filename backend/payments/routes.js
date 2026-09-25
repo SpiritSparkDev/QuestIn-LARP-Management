@@ -9,7 +9,7 @@ import { baseUrl } from '../auth/mailer.js';
 import { getStripeClient } from './stripeClient.js';
 import { getPaymentSettingsForUse } from '../paymentSettings/repository.js';
 import {
-  setAmountDue, markPaidManually, markUnpaid, recordSuccessfulStripePayment,
+  setAmountDue, setDiscount, markPaidManually, markUnpaid, recordSuccessfulStripePayment,
 } from './repository.js';
 
 const CHECKOUT_METHODS = { card: 'stripe_card', paypal: 'stripe_paypal' };
@@ -45,8 +45,8 @@ router.post('/events/:eventId/registrations/:userId/checkout-session', requireAu
       quantity: 1,
     }],
     client_reference_id: `${params.eventId}:${params.userId}`,
-    success_url: `${baseUrl()}/account.html?payment=success#veranstaltung`,
-    cancel_url: `${baseUrl()}/account.html?payment=cancelled#veranstaltung`,
+    success_url: `${baseUrl()}/account.html?payment=success#anmelden`,
+    cancel_url: `${baseUrl()}/account.html?payment=cancelled#anmelden`,
   });
   return { status: 200, body: { url: session.url } };
 }));
@@ -101,6 +101,13 @@ router.patch('/events/:eventId/registrations/:userId/payment', requireAuth(requi
       const registration = await setAmountDue(params.eventId, params.userId, body.amountDueCents);
       return { status: 200, body: registration };
     }
+    if (body.discountCents !== undefined) {
+      if (!Number.isInteger(body.discountCents) || body.discountCents < 0) {
+        return { status: 400, body: { error: 'discountCents must be a non-negative integer' } };
+      }
+      const registration = await setDiscount(params.eventId, params.userId, body.discountCents);
+      return { status: 200, body: registration };
+    }
     if (body.markPaid === true) {
       const registration = await markPaidManually(params.eventId, params.userId, user.id);
       return { status: 200, body: registration };
@@ -109,7 +116,7 @@ router.patch('/events/:eventId/registrations/:userId/payment', requireAuth(requi
       const registration = await markUnpaid(params.eventId, params.userId);
       return { status: 200, body: registration };
     }
-    return { status: 400, body: { error: 'expected amountDueCents or markPaid' } };
+    return { status: 400, body: { error: 'expected amountDueCents, discountCents, or markPaid' } };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
     if (err.code === 'NO_AMOUNT_DUE') return { status: 409, body: { error: err.message } };
