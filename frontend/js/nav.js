@@ -1,4 +1,5 @@
 import { escapeHtml } from './formFields.js';
+import { APP_VERSION } from './version.js';
 
 // Dashboard/Konto/Anmelden/Charaktere are facets of the same 'konto'
 // permission and the same page (account.html) -- distinguished only by
@@ -57,7 +58,8 @@ export function renderSidebarUser(account) {
       <p class="sidebar-user-name">${escapeHtml(account.name)}</p>
       <p class="sidebar-user-role">${escapeHtml(account.group.name)}</p>
     </div>
-  </div>`;
+  </div>
+  <p class="sidebar-version">v${APP_VERSION}</p>`;
 }
 
 // Wires the mobile hamburger button (#sidebar-toggle) to show/hide #sidebar
