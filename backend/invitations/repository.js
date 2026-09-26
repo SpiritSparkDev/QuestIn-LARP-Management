@@ -7,7 +7,7 @@ import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 const SELECT_COLUMNS = `
   id, token, email, first_name, last_name, nickname, group_id,
   account_data_enc,
-  event_id, cancelled_at,
+  event_id, cancelled_at, user_id,
   invited_by, expires_at, created_at, redeemed_at
 `;
 
@@ -23,6 +23,9 @@ function decryptInvitation(row) {
     groupId: row.group_id,
     eventId: row.event_id,
     cancelledAt: row.cancelled_at,
+    // Set = "convert this existing (guest) user" redeem mode; null = today's
+    // "insert a brand-new user" redeem mode. See backend/auth/invite.js.
+    userId: row.user_id,
     ...decryptFieldBlob(row.account_data_enc),
     invitedBy: row.invited_by,
     expiresAt: row.expires_at,
@@ -31,7 +34,7 @@ function decryptInvitation(row) {
   };
 }
 
-export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, eventId, ttlDays = 3, ...otFields }) {
+export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, eventId, ttlDays = 3, userId, ...otFields }) {
   const schema = await getAccountFieldSchema();
   const data = {};
   for (const field of schema) {
@@ -40,10 +43,10 @@ export async function createInvitation({ email, firstName, lastName, nickname, g
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
   const { rows } = await query(
-    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, account_data_enc, event_id, invited_by, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, account_data_enc, event_id, invited_by, expires_at, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING ${SELECT_COLUMNS}`,
-    [token, email, firstName, lastName, nickname ?? null, groupId, encryptFieldBlob(data), eventId ?? null, invitedBy, expiresAt]
+    [token, email, firstName, lastName, nickname ?? null, groupId, encryptFieldBlob(data), eventId ?? null, invitedBy, expiresAt, userId ?? null]
   );
   return decryptInvitation(rows[0]);
 }

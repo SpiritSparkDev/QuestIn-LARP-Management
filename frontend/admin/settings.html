@@ -1,293 +1,471 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Einstellungen – Pakyrion Admin</title>
-<link rel="stylesheet" href="/css/fonts.css">
-<link rel="stylesheet" href="/css/sahara.css">
-<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
-</head>
-<body>
-<div class="app">
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-top">
-      <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
-    </div>
-    <nav id="nav-links"></nav>
-    <div class="sidebar-foot">
-      <div id="sidebar-user-info"></div>
-      <a href="#" id="logout-link">Logout</a>
-    </div>
-  </aside>
-  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
-    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
-  </button>
-  <div class="main"><div class="content">
-    <h1>Einstellungen</h1>
-    <p class="sub">SMTP-Zugangsdaten für den E-Mail-Versand (Registrierung, Passwort-Reset, Einladungen).</p>
-    <div class="card form-pad">
-      <form id="smtp-form">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <label for="smtp-host">Host</label>
-            <input id="smtp-host" name="host" type="text" placeholder="smtp.example.com">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Einstellungen – Pakyrion Admin</title>
+    <link rel="stylesheet" href="/css/fonts.css" />
+    <link rel="stylesheet" href="/css/sahara.css" />
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-top">
+          <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+        </div>
+        <nav id="nav-links"></nav>
+        <div class="sidebar-foot">
+          <div id="sidebar-user-info"></div>
+          <a href="#" id="logout-link">Logout</a>
+        </div>
+      </aside>
+      <button
+        type="button"
+        id="sidebar-toggle"
+        class="sidebar-toggle"
+        aria-label="Menü öffnen"
+      >
+        <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+      </button>
+      <div class="main">
+        <div class="content grid col2">
+          <div class="span">
+            <h1>Einstellungen</h1>
+            <p class="sub">
+              SMTP-Zugangsdaten für den E-Mail-Versand (Registrierung,
+              Passwort-Reset, Einladungen).
+            </p>
           </div>
-          <div>
-            <label for="smtp-port">Port</label>
-            <input id="smtp-port" name="port" type="number" placeholder="587">
+          <div class="card form-pad">
+            <form id="smtp-form">
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px"
+              >
+                <div>
+                  <input
+                    id="smtp-host"
+                    name="host"
+                    type="text"
+                    placeholder="smtp.example.com"
+                  />
+                  <label for="smtp-host">Host</label>
+                </div>
+                <div>
+                  <input
+                    id="smtp-port"
+                    name="port"
+                    type="number"
+                    placeholder="587"
+                  />
+                  <label for="smtp-port">Port</label>
+                </div>
+                <div>
+                  <input id="smtp-username" name="username" type="text" />
+                  <label for="smtp-username">Benutzername</label>
+                </div>
+                <div>
+                  <input
+                    id="smtp-password"
+                    name="password"
+                    type="password"
+                    placeholder="Leer lassen, um das bestehende Passwort zu behalten"
+                  />
+                  <label for="smtp-password">Passwort</label>
+                </div>
+              </div>
+              <input
+                id="smtp-from"
+                name="fromAddress"
+                type="email"
+                placeholder="no-reply@pakyrion.local"
+              />
+              <label for="smtp-from">Absender-Adresse</label>
+              <button type="submit">Speichern</button>
+            </form>
           </div>
-          <div>
-            <label for="smtp-username">Benutzername</label>
-            <input id="smtp-username" name="username" type="text">
+
+          <div class="card form-pad">
+            <h2>Test-Mail senden</h2>
+            <p class="sub">Prüft die Felder oben, ohne sie zu speichern.</p>
+            <input id="test-to" type="email" />
+            <label for="test-to">Ziel-E-Mail-Adresse</label>
+            <button type="button" id="send-test">Test-Mail senden</button>
           </div>
-          <div>
-            <label for="smtp-password">Passwort</label>
-            <input id="smtp-password" name="password" type="password" placeholder="Leer lassen, um das bestehende Passwort zu behalten">
+
+          <div class="card form-pad">
+            <h2>Hotkeys</h2>
+            <p class="sub">
+              Klicke in ein Feld und drücke die gewünschte Taste. Gilt für den
+              Check-In-Scanner.
+            </p>
+            <input id="hotkey-confirm" readonly />
+            <label for="hotkey-confirm">Einchecken (im Pop-up)</label>
+            <input id="hotkey-cancel" readonly />
+            <label for="hotkey-cancel">Abbrechen (im Pop-up)</label>
+            <input id="hotkey-scan" readonly />
+            <label for="hotkey-scan">Scan starten (Push-to-See)</label>
+          </div>
+          <div class="card form-pad">
+            <h2>Einladungen</h2>
+            <p class="sub">
+              Wie lange ein Einladungslink gültig bleibt, bevor er abläuft.
+            </p>
+            <form id="invitation-form">
+              <input
+                id="invitation-ttl-days"
+                name="invitationTtlDays"
+                type="number"
+                min="1"
+              />
+              <label for="invitation-ttl-days">Gültig für (Tage)</label>
+              <button type="submit">Speichern</button>
+            </form>
+          </div>
+          <div class="card form-pad">
+            <h2>Warteliste</h2>
+            <p class="sub">
+              Wenn ein Platz frei wird (z.B. durch eine Absage), rückt
+              automatisch die am längsten wartende Person nach. Ist der Schalter
+              aus, muss Staff im Check-In-Bereich manuell nachrücken lassen.
+            </p>
+            <label
+              ><input type="checkbox" id="waitlist-auto-promote-toggle" />
+              Automatisch nachrücken lassen</label
+            >
+          </div>
+          <div class="card form-pad">
+            <h2>Zahlungen</h2>
+            <p class="sub">
+              Stripe verarbeitet PayPal- und Kreditkartenzahlungen. Für die
+              manuelle Überweisung werden Kontodaten angezeigt.
+            </p>
+            <form id="payment-settings-form">
+              <input
+                id="stripe-secret-key"
+                name="stripeSecretKey"
+                type="password"
+                placeholder="Leer lassen, um den bestehenden Key zu behalten"
+              />
+              <label for="stripe-secret-key">Stripe Secret Key</label>
+              <input
+                id="stripe-webhook-secret"
+                name="stripeWebhookSecret"
+                type="password"
+                placeholder="Leer lassen, um das bestehende Secret zu behalten"
+              />
+              <label for="stripe-webhook-secret"
+                >Stripe Webhook Signing Secret</label
+              >
+              <div
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px"
+              >
+                <div>
+                  <input id="bank-iban" name="bankIban" type="text" />
+                  <label for="bank-iban">IBAN</label>
+                </div>
+                <div>
+                  <input id="bank-bic" name="bankBic" type="text" />
+                  <label for="bank-bic">BIC</label>
+                </div>
+              </div>
+              <input
+                id="bank-account-holder"
+                name="bankAccountHolder"
+                type="text"
+              />
+              <label for="bank-account-holder">Kontoinhaber</label>
+              <button type="submit">Speichern</button>
+            </form>
+          </div>
+          <div class="card form-pad">
+            <h2>Einverständniserklärung</h2>
+            <p class="sub">
+              Wird bei der Event-Anmeldung (Konto-Bereich und öffentliches
+              Ticket-Widget) als Pflicht-Häkchen angezeigt. Leer lassen, um
+              keine Zustimmung einzufordern. Jede Textänderung erhöht die
+              Version automatisch, damit nachvollziehbar bleibt, welcher
+              Fassung ein Teilnehmer zugestimmt hat.
+            </p>
+            <form id="waiver-form">
+              <textarea id="waiver-text" name="waiverText" rows="6"></textarea>
+              <label for="waiver-text">Text der Einverständniserklärung</label>
+              <p class="sub" id="waiver-version-note"></p>
+              <button type="submit">Speichern</button>
+            </form>
+          </div>
+          <div class="card form-pad">
+            <h2>Charaktere durchsuchen</h2>
+            <p class="sub">
+              Schaltet die öffentliche "Charaktere anderer Spieler
+              durchsuchen"-Seite für alle Nutzer ein oder aus.
+            </p>
+            <label
+              ><input type="checkbox" id="character-browsing-toggle" />
+              Charaktere durchsuchen aktiviert</label
+            >
           </div>
         </div>
-        <label for="smtp-from">Absender-Adresse</label>
-        <input id="smtp-from" name="fromAddress" type="email" placeholder="no-reply@pakyrion.local">
-        <button type="submit">Speichern</button>
-      </form>
+      </div>
     </div>
 
-    <div class="card form-pad">
-      <h2>Test-Mail senden</h2>
-      <p class="sub">Prüft die Felder oben, ohne sie zu speichern.</p>
-      <label for="test-to">Ziel-E-Mail-Adresse</label>
-      <input id="test-to" type="email">
-      <button type="button" id="send-test">Test-Mail senden</button>
-    </div>
+    <script type="module">
+      import { api } from "/js/api.js";
+      import { applyBranding } from "/js/branding.js";
+      applyBranding();
+      import {
+        renderNavLinks,
+        renderSidebarUser,
+        initSidebarToggle,
+      } from "/js/nav.js";
+      import { notify } from "/js/notifications.js";
+      initSidebarToggle();
 
-    <div class="card form-pad">
-      <h2>Hotkeys</h2>
-      <p class="sub">Klicke in ein Feld und drücke die gewünschte Taste. Gilt für den Check-In-Scanner.</p>
-      <label for="hotkey-confirm">Einchecken (im Pop-up)</label>
-      <input id="hotkey-confirm" readonly>
-      <label for="hotkey-cancel">Abbrechen (im Pop-up)</label>
-      <input id="hotkey-cancel" readonly>
-      <label for="hotkey-scan">Scan starten (Push-to-See)</label>
-      <input id="hotkey-scan" readonly>
-    </div>
-    <div class="card form-pad">
-      <h2>Einladungen</h2>
-      <p class="sub">Wie lange ein Einladungslink gültig bleibt, bevor er abläuft.</p>
-      <form id="invitation-form">
-        <label for="invitation-ttl-days">Gültig für (Tage)</label>
-        <input id="invitation-ttl-days" name="invitationTtlDays" type="number" min="1">
-        <button type="submit">Speichern</button>
-      </form>
-    </div>
-    <div class="card form-pad">
-      <h2>Warteliste</h2>
-      <p class="sub">Wenn ein Platz frei wird (z.B. durch eine Absage), rückt automatisch die am längsten wartende Person nach. Ist der Schalter aus, muss Staff im Check-In-Bereich manuell nachrücken lassen.</p>
-      <label><input type="checkbox" id="waitlist-auto-promote-toggle"> Automatisch nachrücken lassen</label>
-    </div>
-    <div class="card form-pad">
-      <h2>Zahlungen</h2>
-      <p class="sub">Stripe verarbeitet PayPal- und Kreditkartenzahlungen. Für die manuelle Überweisung werden Kontodaten angezeigt.</p>
-      <form id="payment-settings-form">
-        <label for="stripe-secret-key">Stripe Secret Key</label>
-        <input id="stripe-secret-key" name="stripeSecretKey" type="password" placeholder="Leer lassen, um den bestehenden Key zu behalten">
-        <label for="stripe-webhook-secret">Stripe Webhook Signing Secret</label>
-        <input id="stripe-webhook-secret" name="stripeWebhookSecret" type="password" placeholder="Leer lassen, um das bestehende Secret zu behalten">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <label for="bank-iban">IBAN</label>
-            <input id="bank-iban" name="bankIban" type="text">
-          </div>
-          <div>
-            <label for="bank-bic">BIC</label>
-            <input id="bank-bic" name="bankBic" type="text">
-          </div>
-        </div>
-        <label for="bank-account-holder">Kontoinhaber</label>
-        <input id="bank-account-holder" name="bankAccountHolder" type="text">
-        <button type="submit">Speichern</button>
-      </form>
-    </div>
-    <div class="card form-pad">
-      <h2>Charaktere durchsuchen</h2>
-      <p class="sub">Schaltet die öffentliche "Charaktere anderer Spieler durchsuchen"-Seite für alle Nutzer ein oder aus.</p>
-      <label><input type="checkbox" id="character-browsing-toggle"> Charaktere durchsuchen aktiviert</label>
-    </div>
-  </div></div>
-</div>
+      const form = document.getElementById("smtp-form");
+      const testToInput = document.getElementById("test-to");
 
-<script type="module">
-import { api } from '/js/api.js';
-import { applyBranding } from '/js/branding.js';
-applyBranding();
-import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
-import { notify } from '/js/notifications.js';
-initSidebarToggle();
+      const DEFAULT_HOTKEYS = { confirm: "Enter", cancel: "Escape", scan: " " };
+      const HOTKEY_DISPLAY = {
+        Enter: "Enter",
+        Escape: "Esc",
+        " ": "Leertaste",
+      };
+      function displayKey(key) {
+        return HOTKEY_DISPLAY[key] ?? key;
+      }
 
-const form = document.getElementById('smtp-form');
-const testToInput = document.getElementById('test-to');
+      let currentHotkeys = { ...DEFAULT_HOTKEYS };
 
-const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
-const HOTKEY_DISPLAY = { Enter: 'Enter', Escape: 'Esc', ' ': 'Leertaste' };
-function displayKey(key) { return HOTKEY_DISPLAY[key] ?? key; }
+      function renderHotkeyInputs() {
+        document.getElementById("hotkey-confirm").value = displayKey(
+          currentHotkeys.confirm,
+        );
+        document.getElementById("hotkey-cancel").value = displayKey(
+          currentHotkeys.cancel,
+        );
+        document.getElementById("hotkey-scan").value = displayKey(
+          currentHotkeys.scan,
+        );
+      }
+      renderHotkeyInputs();
 
-let currentHotkeys = { ...DEFAULT_HOTKEYS };
+      function captureHotkey(inputId, action) {
+        document
+          .getElementById(inputId)
+          .addEventListener("keydown", async (event) => {
+            if (
+              event.key === "Tab" ||
+              ["Shift", "Control", "Alt", "Meta"].includes(event.key)
+            )
+              return;
+            event.preventDefault();
+            event.stopPropagation();
+            currentHotkeys = { ...currentHotkeys, [action]: event.key };
+            renderHotkeyInputs();
+            try {
+              await api.patch("/account", { hotkeys: currentHotkeys });
+            } catch (err) {
+              notify(err.message, "error");
+            }
+          });
+      }
 
-function renderHotkeyInputs() {
-  document.getElementById('hotkey-confirm').value = displayKey(currentHotkeys.confirm);
-  document.getElementById('hotkey-cancel').value = displayKey(currentHotkeys.cancel);
-  document.getElementById('hotkey-scan').value = displayKey(currentHotkeys.scan);
-}
-renderHotkeyInputs();
+      captureHotkey("hotkey-confirm", "confirm");
+      captureHotkey("hotkey-cancel", "cancel");
+      captureHotkey("hotkey-scan", "scan");
 
-function captureHotkey(inputId, action) {
-  document.getElementById(inputId).addEventListener('keydown', async (event) => {
-    if (event.key === 'Tab' || ['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    currentHotkeys = { ...currentHotkeys, [action]: event.key };
-    renderHotkeyInputs();
-    try {
-      await api.patch('/account', { hotkeys: currentHotkeys });
-    } catch (err) {
-      notify(err.message, 'error');
-    }
-  });
-}
+      async function loadSettings() {
+        const settings = await api.get("/admin/settings/smtp");
+        form.elements.host.value = settings.host ?? "";
+        form.elements.port.value = settings.port ?? "";
+        form.elements.username.value = settings.username ?? "";
+        form.elements.fromAddress.value = settings.fromAddress ?? "";
+        form.elements.password.placeholder = settings.hasPassword
+          ? "Gesetzt — leer lassen, um es zu behalten"
+          : "Leer lassen, um das bestehende Passwort zu behalten";
+      }
 
-captureHotkey('hotkey-confirm', 'confirm');
-captureHotkey('hotkey-cancel', 'cancel');
-captureHotkey('hotkey-scan', 'scan');
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(form));
+        try {
+          await api.put("/admin/settings/smtp", data);
+          notify("Gespeichert.", "success");
+          form.elements.password.value = "";
+          await loadSettings();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
 
-async function loadSettings() {
-  const settings = await api.get('/admin/settings/smtp');
-  form.elements.host.value = settings.host ?? '';
-  form.elements.port.value = settings.port ?? '';
-  form.elements.username.value = settings.username ?? '';
-  form.elements.fromAddress.value = settings.fromAddress ?? '';
-  form.elements.password.placeholder = settings.hasPassword
-    ? 'Gesetzt — leer lassen, um es zu behalten'
-    : 'Leer lassen, um das bestehende Passwort zu behalten';
-}
+      const invitationForm = document.getElementById("invitation-form");
 
-form.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const data = Object.fromEntries(new FormData(form));
-  try {
-    await api.put('/admin/settings/smtp', data);
-    notify('Gespeichert.', 'success');
-    form.elements.password.value = '';
-    await loadSettings();
-  } catch (err) {
-    notify(err.message, 'error');
-  }
-});
+      async function loadInvitationSettings() {
+        const settings = await api.get("/app-settings");
+        invitationForm.elements.invitationTtlDays.value =
+          settings.invitationTtlDays ?? 3;
+      }
 
-const invitationForm = document.getElementById('invitation-form');
+      invitationForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+          await api.put("/app-settings", {
+            invitationTtlDays: Number(
+              invitationForm.elements.invitationTtlDays.value,
+            ),
+          });
+          notify("Gespeichert.", "success");
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
 
-async function loadInvitationSettings() {
-  const settings = await api.get('/app-settings');
-  invitationForm.elements.invitationTtlDays.value = settings.invitationTtlDays ?? 3;
-}
+      async function loadCharacterBrowsingSetting() {
+        const settings = await api.get("/app-settings");
+        document.getElementById("character-browsing-toggle").checked =
+          settings.characterBrowsingEnabled;
+      }
 
-invitationForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  try {
-    await api.put('/app-settings', { invitationTtlDays: Number(invitationForm.elements.invitationTtlDays.value) });
-    notify('Gespeichert.', 'success');
-  } catch (err) {
-    notify(err.message, 'error');
-  }
-});
+      async function loadWaitlistSetting() {
+        const settings = await api.get("/app-settings");
+        document.getElementById("waitlist-auto-promote-toggle").checked =
+          settings.waitlistAutoPromote;
+      }
 
-async function loadCharacterBrowsingSetting() {
-  const settings = await api.get('/app-settings');
-  document.getElementById('character-browsing-toggle').checked = settings.characterBrowsingEnabled;
-}
+      const waiverForm = document.getElementById("waiver-form");
+      const waiverVersionNote = document.getElementById(
+        "waiver-version-note",
+      );
 
-async function loadWaitlistSetting() {
-  const settings = await api.get('/app-settings');
-  document.getElementById('waitlist-auto-promote-toggle').checked = settings.waitlistAutoPromote;
-}
+      async function loadWaiverSettings() {
+        const settings = await api.get("/app-settings");
+        waiverForm.elements.waiverText.value = settings.waiverText ?? "";
+        waiverVersionNote.textContent = settings.waiverText
+          ? `Aktuelle Version: ${settings.waiverVersion}`
+          : "Keine Einverständniserklärung konfiguriert.";
+      }
 
-const paymentSettingsForm = document.getElementById('payment-settings-form');
+      waiverForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+          await api.put("/app-settings", {
+            waiverText: waiverForm.elements.waiverText.value,
+          });
+          notify("Gespeichert.", "success");
+          await loadWaiverSettings();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
 
-async function loadPaymentSettings() {
-  const settings = await api.get('/admin/settings/payments');
-  paymentSettingsForm.elements.bankIban.value = settings.bankIban ?? '';
-  paymentSettingsForm.elements.bankBic.value = settings.bankBic ?? '';
-  paymentSettingsForm.elements.bankAccountHolder.value = settings.bankAccountHolder ?? '';
-  paymentSettingsForm.elements.stripeSecretKey.placeholder = settings.hasStripeSecretKey
-    ? 'Gesetzt — leer lassen, um ihn zu behalten' : 'Leer lassen, um den bestehenden Key zu behalten';
-  paymentSettingsForm.elements.stripeWebhookSecret.placeholder = settings.hasStripeWebhookSecret
-    ? 'Gesetzt — leer lassen, um es zu behalten' : 'Leer lassen, um das bestehende Secret zu behalten';
-}
+      const paymentSettingsForm = document.getElementById(
+        "payment-settings-form",
+      );
 
-paymentSettingsForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const data = Object.fromEntries(new FormData(paymentSettingsForm));
-  try {
-    await api.put('/admin/settings/payments', data);
-    notify('Gespeichert.', 'success');
-    paymentSettingsForm.elements.stripeSecretKey.value = '';
-    paymentSettingsForm.elements.stripeWebhookSecret.value = '';
-    await loadPaymentSettings();
-  } catch (err) {
-    notify(err.message, 'error');
-  }
-});
+      async function loadPaymentSettings() {
+        const settings = await api.get("/admin/settings/payments");
+        paymentSettingsForm.elements.bankIban.value = settings.bankIban ?? "";
+        paymentSettingsForm.elements.bankBic.value = settings.bankBic ?? "";
+        paymentSettingsForm.elements.bankAccountHolder.value =
+          settings.bankAccountHolder ?? "";
+        paymentSettingsForm.elements.stripeSecretKey.placeholder =
+          settings.hasStripeSecretKey
+            ? "Gesetzt — leer lassen, um ihn zu behalten"
+            : "Leer lassen, um den bestehenden Key zu behalten";
+        paymentSettingsForm.elements.stripeWebhookSecret.placeholder =
+          settings.hasStripeWebhookSecret
+            ? "Gesetzt — leer lassen, um es zu behalten"
+            : "Leer lassen, um das bestehende Secret zu behalten";
+      }
 
-document.getElementById('waitlist-auto-promote-toggle').addEventListener('change', async (event) => {
-  try {
-    await api.put('/app-settings', { waitlistAutoPromote: event.target.checked });
-    notify('Gespeichert.', 'success');
-  } catch (err) {
-    event.target.checked = !event.target.checked;
-    notify(err.message, 'error');
-  }
-});
+      paymentSettingsForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(paymentSettingsForm));
+        try {
+          await api.put("/admin/settings/payments", data);
+          notify("Gespeichert.", "success");
+          paymentSettingsForm.elements.stripeSecretKey.value = "";
+          paymentSettingsForm.elements.stripeWebhookSecret.value = "";
+          await loadPaymentSettings();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
 
-document.getElementById('character-browsing-toggle').addEventListener('change', async (event) => {
-  try {
-    await api.put('/app-settings', { characterBrowsingEnabled: event.target.checked });
-    notify('Gespeichert.', 'success');
-  } catch (err) {
-    event.target.checked = !event.target.checked;
-    notify(err.message, 'error');
-  }
-});
+      document
+        .getElementById("waitlist-auto-promote-toggle")
+        .addEventListener("change", async (event) => {
+          try {
+            await api.put("/app-settings", {
+              waitlistAutoPromote: event.target.checked,
+            });
+            notify("Gespeichert.", "success");
+          } catch (err) {
+            event.target.checked = !event.target.checked;
+            notify(err.message, "error");
+          }
+        });
 
-document.getElementById('send-test').addEventListener('click', async () => {
-  const data = Object.fromEntries(new FormData(form));
-  try {
-    await api.post('/admin/settings/smtp/test', { ...data, to: testToInput.value });
-    notify('Test-Mail verschickt.', 'success');
-  } catch (err) {
-    notify(err.message, 'error');
-  }
-});
+      document
+        .getElementById("character-browsing-toggle")
+        .addEventListener("change", async (event) => {
+          try {
+            await api.put("/app-settings", {
+              characterBrowsingEnabled: event.target.checked,
+            });
+            notify("Gespeichert.", "success");
+          } catch (err) {
+            event.target.checked = !event.target.checked;
+            notify(err.message, "error");
+          }
+        });
 
-document.getElementById('logout-link').addEventListener('click', async (evt) => {
-  evt.preventDefault();
-  if (!confirm('Wirklich abmelden?')) return;
-  await api.post('/auth/logout', {});
-  window.location.href = '/login.html';
-});
+      document
+        .getElementById("send-test")
+        .addEventListener("click", async () => {
+          const data = Object.fromEntries(new FormData(form));
+          try {
+            await api.post("/admin/settings/smtp/test", {
+              ...data,
+              to: testToInput.value,
+            });
+            notify("Test-Mail verschickt.", "success");
+          } catch (err) {
+            notify(err.message, "error");
+          }
+        });
 
-try {
-  const account = await api.get('/account');
-  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
-  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
-  currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
-  renderHotkeyInputs();
-  await loadSettings();
-  await loadInvitationSettings();
-  await loadCharacterBrowsingSetting();
-  await loadWaitlistSetting();
-  await loadPaymentSettings();
-} catch (err) {
-  if (err.status === 401) window.location.href = '/login.html';
-  else if (err.status === 403) { notify('Kein Zugriff – nur für Admins.', 'error'); }
-}
-</script>
-</body>
+      document
+        .getElementById("logout-link")
+        .addEventListener("click", async (evt) => {
+          evt.preventDefault();
+          if (!confirm("Wirklich abmelden?")) return;
+          await api.post("/auth/logout", {});
+          window.location.href = "/login.html";
+        });
+
+      try {
+        const account = await api.get("/account");
+        document.getElementById("nav-links").innerHTML = renderNavLinks(
+          account,
+          window.location.pathname,
+        );
+        document.getElementById("sidebar-user-info").innerHTML =
+          renderSidebarUser(account);
+        currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
+        renderHotkeyInputs();
+        await loadSettings();
+        await loadInvitationSettings();
+        await loadCharacterBrowsingSetting();
+        await loadWaitlistSetting();
+        await loadPaymentSettings();
+        await loadWaiverSettings();
+      } catch (err) {
+        if (err.status === 401) window.location.href = "/login.html";
+        else if (err.status === 403) {
+          notify("Kein Zugriff – nur für Admins.", "error");
+        }
+      }
+    </script>
+  </body>
 </html>

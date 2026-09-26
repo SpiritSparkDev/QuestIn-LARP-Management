@@ -40,6 +40,7 @@
         </div>
       </div>
     </div>
+    <button type="button" id="send-payment-reminders" class="btn-ghost">Zahlungserinnerungen senden</button>
     <button type="button" id="scan-start" style="display:none;">Scan starten (20s)</button>
     <p id="scan-status" class="sub"></p>
     <video id="scan-video" style="max-width:320px;display:none;" playsinline muted></video>
@@ -56,6 +57,7 @@
     </dialog>
     <dialog id="edit-dialog">
       <h2 id="edit-dialog-title">Teilnehmer bearbeiten</h2>
+      <p class="sub" id="edit-waiver-status"></p>
       <div id="edit-ot-fields"></div>
       <div id="edit-characters"></div>
       <button type="button" id="edit-save">Speichern</button>
@@ -328,6 +330,9 @@ function openEditDialog(userId) {
   if (!p) return;
   editingUserId = userId;
   document.getElementById('edit-dialog-title').textContent = `Bearbeiten: ${p.name}`;
+  document.getElementById('edit-waiver-status').textContent = p.waiverAcceptedAt
+    ? `Einverständnis erteilt am ${new Date(p.waiverAcceptedAt).toLocaleString('de-DE')} (Version ${p.waiverVersionAccepted})`
+    : 'Kein Einverständnis hinterlegt.';
 
   // Derived from the schema/permission intersection, not p.otFields' own
   // keys -- a brand-new admin-added field has no guaranteed presence in the
@@ -483,7 +488,12 @@ function renderPaymentStatusCell(p) {
   if (p.amountDueCents == null) return '<span class="sub">–</span>';
   if (p.paidAt) {
     const label = PAYMENT_METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod ?? 'manuell';
-    return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <button type="button" class="btn-ghost" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
+    if (p.refundedAt) {
+      const fullyRefunded = p.refundAmountCents >= p.amountDueCents;
+      const refundNote = fullyRefunded ? 'Vollständig erstattet' : `Teilerstattet: ${(p.refundAmountCents / 100).toFixed(2)} €`;
+      return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <span class="sub">${refundNote}</span> <button type="button" class="btn-ghost" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
+    }
+    return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <button type="button" class="btn-ghost" data-refund="${escapeHtml(p.userId)}">Erstatten</button> <button type="button" class="btn-ghost" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
   }
   return `<span class="status-pill status-pending">Offen</span> <button type="button" class="btn-ghost" data-mark-paid="${escapeHtml(p.userId)}">Als bezahlt markieren</button>`;
 }
@@ -592,6 +602,9 @@ async function loadParticipants(eventId) {
   listBody.querySelectorAll('[data-mark-unpaid]').forEach((button) => {
     button.addEventListener('click', () => setPaymentStatus(eventId, button.dataset.markUnpaid, false));
   });
+  listBody.querySelectorAll('[data-refund]').forEach((button) => {
+    button.addEventListener('click', () => refundPayment(eventId, button.dataset.refund));
+  });
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => openEditDialog(button.dataset.edit));
   });
@@ -684,9 +697,41 @@ async function setPaymentStatus(eventId, userId, markPaid) {
   }
 }
 
+async function refundPayment(eventId, userId) {
+  const p = participantsById.get(userId);
+  const fullAmount = ((p?.amountDueCents ?? 0) / 100).toFixed(2);
+  const input = prompt(`Zu erstattender Betrag in €:`, fullAmount);
+  if (input === null) return;
+  const amountCents = Math.round(Number(input.replace(',', '.')) * 100);
+  if (!Number.isInteger(amountCents) || amountCents <= 0) {
+    notify('Ungültiger Betrag.', 'error');
+    return;
+  }
+  if (!confirm(`${(amountCents / 100).toFixed(2)} € wirklich erstatten?`)) return;
+  try {
+    await api.post(`/events/${eventId}/registrations/${userId}/refund`, { amountCents });
+    notify('Erstattung gebucht.', 'success');
+    await loadParticipants(eventId);
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+}
+
 eventSelect.addEventListener('change', () => {
   onEventChanged();
   loadParticipants(eventSelect.value);
+});
+
+document.getElementById('send-payment-reminders').addEventListener('click', async () => {
+  const eventId = eventSelect.value;
+  if (!eventId) return;
+  if (!confirm('Zahlungserinnerungen an alle Teilnehmer mit offener Zahlung für dieses Event senden?')) return;
+  try {
+    const { sent, total } = await api.post(`/events/${eventId}/payment-reminders`, {});
+    notify(`${sent} von ${total} Erinnerungen verschickt.`, sent === total ? 'success' : 'error');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
 });
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {

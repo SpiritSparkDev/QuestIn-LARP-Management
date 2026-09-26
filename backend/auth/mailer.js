@@ -99,6 +99,27 @@ export async function sendWaitlistPromotedEmail(to, { eventName }, { transporter
   });
 }
 
+export async function sendPaymentReminderEmail(to, { eventName, amountDueCents, payUrl }, { transporter, from }) {
+  const amount = `${(amountDueCents / 100).toFixed(2).replace('.', ',')} €`;
+  return transporter.sendMail({
+    to,
+    from,
+    subject: `Zahlungserinnerung: ${eventName}`,
+    text: `Für deine Anmeldung zu "${eventName}" ist noch ein Betrag von ${amount} offen. Bezahlen: ${payUrl}`,
+  });
+}
+
+export async function sendGuestTicketEmail(to, { eventName, paymentToken }) {
+  const { transporter, from } = await getTransporterAndFrom();
+  const url = `${baseUrl()}/guest-payment.html?token=${paymentToken}`;
+  return transporter.sendMail({
+    to,
+    from,
+    subject: `Dein Ticket für ${eventName}`,
+    text: `Deine Anmeldung für "${eventName}" ist eingegangen. Falls die Bezahlung gerade nicht geklappt hat oder du sie später abschließen möchtest, geht es hier weiter: ${url}`,
+  });
+}
+
 export async function sendEventDeletedEmail(to, { eventName }, { transporter, from }) {
   return transporter.sendMail({
     to,

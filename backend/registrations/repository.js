@@ -12,11 +12,14 @@ import { logger } from '../logger.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { buildPaymentReference } from '../payments/reference.js';
 
-const SELF_SERVICE_CON_ROLES = ['sc', 'nsc', 'helfer'];
+// 'ticket' = a self-service guest ticket bought via the external ticket
+// widget (backend/guestRegistrations/routes.js) -- no character, distinct
+// from 'helfer' (crew).
+const SELF_SERVICE_CON_ROLES = ['sc', 'nsc', 'helfer', 'ticket'];
 const STAFF_CON_ROLES = ['orga', 'hilfs_orga'];
 const ALL_CON_ROLES = [...SELF_SERVICE_CON_ROLES, ...STAFF_CON_ROLES];
 // Roles that don't play a character on-site, so approval doesn't require one assigned.
-const CHARACTER_EXEMPT_CON_ROLES = [...STAFF_CON_ROLES, 'helfer'];
+const CHARACTER_EXEMPT_CON_ROLES = [...STAFF_CON_ROLES, 'helfer', 'ticket'];
 // A registration's character_id: 'sc' must have one, 'nsc' may optionally
 // have one, every other role must not.
 const CHARACTER_REQUIRED_CON_ROLES = ['sc'];
@@ -178,11 +181,21 @@ function resolvePriceGroup(event, priceGroup) {
 
 export const COUNTED_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out'];
 
-export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser) {
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
     err.code = 'EVENT_NOT_FOUND';
+    throw err;
+  }
+
+  // A configured waiver is opt-in enforcement: an org that hasn't set one up
+  // yet (empty text, the default) must not have every existing registration
+  // flow suddenly start rejecting requests.
+  const appSettings = await getAppSettings();
+  if (appSettings.waiverText && waiverAccepted !== true) {
+    const err = new Error('Der Einverständniserklärung muss zugestimmt werden.');
+    err.code = 'WAIVER_NOT_ACCEPTED';
     throw err;
   }
 
@@ -231,13 +244,15 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
         if (countRows[0].count >= capacity) status = 'waitlisted';
       }
       const { rows } = await client.query(
-        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12)
-         RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at`,
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14)
+         RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, waiver_version_accepted, waiver_accepted_at`,
         [
           userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags,
           resolvedPrice.priceGroup, resolvedPrice.priceTier, resolvedPrice.priceListCents,
           encryptFieldBlob(data), status,
+          waiverAccepted === true ? appSettings.waiverVersion : null,
+          waiverAccepted === true ? new Date() : null,
         ]
       );
       return rows[0];
@@ -434,11 +449,13 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
   const { rows: registrations } = await query(
     `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
             r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.discount_cents, latest_payment.method AS payment_method,
+            latest_payment.refund_amount_cents, latest_payment.refunded_at,
+            r.waiver_version_accepted, r.waiver_accepted_at,
             u.account_data_enc, r.registration_data_enc
      FROM registrations r
      JOIN users u ON u.id = r.user_id
      LEFT JOIN LATERAL (
-       SELECT method FROM payments p
+       SELECT method, refund_amount_cents, refunded_at FROM payments p
        WHERE p.event_id = r.event_id AND p.user_id = r.user_id
        ORDER BY p.created_at DESC LIMIT 1
      ) latest_payment ON true
@@ -489,6 +506,10 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       priceTier: r.price_tier,
       discountCents: r.discount_cents,
       paymentMethod: r.payment_method,
+      refundAmountCents: r.refund_amount_cents,
+      refundedAt: r.refunded_at,
+      waiverVersionAccepted: r.waiver_version_accepted,
+      waiverAcceptedAt: r.waiver_accepted_at,
       characters: charactersByUser.get(r.user_id) ?? [],
       otFields,
     };
@@ -507,6 +528,10 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     priceTier: null,
     discountCents: 0,
     paymentMethod: null,
+    refundAmountCents: null,
+    refundedAt: null,
+    waiverVersionAccepted: null,
+    waiverAcceptedAt: null,
     characters: [],
     otFields: {},
   }));
@@ -547,7 +572,7 @@ export async function getScanLookup(eventId, userId) {
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
     `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier,
+            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.waiver_version_accepted, r.waiver_accepted_at,
             r.registration_data_enc, c.name AS character_name, nc.name AS nsc_character_name
      FROM registrations r
      JOIN events e ON e.id = r.event_id
@@ -575,6 +600,8 @@ export async function listRegistrationsForUser(userId) {
     paidAt: r.paid_at,
     priceGroup: r.price_group,
     priceTier: r.price_tier,
+    waiverVersionAccepted: r.waiver_version_accepted,
+    waiverAcceptedAt: r.waiver_accepted_at,
     paymentReference: buildPaymentReference(r.event_id, userId),
     ...decryptFieldBlob(r.registration_data_enc),
   }));

@@ -798,6 +798,81 @@ test('POST /members/:id/resend-verification rejects a member whose email is alre
   }
 });
 
+async function makeGuest() {
+  const email = `members-guest-${crypto.randomUUID()}@example.com`;
+  const { rows } = await query(
+    "INSERT INTO users (email, first_name, last_name, group_id, is_guest, email_verified) VALUES ($1, 'Guest', 'Person', (SELECT id FROM groups WHERE key = 'mitglied'), true, false) RETURNING id",
+    [email]
+  );
+  return { id: rows[0].id, email };
+}
+
+test('POST /members/:id/generate-conversion-link rejects a non-guest member', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
+
+    const res = await fetch(`http://localhost:${port}/members/${targetId}/generate-conversion-link`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/generate-conversion-link returns a redeemable set-password link for a guest', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const guest = await makeGuest();
+
+    const res = await fetch(`http://localhost:${port}/members/${guest.id}/generate-conversion-link`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    const token = new URL(body.link).searchParams.get('token');
+    assert.ok(token);
+
+    const { rows } = await query('SELECT user_id FROM invitations WHERE token = $1', [token]);
+    assert.equal(rows[0].user_id, guest.id);
+
+    const redeemRes = await fetch(`http://localhost:${port}/auth/invite/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password: 'correct horse battery staple' }),
+    });
+    assert.equal(redeemRes.status, 200);
+    const { rows: userRows } = await query('SELECT is_guest FROM users WHERE id = $1', [guest.id]);
+    assert.equal(userRows[0].is_guest, false);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/generate-conversion-link rejects a group without the mitglieder menu', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('mitglied');
+    const guest = await makeGuest();
+
+    const res = await fetch(`http://localhost:${port}/members/${guest.id}/generate-conversion-link`, {
+      method: 'POST',
+      headers: { Cookie: cookie },
+    });
+    assert.equal(res.status, 403);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM invitations");
   await query("DELETE FROM users WHERE email LIKE 'members-%'");

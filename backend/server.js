@@ -11,6 +11,7 @@ import './auth/passwordReset.js';
 import './auth/oauth.js';
 import './auth/invite.js';
 import './accounts/routes.js';
+import './accounts/export.js';
 import './events/routes.js';
 import './characters/routes.js';
 import './characterFiles/routes.js';
@@ -25,6 +26,7 @@ import './smtpSettings/routes.js';
 import './appSettings/routes.js';
 import './paymentSettings/routes.js';
 import './payments/routes.js';
+import './guestRegistrations/routes.js';
 import './storageSettings/routes.js';
 
 // Route modules import `router` from ./routes.js directly (importing it from

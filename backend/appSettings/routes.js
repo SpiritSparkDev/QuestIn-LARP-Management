@@ -15,7 +15,10 @@ router.get('/app-settings', async () => {
 router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote } = body;
+  const { logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText } = body;
+  if (waiverText !== undefined && typeof waiverText !== 'string') {
+    return { status: 400, body: { error: 'waiverText must be a string' } };
+  }
   if (quotaMbPerCharacter !== undefined && (!Number.isInteger(quotaMbPerCharacter) || quotaMbPerCharacter < 1)) {
     return { status: 400, body: { error: 'quotaMbPerCharacter must be a positive integer' } };
   }
@@ -28,7 +31,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
   if (waitlistAutoPromote !== undefined && typeof waitlistAutoPromote !== 'boolean') {
     return { status: 400, body: { error: 'waitlistAutoPromote must be a boolean' } };
   }
-  const saved = await setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote });
+  const saved = await setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText });
   return { status: 200, body: saved };
 })));
 

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticket sichern – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
+  <div class="folio folio--narrow">
+    <h1 class="text-center" id="event-title">Ticket sichern</h1>
+    <p class="sub text-center" id="event-date"></p>
+    <p id="message"></p>
+    <form id="ticket-form" style="display:none;">
+      <input id="firstName" name="firstName" type="text" required>
+      <label for="firstName">Vorname</label>
+      <input id="lastName" name="lastName" type="text" required>
+      <label for="lastName">Nachname</label>
+      <input id="nickname" name="nickname" type="text">
+      <label for="nickname">Rufname</label>
+      <input id="email" name="email" type="email" required>
+      <label for="email">E-Mail</label>
+      <div id="price-group-wrap" style="display:none;">
+        <select id="priceGroup" name="priceGroup"></select>
+        <label for="priceGroup">Teilnahmegruppe</label>
+      </div>
+      <div id="waiver-wrap" style="display:none;">
+        <p class="sub" id="waiver-text-display" style="white-space:pre-wrap;"></p>
+        <label><input type="checkbox" id="waiverAccepted" name="waiverAccepted"> Ich habe die Einverständniserklärung gelesen und stimme zu.</label>
+      </div>
+      <button type="submit">Ticket sichern</button>
+    </form>
+  </div>
+</div>
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { escapeHtml } from '/js/formFields.js';
+applyBranding();
+import { notify } from '/js/notifications.js';
+
+const code = new URLSearchParams(window.location.search).get('event');
+const messageEl = document.getElementById('message');
+const form = document.getElementById('ticket-form');
+const priceGroupWrap = document.getElementById('price-group-wrap');
+const priceGroupSelect = document.getElementById('priceGroup');
+const waiverWrap = document.getElementById('waiver-wrap');
+const waiverTextDisplay = document.getElementById('waiver-text-display');
+const waiverCheckbox = document.getElementById('waiverAccepted');
+
+if (!code) {
+  messageEl.textContent = 'Kein Event angegeben.';
+  messageEl.className = 'error';
+} else {
+  let event;
+  try {
+    event = await api.get(`/public/events/${encodeURIComponent(code)}`);
+  } catch (err) {
+    messageEl.textContent = err.status === 404 ? 'Dieses Event wurde nicht gefunden.' : err.message;
+    messageEl.className = 'error';
+  }
+  if (event) {
+    document.getElementById('event-title').textContent = event.name;
+    document.getElementById('event-date').textContent = event.eventDate;
+    if (event.priceGroups.length > 0) {
+      priceGroupWrap.style.display = '';
+      priceGroupSelect.innerHTML = event.priceGroups.map((g) => {
+        const priceCents = event.prices[g];
+        const priceLabel = Number.isInteger(priceCents) ? ` (${(priceCents / 100).toFixed(2)} €)` : '';
+        return `<option value="${escapeHtml(g)}">${escapeHtml(g)}${priceLabel}</option>`;
+      }).join('');
+    }
+    const { waiverText } = await api.get('/app-settings');
+    if (waiverText) {
+      waiverTextDisplay.textContent = waiverText;
+      waiverWrap.style.display = '';
+      waiverCheckbox.required = true;
+    }
+
+    form.style.display = '';
+
+    form.addEventListener('submit', async (evt) => {
+      evt.preventDefault();
+      const submitButton = form.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      const formData = new FormData(form);
+      const data = Object.fromEntries(formData);
+      if (!data.priceGroup) delete data.priceGroup;
+      data.waiverAccepted = formData.has('waiverAccepted');
+      try {
+        const result = await api.post(`/public/events/${event.id}/guest-registration`, data);
+        if (result.paymentUrl) {
+          window.location.href = result.paymentUrl;
+        } else {
+          form.style.display = 'none';
+          messageEl.textContent = 'Dein Ticket ist gesichert! Du erhältst eine Bestätigung per E-Mail.';
+          messageEl.className = 'success';
+        }
+      } catch (err) {
+        notify(err.message, 'error');
+        submitButton.disabled = false;
+      }
+    });
+  }
+}
+</script>
+</body>
+</html>

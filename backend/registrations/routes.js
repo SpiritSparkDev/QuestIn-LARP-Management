@@ -38,10 +38,11 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user);
+    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, body.waiverAccepted);
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
+    if (err.code === 'WAIVER_NOT_ACCEPTED') return { status: 400, body: { error: err.message } };
     if (err.code === 'ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
     if (err.code === 'INVALID_CON_ROLE') return { status: 400, body: { error: err.message } };
     if (err.code === 'FORBIDDEN_CON_ROLE') return { status: 403, body: { error: err.message } };

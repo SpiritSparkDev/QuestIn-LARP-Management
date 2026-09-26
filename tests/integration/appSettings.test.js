@@ -30,7 +30,7 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, hasUploadedLogo: false, hasUploadedTicketBackground: false });
   });
 });
 
@@ -49,7 +49,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, hasUploadedLogo: false, hasUploadedTicketBackground: false });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
@@ -323,6 +323,57 @@ test('PUT /app-settings rejects a non-boolean waitlistAutoPromote', async () => 
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({ waitlistAutoPromote: 'yes' }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+test('PUT /app-settings auto-bumps waiverVersion only when the text actually changes', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+
+    const first = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ waiverText: 'Ich nehme auf eigene Gefahr teil.' }),
+    });
+    const firstBody = await first.json();
+    assert.equal(firstBody.waiverText, 'Ich nehme auf eigene Gefahr teil.');
+    assert.equal(firstBody.waiverVersion, 2);
+
+    // Saving something else entirely must not re-bump the version.
+    const unrelated = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ appTitle: 'Unrelated change' }),
+    });
+    assert.equal((await unrelated.json()).waiverVersion, 2);
+
+    // Saving the identical text again must not re-bump the version either.
+    const sameText = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ waiverText: 'Ich nehme auf eigene Gefahr teil.' }),
+    });
+    assert.equal((await sameText.json()).waiverVersion, 2);
+
+    // A real wording change bumps it again.
+    const changed = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ waiverText: 'Neuer Text.' }),
+    });
+    assert.equal((await changed.json()).waiverVersion, 3);
+  });
+});
+
+test('PUT /app-settings rejects a non-string waiverText', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ waiverText: 42 }),
     });
     assert.equal(res.status, 400);
   });

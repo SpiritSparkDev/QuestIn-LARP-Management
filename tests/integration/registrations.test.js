@@ -1372,6 +1372,41 @@ test('raising an event capacity promotes as many waitlisted people as now fit', 
   });
 });
 
+test('registering is rejected without waiverAccepted once a waiver is configured, and stores version+timestamp when accepted', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ waiverText: 'Ich nehme auf eigene Gefahr teil.' }),
+    });
+    const { waiverVersion } = await (await fetch(`http://localhost:${port}/app-settings`)).json();
+
+    try {
+      const { cookie } = await makeUserAndSession('mitglied');
+      const rejected = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ conRole: 'helfer' }),
+      });
+      assert.equal(rejected.status, 400);
+
+      const accepted = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ conRole: 'helfer', waiverAccepted: true }),
+      });
+      assert.equal(accepted.status, 201);
+      const body = await accepted.json();
+      assert.equal(body.waiver_version_accepted, waiverVersion);
+      assert.ok(body.waiver_accepted_at);
+    } finally {
+      await fetch(`http://localhost:${port}/app-settings`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+        body: JSON.stringify({ waiverText: '' }),
+      });
+    }
+  });
+});
+
 test.after(async () => {
   // Users created in a reg_custom_* group must be deleted before the group
   // itself (users.group_id -> groups.id has no ON DELETE CASCADE), otherwise
@@ -1380,5 +1415,10 @@ test.after(async () => {
   // cleanup checkin.test.js does for its own checkin_custom_* groups.
   await query("DELETE FROM users WHERE email LIKE 'reg-custom-%'");
   await query("DELETE FROM groups WHERE key LIKE 'reg_custom_%'");
+  // Restoring waiverText to '' still leaves waiver_version bumped (the
+  // auto-increment can't be undone by content alone, unlike the boolean
+  // settings above) -- a full reset avoids leaking an elevated version into
+  // other test files sharing this DB.
+  await query('DELETE FROM app_settings');
   await closePool();
 });

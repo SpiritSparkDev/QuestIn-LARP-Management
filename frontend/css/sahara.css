@@ -111,10 +111,6 @@ h1, h2, h3 {
   padding: 32px;
 }
 
-.card + .card {
-  margin-top: 24px;
-}
-
 .form-pad {
   padding: 24px;
 }
@@ -1561,4 +1557,15 @@ dialog#toast-stack::backdrop {
     left: 12px;
     max-width: none;
   }
+}
+
+.grid {
+  display: grid;
+  gap: 20px;
+}
+.col2 {
+  grid-template-columns: 1fr 1fr;
+}
+.grid .span {
+  grid-column: span 2;
 }

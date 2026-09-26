@@ -55,8 +55,8 @@
         <dialog id="detail-dialog">
           <h2 id="detail-title">Mitglied bearbeiten</h2>
           <div id="detail-group-wrap" style="display:none;">
-            <label for="detail-group">Gruppe</label>
             <select id="detail-group" name="group"></select>
+            <label for="detail-group">Gruppe</label>
           </div>
           <div id="detail-fields"></div>
           <div id="detail-characters"></div>
@@ -69,31 +69,31 @@
           <form id="invite-form">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
               <div>
-                <label for="invite-first-name">Vorname</label>
                 <input id="invite-first-name" name="firstName" type="text" required>
+                <label for="invite-first-name">Vorname</label>
               </div>
               <div>
-                <label for="invite-last-name">Nachname</label>
                 <input id="invite-last-name" name="lastName" type="text" required>
+                <label for="invite-last-name">Nachname</label>
               </div>
               <div>
-                <label for="invite-nickname">Rufname</label>
                 <input id="invite-nickname" name="nickname" type="text">
+                <label for="invite-nickname">Rufname</label>
               </div>
               <div>
-                <label for="invite-email">E-Mail</label>
                 <input id="invite-email" name="email" type="email" required>
+                <label for="invite-email">E-Mail</label>
               </div>
             </div>
             <div>
-              <label for="invite-event">Veranstaltung (optional)</label>
               <select id="invite-event" name="eventId">
                 <option value="">– keine –</option>
               </select>
+              <label for="invite-event">Veranstaltung (optional)</label>
             </div>
             <div id="invite-group-wrap" style="display:none;">
-              <label for="invite-group">Gruppe</label>
               <select id="invite-group" name="group" disabled></select>
+              <label for="invite-group">Gruppe</label>
             </div>
             <div id="invite-fields"></div>
             <label for="invite-send-email"><input id="invite-send-email" name="sendEmail" type="checkbox" checked> Per
@@ -103,8 +103,8 @@
           </form>
         </dialog>
         <div id="invite-link-box" style="display:none;">
-          <label for="invite-link-text">Einladungslink</label>
           <input id="invite-link-text" readonly>
+          <label for="invite-link-text">Einladungslink</label>
           <button type="button" id="invite-link-copy">Kopieren</button>
         </div>
       </div>
@@ -191,16 +191,16 @@
     function buildDetailFieldInputs(container, values = {}) {
       const nameFieldsHtml = `
     <div class="firstName-container">
-      <label for="field-firstName">Vorname</label>
       <input id="field-firstName" data-field="firstName" type="text" value="${escapeHtml(values.firstName ?? '')}">
+      <label for="field-firstName">Vorname</label>
     </div>
     <div class="lastName-container">
-      <label for="field-lastName">Nachname</label>
       <input id="field-lastName" data-field="lastName" type="text" value="${escapeHtml(values.lastName ?? '')}">
+      <label for="field-lastName">Nachname</label>
     </div>
     <div class="nickname-container">
-      <label for="field-nickname">Rufname</label>
       <input id="field-nickname" data-field="nickname" type="text" value="${escapeHtml(values.nickname ?? '')}">
+      <label for="field-nickname">Rufname</label>
     </div>
   `;
       container.innerHTML = nameFieldsHtml + accountSchema.map((field) => {
@@ -209,7 +209,7 @@
           const sealedBadge = ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>';
           return renderAccountFieldInput(field, values[field.key], { sealedBadge });
         }
-        return `<div class="${escapeHtml(field.key)}-container"><label>${escapeHtml(label)}</label><p>${escapeHtml(values[field.key] ?? '–')}</p></div>`;
+        return `<div class="${escapeHtml(field.key)}-container"><p>${escapeHtml(values[field.key] ?? '–')}</p><label>${escapeHtml(label)}</label></div>`;
       }).join('');
       attachLiveValidation(container);
     }
@@ -237,12 +237,16 @@
         const resendVerifyBtn = m.status !== 'invited' && !m.emailVerified
           ? `<button type="button" class="btn-sm btn-ghost" data-resend-verify="${m.id}">Bestätigungsmail erneut senden</button>`
           : '';
+        const guestBadge = m.isGuest ? ` <span class="badge badge-inactive">Gast</span>` : '';
+        const conversionLinkBtn = m.isGuest
+          ? `<button type="button" class="btn-sm btn-ghost" data-generate-conversion-link="${m.id}">Konvertierungslink erzeugen</button>`
+          : '';
         if (m.status === 'active') {
-          statusCell = `<span class="badge badge-active">Aktiv</span>`;
+          statusCell = `<span class="badge badge-active">Aktiv</span>${guestBadge}`;
           const deactivateBtn = m.id === myUserId
             ? ''
             : `<button type="button" class="btn-sm btn-ghost" data-deactivate="${m.id}">Deaktivieren</button>`;
-          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn} ${resendVerifyBtn}`;
+          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn} ${conversionLinkBtn} ${resendVerifyBtn}`;
         } else if (m.status === 'deactivated') {
           statusCell = `<span class="badge badge-inactive">Deaktiviert</span>`;
           actionsCell = `<button type="button" class="btn-sm btn-ghost" data-reactivate="${m.id}">Reaktivieren</button>
@@ -284,6 +288,9 @@
       });
       listBody.querySelectorAll('[data-resend-verify]').forEach((button) => {
         button.addEventListener('click', () => resendVerification(button.dataset.resendVerify));
+      });
+      listBody.querySelectorAll('[data-generate-conversion-link]').forEach((button) => {
+        button.addEventListener('click', () => generateConversionLink(button.dataset.generateConversionLink));
       });
       applySearchFilter();
     }
@@ -406,6 +413,16 @@
       try {
         await api.post(`/members/${id}/resend-verification`, {});
         notify('Bestätigungsmail erneut verschickt.', 'success');
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+    }
+
+    async function generateConversionLink(id) {
+      try {
+        const result = await api.post(`/members/${id}/generate-conversion-link`, {});
+        showInviteLink(result.link);
+        notify('Konvertierungslink erzeugt.', 'success');
       } catch (err) {
         notify(err.message, 'error');
       }

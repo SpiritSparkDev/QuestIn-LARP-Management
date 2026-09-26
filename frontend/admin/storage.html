@@ -29,21 +29,21 @@
 
     <div class="card form-pad">
       <form id="storage-form">
-        <label for="backend-select">Backend</label>
         <select id="backend-select" name="backend">
           <option value="local">Lokal</option>
           <option value="ftp">FTP</option>
           <option value="s3">S3</option>
         </select>
+        <label for="backend-select">Backend</label>
 
         <fieldset id="ftp-fields" hidden>
           <legend>FTP</legend>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-            <div><label for="ftp-host">Host</label><input id="ftp-host" name="ftpHost" type="text"></div>
-            <div><label for="ftp-port">Port</label><input id="ftp-port" name="ftpPort" type="number" placeholder="21"></div>
-            <div><label for="ftp-username">Benutzername</label><input id="ftp-username" name="ftpUsername" type="text"></div>
-            <div><label for="ftp-password">Passwort</label><input id="ftp-password" name="ftpPassword" type="password" placeholder="Leer lassen, um das bestehende Passwort zu behalten"></div>
-            <div><label for="ftp-basedir">Basis-Verzeichnis</label><input id="ftp-basedir" name="ftpBaseDir" type="text" placeholder="/uploads"></div>
+            <div><input id="ftp-host" name="ftpHost" type="text"><label for="ftp-host">Host</label></div>
+            <div><input id="ftp-port" name="ftpPort" type="number" placeholder="21"><label for="ftp-port">Port</label></div>
+            <div><input id="ftp-username" name="ftpUsername" type="text"><label for="ftp-username">Benutzername</label></div>
+            <div><input id="ftp-password" name="ftpPassword" type="password" placeholder="Leer lassen, um das bestehende Passwort zu behalten"><label for="ftp-password">Passwort</label></div>
+            <div><input id="ftp-basedir" name="ftpBaseDir" type="text" placeholder="/uploads"><label for="ftp-basedir">Basis-Verzeichnis</label></div>
             <div><label for="ftp-secure"><input id="ftp-secure" name="ftpSecure" type="checkbox" checked> FTPS (verschlüsselt)</label></div>
           </div>
         </fieldset>
@@ -51,11 +51,11 @@
         <fieldset id="s3-fields" hidden>
           <legend>S3</legend>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-            <div><label for="s3-bucket">Bucket</label><input id="s3-bucket" name="s3Bucket" type="text"></div>
-            <div><label for="s3-region">Region</label><input id="s3-region" name="s3Region" type="text" placeholder="eu-central-1"></div>
-            <div><label for="s3-endpoint">Endpoint (optional, für S3-kompatible Dienste)</label><input id="s3-endpoint" name="s3Endpoint" type="text" placeholder="https://s3.example.com"></div>
-            <div><label for="s3-access-key">Access Key ID</label><input id="s3-access-key" name="s3AccessKeyId" type="text"></div>
-            <div><label for="s3-secret-key">Secret Access Key</label><input id="s3-secret-key" name="s3SecretAccessKey" type="password" placeholder="Leer lassen, um den bestehenden Schlüssel zu behalten"></div>
+            <div><input id="s3-bucket" name="s3Bucket" type="text"><label for="s3-bucket">Bucket</label></div>
+            <div><input id="s3-region" name="s3Region" type="text" placeholder="eu-central-1"><label for="s3-region">Region</label></div>
+            <div><input id="s3-endpoint" name="s3Endpoint" type="text" placeholder="https://s3.example.com"><label for="s3-endpoint">Endpoint (optional, für S3-kompatible Dienste)</label></div>
+            <div><input id="s3-access-key" name="s3AccessKeyId" type="text"><label for="s3-access-key">Access Key ID</label></div>
+            <div><input id="s3-secret-key" name="s3SecretAccessKey" type="password" placeholder="Leer lassen, um den bestehenden Schlüssel zu behalten"><label for="s3-secret-key">Secret Access Key</label></div>
           </div>
         </fieldset>
 

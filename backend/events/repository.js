@@ -65,6 +65,14 @@ export async function getEvent(id) {
   return rows[0] ?? null;
 }
 
+export async function getEventByCode(code) {
+  const { rows } = await query(
+    `SELECT ${SELECT_COLUMNS} FROM events WHERE code = $1`,
+    [code]
+  );
+  return rows[0] ?? null;
+}
+
 export async function listEvents() {
   const { rows } = await query(
     `SELECT ${SELECT_COLUMNS} FROM events ORDER BY event_date`

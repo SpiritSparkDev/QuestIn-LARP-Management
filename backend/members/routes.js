@@ -194,6 +194,34 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
   return { status: 201, body: { id: invitation.id, email: invitation.email, status: 'invited', emailSent, link } };
 })));
 
+// Converts an existing GUEST member (no login access, created via the public
+// ticket widget) into a regular full account -- deliberately a separate
+// endpoint from /members/invite above, which explicitly rejects an email
+// that already has a users row (routes.js ~149-152); here that's exactly
+// the precondition. The invitation this creates carries `userId`, which
+// makes /auth/invite/redeem update the existing row in place instead of
+// inserting a new one (see backend/auth/invite.js).
+router.post('/members/:id/generate-conversion-link', requireAuth(requireMenu('mitglieder')(async ({ params, user }) => {
+  const member = await getMember(params.id);
+  if (!member) return { status: 404, body: { error: 'member not found' } };
+  if (!member.isGuest) return { status: 400, body: { error: 'member is not a guest account' } };
+
+  const { invitationTtlDays } = await getAppSettings();
+  const invitation = await createInvitation({
+    userId: member.id,
+    email: member.email,
+    firstName: member.firstName,
+    lastName: member.lastName,
+    nickname: member.nickname,
+    groupId: member.group.id,
+    invitedBy: user.id,
+    ttlDays: invitationTtlDays,
+  });
+
+  const link = `${baseUrl()}/set-password.html?token=${invitation.token}`;
+  return { status: 201, body: { id: invitation.id, link } };
+})));
+
 router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglieder')(async ({ req, params }) => {
   const body = (await readJsonBody(req)) ?? {};
   const shouldSendEmail = body.sendEmail !== false;

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zahlung – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
+  <div class="folio folio--narrow">
+    <h1 class="text-center">Zahlung</h1>
+    <p id="message">Bitte warten …</p>
+    <button type="button" id="retry-button" style="display:none;">Zur Bezahlung</button>
+  </div>
+</div>
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+applyBranding();
+
+const params = new URLSearchParams(window.location.search);
+const token = params.get('token');
+const payment = params.get('payment');
+const messageEl = document.getElementById('message');
+const retryButton = document.getElementById('retry-button');
+
+async function startCheckout() {
+  try {
+    const result = await api.post(`/public/registrations/${token}/checkout-session`, { method: 'card' });
+    window.location.href = result.url;
+  } catch (err) {
+    messageEl.textContent = err.message;
+    messageEl.className = 'error';
+    retryButton.style.display = '';
+  }
+}
+
+if (!token) {
+  messageEl.textContent = 'Kein Zahlungslink angegeben.';
+  messageEl.className = 'error';
+} else if (payment === 'success') {
+  messageEl.textContent = 'Zahlung erfolgreich! Du erhältst in Kürze eine Bestätigung per E-Mail.';
+  messageEl.className = 'success';
+} else if (payment === 'cancelled') {
+  messageEl.textContent = 'Die Zahlung wurde abgebrochen.';
+  retryButton.style.display = '';
+} else {
+  try {
+    const registration = await api.get(`/public/registrations/${token}`);
+    if (registration.paid) {
+      messageEl.textContent = 'Dieses Ticket ist bereits bezahlt.';
+      messageEl.className = 'success';
+    } else {
+      await startCheckout();
+    }
+  } catch (err) {
+    messageEl.textContent = err.status === 410 ? 'Dieser Zahlungslink ist abgelaufen.' : err.message;
+    messageEl.className = 'error';
+  }
+}
+
+retryButton.addEventListener('click', startCheckout);
+</script>
+</body>
+</html>

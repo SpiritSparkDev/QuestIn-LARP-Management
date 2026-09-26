@@ -280,6 +280,174 @@ test('PATCH .../payment lets checkin-menu staff set an amount and mark paid, and
   });
 });
 
+test('POST .../refund returns 404 when there is no unrefunded payment for the registration', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    const { cookie } = await makeCheckinGroupUserAndSession();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/refund`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({}),
+    });
+    assert.equal(res.status, 404);
+  });
+});
+
+test('POST .../refund fully refunds a bank_transfer payment without calling Stripe, and leaves registrations.paid_at untouched', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 2000);
+    const { userId: adminId, cookie } = await makeCheckinGroupUserAndSession();
+    await markPaidManually(eventId, userId, adminId);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/refund`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({}),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.refundAmountCents, 2000);
+    assert.ok(body.refundedAt);
+
+    const { rows } = await query(
+      'SELECT refunded_at, refund_amount_cents FROM payments WHERE event_id = $1 AND user_id = $2',
+      [eventId, userId]
+    );
+    assert.ok(rows[0].refunded_at);
+    assert.equal(rows[0].refund_amount_cents, 2000);
+
+    const { rows: regRows } = await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.ok(regRows[0].paid_at, 'paid_at must stay set -- refund state lives on payments, not registrations');
+  });
+});
+
+test('POST .../refund supports a partial amount', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 5000);
+    const { userId: adminId, cookie } = await makeCheckinGroupUserAndSession();
+    await markPaidManually(eventId, userId, adminId);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/refund`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ amountCents: 1500 }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).refundAmountCents, 1500);
+  });
+});
+
+test('POST .../refund rejects an amountCents greater than the paid amount', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 1000);
+    const { userId: adminId, cookie } = await makeCheckinGroupUserAndSession();
+    await markPaidManually(eventId, userId, adminId);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/refund`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ amountCents: 2000 }),
+    });
+    assert.equal(res.status, 400);
+  });
+});
+
+test('POST .../refund rejects a second refund attempt on the same payment', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 1000);
+    const { userId: adminId, cookie } = await makeCheckinGroupUserAndSession();
+    await markPaidManually(eventId, userId, adminId);
+
+    await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/refund`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({}),
+    });
+    const second = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/refund`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({}),
+    });
+    assert.equal(second.status, 404);
+  });
+});
+
+test('POST .../refund on a stripe payment with no stored payment_intent is rejected rather than silently skipped', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await recordSuccessfulStripePayment({ eventId, userId, method: 'stripe_card', amountCents: 1000, providerReference: `pi-test-${crypto.randomUUID()}` });
+    const { cookie } = await makeCheckinGroupUserAndSession();
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/refund`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({}),
+    });
+    assert.equal(res.status, 409);
+  });
+});
+
+test('POST .../refund is rejected for a group without the checkin menu', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 1000);
+    const { userId: adminId } = await makeCheckinGroupUserAndSession();
+    await markPaidManually(eventId, userId, adminId);
+    const memberCookie = await makeSession(await makeUser());
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/refund`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: memberCookie }, body: JSON.stringify({}),
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
+test('POST .../payment-reminders emails everyone with an open balance and reports sent/total', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const unpaidUser = await makeUser();
+    await makeRegistration(eventId, unpaidUser);
+    await setAmountDue(eventId, unpaidUser, 1000);
+
+    const paidUser = await makeUser();
+    await makeRegistration(eventId, paidUser);
+    await setAmountDue(eventId, paidUser, 1000);
+    const { userId: adminId, cookie } = await makeCheckinGroupUserAndSession();
+    await markPaidManually(eventId, paidUser, adminId);
+
+    const noAmountUser = await makeUser();
+    await makeRegistration(eventId, noAmountUser);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/payment-reminders`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.total, 1);
+    assert.equal(body.sent, 1);
+  });
+});
+
+test('POST .../payment-reminders is rejected for a group without the checkin menu', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const memberCookie = await makeSession(await makeUser());
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/payment-reminders`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: memberCookie },
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
 test.after(async () => {
   // payments.confirmed_by has no ON DELETE action, and a single multi-row
   // DELETE FROM users doesn't guarantee the registrations->payments cascade

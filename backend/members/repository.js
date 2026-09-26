@@ -5,6 +5,7 @@ import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.deactivated_at,
+  users.is_guest,
   users.account_data_enc,
   groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
   discord_accounts.username AS discord_username
@@ -26,6 +27,7 @@ function decryptMember(row) {
     emailVerified: row.email_verified,
     status: row.deactivated_at ? 'deactivated' : 'active',
     deactivatedAt: row.deactivated_at,
+    isGuest: row.is_guest,
     group: { id: row.group_id, key: row.group_key, name: row.group_name },
     discordUsername: row.discord_username,
     ...decryptFieldBlob(row.account_data_enc),

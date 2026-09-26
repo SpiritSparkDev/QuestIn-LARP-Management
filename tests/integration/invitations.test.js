@@ -236,8 +236,86 @@ test('cancelInvitation still succeeds on an already-redeemed invitation', async 
   assert.equal(cancelled, true);
 });
 
+async function makeGuest() {
+  const groupId = await scGroupId();
+  const email = `guest-${crypto.randomUUID()}@example.com`;
+  const { rows } = await query(
+    `INSERT INTO users (email, group_id, first_name, last_name, is_guest, email_verified)
+     VALUES ($1, $2, 'Guest', 'Person', true, false) RETURNING id`,
+    [email, groupId]
+  );
+  return { id: rows[0].id, email };
+}
+
+test('POST /auth/invite/redeem with a userId-carrying invitation converts the SAME row in place, not a new one', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const invitedBy = await makeAdmin();
+    const groupId = await scGroupId();
+    const guest = await makeGuest();
+    const invitation = await createInvitation({
+      userId: guest.id,
+      email: guest.email,
+      firstName: 'Guest',
+      lastName: 'Person',
+      groupId,
+      invitedBy,
+    });
+
+    const res = await fetch(`http://localhost:${port}/auth/invite/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: invitation.token, password: 'correct horse battery staple' }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.id, guest.id);
+
+    const { rows } = await query('SELECT is_guest, password_hash, email_verified FROM users WHERE id = $1', [guest.id]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].is_guest, false);
+    assert.ok(rows[0].password_hash);
+    assert.equal(rows[0].email_verified, true);
+
+    const { rows: allUsers } = await query('SELECT count(*)::int AS count FROM users WHERE email = $1', [guest.email]);
+    assert.equal(allUsers[0].count, 1);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /auth/invite/redeem rejects a guest-conversion token whose user is no longer a guest', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const invitedBy = await makeAdmin();
+    const groupId = await scGroupId();
+    const guest = await makeGuest();
+    const invitation = await createInvitation({
+      userId: guest.id,
+      email: guest.email,
+      firstName: 'Guest',
+      lastName: 'Person',
+      groupId,
+      invitedBy,
+    });
+    // Simulate the guest already having been converted some other way.
+    await query('UPDATE users SET is_guest = false WHERE id = $1', [guest.id]);
+
+    const res = await fetch(`http://localhost:${port}/auth/invite/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: invitation.token, password: 'correct horse battery staple' }),
+    });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM invitations");
-  await query("DELETE FROM users WHERE email LIKE 'inviter-%' OR email LIKE 'invitee-%' OR email LIKE 'redeem-%' OR email LIKE 'resend-%'");
+  await query("DELETE FROM users WHERE email LIKE 'inviter-%' OR email LIKE 'invitee-%' OR email LIKE 'redeem-%' OR email LIKE 'resend-%' OR email LIKE 'guest-%'");
   await closePool();
 });

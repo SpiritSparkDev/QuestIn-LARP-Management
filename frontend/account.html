@@ -89,12 +89,19 @@
               <div><input id="nickname" name="nickname" type="text"><label for="nickname">Rufname</label></div>
             </div>
             <div class="field-grid" id="discordUsername-field" style="display:none;">
-              <div><label for="discordUsername">Discord-Nutzername</label><p id="discordUsername">–</p></div>
+              <div><p id="discordUsername">–</p><label for="discordUsername">Discord-Nutzername</label></div>
             </div>
             <div id="account-ot-fields"></div>
 
             <button type="submit">Speichern</button>
           </form>
+
+          <div class="card form-pad">
+            <h2>Meine Daten (DSGVO-Auskunft)</h2>
+            <p class="sub">Lade eine vollständige Auskunft über alle bei uns gespeicherten Daten zu deinem Konto herunter.</p>
+            <button type="button" id="export-data-btn">Meine Daten herunterladen (TXT)</button>
+            <button type="button" id="export-files-btn" class="btn-ghost">Hochgeladene Dateien herunterladen (ZIP)</button>
+          </div>
         </div>
 
         <div class="tab-panel" id="anmelden-tab" hidden>
@@ -167,6 +174,12 @@
                     <h3>3. Weitere Angaben zu dieser Anmeldung</h3>
                     <div id="ot-fields" class="field-grid"></div>
 
+                    <div id="registration-waiver" style="display:none;">
+                      <h3>4. Einverständniserklärung</h3>
+                      <p class="sub" id="registration-waiver-text" style="white-space:pre-wrap;"></p>
+                      <label><input type="checkbox" id="registration-waiver-checkbox" required> Ich habe die Einverständniserklärung gelesen und stimme zu.</label>
+                    </div>
+
                     <div class="note-box">
                       <span class="material-symbols-outlined" aria-hidden="true">info</span>
                       <p>Mit dem Absenden meldest du dich verbindlich für dieses Event an. Deine Angaben kannst du danach jederzeit hier bearbeiten.</p>
@@ -219,8 +232,8 @@
                   <dialog id="copy-character-dialog">
                     <h3>Charakter kopieren</h3>
                     <p class="lede">Übernimmt Name und Sheet-Daten in einen neuen, unabhängigen Charakter.</p>
-                    <label for="copy-character-select">Vorlage</label>
                     <select id="copy-character-select"></select>
+                    <label for="copy-character-select">Vorlage</label>
                     <div class="dialog-actions">
                       <button type="button" id="copy-character-confirm">Kopieren</button>
                       <button type="button" id="copy-character-cancel" class="btn-ghost">Abbrechen</button>
@@ -261,8 +274,8 @@
             <dialog id="delete-character-dialog">
               <h3>Charakter löschen</h3>
               <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden. Gib zur Bestätigung den Namen "<strong id="delete-character-name"></strong>" ein.</p>
-              <label for="delete-character-input">Charaktername</label>
               <input type="text" id="delete-character-input" autocomplete="off">
+              <label for="delete-character-input">Charaktername</label>
               <div class="dialog-actions">
                 <button type="button" id="delete-character-confirm">Löschen</button>
                 <button type="button" id="delete-character-cancel" class="btn-ghost">Abbrechen</button>
@@ -663,6 +676,34 @@
       }
     }
 
+    async function downloadFile(path, notFoundMessage) {
+      const res = await fetch(path, { credentials: "include" });
+      if (!res.ok) {
+        if (res.status === 404) {
+          notify(notFoundMessage, "error");
+          return;
+        }
+        notify((await res.json().catch(() => ({}))).error ?? "Download fehlgeschlagen.", "error");
+        return;
+      }
+      const disposition = res.headers.get("content-disposition") ?? "";
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "download";
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById("export-data-btn").addEventListener("click", () => {
+      downloadFile("/account/export", "Download fehlgeschlagen.");
+    });
+    document.getElementById("export-files-btn").addEventListener("click", () => {
+      downloadFile("/account/export/files", "Keine Dateien vorhanden.");
+    });
+
     document.getElementById("ticket-download-png").addEventListener("click", async () => {
       const card = document.getElementById("ticket-card");
       const canvas = await html2canvas(card, { backgroundColor: null, scale: 2 });
@@ -726,6 +767,24 @@
     const otFieldsContainer = document.getElementById("ot-fields");
     const registrationFlagsContainer = document.getElementById("registration-flags");
     const registrationPriceGroupContainer = document.getElementById("registration-price-group");
+    const registrationWaiverSection = document.getElementById("registration-waiver");
+    const registrationWaiverText = document.getElementById("registration-waiver-text");
+    const registrationWaiverCheckbox = document.getElementById("registration-waiver-checkbox");
+
+    // The waiver is a global, admin-configured setting (not per-event), so
+    // it's loaded once and shown for every event -- not re-fetched per
+    // event-select change like the price-group/flags fields above.
+    async function loadRegistrationWaiver() {
+      const { waiverText } = await api.get("/app-settings");
+      if (waiverText) {
+        registrationWaiverText.textContent = waiverText;
+        registrationWaiverSection.style.display = "";
+        registrationWaiverCheckbox.required = true;
+      } else {
+        registrationWaiverSection.style.display = "none";
+        registrationWaiverCheckbox.required = false;
+      }
+    }
 
     // A synthetic OT-field definition so the event's flag vocabulary can be
     // rendered/collected with the exact same generic machinery the
@@ -1121,6 +1180,7 @@
           flags: collectRegistrationFlags(),
           priceGroup: collectRegistrationPriceGroup(),
           otFields: collectOtFields(),
+          waiverAccepted: registrationWaiverCheckbox.checked,
         });
         notify("Angemeldet.", "success");
         renderOtFields();
@@ -1692,6 +1752,7 @@
       }
 
       await loadEvents();
+      await loadRegistrationWaiver();
       await loadRegistrations();
       await loadCharacters();
       await loadQrCode(account, events, currentRegistrations);

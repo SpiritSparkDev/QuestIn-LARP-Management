@@ -28,19 +28,40 @@ router.post('/auth/invite/redeem', async ({ req }) => {
   let userId;
   try {
     userId = await withTransaction(async (client) => {
-      const { rows } = await client.query(
-        `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname, email_verified, account_data_enc)
-         VALUES ($1, $2, $3, $4, $5, $6, true, (SELECT account_data_enc FROM invitations WHERE id = $7))
-         RETURNING id`,
-        [invitation.email, passwordHash, invitation.groupId, invitation.firstName, invitation.lastName, invitation.nickname ?? null, invitation.id]
-      );
+      let redeemedUserId;
+      if (invitation.userId) {
+        // Guest-conversion mode: update the existing guest row in place
+        // instead of inserting a new one -- same record, now with login
+        // access. The WHERE guard is defense-in-depth alongside
+        // markRedeemed's own race guard: it also refuses to touch a row
+        // that was somehow already converted or is no longer a guest.
+        const { rowCount } = await client.query(
+          `UPDATE users SET password_hash = $2, is_guest = false, email_verified = true
+           WHERE id = $1 AND is_guest = true AND password_hash IS NULL`,
+          [invitation.userId, passwordHash]
+        );
+        if (rowCount === 0) {
+          const err = new Error('invitation already redeemed');
+          err.code = 'ALREADY_REDEEMED';
+          throw err;
+        }
+        redeemedUserId = invitation.userId;
+      } else {
+        const { rows } = await client.query(
+          `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname, email_verified, account_data_enc)
+           VALUES ($1, $2, $3, $4, $5, $6, true, (SELECT account_data_enc FROM invitations WHERE id = $7))
+           RETURNING id`,
+          [invitation.email, passwordHash, invitation.groupId, invitation.firstName, invitation.lastName, invitation.nickname ?? null, invitation.id]
+        );
+        redeemedUserId = rows[0].id;
+      }
       const redeemed = await markRedeemed(invitation.id, client);
       if (!redeemed) {
         const err = new Error('invitation already redeemed');
         err.code = 'ALREADY_REDEEMED';
         throw err;
       }
-      return rows[0].id;
+      return redeemedUserId;
     });
   } catch (err) {
     if (err.code === 'ALREADY_REDEEMED') {
