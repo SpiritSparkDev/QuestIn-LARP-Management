@@ -20,9 +20,9 @@
 
         <div class="tabs" id="char-class-tabs">
           <button type="button" class="tab-btn active" data-tab="daten-tab">Konto</button>
-          <button type="button" class="tab-btn" data-tab="sc-tab">Charaktere</button>
-          <button type="button" class="tab-btn" data-tab="nsc-tab" id="nsc-tab-btn" style="display:none;">NSC-Charaktere</button>
           <button type="button" class="tab-btn" data-tab="anmelden-tab">Anmeldung</button>
+          <button type="button" class="tab-btn" data-tab="sc-tab" id="sc-tab-btn">Charaktere</button>
+          <button type="button" class="tab-btn" data-tab="nsc-tab" id="nsc-tab-btn" style="display:none;">NSC-Charaktere</button>
         </div>
 
         <div class="tab-panel" id="daten-tab">
@@ -54,7 +54,7 @@
                   <input id="character-name" name="name" type="text" required>
                   <label for="character-name">Charaktername</label>
                   <h3>2. Charakterdaten</h3>
-                  <div id="character-dynamic-fields" class="field-grid"></div>
+                  <div id="character-dynamic-fields"></div>
                   <div class="dialog-actions">
                     <button type="submit">Speichern</button>
                     <button type="button" id="character-cancel-edit" class="btn-ghost">Abbrechen</button>
@@ -107,7 +107,7 @@
                     <input id="nsc-character-name" name="name" type="text" required>
                     <label for="nsc-character-name">Charaktername</label>
                     <h3>2. Charakterdaten</h3>
-                    <div id="nsc-dynamic-fields" class="field-grid"></div>
+                    <div id="nsc-dynamic-fields"></div>
                     <div class="dialog-actions">
                       <button type="submit">Speichern</button>
                       <button type="button" id="nsc-cancel-edit" class="btn-ghost">Abbrechen</button>
@@ -255,11 +255,41 @@
     const characterFormTitle = document.getElementById("form-title");
     const characterDynamicFields = document.getElementById("character-dynamic-fields");
 
-    function renderScSchemaFields(data = {}) {
-      characterDynamicFields.innerHTML = scSchema
-        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "sc-char-", { readOnly: field.staffOnly === true })}</div>`)
+    // Admin-assigned field.group (e.g. "Grunddaten", "Herkunft & Archetyp")
+    // becomes a sub-tab inside the character form, so a long field list
+    // doesn't force one long scrolling card. Fields without a group (or a
+    // schema where nobody has set one yet) fall back to today's single
+    // flat field-grid -- no sub-tabs appear until an admin opts in.
+    function renderGroupedFields(container, schema, data, idPrefix) {
+      const groups = new Map();
+      for (const field of schema) {
+        const key = field.group || "";
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(field);
+      }
+      const groupKeys = [...groups.keys()];
+      const fieldHtml = (field) => `<div class="form-group">${renderField(field, data[field.key], idPrefix, { readOnly: field.staffOnly === true })}</div>`;
+
+      if (groupKeys.length <= 1) {
+        container.innerHTML = `<div class="field-grid">${schema.map(fieldHtml).join("")}</div>`;
+        attachLiveValidation(container);
+        return;
+      }
+
+      const tabsId = `${idPrefix}group-tabs`;
+      const tabsHtml = `<div class="tabs" id="${tabsId}">${groupKeys
+        .map((key, i) => `<button type="button" class="tab-btn${i === 0 ? " active" : ""}" data-tab="${idPrefix}group-panel-${i}">${escapeHtml(key || "Weitere Felder")}</button>`)
+        .join("")}</div>`;
+      const panelsHtml = groupKeys
+        .map((key, i) => `<div class="tab-panel" id="${idPrefix}group-panel-${i}"${i === 0 ? "" : " hidden"}><div class="field-grid">${groups.get(key).map(fieldHtml).join("")}</div></div>`)
         .join("");
-      attachLiveValidation(characterDynamicFields);
+      container.innerHTML = tabsHtml + panelsHtml;
+      initTabs(document.getElementById(tabsId));
+      attachLiveValidation(container);
+    }
+
+    function renderScSchemaFields(data = {}) {
+      renderGroupedFields(characterDynamicFields, scSchema, data, "sc-char-");
     }
 
     function readFileAsBase64(file) {
@@ -445,14 +475,20 @@
     let nscCharacters = [];
     let editingNscCharacterId = null;
     const nscSection = document.getElementById("nsc-section");
+    const scTabButton = document.getElementById("sc-tab-btn");
     const nscTabButton = document.getElementById("nsc-tab-btn");
     const nscRoleTabButton = document.getElementById("nsc-role-tab-btn");
 
+    // The Charaktere/NSC-Charaktere tabs track which role is currently
+    // selected in Anmeldung's step 2 -- only the tab matching that role is
+    // offered, guiding "pick a role, then go create that kind of character".
+    function updateCharacterTabVisibility() {
+      scTabButton.style.display = selectedRegistrationRole === "sc" ? "" : "none";
+      nscTabButton.style.display = (selectedRegistrationRole === "nsc" && nscSchemaAvailable) ? "" : "none";
+    }
+
     function renderNscSchemaFields(data = {}) {
-      document.getElementById("nsc-dynamic-fields").innerHTML = nscSchema
-        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true })}</div>`)
-        .join("");
-      attachLiveValidation(document.getElementById("nsc-dynamic-fields"));
+      renderGroupedFields(document.getElementById("nsc-dynamic-fields"), nscSchema, data, "nsc-");
     }
 
     function renderNscList() {
@@ -566,6 +602,7 @@
         document.querySelectorAll("#registration-role-tabs .role-card").forEach((b) => b.classList.toggle("active", b === btn));
         scRolePanel.hidden = isNscRoleSelected();
         nscRolePanel.hidden = !isNscRoleSelected();
+        updateCharacterTabVisibility();
       });
     });
 
@@ -646,8 +683,8 @@
       renderRegistrationsList();
       const wantsNsc = nscSchemaAvailable;
       nscSection.style.display = wantsNsc ? "" : "none";
-      nscTabButton.style.display = wantsNsc ? "" : "none";
       nscRoleTabButton.style.display = wantsNsc ? "" : "none";
+      updateCharacterTabVisibility();
     }
 
     async function unregister(eventId) {
