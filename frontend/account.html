@@ -105,6 +105,39 @@
             <button type="button" id="export-data-btn">Meine Daten herunterladen (TXT)</button>
             <button type="button" id="export-files-btn" class="btn-ghost">Hochgeladene Dateien herunterladen (ZIP)</button>
           </div>
+
+          <div class="card form-pad">
+            <h2>Verwaltete Personen</h2>
+            <p class="sub">Melde zusätzliche Personen an, die sich nicht selbst einloggen können oder wollen — z.B. Familienmitglieder oder Kinder. Du verwaltest ihre Daten, Charaktere und Anmeldungen stellvertretend.</p>
+            <div id="managed-persons-list"></div>
+            <button type="button" id="new-managed-person-btn" class="btn-ghost">Person hinzufügen</button>
+
+            <dialog id="managed-person-dialog">
+              <h3 id="managed-person-dialog-title">Person hinzufügen</h3>
+              <form id="managed-person-form">
+                <div class="field-grid">
+                  <div><input id="managed-person-firstName" name="firstName" type="text" required><label for="managed-person-firstName">Vorname *</label></div>
+                  <div><input id="managed-person-lastName" name="lastName" type="text" required><label for="managed-person-lastName">Nachname *</label></div>
+                  <div><input id="managed-person-nickname" name="nickname" type="text"><label for="managed-person-nickname">Rufname</label></div>
+                  <div><input id="managed-person-email" name="email" type="email"><label for="managed-person-email">E-Mail (optional, für spätere Umwandlung in einen eigenen Account)</label></div>
+                </div>
+                <div id="managed-person-ot-fields"></div>
+                <div class="dialog-actions">
+                  <button type="submit">Speichern</button>
+                  <button type="button" id="managed-person-dialog-cancel" class="btn-ghost">Abbrechen</button>
+                </div>
+              </form>
+            </dialog>
+
+            <dialog id="managed-person-delete-dialog">
+              <h3>Person löschen</h3>
+              <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              <div class="dialog-actions">
+                <button type="button" id="managed-person-delete-confirm">Löschen</button>
+                <button type="button" id="managed-person-delete-cancel" class="btn-ghost">Abbrechen</button>
+              </div>
+            </dialog>
+          </div>
         </div>
 
         <div class="tab-panel" id="anmelden-tab" hidden>
@@ -745,6 +778,132 @@
         notify(err.message, "error");
       }
     });
+
+    let managedPersons = [];
+
+    function managedPersonStatusLabel(p) {
+      if (!p.email) return "Platzhalter (keine E-Mail hinterlegt)";
+      return "Platzhalter";
+    }
+
+    function renderManagedPersonsList() {
+      const container = document.getElementById("managed-persons-list");
+      if (managedPersons.length === 0) {
+        container.innerHTML = '<p class="sub">Noch keine verwalteten Personen angelegt.</p>';
+        return;
+      }
+      container.innerHTML = managedPersons
+        .map((p) => `<div class="card form-pad" data-managed-person-card="${p.id}">
+      <h3>${escapeHtml(p.name)}</h3>
+      <p class="sub">${escapeHtml(managedPersonStatusLabel(p))}</p>
+      <div class="action-row">
+        <a href="/managed-person.html?id=${encodeURIComponent(p.id)}" class="btn-ghost">Charaktere &amp; Anmeldung verwalten</a>
+        <button type="button" data-managed-person-edit="${p.id}" class="btn-ghost">Bearbeiten</button>
+        <button type="button" data-managed-person-delete="${p.id}" class="btn-ghost" ${p.canDelete ? "" : "disabled title=\"Diese Person hat bereits Event-Anmeldungen und kann nicht gelöscht werden.\""}>Löschen</button>
+        ${p.email ? `<button type="button" data-managed-person-convert="${p.id}" class="btn-ghost">In eigenen Account umwandeln</button>` : ""}
+      </div>
+    </div>`)
+        .join("");
+
+      container.querySelectorAll("[data-managed-person-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => openManagedPersonDialog(btn.dataset.managedPersonEdit));
+      });
+      container.querySelectorAll("[data-managed-person-delete]:not([disabled])").forEach((btn) => {
+        btn.addEventListener("click", () => openManagedPersonDeleteDialog(btn.dataset.managedPersonDelete));
+      });
+      container.querySelectorAll("[data-managed-person-convert]").forEach((btn) => {
+        btn.addEventListener("click", () => convertManagedPerson(btn.dataset.managedPersonConvert));
+      });
+    }
+
+    async function loadManagedPersons() {
+      managedPersons = await api.get("/managed-persons");
+      renderManagedPersonsList();
+    }
+
+    const managedPersonDialog = document.getElementById("managed-person-dialog");
+    const managedPersonForm = document.getElementById("managed-person-form");
+    attachLiveValidation(managedPersonForm);
+    const managedPersonOtFieldsContainer = document.getElementById("managed-person-ot-fields");
+    let editingManagedPersonId = null;
+
+    function renderManagedPersonOtFields(values = {}) {
+      managedPersonOtFieldsContainer.innerHTML = accountSchema
+        .map((field) => renderAccountFieldInput(field, values[field.key], { idPrefix: "managed-person-" }))
+        .join("");
+      attachLiveValidation(managedPersonOtFieldsContainer);
+    }
+
+    function openManagedPersonDialog(id) {
+      const person = id ? managedPersons.find((p) => p.id === id) : null;
+      editingManagedPersonId = person ? person.id : null;
+      document.getElementById("managed-person-dialog-title").textContent =
+        person ? `Person bearbeiten: ${person.name}` : "Person hinzufügen";
+      managedPersonForm.elements.firstName.value = person?.firstName ?? "";
+      managedPersonForm.elements.lastName.value = person?.lastName ?? "";
+      managedPersonForm.elements.nickname.value = person?.nickname ?? "";
+      managedPersonForm.elements.email.value = person?.email ?? "";
+      renderManagedPersonOtFields(person ?? {});
+      managedPersonDialog.showModal();
+    }
+
+    document.getElementById("new-managed-person-btn").addEventListener("click", () => openManagedPersonDialog(null));
+    document.getElementById("managed-person-dialog-cancel").addEventListener("click", () => managedPersonDialog.close());
+
+    managedPersonForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const data = {
+        ...Object.fromEntries(new FormData(managedPersonForm)),
+        ...nullifyBlankNumberFields(accountSchema, collectAccountFieldValues(managedPersonOtFieldsContainer, accountSchema)),
+      };
+      try {
+        if (editingManagedPersonId) {
+          await api.patch(`/managed-persons/${editingManagedPersonId}`, data);
+        } else {
+          await api.post("/managed-persons", data);
+        }
+        notify("Gespeichert.", "success");
+        managedPersonDialog.close();
+        await loadManagedPersons();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    const managedPersonDeleteDialog = document.getElementById("managed-person-delete-dialog");
+    let deletingManagedPersonId = null;
+
+    function openManagedPersonDeleteDialog(id) {
+      deletingManagedPersonId = id;
+      managedPersonDeleteDialog.showModal();
+    }
+
+    document.getElementById("managed-person-delete-cancel").addEventListener("click", () => {
+      deletingManagedPersonId = null;
+      managedPersonDeleteDialog.close();
+    });
+
+    document.getElementById("managed-person-delete-confirm").addEventListener("click", async () => {
+      try {
+        await api.delete(`/managed-persons/${deletingManagedPersonId}`);
+        notify("Gelöscht.", "success");
+        managedPersonDeleteDialog.close();
+        await loadManagedPersons();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    async function convertManagedPerson(id) {
+      if (!confirm("Diese Person erhält eine E-Mail mit einem Link, um ein eigenes Passwort zu setzen. Danach hast du keinen Zugriff mehr auf ihre Daten. Fortfahren?")) return;
+      try {
+        await api.post(`/managed-persons/${id}/convert`, {});
+        notify("Einladung verschickt.", "success");
+        await loadManagedPersons();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    }
 
     const CON_ROLE_LABELS = {
       sc: "SC",
@@ -1742,6 +1901,7 @@
       registrationSchema = await api.get("/registration-schema");
       renderOtFields();
       renderDashboardAccountHint(account);
+      await loadManagedPersons();
 
       scSchema = await api.get("/sc-schema");
       renderScSchemaFields();
