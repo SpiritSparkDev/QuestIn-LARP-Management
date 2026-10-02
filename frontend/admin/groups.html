@@ -9,10 +9,14 @@
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
 </head>
 <body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-top">
-      <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
     </div>
     <nav id="nav-links"></nav>
     <div class="sidebar-foot">
@@ -83,6 +87,7 @@
 <script type="module">
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
 applyBranding();
 import { escapeHtml } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
@@ -224,6 +229,8 @@ try {
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
   else if (err.status === 403) { notify('Kein Zugriff – nur für Admins.', 'error'); }
+} finally {
+  hideLoading();
 }
 </script>
 </body>

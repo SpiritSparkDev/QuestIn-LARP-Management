@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { getSmtpSettingsForSending } from '../smtpSettings/repository.js';
+import { getAppSettings, DEFAULT_BASE_URL } from '../appSettings/repository.js';
 import { logger } from '../logger.js';
 
 async function resolveSmtpConfig() {
@@ -35,13 +36,21 @@ export async function getTransporterAndFrom() {
   return { transporter, from };
 }
 
-export function baseUrl() {
-  return process.env.APP_BASE_URL || 'http://localhost:3000';
+export async function baseUrl() {
+  if (process.env.DATABASE_URL) {
+    try {
+      const settings = await getAppSettings();
+      return settings.effectiveBaseUrl;
+    } catch (err) {
+      logger.error('failed to read app_settings, falling back to environment variable', { error: err.message });
+    }
+  }
+  return process.env.APP_BASE_URL || DEFAULT_BASE_URL;
 }
 
 export async function sendVerificationEmail(to, token) {
   const { transporter, from } = await getTransporterAndFrom();
-  const url = `${baseUrl()}/verify.html?token=${token}`;
+  const url = `${await baseUrl()}/verify.html?token=${token}`;
   return transporter.sendMail({
     to,
     from,
@@ -52,7 +61,7 @@ export async function sendVerificationEmail(to, token) {
 
 export async function sendPasswordResetEmail(to, token) {
   const { transporter, from } = await getTransporterAndFrom();
-  const url = `${baseUrl()}/reset-password.html?token=${token}`;
+  const url = `${await baseUrl()}/reset-password.html?token=${token}`;
   return transporter.sendMail({
     to,
     from,
@@ -63,7 +72,7 @@ export async function sendPasswordResetEmail(to, token) {
 
 export async function sendInvitationEmail(to, token) {
   const { transporter, from } = await getTransporterAndFrom();
-  const url = `${baseUrl()}/set-password.html?token=${token}`;
+  const url = `${await baseUrl()}/set-password.html?token=${token}`;
   return transporter.sendMail({
     to,
     from,
@@ -111,7 +120,7 @@ export async function sendPaymentReminderEmail(to, { eventName, amountDueCents, 
 
 export async function sendGuestTicketEmail(to, { eventName, paymentToken }) {
   const { transporter, from } = await getTransporterAndFrom();
-  const url = `${baseUrl()}/guest-payment.html?token=${paymentToken}`;
+  const url = `${await baseUrl()}/guest-payment.html?token=${paymentToken}`;
   return transporter.sendMail({
     to,
     from,

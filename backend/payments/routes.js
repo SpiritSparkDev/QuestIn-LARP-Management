@@ -55,13 +55,14 @@ router.post('/events/:eventId/registrations/:userId/checkout-session', requireAu
   if (rows[0].amount_due_cents == null) return { status: 400, body: { error: 'Für diese Anmeldung ist kein Betrag hinterlegt.' } };
   if (rows[0].paid_at) return { status: 409, body: { error: 'Bereits bezahlt.' } };
 
+  const resolvedBaseUrl = await baseUrl();
   const session = await createCheckoutSession({
     eventId: params.eventId,
     userId: params.userId,
     method: body.method,
     amountDueCents: rows[0].amount_due_cents,
-    successUrl: `${baseUrl()}/account.html?payment=success#anmelden`,
-    cancelUrl: `${baseUrl()}/account.html?payment=cancelled#anmelden`,
+    successUrl: `${resolvedBaseUrl}/account.html?payment=success#anmelden`,
+    cancelUrl: `${resolvedBaseUrl}/account.html?payment=cancelled#anmelden`,
   });
   if (!session) return { status: 502, body: { error: 'Zahlungen sind aktuell nicht konfiguriert.' } };
   return { status: 200, body: { url: session.url } };
@@ -105,13 +106,14 @@ router.post('/public/registrations/:token/checkout-session', async ({ req, param
   if (registration.amountDueCents == null) return { status: 400, body: { error: 'Für diese Anmeldung ist kein Betrag hinterlegt.' } };
   if (registration.paidAt) return { status: 409, body: { error: 'Bereits bezahlt.' } };
 
+  const resolvedBaseUrl = await baseUrl();
   const session = await createCheckoutSession({
     eventId: registration.eventId,
     userId: registration.userId,
     method: body.method,
     amountDueCents: registration.amountDueCents,
-    successUrl: `${baseUrl()}/guest-payment.html?token=${params.token}&payment=success`,
-    cancelUrl: `${baseUrl()}/guest-payment.html?token=${params.token}&payment=cancelled`,
+    successUrl: `${resolvedBaseUrl}/guest-payment.html?token=${params.token}&payment=success`,
+    cancelUrl: `${resolvedBaseUrl}/guest-payment.html?token=${params.token}&payment=cancelled`,
   });
   if (!session) return { status: 502, body: { error: 'Zahlungen sind aktuell nicht konfiguriert.' } };
   return { status: 200, body: { url: session.url } };
@@ -245,15 +247,16 @@ router.post('/events/:eventId/payment-reminders', requireAuth(requireMenu('check
 
   const unpaid = await listUnpaidRegistrationsForEvent(params.eventId);
   const { transporter, from } = await getTransporterAndFrom();
+  const resolvedBaseUrl = await baseUrl();
   let sent = 0;
   for (const reg of unpaid) {
-    let payUrl = `${baseUrl()}/account.html?payment=reminder#anmelden`;
+    let payUrl = `${resolvedBaseUrl}/account.html?payment=reminder#anmelden`;
     if (reg.isGuest) {
       let token = reg.paymentToken;
       if (!token || new Date(reg.paymentTokenExpiresAt) < new Date()) {
         ({ token } = await setGuestPaymentToken(params.eventId, reg.userId, GUEST_PAYMENT_TOKEN_TTL_MS));
       }
-      payUrl = `${baseUrl()}/guest-payment.html?token=${token}`;
+      payUrl = `${resolvedBaseUrl}/guest-payment.html?token=${token}`;
     }
     try {
       await sendPaymentReminderEmail(reg.email, { eventName: event.name, amountDueCents: reg.amountDueCents, payUrl }, { transporter, from });

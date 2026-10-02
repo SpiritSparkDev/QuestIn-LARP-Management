@@ -21,7 +21,11 @@ const PAYMENT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const GUEST_GROUP_KEY = 'mitglied';
 
 router.get('/public/events/:code', async ({ params }) => {
-  const event = await getEventByCode(params.code);
+  // The router matches raw, still-percent-encoded path segments (see
+  // Router.match in backend/router.js), so a code containing "/" -- the
+  // exact format the admin UI suggests, e.g. "P17/2027" -- arrives here as
+  // literal "P17%2F2027" unless decoded first.
+  const event = await getEventByCode(decodeURIComponent(params.code));
   if (!event) return { status: 404, body: { error: 'event not found' } };
   if (!event.is_active) {
     return { status: 409, body: { error: 'Für dieses Event ist aktuell keine Anmeldung möglich.' } };

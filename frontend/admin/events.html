@@ -9,10 +9,14 @@
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
 </head>
 <body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-top">
-      <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
     </div>
     <nav id="nav-links"></nav>
     <div class="sidebar-foot">
@@ -53,6 +57,25 @@
         <label for="event-date">Datum</label>
         <input id="event-code" name="code" type="text" placeholder="P17/2027">
         <label for="event-code">QR-Code-Kennung <span style="opacity:0.6;font-size:12px;">optional, z.B. P17/2027</span></label>
+
+        <div id="guest-widget-help" style="margin:4px 0 20px;padding:12px 16px;border:1px solid var(--border-color, #ddd);border-radius:8px;">
+          <strong>Gast-Widget einbetten</strong>
+          <p class="sub" style="margin-top:4px;">Damit können Gäste sich ohne Konto für dieses Event ein Ticket sichern (z.B. eingebettet auf eurer Website).</p>
+          <div id="guest-widget-missing-code" class="sub">Vergib oben eine QR-Code-Kennung, um Link und Einbettungscode zu erhalten.</div>
+          <div id="guest-widget-ready" style="display:none;">
+            <label for="guest-widget-link" style="margin-top:12px;">Direkter Link</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input id="guest-widget-link" type="text" readonly style="flex:1;">
+              <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-link">Kopieren</button>
+            </div>
+            <label for="guest-widget-iframe" style="margin-top:12px;">Einbettungscode (iframe)</label>
+            <div style="display:flex;gap:8px;align-items:flex-start;">
+              <textarea id="guest-widget-iframe" readonly rows="2" style="flex:1;font-family:monospace;font-size:13px;"></textarea>
+              <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-iframe">Kopieren</button>
+            </div>
+          </div>
+        </div>
+
         <input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt">
         <label for="event-capacity">Max. Teilnehmerzahl <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
         <input id="event-flags" name="flags" type="text" placeholder="GSC, VP, Ersthelfer">
@@ -79,6 +102,7 @@
 <script type="module">
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
 applyBranding();
 import { escapeHtml } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
@@ -206,6 +230,41 @@ function collectPricing() {
 renderPriceGroups();
 renderPriceTiers();
 
+const guestWidgetMissingCode = document.getElementById('guest-widget-missing-code');
+const guestWidgetReady = document.getElementById('guest-widget-ready');
+const guestWidgetLink = document.getElementById('guest-widget-link');
+const guestWidgetIframe = document.getElementById('guest-widget-iframe');
+
+function renderGuestWidgetHelp() {
+  const code = form.elements.code.value.trim();
+  if (!code) {
+    guestWidgetMissingCode.style.display = '';
+    guestWidgetReady.style.display = 'none';
+    return;
+  }
+  const url = `${window.location.origin}/ticket-widget.html?event=${encodeURIComponent(code)}`;
+  guestWidgetLink.value = url;
+  guestWidgetIframe.value = `<iframe src="${url}" style="width:100%;max-width:480px;min-height:640px;border:0;"></iframe>`;
+  guestWidgetMissingCode.style.display = 'none';
+  guestWidgetReady.style.display = '';
+}
+
+form.elements.code.addEventListener('input', renderGuestWidgetHelp);
+renderGuestWidgetHelp();
+
+document.querySelectorAll('[data-copy-target]').forEach((button) => {
+  button.addEventListener('click', async () => {
+    const target = document.getElementById(button.dataset.copyTarget);
+    try {
+      await navigator.clipboard.writeText(target.value);
+      notify('In die Zwischenablage kopiert.', 'success');
+    } catch {
+      target.select();
+      notify('Automatisches Kopieren nicht möglich – Text ist markiert, bitte manuell kopieren (Strg/Cmd+C).', 'error');
+    }
+  });
+});
+
 document.getElementById('force-delete-cancel').addEventListener('click', () => forceDeleteDialog.close());
 
 function openForceDeleteDialog(eventData) {
@@ -294,6 +353,7 @@ function startEdit(eventData) {
   }));
   renderPriceGroups();
   renderPriceTiers();
+  renderGuestWidgetHelp();
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
 }
 
@@ -305,6 +365,7 @@ function resetForm() {
   priceTiers = [];
   renderPriceGroups();
   renderPriceTiers();
+  renderGuestWidgetHelp();
   form.querySelector('button[type="submit"]').textContent = 'Speichern';
 }
 
@@ -349,6 +410,8 @@ try {
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
   else if (err.status === 403) { notify('Kein Zugriff – nur für Admin/Moderator.', 'error'); }
+} finally {
+  hideLoading();
 }
 </script>
 </body>

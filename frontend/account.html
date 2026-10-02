@@ -13,6 +13,7 @@
 </head>
 
 <body>
+  <div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
   <div class="app">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-top">
@@ -363,6 +364,7 @@
   <script type="module">
     import { api } from "/js/api.js";
     import { applyBranding } from "/js/branding.js";
+    import { hideLoading } from "/js/loading.js";
     applyBranding();
     import {
       renderNavLinks,
@@ -1762,6 +1764,8 @@
       document.getElementById("browse-characters-link").style.display = characterBrowsingEnabled ? "" : "none";
     } catch (err) {
       if (err.status === 401) window.location.href = "/login.html";
+    } finally {
+      hideLoading();
     }
   </script>
 </body>

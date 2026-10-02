@@ -145,6 +145,18 @@ h1, h2, h3 {
   padding: 0 8px 20px;
 }
 
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-brand-row .brand-seal {
+  height: 36px;
+  width: 36px !important;
+  flex: none;
+}
+
 .sidebar-brand {
   font-family: "EB Garamond", serif;
   font-size: 20px;
@@ -1568,4 +1580,35 @@ dialog#toast-stack::backdrop {
 }
 .grid .span {
   grid-column: span 2;
+}
+
+/* ---------- Page loader ---------- */
+
+.page-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-container-lowest);
+  transition: opacity 0.2s ease;
+}
+
+.page-loader.page-loader-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.page-loader-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--outline-variant);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: page-loader-spin 0.7s linear infinite;
+}
+
+@keyframes page-loader-spin {
+  to { transform: rotate(360deg); }
 }

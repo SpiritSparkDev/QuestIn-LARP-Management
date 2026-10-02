@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E-Mail-Vorlagen – Pakyrion Admin</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
+    <h1>E-Mail-Vorlagen</h1>
+    <p class="sub">Erstelle Vorlagen für E-Mails. Felder aus den Konto- (OT) und Charakter- (IT) Daten eines Empfängers lassen sich per Klick als Platzhalter einfügen und werden beim Versand automatisch ersetzt.</p>
+
+    <div class="card">
+      <div class="table-scroll">
+      <table id="template-list">
+        <thead><tr><th>Name</th><th>Betreff</th><th>Format</th><th></th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="card form-pad">
+      <h2 id="form-title">Neue Vorlage</h2>
+      <form id="template-form">
+        <input id="template-name" name="name" type="text" required>
+        <label for="template-name">Name <span style="opacity:0.6;font-size:12px;">nur intern, erscheint nicht in der Mail</span></label>
+
+        <input id="template-subject" name="subject" type="text">
+        <label for="template-subject">Betreff</label>
+
+        <textarea id="template-body" name="body" rows="12"></textarea>
+        <label for="template-body">Inhalt</label>
+
+        <label><input type="checkbox" id="template-is-html"> Als HTML senden <span style="opacity:0.6;font-size:12px;">sonst Klartext</span></label>
+
+        <div style="margin:16px 0;">
+          <strong>Felder einfügen</strong>
+          <p class="sub" style="margin:4px 0 8px;">Klicke auf ein Feld, um es an der Cursorposition in Betreff/Inhalt einzufügen (zuletzt angeklicktes Feld von beiden wird verwendet).</p>
+          <p class="sub" style="margin-bottom:4px;"><strong>OT-Felder (Konto)</strong></p>
+          <div id="account-field-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+          <p class="sub" style="margin-bottom:4px;"><strong>IT-Felder (Charakter)</strong></p>
+          <div id="character-field-tags" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        </div>
+
+        <button type="submit">Speichern</button>
+        <button type="button" id="template-cancel-edit" class="btn-ghost">Abbrechen</button>
+      </form>
+    </div>
+
+    <div class="card form-pad" id="test-section" style="display:none;">
+      <h2>Vorschau &amp; Testmail</h2>
+      <p class="sub">Rendert die Vorlage mit den echten Daten eines gewählten Mitglieds (und optional eines seiner Charaktere).</p>
+      <select id="test-member"></select>
+      <label for="test-member">Mitglied</label>
+      <select id="test-character"><option value="">Kein Charakter</option></select>
+      <label for="test-character">Charakter</label>
+      <button type="button" id="test-preview">Vorschau anzeigen</button>
+      <button type="button" id="test-send">Testmail senden</button>
+
+      <div id="preview-result" style="display:none;margin-top:16px;">
+        <label>Gerenderter Betreff</label>
+        <p id="preview-subject" style="font-weight:600;"></p>
+        <label>Gerenderter Inhalt</label>
+        <pre id="preview-body-text" style="white-space:pre-wrap;background:var(--surface-container-high);padding:12px;border-radius:8px;"></pre>
+        <iframe id="preview-body-html" style="display:none;width:100%;min-height:300px;border:1px solid var(--outline-variant);border-radius:8px;background:#fff;"></iframe>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
+applyBranding();
+import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
+initSidebarToggle();
+
+const listBody = document.querySelector('#template-list tbody');
+const form = document.getElementById('template-form');
+const formTitle = document.getElementById('form-title');
+const nameInput = document.getElementById('template-name');
+const subjectInput = document.getElementById('template-subject');
+const bodyInput = document.getElementById('template-body');
+const isHtmlCheckbox = document.getElementById('template-is-html');
+const testSection = document.getElementById('test-section');
+const testMemberSelect = document.getElementById('test-member');
+const testCharacterSelect = document.getElementById('test-character');
+const previewResult = document.getElementById('preview-result');
+const previewSubjectEl = document.getElementById('preview-subject');
+const previewBodyTextEl = document.getElementById('preview-body-text');
+const previewBodyHtmlEl = document.getElementById('preview-body-html');
+
+let editingId = null;
+let templates = [];
+let members = [];
+
+// Tracks whichever of subject/body was focused last, so a field-tag click
+// (which itself steals focus) still knows where to insert the placeholder.
+let insertTarget = bodyInput;
+subjectInput.addEventListener('focus', () => { insertTarget = subjectInput; });
+bodyInput.addEventListener('focus', () => { insertTarget = bodyInput; });
+
+function insertAtCursor(target, text) {
+  const start = target.selectionStart ?? target.value.length;
+  const end = target.selectionEnd ?? target.value.length;
+  target.value = target.value.slice(0, start) + text + target.value.slice(end);
+  target.focus();
+  const cursor = start + text.length;
+  target.setSelectionRange(cursor, cursor);
+}
+
+function renderFieldTags(container, bucket, fields) {
+  container.innerHTML = fields.map((f) => `<button type="button" class="btn-sm btn-ghost" data-token="{{${bucket}.${escapeHtml(f.key)}}}">${escapeHtml(f.label)}</button>`).join('')
+    || '<p class="sub">Keine Felder definiert.</p>';
+  container.querySelectorAll('[data-token]').forEach((btn) => {
+    btn.addEventListener('click', () => insertAtCursor(insertTarget, btn.dataset.token));
+  });
+}
+
+async function loadFields() {
+  const fields = await api.get('/admin/email-templates/fields');
+  renderFieldTags(document.getElementById('account-field-tags'), 'account', fields.account);
+  renderFieldTags(document.getElementById('character-field-tags'), 'character', fields.character);
+}
+
+function resetForm() {
+  editingId = null;
+  formTitle.textContent = 'Neue Vorlage';
+  form.reset();
+  testSection.style.display = 'none';
+  previewResult.style.display = 'none';
+  form.querySelector('button[type="submit"]').textContent = 'Speichern';
+}
+
+function startEdit(template) {
+  editingId = template.id;
+  formTitle.textContent = `Vorlage bearbeiten: ${template.name}`;
+  nameInput.value = template.name;
+  subjectInput.value = template.subject;
+  bodyInput.value = template.body;
+  isHtmlCheckbox.checked = template.isHtml;
+  form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
+  testSection.style.display = '';
+  previewResult.style.display = 'none';
+}
+
+async function loadTemplates() {
+  listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
+  templates = await api.get('/admin/email-templates');
+  listBody.innerHTML = templates.map((t) => `<tr>
+    <td>${escapeHtml(t.name)}</td>
+    <td>${escapeHtml(t.subject)}</td>
+    <td>${t.isHtml ? 'HTML' : 'Klartext'}</td>
+    <td><button type="button" class="btn-sm btn-ghost" data-edit="${t.id}">Bearbeiten</button></td>
+    <td><button type="button" class="btn-sm btn-ghost" data-delete="${t.id}">Löschen</button></td>
+  </tr>`).join('') || '<tr><td colspan="100%">Noch keine Vorlagen angelegt.</td></tr>';
+
+  listBody.querySelectorAll('[data-edit]').forEach((button) => {
+    button.addEventListener('click', () => startEdit(templates.find((t) => t.id === button.dataset.edit)));
+  });
+  listBody.querySelectorAll('[data-delete]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const template = templates.find((t) => t.id === button.dataset.delete);
+      if (!confirm(`Vorlage "${template.name}" wirklich löschen?`)) return;
+      try {
+        await api.delete(`/admin/email-templates/${template.id}`);
+        notify('Gelöscht.', 'success');
+        if (editingId === template.id) resetForm();
+        await loadTemplates();
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+    });
+  });
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const payload = {
+    name: nameInput.value,
+    subject: subjectInput.value,
+    body: bodyInput.value,
+    isHtml: isHtmlCheckbox.checked,
+  };
+  try {
+    const saved = editingId
+      ? await api.put(`/admin/email-templates/${editingId}`, payload)
+      : await api.post('/admin/email-templates', payload);
+    notify('Gespeichert.', 'success');
+    startEdit(saved);
+    await loadTemplates();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+document.getElementById('template-cancel-edit').addEventListener('click', () => resetForm());
+
+async function loadMembersIntoTestPicker() {
+  members = await api.get('/members');
+  members = members.filter((m) => m.status !== 'invited' && m.email);
+  testMemberSelect.innerHTML = members.map((m) => `<option value="${m.id}">${escapeHtml(m.name)} (${escapeHtml(m.email)})</option>`).join('');
+}
+
+async function loadCharactersForTestMember() {
+  testCharacterSelect.innerHTML = '<option value="">Kein Charakter</option>';
+  if (!testMemberSelect.value) return;
+  const characters = await api.get(`/admin/email-templates/members/${testMemberSelect.value}/characters`);
+  testCharacterSelect.innerHTML += characters.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+}
+
+testMemberSelect.addEventListener('change', loadCharactersForTestMember);
+
+function showPreview(rendered) {
+  previewResult.style.display = '';
+  previewSubjectEl.textContent = rendered.subject;
+  if (rendered.isHtml) {
+    previewBodyTextEl.style.display = 'none';
+    previewBodyHtmlEl.style.display = '';
+    previewBodyHtmlEl.srcdoc = rendered.body;
+  } else {
+    previewBodyTextEl.style.display = '';
+    previewBodyHtmlEl.style.display = 'none';
+    previewBodyTextEl.textContent = rendered.body;
+  }
+}
+
+document.getElementById('test-preview').addEventListener('click', async () => {
+  if (!editingId) return;
+  if (!testMemberSelect.value) { notify('Bitte ein Mitglied auswählen.', 'error'); return; }
+  try {
+    const rendered = await api.post(`/admin/email-templates/${editingId}/preview`, {
+      userId: testMemberSelect.value,
+      characterId: testCharacterSelect.value || undefined,
+    });
+    showPreview(rendered);
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+document.getElementById('test-send').addEventListener('click', async () => {
+  if (!editingId) return;
+  if (!testMemberSelect.value) { notify('Bitte ein Mitglied auswählen.', 'error'); return; }
+  try {
+    const result = await api.post(`/admin/email-templates/${editingId}/send-test`, {
+      userId: testMemberSelect.value,
+      characterId: testCharacterSelect.value || undefined,
+    });
+    showPreview(result);
+    notify(`Testmail an ${result.to} gesendet.`, 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  if (account.group.key !== 'admin') {
+    notify('Kein Zugriff – nur für Admin.', 'error');
+  } else {
+    await Promise.all([loadFields(), loadTemplates(), loadMembersIntoTestPicker()]);
+  }
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+} finally {
+  hideLoading();
+}
+</script>
+</body>
+</html>

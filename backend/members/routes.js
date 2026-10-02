@@ -190,7 +190,7 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     }
   }
 
-  const link = `${baseUrl()}/set-password.html?token=${invitation.token}`;
+  const link = `${await baseUrl()}/set-password.html?token=${invitation.token}`;
   return { status: 201, body: { id: invitation.id, email: invitation.email, status: 'invited', emailSent, link } };
 })));
 
@@ -218,7 +218,7 @@ router.post('/members/:id/generate-conversion-link', requireAuth(requireMenu('mi
     ttlDays: invitationTtlDays,
   });
 
-  const link = `${baseUrl()}/set-password.html?token=${invitation.token}`;
+  const link = `${await baseUrl()}/set-password.html?token=${invitation.token}`;
   return { status: 201, body: { id: invitation.id, link } };
 })));
 
@@ -245,7 +245,7 @@ router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglied
       logger.error('failed to resend invitation email', { error: err.message });
     }
   }
-  const link = `${baseUrl()}/set-password.html?token=${updated.token}`;
+  const link = `${await baseUrl()}/set-password.html?token=${updated.token}`;
   return { status: 200, body: { id: updated.id, email: updated.email, status: 'invited', emailSent, link } };
 })));
 

@@ -1,8 +1,10 @@
 import { query } from '../db.js';
 
+export const DEFAULT_BASE_URL = 'http://localhost:3000';
+
 export async function getAppSettings() {
-  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, waitlist_auto_promote, waiver_text, waiver_version, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background FROM app_settings LIMIT 1');
-  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, hasUploadedLogo: false, hasUploadedTicketBackground: false };
+  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, waitlist_auto_promote, waiver_text, waiver_version, base_url, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background FROM app_settings LIMIT 1');
+  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: process.env.APP_BASE_URL || DEFAULT_BASE_URL, hasUploadedLogo: false, hasUploadedTicketBackground: false };
   return {
     logoUrl: rows[0].logo_url,
     appTitle: rows[0].app_title,
@@ -13,12 +15,14 @@ export async function getAppSettings() {
     waitlistAutoPromote: rows[0].waitlist_auto_promote,
     waiverText: rows[0].waiver_text,
     waiverVersion: rows[0].waiver_version,
+    baseUrl: rows[0].base_url,
+    effectiveBaseUrl: rows[0].base_url || process.env.APP_BASE_URL || DEFAULT_BASE_URL,
     hasUploadedLogo: rows[0].has_uploaded_logo,
     hasUploadedTicketBackground: rows[0].has_uploaded_ticket_background,
   };
 }
 
-export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText }) {
+export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText, baseUrl }) {
   const id = await ensureSettingsRow();
   // Auto-bumps waiver_version whenever the text actually changes, so a
   // participant's stored waiver_version_accepted always identifies exactly
@@ -29,6 +33,13 @@ export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerC
     const current = await getAppSettings();
     if (waiverText !== current.waiverText) waiverVersionBump = current.waiverVersion + 1;
   }
+  // baseUrl needs tri-state handling that COALESCE can't express: undefined
+  // ("field not submitted") must keep the stored value, while '' ("admin
+  // cleared the field") must overwrite it with NULL to fall back to
+  // APP_BASE_URL again -- COALESCE($n, col) can never produce NULL from a
+  // non-NULL column.
+  const baseUrlProvided = baseUrl !== undefined;
+  const baseUrlValue = baseUrl === '' ? null : (baseUrl ?? null);
   await query(
     `UPDATE app_settings SET
        logo_url = COALESCE($2, logo_url),
@@ -39,12 +50,13 @@ export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerC
        character_browsing_enabled = COALESCE($7, character_browsing_enabled),
        waitlist_auto_promote = COALESCE($8, waitlist_auto_promote),
        waiver_text = COALESCE($9, waiver_text),
-       waiver_version = COALESCE($10, waiver_version)
+       waiver_version = COALESCE($10, waiver_version),
+       base_url = CASE WHEN $11 THEN $12 ELSE base_url END
      WHERE id = $1`,
     [
       id, logoUrl ?? null, appTitle ?? null, eventName ?? null, quotaMbPerCharacter ?? null,
       invitationTtlDays ?? null, characterBrowsingEnabled ?? null, waitlistAutoPromote ?? null,
-      waiverText ?? null, waiverVersionBump,
+      waiverText ?? null, waiverVersionBump, baseUrlProvided, baseUrlValue,
     ]
   );
   return getAppSettings();
