@@ -49,6 +49,43 @@
               <button type="button" id="dashboard-characters-link" class="btn-ghost">Alle Charaktere verwalten</button>
 
               <div class="card" id="dashboard-account-hint" style="display:none;"></div>
+
+              <div id="dashboard-managed-persons-toggle" style="display:none;">
+                <label><input type="checkbox" id="dashboard-managed-persons-checkbox"> Gruppe oder weitere Charaktere anmelden</label>
+              </div>
+
+              <div class="card form-pad" id="dashboard-managed-persons-section" style="display:none;">
+                <h2>Verwaltete Personen</h2>
+                <p class="sub">Melde zusätzliche Personen an, die sich nicht selbst einloggen können oder wollen — z.B. Familienmitglieder oder Kinder. Du verwaltest ihre Daten, Charaktere und Anmeldungen stellvertretend.</p>
+                <div id="managed-persons-list"></div>
+                <button type="button" id="new-managed-person-btn" class="btn-ghost">Person hinzufügen</button>
+
+                <dialog id="managed-person-dialog">
+                  <h3 id="managed-person-dialog-title">Person hinzufügen</h3>
+                  <form id="managed-person-form">
+                    <div class="field-grid">
+                      <div><input id="managed-person-firstName" name="firstName" type="text" required><label for="managed-person-firstName">Vorname *</label></div>
+                      <div><input id="managed-person-lastName" name="lastName" type="text" required><label for="managed-person-lastName">Nachname *</label></div>
+                      <div><input id="managed-person-nickname" name="nickname" type="text"><label for="managed-person-nickname">Rufname</label></div>
+                      <div><input id="managed-person-email" name="email" type="email"><label for="managed-person-email">E-Mail (optional, für spätere Umwandlung in einen eigenen Account)</label></div>
+                    </div>
+                    <div id="managed-person-ot-fields"></div>
+                    <div class="dialog-actions">
+                      <button type="submit">Speichern</button>
+                      <button type="button" id="managed-person-dialog-cancel" class="btn-ghost">Abbrechen</button>
+                    </div>
+                  </form>
+                </dialog>
+
+                <dialog id="managed-person-delete-dialog">
+                  <h3>Person löschen</h3>
+                  <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+                  <div class="dialog-actions">
+                    <button type="button" id="managed-person-delete-confirm">Löschen</button>
+                    <button type="button" id="managed-person-delete-cancel" class="btn-ghost">Abbrechen</button>
+                  </div>
+                </dialog>
+              </div>
             </div>
 
             <div class="ticket-panel" id="ticket-panel" style="display:none;">
@@ -106,38 +143,6 @@
             <button type="button" id="export-files-btn" class="btn-ghost">Hochgeladene Dateien herunterladen (ZIP)</button>
           </div>
 
-          <div class="card form-pad">
-            <h2>Verwaltete Personen</h2>
-            <p class="sub">Melde zusätzliche Personen an, die sich nicht selbst einloggen können oder wollen — z.B. Familienmitglieder oder Kinder. Du verwaltest ihre Daten, Charaktere und Anmeldungen stellvertretend.</p>
-            <div id="managed-persons-list"></div>
-            <button type="button" id="new-managed-person-btn" class="btn-ghost">Person hinzufügen</button>
-
-            <dialog id="managed-person-dialog">
-              <h3 id="managed-person-dialog-title">Person hinzufügen</h3>
-              <form id="managed-person-form">
-                <div class="field-grid">
-                  <div><input id="managed-person-firstName" name="firstName" type="text" required><label for="managed-person-firstName">Vorname *</label></div>
-                  <div><input id="managed-person-lastName" name="lastName" type="text" required><label for="managed-person-lastName">Nachname *</label></div>
-                  <div><input id="managed-person-nickname" name="nickname" type="text"><label for="managed-person-nickname">Rufname</label></div>
-                  <div><input id="managed-person-email" name="email" type="email"><label for="managed-person-email">E-Mail (optional, für spätere Umwandlung in einen eigenen Account)</label></div>
-                </div>
-                <div id="managed-person-ot-fields"></div>
-                <div class="dialog-actions">
-                  <button type="submit">Speichern</button>
-                  <button type="button" id="managed-person-dialog-cancel" class="btn-ghost">Abbrechen</button>
-                </div>
-              </form>
-            </dialog>
-
-            <dialog id="managed-person-delete-dialog">
-              <h3>Person löschen</h3>
-              <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden.</p>
-              <div class="dialog-actions">
-                <button type="button" id="managed-person-delete-confirm">Löschen</button>
-                <button type="button" id="managed-person-delete-cancel" class="btn-ghost">Abbrechen</button>
-              </div>
-            </dialog>
-          </div>
         </div>
 
         <div class="tab-panel" id="anmelden-tab" hidden>
@@ -786,7 +791,22 @@
       return "Platzhalter";
     }
 
+    // No managed persons yet: the whole section stays behind an opt-in
+    // checkbox on the dashboard (most accounts never need this). Once at
+    // least one exists, it's real state the account depends on -- show it
+    // unconditionally so nobody has to re-check a box every visit to see
+    // who they've already set up.
+    function updateManagedPersonsDashboardVisibility() {
+      const hasAny = managedPersons.length > 0;
+      document.getElementById("dashboard-managed-persons-toggle").style.display = hasAny ? "none" : "";
+      document.getElementById("dashboard-managed-persons-section").style.display =
+        hasAny || document.getElementById("dashboard-managed-persons-checkbox").checked ? "" : "none";
+    }
+
+    document.getElementById("dashboard-managed-persons-checkbox").addEventListener("change", updateManagedPersonsDashboardVisibility);
+
     function renderManagedPersonsList() {
+      updateManagedPersonsDashboardVisibility();
       const container = document.getElementById("managed-persons-list");
       if (managedPersons.length === 0) {
         container.innerHTML = '<p class="sub">Noch keine verwalteten Personen angelegt.</p>';
