@@ -5,6 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
+import { isManagedBy } from '../managedPersons/repository.js';
 import {
   registerForEvent,
   setConRole,
@@ -211,7 +212,7 @@ router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ re
 }));
 
 router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ req, params, user }) => {
-  const isOwner = params.userId === user.id;
+  const isOwner = params.userId === user.id || await isManagedBy(params.userId, user.id);
   const isStaff = user.group.visibleMenus.includes('mitglieder');
   if (!isOwner && !isStaff) return { status: 403, body: { error: 'forbidden' } };
   const body = await readJsonBody(req);

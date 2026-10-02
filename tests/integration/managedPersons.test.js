@@ -442,6 +442,46 @@ test('POST /managed-persons/:id/convert without an email on file returns 400', a
   }
 });
 
+test('PUT /events/:eventId/registrations/:userId/ot-fields lets an owner edit their managed person\'s registration, 403s for a stranger', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: ownerCookie } = await makeUserAndSession('mitglied');
+    const { cookie: strangerCookie } = await makeUserAndSession('mitglied');
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: ownerCookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'OtFields' }),
+    });
+    const { id: managedId } = await personRes.json();
+    const { rows: eventRows } = await query(
+      "INSERT INTO events (name, event_date, is_active) VALUES ('Managed OtFields Test Event', '2026-04-01', true) RETURNING id"
+    );
+    const eventId = eventRows[0].id;
+    await query(
+      "INSERT INTO registrations (user_id, event_id, con_role) VALUES ($1, $2, 'helfer')",
+      [managedId, eventId]
+    );
+
+    const ownerRes = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${managedId}/ot-fields`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: ownerCookie },
+      body: JSON.stringify({ conTage: '5' }),
+    });
+    assert.equal(ownerRes.status, 200);
+    assert.equal((await ownerRes.json()).conTage, '5');
+
+    const strangerRes = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${managedId}/ot-fields`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: strangerCookie },
+      body: JSON.stringify({ conTage: '9' }),
+    });
+    assert.equal(strangerRes.status, 403);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM registrations WHERE event_id IN (SELECT id FROM events WHERE name LIKE 'Managed Delete Test%' OR name LIKE 'Managed Convert Test%')");
   await query("DELETE FROM events WHERE name LIKE 'Managed Delete Test%' OR name LIKE 'Managed Convert Test%'");
