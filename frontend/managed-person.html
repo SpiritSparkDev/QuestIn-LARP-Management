@@ -740,7 +740,6 @@
 
       scSchema = await api.get("/sc-schema");
       renderScSchemaFields();
-      await loadCharacters();
 
       try {
         nscSchema = await api.get("/nsc-schema");
@@ -754,6 +753,9 @@
       await loadEvents();
       await loadRegistrationWaiver();
       await loadRegistrations();
+      // Called last, like account.html's own init -- loadCharacters()'s NSC-list
+      // guard reads nscSection's visibility, which loadRegistrations() just set.
+      await loadCharacters();
     } catch (err) {
       if (err.status === 401) window.location.href = "/login.html";
       else if (err.status === 404) document.body.innerHTML = '<p class="error">Diese Person existiert nicht oder gehört nicht zu deinem Konto.</p>';
