@@ -341,9 +341,81 @@ test('a stranger gets 404 attempting to register someone else\'s managed person'
   }
 });
 
+test('POST /managed-persons/:id/convert sends an invitation, and redeeming it fully severs ownership', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('mitglied');
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'Convert', email: `managed-convert-${crypto.randomUUID()}@example.com` }),
+    });
+    const { id: managedId } = await personRes.json();
+    const { rows: charRows } = await query(
+      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Pre-Convert Char', '{}') RETURNING id",
+      [managedId]
+    );
+
+    const convertRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/convert`, {
+      method: 'POST',
+      headers: { Cookie: cookie },
+    });
+    assert.equal(convertRes.status, 201);
+    const { link } = await convertRes.json();
+    const token = new URL(link).searchParams.get('token');
+
+    const { rows: invRows } = await query('SELECT user_id, invited_by FROM invitations WHERE token = $1', [token]);
+    assert.equal(invRows[0].user_id, managedId);
+
+    const redeemRes = await fetch(`http://localhost:${port}/auth/invite/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password: 'correct horse battery staple' }),
+    });
+    assert.equal(redeemRes.status, 200);
+
+    const { rows } = await query('SELECT is_guest, managed_by_user_id FROM users WHERE id = $1', [managedId]);
+    assert.equal(rows[0].is_guest, false);
+    assert.equal(rows[0].managed_by_user_id, null);
+
+    // The character created before conversion survives, and the former
+    // owner has no special access to it any more now that ownership is gone.
+    const ownerAccessRes = await fetch(`http://localhost:${port}/characters/${charRows[0].id}`, { headers: { Cookie: cookie } });
+    assert.equal(ownerAccessRes.status, 200); // character's own public-field view, not the owner-view
+    const body = await ownerAccessRes.json();
+    assert.equal(body.id, charRows[0].id);
+    // The former owner's /managed-persons list no longer includes this person.
+    const listRes = await fetch(`http://localhost:${port}/managed-persons`, { headers: { Cookie: cookie } });
+    assert.ok(!(await listRes.json()).some((p) => p.id === managedId));
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /managed-persons/:id/convert without an email on file returns 400', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('mitglied');
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'NoEmailConvert' }),
+    });
+    const { id: managedId } = await personRes.json();
+
+    const res = await fetch(`http://localhost:${port}/managed-persons/${managedId}/convert`, { method: 'POST', headers: { Cookie: cookie } });
+    assert.equal(res.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM registrations WHERE event_id IN (SELECT id FROM events WHERE name LIKE 'Managed Delete Test%')");
   await query("DELETE FROM events WHERE name LIKE 'Managed Delete Test%'");
+  await query("DELETE FROM invitations WHERE email LIKE 'managed-convert-%'");
   await query("DELETE FROM users WHERE email LIKE 'managed-owner-%' OR first_name = 'ManagedTestPerson'");
   await closePool();
 });

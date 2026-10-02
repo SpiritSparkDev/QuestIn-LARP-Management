@@ -21,6 +21,7 @@ import './members/routes.js';
 import './managedPersons/routes.js';
 import './managedPersons/characterRoutes.js';
 import './managedPersons/registrationRoutes.js';
+import './managedPersons/convertRoutes.js';
 import './nscSchema/routes.js';
 import './scSchema/routes.js';
 import './accountFieldSchema/routes.js';

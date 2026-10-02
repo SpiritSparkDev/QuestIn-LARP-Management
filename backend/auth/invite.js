@@ -38,7 +38,7 @@ router.post('/auth/invite/redeem', async ({ req }) => {
         // markRedeemed's own race guard: it also refuses to touch a row
         // that was somehow already converted or is no longer a guest.
         const { rowCount } = await client.query(
-          `UPDATE users SET password_hash = $2, is_guest = false, email_verified = true, access_token = $3
+          `UPDATE users SET password_hash = $2, is_guest = false, email_verified = true, access_token = $3, managed_by_user_id = NULL
            WHERE id = $1 AND is_guest = true AND password_hash IS NULL`,
           [invitation.userId, passwordHash, accessToken]
         );
