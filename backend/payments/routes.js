@@ -8,6 +8,7 @@ import { getEvent } from '../events/repository.js';
 import { baseUrl, getTransporterAndFrom, sendPaymentReminderEmail } from '../auth/mailer.js';
 import { getStripeClient } from './stripeClient.js';
 import { getPaymentSettingsForUse } from '../paymentSettings/repository.js';
+import { isManagedBy } from '../managedPersons/repository.js';
 import {
   setAmountDue, setDiscount, markPaidManually, markUnpaid, recordSuccessfulStripePayment,
   getRegistrationByPaymentToken, refundPayment, listUnpaidRegistrationsForEvent, setGuestPaymentToken,
@@ -41,7 +42,9 @@ async function createCheckoutSession({ eventId, userId, method, amountDueCents, 
 }
 
 router.post('/events/:eventId/registrations/:userId/checkout-session', requireAuth(async ({ req, params, user }) => {
-  if (params.userId !== user.id) return { status: 403, body: { error: 'forbidden' } };
+  if (params.userId !== user.id && !(await isManagedBy(params.userId, user.id))) {
+    return { status: 403, body: { error: 'forbidden' } };
+  }
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const stripeMethod = CHECKOUT_METHODS[body.method];

@@ -277,6 +277,70 @@ test('a stranger gets 404 from /managed-persons/:id/characters, not another acco
   }
 });
 
+test('POST/DELETE /managed-persons/:id/events/:eventId/register registers and unregisters the managed person', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('mitglied');
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'RegOwner' }),
+    });
+    const { id: managedId } = await personRes.json();
+    const { rows: eventRows } = await query(
+      "INSERT INTO events (name, event_date, is_active) VALUES ('Managed Register Test Event', '2026-02-01', true) RETURNING id"
+    );
+    const eventId = eventRows[0].id;
+
+    const registerRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/events/${eventId}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    assert.equal(registerRes.status, 201);
+    const registration = await registerRes.json();
+    assert.equal(registration.user_id, managedId);
+
+    const listRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/registrations`, { headers: { Cookie: cookie } });
+    const list = await listRes.json();
+    assert.equal(list.length, 1);
+    assert.equal(list[0].eventId, eventId);
+
+    const unregisterRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/events/${eventId}/register`, { method: 'DELETE', headers: { Cookie: cookie } });
+    assert.equal(unregisterRes.status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+test('a stranger gets 404 attempting to register someone else\'s managed person', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: ownerCookie } = await makeUserAndSession('mitglied');
+    const { cookie: strangerCookie } = await makeUserAndSession('mitglied');
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: ownerCookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'RegStranger' }),
+    });
+    const { id: managedId } = await personRes.json();
+    const { rows: eventRows } = await query(
+      "INSERT INTO events (name, event_date, is_active) VALUES ('Managed Register Stranger Event', '2026-02-02', true) RETURNING id"
+    );
+
+    const res = await fetch(`http://localhost:${port}/managed-persons/${managedId}/events/${eventRows[0].id}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: strangerCookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    assert.equal(res.status, 404);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM registrations WHERE event_id IN (SELECT id FROM events WHERE name LIKE 'Managed Delete Test%')");
   await query("DELETE FROM events WHERE name LIKE 'Managed Delete Test%'");

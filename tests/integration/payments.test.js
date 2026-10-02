@@ -448,6 +448,57 @@ test('POST .../payment-reminders is rejected for a group without the checkin men
   });
 });
 
+test('an owner can start a checkout session for their managed person\'s registration', async () => {
+  await withTestServer(async (port) => {
+    const ownerId = await makeUser();
+    const cookie = await makeSession(ownerId);
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'PayOwner' }),
+    });
+    const { id: managedId } = await personRes.json();
+    const eventId = await makeEvent();
+    await makeRegistration(eventId, managedId);
+    await setAmountDue(eventId, managedId, 1000);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${managedId}/checkout-session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ method: 'card' }),
+    });
+    // 502 is the existing, expected response when Stripe isn't configured
+    // in this test environment (see the same assertion style for the
+    // self-service checkout-session tests already in this file) -- the
+    // point of this test is that ownership passes (not a 403), not that
+    // a real Stripe session gets created.
+    assert.notEqual(res.status, 403);
+    assert.notEqual(res.status, 404);
+  });
+});
+
+test('a stranger cannot start a checkout session for someone else\'s managed person', async () => {
+  await withTestServer(async (port) => {
+    const ownerId = await makeUser();
+    const ownerCookie = await makeSession(ownerId);
+    const strangerCookie = await makeSession(await makeUser());
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: ownerCookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'PayStranger' }),
+    });
+    const { id: managedId } = await personRes.json();
+    const eventId = await makeEvent();
+    await makeRegistration(eventId, managedId);
+    await setAmountDue(eventId, managedId, 1000);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${managedId}/checkout-session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: strangerCookie },
+      body: JSON.stringify({ method: 'card' }),
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
 test.after(async () => {
   // payments.confirmed_by has no ON DELETE action, and a single multi-row
   // DELETE FROM users doesn't guarantee the registrations->payments cascade
