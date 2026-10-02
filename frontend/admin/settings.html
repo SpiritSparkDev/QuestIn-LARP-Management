@@ -230,6 +230,45 @@
               Charaktere durchsuchen aktiviert</label
             >
           </div>
+          <div class="card form-pad">
+            <h2>Anmeldung startet bald</h2>
+            <p class="sub">
+              Zeigt Besucher*innen der Startseite und der
+              Registrierungs-Seite statt des Formulars einen Hinweis mit dem
+              Logo, einer frei gestaltbaren Nachricht (HTML) und optional
+              einem Countdown. Mitglieder können sich über
+              <a href="/login.html" target="_blank">/login.html</a> weiterhin
+              normal anmelden.
+            </p>
+            <label
+              ><input type="checkbox" id="coming-soon-toggle" />
+              Hinweisseite aktiviert</label
+            >
+            <form id="coming-soon-form" style="margin-top:16px;">
+              <textarea
+                id="coming-soon-message"
+                name="comingSoonMessage"
+                rows="6"
+                placeholder="<p>Wir sind bald wieder für euch da!</p>"
+              ></textarea>
+              <label for="coming-soon-message">Nachricht (HTML)</label>
+              <input
+                id="coming-soon-until"
+                name="comingSoonUntil"
+                type="datetime-local"
+              />
+              <label for="coming-soon-until"
+                >Countdown-Ziel (optional, leer lassen für keinen
+                Countdown)</label
+              >
+              <button type="submit">Speichern</button>
+            </form>
+            <p class="text-center" style="margin-top:12px;">
+              <a href="/coming-soon.html" target="_blank" class="btn-ghost"
+                >Vorschau öffnen</a
+              >
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -470,6 +509,58 @@
           }
         });
 
+      // datetime-local has no timezone of its own -- it's read/written in
+      // the browser's local time, converted to/from the stored UTC ISO
+      // string at the edges.
+      function isoToDatetimeLocal(iso) {
+        if (!iso) return "";
+        const d = new Date(iso);
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+
+      const comingSoonForm = document.getElementById("coming-soon-form");
+      const comingSoonToggle = document.getElementById("coming-soon-toggle");
+
+      async function loadComingSoonSettings() {
+        const settings = await api.get("/app-settings");
+        comingSoonToggle.checked = settings.comingSoonEnabled;
+        comingSoonForm.elements.comingSoonMessage.value =
+          settings.comingSoonMessage ?? "";
+        comingSoonForm.elements.comingSoonUntil.value = isoToDatetimeLocal(
+          settings.comingSoonUntil,
+        );
+      }
+
+      comingSoonToggle.addEventListener("change", async (event) => {
+        try {
+          await api.put("/app-settings", {
+            comingSoonEnabled: event.target.checked,
+          });
+          notify("Gespeichert.", "success");
+        } catch (err) {
+          event.target.checked = !event.target.checked;
+          notify(err.message, "error");
+        }
+      });
+
+      comingSoonForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const untilValue = comingSoonForm.elements.comingSoonUntil.value;
+        try {
+          await api.put("/app-settings", {
+            comingSoonMessage: comingSoonForm.elements.comingSoonMessage.value,
+            comingSoonUntil: untilValue
+              ? new Date(untilValue).toISOString()
+              : "",
+          });
+          notify("Gespeichert.", "success");
+          await loadComingSoonSettings();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
+
       document
         .getElementById("send-test")
         .addEventListener("click", async () => {
@@ -511,6 +602,7 @@
         await loadWaitlistSetting();
         await loadPaymentSettings();
         await loadWaiverSettings();
+        await loadComingSoonSettings();
       } catch (err) {
         if (err.status === 401) window.location.href = "/login.html";
         else if (err.status === 403) {

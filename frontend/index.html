@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="0; url=/login.html">
 <title>Pakyrion</title>
 <link rel="stylesheet" href="/css/fonts.css">
 <link rel="stylesheet" href="/css/sahara.css">
@@ -17,7 +16,13 @@
 </div>
 <script type="module">
 import { applyBranding } from '/js/branding.js';
+import { redirectIfComingSoonEnabled } from '/js/comingSoonGate.js';
 applyBranding();
+
+(async () => {
+  if (await redirectIfComingSoonEnabled()) return;
+  window.location.replace('/login.html');
+})();
 </script>
 </body>
 </html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anmeldung startet bald – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
+  <p class="brand-sub">QuestIn LARP Management</p>
+  <div class="folio folio--narrow">
+    <h1 class="text-center">Anmeldung startet bald</h1>
+    <div id="coming-soon-message"></div>
+    <div id="countdown" style="display:none; margin-top:24px;">
+      <div style="display:flex; justify-content:center; gap:16px;">
+        <div style="text-align:center;">
+          <div id="cd-days" style="font-family:'EB Garamond',Georgia,serif; font-size:2rem; color:var(--primary);">0</div>
+          <div class="sub">Tage</div>
+        </div>
+        <div style="text-align:center;">
+          <div id="cd-hours" style="font-family:'EB Garamond',Georgia,serif; font-size:2rem; color:var(--primary);">00</div>
+          <div class="sub">Std.</div>
+        </div>
+        <div style="text-align:center;">
+          <div id="cd-minutes" style="font-family:'EB Garamond',Georgia,serif; font-size:2rem; color:var(--primary);">00</div>
+          <div class="sub">Min.</div>
+        </div>
+        <div style="text-align:center;">
+          <div id="cd-seconds" style="font-family:'EB Garamond',Georgia,serif; font-size:2rem; color:var(--primary);">00</div>
+          <div class="sub">Sek.</div>
+        </div>
+      </div>
+      <p id="countdown-done" class="text-center" style="display:none;">Die Anmeldung öffnet jeden Moment.</p>
+    </div>
+    <p class="text-center" style="margin-top:28px;"><a href="/login.html" class="btn-ghost">Für Mitglieder: Anmelden</a></p>
+  </div>
+</div>
+<script type="module">
+import { applyBranding } from '/js/branding.js';
+import { startCountdown } from '/js/countdown.js';
+applyBranding();
+
+const messageEl = document.getElementById('coming-soon-message');
+
+(async () => {
+  let settings;
+  try {
+    settings = await (await fetch('/app-settings')).json();
+  } catch {
+    return;
+  }
+
+  if (settings.comingSoonMessage) {
+    const iframe = document.createElement('iframe');
+    iframe.title = 'Nachricht';
+    iframe.style.cssText = 'width:100%; border:0; display:block;';
+    messageEl.replaceChildren(iframe);
+    iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+      body { font-family: 'Manrope', system-ui, sans-serif; margin: 0; padding: 0; color: #3a302a; text-align: center; }
+    </style></head><body>${settings.comingSoonMessage}</body></html>`;
+    iframe.addEventListener('load', () => {
+      try {
+        iframe.style.height = `${iframe.contentDocument.documentElement.scrollHeight}px`;
+      } catch {
+        iframe.style.height = '120px';
+      }
+    });
+  }
+
+  if (settings.comingSoonUntil) {
+    const target = new Date(settings.comingSoonUntil);
+    if (!Number.isNaN(target.getTime()) && target.getTime() > Date.now()) {
+      document.getElementById('countdown').style.display = '';
+      startCountdown(target, ({ days, hours, minutes, seconds, done }) => {
+        document.getElementById('cd-days').textContent = days;
+        document.getElementById('cd-hours').textContent = String(hours).padStart(2, '0');
+        document.getElementById('cd-minutes').textContent = String(minutes).padStart(2, '0');
+        document.getElementById('cd-seconds').textContent = String(seconds).padStart(2, '0');
+        if (done) {
+          document.getElementById('countdown-done').style.display = '';
+        }
+      });
+    }
+  }
+})();
+</script>
+</body>
+</html>

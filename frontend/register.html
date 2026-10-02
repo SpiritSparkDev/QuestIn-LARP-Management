@@ -36,7 +36,9 @@
 <script type="module">
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
+import { redirectIfComingSoonEnabled } from '/js/comingSoonGate.js';
 applyBranding();
+redirectIfComingSoonEnabled();
 import { notify } from '/js/notifications.js';
 
 const form = document.getElementById('register-form');

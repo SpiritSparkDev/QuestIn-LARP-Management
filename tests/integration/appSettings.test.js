@@ -30,7 +30,7 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, hasUploadedLogo: false, hasUploadedTicketBackground: false });
   });
 });
 
@@ -49,7 +49,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, hasUploadedLogo: false, hasUploadedTicketBackground: false });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
@@ -376,6 +376,77 @@ test('PUT /app-settings rejects a non-string waiverText', async () => {
       body: JSON.stringify({ waiverText: 42 }),
     });
     assert.equal(res.status, 400);
+  });
+});
+
+test('PUT /app-settings saves comingSoonEnabled/comingSoonMessage/comingSoonUntil and GET reflects it back', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+    const until = new Date(Date.now() + 86400000).toISOString();
+
+    const putRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ comingSoonEnabled: true, comingSoonMessage: '<p>Bald geht es los!</p>', comingSoonUntil: until }),
+    });
+    assert.equal(putRes.status, 200);
+    const body = await putRes.json();
+    assert.equal(body.comingSoonEnabled, true);
+    assert.equal(body.comingSoonMessage, '<p>Bald geht es los!</p>');
+    assert.equal(new Date(body.comingSoonUntil).toISOString(), until);
+
+    const getBody = await (await fetch(`http://localhost:${port}/app-settings`)).json();
+    assert.equal(getBody.comingSoonEnabled, true);
+    assert.equal(getBody.comingSoonMessage, '<p>Bald geht es los!</p>');
+    assert.equal(new Date(getBody.comingSoonUntil).toISOString(), until);
+  });
+});
+
+test('PUT /app-settings clears comingSoonUntil with an empty string, independently of comingSoonEnabled', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ comingSoonEnabled: true, comingSoonUntil: new Date(Date.now() + 1000).toISOString() }),
+    });
+
+    const res = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ comingSoonUntil: '' }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.comingSoonUntil, null);
+    assert.equal(body.comingSoonEnabled, true);
+  });
+});
+
+test('PUT /app-settings rejects a non-boolean comingSoonEnabled, a non-string comingSoonMessage, and an invalid comingSoonUntil', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+
+    const badEnabled = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ comingSoonEnabled: 'yes' }),
+    });
+    assert.equal(badEnabled.status, 400);
+
+    const badMessage = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ comingSoonMessage: 42 }),
+    });
+    assert.equal(badMessage.status, 400);
+
+    const badUntil = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ comingSoonUntil: 'not-a-date' }),
+    });
+    assert.equal(badUntil.status, 400);
   });
 });
 

@@ -3,8 +3,8 @@ import { query } from '../db.js';
 export const DEFAULT_BASE_URL = 'http://localhost:3000';
 
 export async function getAppSettings() {
-  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, waitlist_auto_promote, waiver_text, waiver_version, base_url, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background FROM app_settings LIMIT 1');
-  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: process.env.APP_BASE_URL || DEFAULT_BASE_URL, hasUploadedLogo: false, hasUploadedTicketBackground: false };
+  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, waitlist_auto_promote, waiver_text, waiver_version, base_url, coming_soon_enabled, coming_soon_message, coming_soon_until, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background FROM app_settings LIMIT 1');
+  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: process.env.APP_BASE_URL || DEFAULT_BASE_URL, comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, hasUploadedLogo: false, hasUploadedTicketBackground: false };
   return {
     logoUrl: rows[0].logo_url,
     appTitle: rows[0].app_title,
@@ -17,12 +17,18 @@ export async function getAppSettings() {
     waiverVersion: rows[0].waiver_version,
     baseUrl: rows[0].base_url,
     effectiveBaseUrl: rows[0].base_url || process.env.APP_BASE_URL || DEFAULT_BASE_URL,
+    comingSoonEnabled: rows[0].coming_soon_enabled,
+    comingSoonMessage: rows[0].coming_soon_message,
+    comingSoonUntil: rows[0].coming_soon_until,
     hasUploadedLogo: rows[0].has_uploaded_logo,
     hasUploadedTicketBackground: rows[0].has_uploaded_ticket_background,
   };
 }
 
-export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText, baseUrl }) {
+export async function setAppSettings({
+  logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
+  waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil,
+}) {
   const id = await ensureSettingsRow();
   // Auto-bumps waiver_version whenever the text actually changes, so a
   // participant's stored waiver_version_accepted always identifies exactly
@@ -40,6 +46,10 @@ export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerC
   // non-NULL column.
   const baseUrlProvided = baseUrl !== undefined;
   const baseUrlValue = baseUrl === '' ? null : (baseUrl ?? null);
+  // comingSoonUntil needs the same tri-state handling as baseUrl: undefined
+  // keeps the stored value, '' or null clears it back to "no countdown".
+  const comingSoonUntilProvided = comingSoonUntil !== undefined;
+  const comingSoonUntilValue = (comingSoonUntil === '' || comingSoonUntil == null) ? null : new Date(comingSoonUntil);
   await query(
     `UPDATE app_settings SET
        logo_url = COALESCE($2, logo_url),
@@ -51,12 +61,16 @@ export async function setAppSettings({ logoUrl, appTitle, eventName, quotaMbPerC
        waitlist_auto_promote = COALESCE($8, waitlist_auto_promote),
        waiver_text = COALESCE($9, waiver_text),
        waiver_version = COALESCE($10, waiver_version),
-       base_url = CASE WHEN $11 THEN $12 ELSE base_url END
+       base_url = CASE WHEN $11 THEN $12 ELSE base_url END,
+       coming_soon_enabled = COALESCE($13, coming_soon_enabled),
+       coming_soon_message = COALESCE($14, coming_soon_message),
+       coming_soon_until = CASE WHEN $15 THEN $16 ELSE coming_soon_until END
      WHERE id = $1`,
     [
       id, logoUrl ?? null, appTitle ?? null, eventName ?? null, quotaMbPerCharacter ?? null,
       invitationTtlDays ?? null, characterBrowsingEnabled ?? null, waitlistAutoPromote ?? null,
       waiverText ?? null, waiverVersionBump, baseUrlProvided, baseUrlValue,
+      comingSoonEnabled ?? null, comingSoonMessage ?? null, comingSoonUntilProvided, comingSoonUntilValue,
     ]
   );
   return getAppSettings();

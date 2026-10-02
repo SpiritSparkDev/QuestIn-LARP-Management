@@ -15,7 +15,10 @@ router.get('/app-settings', async () => {
 router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText, baseUrl } = body;
+  const {
+    logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
+    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil,
+  } = body;
   if (waiverText !== undefined && typeof waiverText !== 'string') {
     return { status: 400, body: { error: 'waiverText must be a string' } };
   }
@@ -39,9 +42,21 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
   if (waitlistAutoPromote !== undefined && typeof waitlistAutoPromote !== 'boolean') {
     return { status: 400, body: { error: 'waitlistAutoPromote must be a boolean' } };
   }
+  if (comingSoonEnabled !== undefined && typeof comingSoonEnabled !== 'boolean') {
+    return { status: 400, body: { error: 'comingSoonEnabled must be a boolean' } };
+  }
+  if (comingSoonMessage !== undefined && typeof comingSoonMessage !== 'string') {
+    return { status: 400, body: { error: 'comingSoonMessage must be a string' } };
+  }
+  if (comingSoonUntil !== undefined && comingSoonUntil !== null && comingSoonUntil !== '') {
+    if (typeof comingSoonUntil !== 'string' || Number.isNaN(new Date(comingSoonUntil).getTime())) {
+      return { status: 400, body: { error: 'comingSoonUntil must be a valid date string' } };
+    }
+  }
   const saved = await setAppSettings({
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText,
     baseUrl: baseUrl === undefined ? undefined : baseUrl.replace(/\/+$/, ''),
+    comingSoonEnabled, comingSoonMessage, comingSoonUntil,
   });
   return { status: 200, body: saved };
 })));
