@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verwaltete Person – Pakyrion</title>
+  <link rel="stylesheet" href="/css/fonts.css">
+  <link rel="stylesheet" href="/css/sahara.css">
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+
+<body>
+  <div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+  <div class="app">
+    <div class="main">
+      <div class="content account-page">
+        <p><a href="/account.html#konto">&larr; Zurück zu meinem Konto</a></p>
+        <h1 id="managed-person-heading">Person verwalten</h1>
+
+        <div class="tab-panel" id="daten-tab">
+          <h2>Mitgliedsdaten</h2>
+          <form id="data-form">
+            <div class="field-grid">
+              <div><input id="firstName" name="firstName" type="text" required><label for="firstName">Vorname *</label></div>
+              <div><input id="lastName" name="lastName" type="text" required><label for="lastName">Nachname *</label></div>
+              <div><input id="nickname" name="nickname" type="text"><label for="nickname">Rufname</label></div>
+              <div><input id="email" name="email" type="email"><label for="email">E-Mail (optional)</label></div>
+            </div>
+            <div id="data-ot-fields"></div>
+            <button type="submit">Speichern</button>
+          </form>
+        </div>
+
+        <div class="tabs" id="char-class-tabs">
+          <button type="button" class="tab-btn active" data-tab="sc-tab">Charaktere</button>
+          <button type="button" class="tab-btn" data-tab="nsc-tab" id="nsc-tab-btn" style="display:none;">NSC-Charaktere</button>
+          <button type="button" class="tab-btn" data-tab="anmelden-tab">Anmeldung</button>
+        </div>
+
+        <div class="tab-panel" id="sc-tab">
+          <div class="dashboard-layout">
+            <div class="dashboard-main">
+              <div class="action-row">
+                <button type="button" id="new-character-btn">Neuen Charakter anlegen</button>
+              </div>
+
+              <div id="sc-form-section" class="card" style="display:none;">
+                <h3 id="form-title">Neuen Charakter anlegen</h3>
+                <hr class="rule">
+                <form id="character-form">
+                  <h3>1. Charaktername</h3>
+                  <input id="character-name" name="name" type="text" required>
+                  <label for="character-name">Charaktername</label>
+                  <h3>2. Charakterdaten</h3>
+                  <div id="character-dynamic-fields" class="field-grid"></div>
+                  <div class="dialog-actions">
+                    <button type="submit">Speichern</button>
+                    <button type="button" id="character-cancel-edit" class="btn-ghost">Abbrechen</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+            <div>
+              <div id="character-list" class="char-grid"></div>
+            </div>
+          </div>
+        </div>
+
+        <dialog id="delete-character-dialog">
+          <h3>Charakter löschen</h3>
+          <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden. Gib zur Bestätigung den Namen "<strong id="delete-character-name"></strong>" ein.</p>
+          <input type="text" id="delete-character-input" autocomplete="off">
+          <label for="delete-character-input">Charaktername</label>
+          <div class="dialog-actions">
+            <button type="button" id="delete-character-confirm">Löschen</button>
+            <button type="button" id="delete-character-cancel" class="btn-ghost">Abbrechen</button>
+          </div>
+        </dialog>
+
+        <dialog id="photo-upload-dialog">
+          <h3>Foto hochladen</h3>
+          <form id="photo-upload-form">
+            <input type="file" id="photo-upload-input" accept="image/jpeg,image/png,image/webp" required>
+            <label><input type="checkbox" id="photo-upload-consent" required> Ich habe den Hinweis gelesen</label>
+            <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an diesem Bild besitzt und einverstanden bist, dass es im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>
+            <div class="dialog-actions">
+              <button type="submit">Hochladen</button>
+              <button type="button" id="photo-upload-cancel" class="btn-ghost">Abbrechen</button>
+            </div>
+          </form>
+        </dialog>
+
+        <div class="tab-panel" id="nsc-tab" hidden>
+          <!-- filled in by Task 3 -->
+        </div>
+        <div class="tab-panel" id="anmelden-tab" hidden>
+          <!-- filled in by Task 3 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api } from "/js/api.js";
+    import { applyBranding } from "/js/branding.js";
+    import { hideLoading } from "/js/loading.js";
+    applyBranding();
+    import {
+      escapeHtml,
+      renderField,
+      collectFieldValues,
+      attachLiveValidation,
+      renderAccountFieldInput,
+      collectAccountFieldValues,
+      nullifyBlankNumberFields,
+    } from "/js/formFields.js";
+    import { notify } from "/js/notifications.js";
+
+    const managedPersonId = new URLSearchParams(window.location.search).get("id");
+    if (!managedPersonId) {
+      document.body.innerHTML = '<p class="error">Keine Person angegeben.</p>';
+      throw new Error("missing id");
+    }
+
+    function initTabs(tabsEl) {
+      const buttons = [...tabsEl.querySelectorAll(".tab-btn")];
+      buttons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          buttons.forEach((b) => {
+            b.classList.toggle("active", b === btn);
+            document.getElementById(b.dataset.tab).hidden = b !== btn;
+          });
+        });
+      });
+    }
+    initTabs(document.getElementById("char-class-tabs"));
+
+    const dataForm = document.getElementById("data-form");
+    attachLiveValidation(dataForm);
+    const dataOtFieldsContainer = document.getElementById("data-ot-fields");
+    let accountSchema = [];
+
+    dataForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const data = {
+        ...Object.fromEntries(new FormData(dataForm)),
+        ...nullifyBlankNumberFields(accountSchema, collectAccountFieldValues(dataOtFieldsContainer, accountSchema)),
+      };
+      try {
+        const updated = await api.patch(`/managed-persons/${managedPersonId}`, data);
+        document.getElementById("managed-person-heading").textContent = `${updated.name} verwalten`;
+        notify("Gespeichert.", "success");
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    let characters = [];
+    let scSchema = [];
+    let editingCharacterId = null;
+
+    const scFormSection = document.getElementById("sc-form-section");
+    function hideCharacterForm() { scFormSection.style.display = "none"; }
+    function showCharacterForm() { scFormSection.style.display = ""; scFormSection.scrollIntoView({ behavior: "smooth" }); }
+    const characterForm = document.getElementById("character-form");
+    attachLiveValidation(characterForm);
+    const characterListBody = document.getElementById("character-list");
+    const characterFormTitle = document.getElementById("form-title");
+    const characterDynamicFields = document.getElementById("character-dynamic-fields");
+
+    function renderScSchemaFields(data = {}) {
+      characterDynamicFields.innerHTML = scSchema
+        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "sc-char-", { readOnly: field.staffOnly === true })}</div>`)
+        .join("");
+      attachLiveValidation(characterDynamicFields);
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function kindForMimeType(mimeType) {
+      if (["image/jpeg", "image/png", "image/webp"].includes(mimeType)) return "image";
+      if (mimeType === "application/pdf") return "document";
+      return null;
+    }
+
+    async function loadPhotoInto(characterId) {
+      const container = document.querySelector(`[data-photo-for="${characterId}"]`);
+      if (!container) return;
+      const imageSlot = container.querySelector("[data-photo-image]");
+      try {
+        const files = await api.get(`/characters/${characterId}/files`);
+        const photo = files.find((f) => f.kind === "image");
+        if (photo) imageSlot.innerHTML = `<img src="/characters/${characterId}/files/${photo.id}" alt="">`;
+      } catch {
+        // fail-quiet: card keeps its placeholder icon
+      }
+    }
+
+    const photoUploadDialog = document.getElementById("photo-upload-dialog");
+    const photoUploadForm = document.getElementById("photo-upload-form");
+    const photoUploadInput = document.getElementById("photo-upload-input");
+    const photoUploadConsent = document.getElementById("photo-upload-consent");
+    let photoUploadCharacterId = null;
+
+    function openPhotoUploadDialog(characterId) {
+      photoUploadCharacterId = characterId;
+      photoUploadForm.reset();
+      photoUploadDialog.showModal();
+    }
+    document.getElementById("photo-upload-cancel").addEventListener("click", () => photoUploadDialog.close());
+    photoUploadForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const file = photoUploadInput.files[0];
+      if (!file) return;
+      try {
+        const dataBase64 = await readFileAsBase64(file);
+        await api.post(`/characters/${photoUploadCharacterId}/files`, {
+          kind: "image", filename: file.name, mimeType: file.type, dataBase64,
+          isPublic: false, gdprConsent: photoUploadConsent.checked,
+        });
+        photoUploadDialog.close();
+        await loadPhotoInto(photoUploadCharacterId);
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    function renderCharacterList() {
+      const scCharacters = characters.filter((c) => c.class !== "nsc");
+      characterListBody.innerHTML = scCharacters
+        .map((c) => `<div class="char-card" data-card-for="${c.id}">
+      <button type="button" class="char-card-delete" data-delete="${c.id}" aria-label="Charakter löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+      <div class="char-photo" data-photo-for="${c.id}">
+        <div class="char-photo-image" data-photo-image><span class="char-photo-placeholder material-symbols-outlined" aria-hidden="true">person</span></div>
+        <button type="button" class="char-photo-upload" aria-label="Foto hochladen"><span class="material-symbols-outlined" aria-hidden="true">photo_camera</span></button>
+      </div>
+      <h3>${escapeHtml(c.name)}</h3>
+    </div>`)
+        .join("");
+
+      characterListBody.querySelectorAll("[data-card-for]").forEach((card) => {
+        card.addEventListener("click", () => startEdit(card.dataset.cardFor));
+      });
+      characterListBody.querySelectorAll("[data-delete]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openDeleteCharacterDialog(button.dataset.delete);
+        });
+      });
+      characterListBody.querySelectorAll(".char-photo-upload").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openPhotoUploadDialog(button.closest("[data-card-for]").dataset.cardFor);
+        });
+      });
+      scCharacters.forEach((c) => loadPhotoInto(c.id));
+    }
+
+    async function loadCharacters() {
+      characters = await api.get(`/managed-persons/${managedPersonId}/characters`);
+      renderCharacterList();
+    }
+
+    function startEdit(characterId) {
+      const character = characters.find((c) => c.id === characterId);
+      if (!character) return;
+      editingCharacterId = characterId;
+      characterFormTitle.textContent = `Charakter bearbeiten: ${character.name}`;
+      characterForm.elements.name.value = character.name;
+      renderScSchemaFields(character.data);
+      characterForm.querySelector('button[type="submit"]').textContent = "Änderungen speichern";
+      showCharacterForm();
+    }
+
+    function resetCharacterForm() {
+      editingCharacterId = null;
+      characterFormTitle.textContent = "Neuen Charakter anlegen";
+      characterForm.reset();
+      renderScSchemaFields();
+      characterForm.querySelector('button[type="submit"]').textContent = "Speichern";
+    }
+
+    document.getElementById("new-character-btn").addEventListener("click", () => {
+      resetCharacterForm();
+      showCharacterForm();
+    });
+    document.getElementById("character-cancel-edit").addEventListener("click", () => {
+      resetCharacterForm();
+      hideCharacterForm();
+    });
+
+    const deleteCharacterDialog = document.getElementById("delete-character-dialog");
+    let deleteCharacterId = null;
+    function openDeleteCharacterDialog(characterId) {
+      const character = characters.find((c) => c.id === characterId);
+      if (!character) return;
+      deleteCharacterId = characterId;
+      document.getElementById("delete-character-name").textContent = character.name;
+      document.getElementById("delete-character-input").value = "";
+      deleteCharacterDialog.showModal();
+    }
+    document.getElementById("delete-character-cancel").addEventListener("click", () => {
+      deleteCharacterDialog.close();
+      deleteCharacterId = null;
+    });
+    document.getElementById("delete-character-confirm").addEventListener("click", async () => {
+      const character = characters.find((c) => c.id === deleteCharacterId);
+      if (!character) return;
+      if (document.getElementById("delete-character-input").value.trim() !== character.name) {
+        notify("Name stimmt nicht überein.", "error");
+        return;
+      }
+      const characterId = deleteCharacterId;
+      try {
+        await api.delete(`/characters/${characterId}`);
+        if (editingCharacterId === characterId) { resetCharacterForm(); hideCharacterForm(); }
+        deleteCharacterDialog.close();
+        deleteCharacterId = null;
+        await loadCharacters();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    characterForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const name = characterForm.elements.name.value;
+      const data = collectFieldValues(characterForm, scSchema);
+      try {
+        if (editingCharacterId) {
+          await api.put(`/characters/${editingCharacterId}`, { name, data });
+        } else {
+          await api.post(`/managed-persons/${managedPersonId}/characters`, { class: "sc", name, data });
+        }
+        notify("Gespeichert.", "success");
+        resetCharacterForm();
+        hideCharacterForm();
+        await loadCharacters();
+      } catch (err) {
+        notify(err.status === 400 && err.body?.details ? err.body.details.join(", ") : err.message, "error");
+      }
+    });
+
+    try {
+      const person = await api.get(`/managed-persons/${managedPersonId}`);
+      document.getElementById("managed-person-heading").textContent = `${person.name} verwalten`;
+      dataForm.elements.firstName.value = person.firstName ?? "";
+      dataForm.elements.lastName.value = person.lastName ?? "";
+      dataForm.elements.nickname.value = person.nickname ?? "";
+      dataForm.elements.email.value = person.email ?? "";
+      accountSchema = await api.get("/account-schema");
+      dataOtFieldsContainer.innerHTML = accountSchema
+        .map((field) => renderAccountFieldInput(field, person[field.key], {
+          sealedBadge: ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>',
+        }))
+        .join("");
+      attachLiveValidation(dataOtFieldsContainer);
+
+      scSchema = await api.get("/sc-schema");
+      renderScSchemaFields();
+      await loadCharacters();
+    } catch (err) {
+      if (err.status === 401) window.location.href = "/login.html";
+      else if (err.status === 404) document.body.innerHTML = '<p class="error">Diese Person existiert nicht oder gehört nicht zu deinem Konto.</p>';
+    } finally {
+      hideLoading();
+    }
+  </script>
+</body>
+
+</html>
