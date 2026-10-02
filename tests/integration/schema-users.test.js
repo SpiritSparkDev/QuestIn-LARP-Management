@@ -123,6 +123,27 @@ test('users.email is nullable after migration', async () => {
   assert.equal(rows[0].is_nullable, 'YES');
 });
 
+test('deleting an owner sets managed_by_user_id to NULL on the managed person (ON DELETE SET NULL), not a cascading delete', async () => {
+  const { rows: ownerRows } = await query(
+    "INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'Owner', 'FkTest', (SELECT id FROM groups WHERE key = 'mitglied')) RETURNING id",
+    [`fk-owner-${Date.now()}@example.com`]
+  );
+  const ownerId = ownerRows[0].id;
+  const { rows: managedRows } = await query(
+    "INSERT INTO users (first_name, last_name, group_id, is_guest, managed_by_user_id) VALUES ('Managed', 'FkTest', (SELECT id FROM groups WHERE key = 'mitglied'), true, $1) RETURNING id",
+    [ownerId]
+  );
+  const managedId = managedRows[0].id;
+
+  await query('DELETE FROM users WHERE id = $1', [ownerId]);
+
+  const { rows } = await query('SELECT managed_by_user_id FROM users WHERE id = $1', [managedId]);
+  assert.equal(rows.length, 1, 'managed person row should still exist after owner deletion');
+  assert.equal(rows[0].managed_by_user_id, null);
+
+  await query('DELETE FROM users WHERE id = $1', [managedId]);
+});
+
 test.after(async () => {
   await closePool();
 });

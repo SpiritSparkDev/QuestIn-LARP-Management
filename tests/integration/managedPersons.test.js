@@ -356,6 +356,14 @@ test('POST /managed-persons/:id/convert sends an invitation, and redeeming it fu
       "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Pre-Convert Char', '{}') RETURNING id",
       [managedId]
     );
+    const { rows: eventRows } = await query(
+      "INSERT INTO events (name, event_date, is_active) VALUES ('Managed Convert Test Event', '2026-03-01', true) RETURNING id"
+    );
+    const eventId = eventRows[0].id;
+    await query(
+      "INSERT INTO registrations (user_id, event_id, con_role, amount_due_cents) VALUES ($1, $2, 'helfer', 1000)",
+      [managedId, eventId]
+    );
 
     const convertRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/convert`, {
       method: 'POST',
@@ -397,6 +405,19 @@ test('POST /managed-persons/:id/convert sends an invitation, and redeeming it fu
     // The former owner's /managed-persons list no longer includes this person.
     const listRes = await fetch(`http://localhost:${port}/managed-persons`, { headers: { Cookie: cookie } });
     assert.ok(!(await listRes.json()).some((p) => p.id === managedId));
+
+    // Same cutoff applies to the registrations list and the payment
+    // checkout-session route -- both re-check ownership via
+    // getManagedPerson/isManagedBy, which now fail for the former owner.
+    const registrationsRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/registrations`, { headers: { Cookie: cookie } });
+    assert.equal(registrationsRes.status, 404);
+
+    const checkoutRes = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${managedId}/checkout-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ method: 'card' }),
+    });
+    assert.equal(checkoutRes.status, 403);
   } finally {
     server.close();
   }
@@ -422,8 +443,8 @@ test('POST /managed-persons/:id/convert without an email on file returns 400', a
 });
 
 test.after(async () => {
-  await query("DELETE FROM registrations WHERE event_id IN (SELECT id FROM events WHERE name LIKE 'Managed Delete Test%')");
-  await query("DELETE FROM events WHERE name LIKE 'Managed Delete Test%'");
+  await query("DELETE FROM registrations WHERE event_id IN (SELECT id FROM events WHERE name LIKE 'Managed Delete Test%' OR name LIKE 'Managed Convert Test%')");
+  await query("DELETE FROM events WHERE name LIKE 'Managed Delete Test%' OR name LIKE 'Managed Convert Test%'");
   await query("DELETE FROM invitations WHERE email LIKE 'managed-convert-%'");
   await query("DELETE FROM users WHERE email LIKE 'managed-owner-%' OR first_name = 'ManagedTestPerson'");
   await closePool();
