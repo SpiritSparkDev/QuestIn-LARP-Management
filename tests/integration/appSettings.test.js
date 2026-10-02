@@ -30,7 +30,7 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', hasUploadedLogo: false, hasUploadedTicketBackground: false });
   });
 });
 
@@ -49,7 +49,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', hasUploadedLogo: false, hasUploadedTicketBackground: false });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
