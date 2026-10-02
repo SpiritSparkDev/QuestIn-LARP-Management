@@ -385,6 +385,15 @@ test('POST /managed-persons/:id/convert sends an invitation, and redeeming it fu
     assert.equal(ownerAccessRes.status, 200); // character's own public-field view, not the owner-view
     const body = await ownerAccessRes.json();
     assert.equal(body.id, charRows[0].id);
+    // Unlike GET (same 200 status for owner and non-owner views), PUT
+    // distinguishes them with a different status code -- the former owner
+    // is now a plain non-owner, non-elevated caller, so this 403s.
+    const ownerEditRes = await fetch(`http://localhost:${port}/characters/${charRows[0].id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ name: 'Should not be allowed' }),
+    });
+    assert.equal(ownerEditRes.status, 403);
     // The former owner's /managed-persons list no longer includes this person.
     const listRes = await fetch(`http://localhost:${port}/managed-persons`, { headers: { Cookie: cookie } });
     assert.ok(!(await listRes.json()).some((p) => p.id === managedId));
