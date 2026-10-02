@@ -27,6 +27,7 @@ import './appSettings/routes.js';
 import './paymentSettings/routes.js';
 import './payments/routes.js';
 import './guestRegistrations/routes.js';
+import './comingSoon/routes.js';
 import './storageSettings/routes.js';
 import './emailTemplates/routes.js';
 

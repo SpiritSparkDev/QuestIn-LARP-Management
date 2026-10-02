@@ -36,15 +36,40 @@
       </div>
       <p id="countdown-done" class="text-center" style="display:none;">Die Anmeldung öffnet jeden Moment.</p>
     </div>
+    <form id="remind-me-form" style="margin-top:28px;">
+      <p class="eyebrow text-center">Per Mail erinnern lassen</p>
+      <input id="remind-firstName" name="firstName" type="text" required>
+      <label for="remind-firstName">Vorname</label>
+      <input id="remind-lastName" name="lastName" type="text" required>
+      <label for="remind-lastName">Nachname</label>
+      <input id="remind-email" name="email" type="email" required>
+      <label for="remind-email">E-Mail</label>
+      <button type="submit">Erinnern lassen</button>
+    </form>
     <p class="text-center" style="margin-top:28px;"><a href="/login.html" class="btn-ghost">Für Mitglieder: Anmelden</a></p>
   </div>
 </div>
 <script type="module">
+import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 import { startCountdown } from '/js/countdown.js';
+import { notify } from '/js/notifications.js';
 applyBranding();
 
 const messageEl = document.getElementById('coming-soon-message');
+const remindForm = document.getElementById('remind-me-form');
+
+remindForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(remindForm));
+  try {
+    await api.post('/public/coming-soon/remind-me', data);
+    notify('Danke! Sobald die Anmeldung startet, bekommst du eine E-Mail.', 'success');
+    remindForm.reset();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
 
 (async () => {
   let settings;

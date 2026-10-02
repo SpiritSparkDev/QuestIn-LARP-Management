@@ -7,6 +7,7 @@ import {
   getUploadedTicketBackground, setTicketBackground, clearTicketBackground,
   getUploadedBackgroundImage, setBackgroundImage, clearBackgroundImage,
 } from './repository.js';
+import { sendComingSoonReminders } from '../comingSoon/notify.js';
 
 const ALLOWED_THEME_MODES = ['light', 'dark'];
 const ALLOWED_COLOR_SCHEMES = ['sahara', 'ozean', 'wald', 'hoehle', 'horror', 'custom'];
@@ -31,7 +32,7 @@ router.get('/app-settings', async () => {
   return { status: 200, body: settings };
 });
 
-router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
+router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const {
@@ -91,11 +92,23 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
       }
     }
   }
+  // Only read the pre-update value when a disable is actually possible --
+  // avoids an extra query on the common PUT /app-settings call, which never
+  // touches comingSoonEnabled at all (branding/theme/etc. edits).
+  const wasComingSoonEnabled = comingSoonEnabled === false ? (await getAppSettings()).comingSoonEnabled : false;
+
   const saved = await setAppSettings({
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText,
     baseUrl: baseUrl === undefined ? undefined : baseUrl.replace(/\/+$/, ''),
     comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors,
   });
+
+  // Fire-and-forget: sendComingSoonReminders never throws (own try/catch per
+  // recipient), so this must not be awaited before responding to the admin.
+  if (comingSoonEnabled === false && wasComingSoonEnabled) {
+    sendComingSoonReminders(user.id);
+  }
+
   return { status: 200, body: saved };
 })));
 
