@@ -18,6 +18,13 @@
         <p><a href="/account.html#konto">&larr; Zurück zu meinem Konto</a></p>
         <h1 id="managed-person-heading">Person verwalten</h1>
 
+        <div class="tabs" id="char-class-tabs">
+          <button type="button" class="tab-btn active" data-tab="daten-tab">Konto</button>
+          <button type="button" class="tab-btn" data-tab="sc-tab">Charaktere</button>
+          <button type="button" class="tab-btn" data-tab="nsc-tab" id="nsc-tab-btn" style="display:none;">NSC-Charaktere</button>
+          <button type="button" class="tab-btn" data-tab="anmelden-tab">Anmeldung</button>
+        </div>
+
         <div class="tab-panel" id="daten-tab">
           <h2>Mitgliedsdaten</h2>
           <form id="data-form">
@@ -27,18 +34,12 @@
               <div><input id="nickname" name="nickname" type="text"><label for="nickname">Rufname</label></div>
               <div><input id="email" name="email" type="email"><label for="email">E-Mail (optional)</label></div>
             </div>
-            <div id="data-ot-fields"></div>
+            <div id="data-ot-fields" class="field-grid"></div>
             <button type="submit">Speichern</button>
           </form>
         </div>
 
-        <div class="tabs" id="char-class-tabs">
-          <button type="button" class="tab-btn active" data-tab="sc-tab">Charaktere</button>
-          <button type="button" class="tab-btn" data-tab="nsc-tab" id="nsc-tab-btn" style="display:none;">NSC-Charaktere</button>
-          <button type="button" class="tab-btn" data-tab="anmelden-tab">Anmeldung</button>
-        </div>
-
-        <div class="tab-panel" id="sc-tab">
+        <div class="tab-panel" id="sc-tab" hidden>
           <div class="dashboard-layout">
             <div class="dashboard-main">
               <div class="action-row">
