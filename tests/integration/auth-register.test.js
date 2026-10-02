@@ -34,26 +34,21 @@ test('register creates an unverified user with a verification token; verify acti
     const registerBody = await registerRes.json();
     assert.equal(registerBody.email, email);
 
-    const { rows: userRows } = await query('SELECT email_verified FROM users WHERE id = $1', [registerBody.id]);
+    const { rows: userRows } = await query('SELECT email_verified, access_token FROM users WHERE id = $1', [registerBody.id]);
     assert.equal(userRows[0].email_verified, false);
+    assert.ok(userRows[0].access_token);
+    const token = userRows[0].access_token;
 
-    const { rows: tokenRows } = await query(
-      'SELECT token FROM email_verification_tokens WHERE user_id = $1',
-      [registerBody.id]
-    );
-    assert.equal(tokenRows.length, 1);
-
-    const verifyRes = await fetch(`http://localhost:${port}/auth/verify?token=${tokenRows[0].token}`);
+    const verifyRes = await fetch(`http://localhost:${port}/auth/verify?token=${token}`);
     assert.equal(verifyRes.status, 200);
 
-    const { rows: verifiedRows } = await query('SELECT email_verified FROM users WHERE id = $1', [registerBody.id]);
+    const { rows: verifiedRows } = await query('SELECT email_verified, access_token FROM users WHERE id = $1', [registerBody.id]);
     assert.equal(verifiedRows[0].email_verified, true);
 
-    const { rows: tokenAfter } = await query(
-      'SELECT token FROM email_verification_tokens WHERE token = $1',
-      [tokenRows[0].token]
-    );
-    assert.equal(tokenAfter.length, 0);
+    // Verifying rotates the link -- the one from registration can't be replayed.
+    assert.notEqual(verifiedRows[0].access_token, token);
+    const replayRes = await fetch(`http://localhost:${port}/auth/verify?token=${token}`);
+    assert.equal(replayRes.status, 400);
   });
 });
 
@@ -126,7 +121,7 @@ test('concurrent registrations for the same email: one 201, one 409, no 500', as
   });
 });
 
-test('resending verification issues a new token and invalidates the old one', async () => {
+test('resending verification resends the same permanent token, which still verifies', async () => {
   await withTestServer(async (port) => {
     const email = `resend-${crypto.randomUUID()}@example.com`;
 
@@ -136,10 +131,8 @@ test('resending verification issues a new token and invalidates the old one', as
       body: JSON.stringify({ email, password: 'correct horse battery staple', firstName: 'Resend', lastName: 'User' }),
     });
     const { id } = await registerRes.json();
-    const { rows: oldTokenRows } = await query(
-      'SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]
-    );
-    const oldToken = oldTokenRows[0].token;
+    const { rows: beforeRows } = await query('SELECT access_token FROM users WHERE id = $1', [id]);
+    const token = beforeRows[0].access_token;
 
     const resendRes = await fetch(`http://localhost:${port}/auth/verify/resend`, {
       method: 'POST',
@@ -148,19 +141,10 @@ test('resending verification issues a new token and invalidates the old one', as
     });
     assert.equal(resendRes.status, 200);
 
-    const { rows: newTokenRows } = await query(
-      'SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]
-    );
-    assert.equal(newTokenRows.length, 1);
-    const newToken = newTokenRows[0].token;
-    assert.notEqual(newToken, oldToken);
+    const { rows: afterRows } = await query('SELECT access_token FROM users WHERE id = $1', [id]);
+    assert.equal(afterRows[0].access_token, token);
 
-    const { rows: oldTokenAfter } = await query(
-      'SELECT token FROM email_verification_tokens WHERE token = $1', [oldToken]
-    );
-    assert.equal(oldTokenAfter.length, 0);
-
-    const verifyRes = await fetch(`http://localhost:${port}/auth/verify?token=${newToken}`);
+    const verifyRes = await fetch(`http://localhost:${port}/auth/verify?token=${token}`);
     assert.equal(verifyRes.status, 200);
   });
 });
@@ -181,7 +165,7 @@ test('resending verification for an unknown or already-verified email still retu
       body: JSON.stringify({ email, password: 'correct horse battery staple', firstName: 'Verified', lastName: 'User' }),
     });
     const { id } = await registerRes.json();
-    const { rows: tokenRows } = await query('SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]);
+    const { rows: tokenRows } = await query('SELECT access_token AS token FROM users WHERE id = $1', [id]);
     await fetch(`http://localhost:${port}/auth/verify?token=${tokenRows[0].token}`);
 
     const verifiedRes = await fetch(`http://localhost:${port}/auth/verify/resend`, {

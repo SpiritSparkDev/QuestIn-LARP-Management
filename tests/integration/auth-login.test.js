@@ -30,7 +30,7 @@ async function registerAndVerify(port, email, password) {
     body: JSON.stringify({ email, password, firstName: 'Login', lastName: 'Test' }),
   });
   const { id } = await registerRes.json();
-  const { rows } = await query('SELECT token FROM email_verification_tokens WHERE user_id = $1', [id]);
+  const { rows } = await query('SELECT access_token AS token FROM users WHERE id = $1', [id]);
   await fetch(`http://localhost:${port}/auth/verify?token=${rows[0].token}`);
   return id;
 }

@@ -199,9 +199,9 @@ export async function findOrCreateOAuthUser(providerName, providerUserId, email,
   } else {
     const { firstName, lastName } = splitFullName(name || normalizedEmail);
     const { rows } = await query(
-      `INSERT INTO users (email, password_hash, group_id, first_name, last_name, email_verified)
-       VALUES ($1, NULL, (SELECT id FROM groups WHERE key = 'mitglied'), $2, $3, $4) RETURNING id`,
-      [normalizedEmail, firstName, lastName, !!emailVerifiedByProvider]
+      `INSERT INTO users (email, password_hash, group_id, first_name, last_name, email_verified, access_token)
+       VALUES ($1, NULL, (SELECT id FROM groups WHERE key = 'mitglied'), $2, $3, $4, $5) RETURNING id`,
+      [normalizedEmail, firstName, lastName, !!emailVerifiedByProvider, crypto.randomBytes(32).toString('hex')]
     );
     userId = rows[0].id;
   }

@@ -108,8 +108,9 @@
         </dialog>
         <div id="invite-link-box" style="display:none;">
           <input id="invite-link-text" readonly>
-          <label for="invite-link-text">Einladungslink</label>
+          <label id="invite-link-label" for="invite-link-text">Einladungslink</label>
           <button type="button" id="invite-link-copy">Kopieren</button>
+          <button type="button" id="invite-link-send" style="display:none;">Per E-Mail senden</button>
         </div>
       </div>
     </div>
@@ -141,6 +142,9 @@
     const inviteEventSelect = document.getElementById('invite-event');
     const inviteLinkBox = document.getElementById('invite-link-box');
     const inviteLinkText = document.getElementById('invite-link-text');
+    const inviteLinkLabel = document.getElementById('invite-link-label');
+    const inviteLinkSendBtn = document.getElementById('invite-link-send');
+    let accessLinkMemberId = null;
     const searchInput = document.getElementById('member-search');
     let currentSearch = '';
 
@@ -158,7 +162,18 @@
     });
 
     function showInviteLink(link) {
+      inviteLinkLabel.textContent = 'Einladungslink';
       inviteLinkText.value = link;
+      accessLinkMemberId = null;
+      inviteLinkSendBtn.style.display = 'none';
+      inviteLinkBox.style.display = '';
+    }
+
+    function showAccessLinkBox(link, memberId) {
+      inviteLinkLabel.textContent = 'Zugriffslink';
+      inviteLinkText.value = link;
+      accessLinkMemberId = memberId;
+      inviteLinkSendBtn.style.display = '';
       inviteLinkBox.style.display = '';
     }
 
@@ -172,6 +187,16 @@
         button.textContent = 'Kopieren fehlgeschlagen';
       }
       setTimeout(() => { button.textContent = originalText; }, 2000);
+    });
+
+    inviteLinkSendBtn.addEventListener('click', async () => {
+      if (!accessLinkMemberId) return;
+      try {
+        await api.post(`/members/${accessLinkMemberId}/access-link/send`, {});
+        notify('Zugriffslink per E-Mail verschickt.', 'success');
+      } catch (err) {
+        notify(err.message, 'error');
+      }
     });
 
     let myAccountFields = [];
@@ -239,8 +264,8 @@
       listBody.innerHTML = visible.map((m) => {
         let statusCell;
         let actionsCell;
-        const resendVerifyBtn = m.status !== 'invited' && !m.emailVerified
-          ? `<button type="button" class="btn-sm btn-ghost" data-resend-verify="${m.id}">Bestätigungsmail erneut senden</button>`
+        const accessLinkBtn = m.status === 'active' && !m.isGuest
+          ? `<button type="button" class="btn-sm btn-ghost" data-access-link="${m.id}">Zugriffslink anzeigen</button>`
           : '';
         const guestBadge = m.isGuest ? ` <span class="badge badge-inactive">Gast</span>` : '';
         const conversionLinkBtn = m.isGuest
@@ -251,11 +276,11 @@
           const deactivateBtn = m.id === myUserId
             ? ''
             : `<button type="button" class="btn-sm btn-ghost" data-deactivate="${m.id}">Deaktivieren</button>`;
-          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn} ${conversionLinkBtn} ${resendVerifyBtn}`;
+          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn} ${conversionLinkBtn} ${accessLinkBtn}`;
         } else if (m.status === 'deactivated') {
           statusCell = `<span class="badge badge-inactive">Deaktiviert</span>`;
           actionsCell = `<button type="button" class="btn-sm btn-ghost" data-reactivate="${m.id}">Reaktivieren</button>
-         <button type="button" class="btn-sm btn-ghost" data-delete="${m.id}">Löschen</button> ${resendVerifyBtn}`;
+         <button type="button" class="btn-sm btn-ghost" data-delete="${m.id}">Löschen</button>`;
         } else {
           statusCell = `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`;
           actionsCell = `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>
@@ -291,8 +316,8 @@
       listBody.querySelectorAll('[data-delete]').forEach((button) => {
         button.addEventListener('click', () => deleteMemberRow(button.dataset.delete));
       });
-      listBody.querySelectorAll('[data-resend-verify]').forEach((button) => {
-        button.addEventListener('click', () => resendVerification(button.dataset.resendVerify));
+      listBody.querySelectorAll('[data-access-link]').forEach((button) => {
+        button.addEventListener('click', () => showAccessLink(button.dataset.accessLink));
       });
       listBody.querySelectorAll('[data-generate-conversion-link]').forEach((button) => {
         button.addEventListener('click', () => generateConversionLink(button.dataset.generateConversionLink));
@@ -414,10 +439,10 @@
       }
     }
 
-    async function resendVerification(id) {
+    async function showAccessLink(id) {
       try {
-        await api.post(`/members/${id}/resend-verification`, {});
-        notify('Bestätigungsmail erneut verschickt.', 'success');
+        const result = await api.get(`/members/${id}/access-link`);
+        showAccessLinkBox(result.link, id);
       } catch (err) {
         notify(err.message, 'error');
       }

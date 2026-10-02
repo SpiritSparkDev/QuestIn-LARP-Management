@@ -1,18 +1,16 @@
-import crypto from 'node:crypto';
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { listMembers, getMember, updateMember, deactivateMember, reactivateMember, deleteMember } from './repository.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
-import { sendInvitationEmail, sendVerificationEmail, baseUrl } from '../auth/mailer.js';
+import { sendInvitationEmail, sendVerificationEmail, sendPasswordResetEmail, baseUrl } from '../auth/mailer.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { logger } from '../logger.js';
 import { query } from '../db.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { isValidEmail } from '../validation.js';
-
-const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+import { ensureAccessToken } from '../auth/accessTokens.js';
 
 async function filterToAllowedFields(body, allowedFields) {
   const schemaKeys = (await getAccountFieldSchema()).map((f) => f.key);
@@ -97,23 +95,35 @@ router.delete('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ par
   return { status: 200, body: { deleted: true } };
 })));
 
-router.post('/members/:id/resend-verification', requireAuth(requireMenu('mitglieder')(async ({ params, requestId }) => {
+// The member's permanent access link (see backend/auth/accessTokens.js):
+// confirms their email while unverified, or resets their password once
+// verified -- the admin can look it up and (re)send it at any time, not
+// just while the account is still unconfirmed.
+router.get('/members/:id/access-link', requireAuth(requireMenu('mitglieder')(async ({ params }) => {
   const member = await getMember(params.id);
   if (!member) return { status: 404, body: { error: 'member not found' } };
-  if (member.emailVerified) return { status: 400, body: { error: 'email already verified' } };
+  if (member.isGuest) return { status: 400, body: { error: 'guest accounts have no access link' } };
 
-  await query('DELETE FROM email_verification_tokens WHERE user_id = $1', [params.id]);
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
-  await query(
-    'INSERT INTO email_verification_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)',
-    [token, params.id, expiresAt]
-  );
+  const token = await ensureAccessToken(params.id);
+  const page = member.emailVerified ? 'reset-password' : 'verify';
+  const link = `${await baseUrl()}/${page}.html?token=${token}`;
+  return { status: 200, body: { link, emailVerified: member.emailVerified } };
+})));
 
+router.post('/members/:id/access-link/send', requireAuth(requireMenu('mitglieder')(async ({ params, requestId }) => {
+  const member = await getMember(params.id);
+  if (!member) return { status: 404, body: { error: 'member not found' } };
+  if (member.isGuest) return { status: 400, body: { error: 'guest accounts have no access link' } };
+
+  const token = await ensureAccessToken(params.id);
   try {
-    await sendVerificationEmail(member.email, token, { userId: params.id });
+    if (member.emailVerified) {
+      await sendPasswordResetEmail(member.email, token, { userId: params.id });
+    } else {
+      await sendVerificationEmail(member.email, token, { userId: params.id });
+    }
   } catch (err) {
-    logger.error('failed to resend verification email', { requestId, userId: params.id, email: member.email, error: err.message });
+    logger.error('failed to send access link email', { requestId, userId: params.id, email: member.email, error: err.message });
     return { status: 502, body: { error: 'failed to send email' } };
   }
   return { status: 200, body: { sent: true } };

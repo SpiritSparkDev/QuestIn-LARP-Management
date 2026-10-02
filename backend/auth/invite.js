@@ -6,6 +6,7 @@ import { serializeSessionCookie } from './cookies.js';
 import { readJsonBody } from '../httpBody.js';
 import { getInvitationByToken, markRedeemed } from '../invitations/repository.js';
 import { isValidPassword } from '../validation.js';
+import { generateAccessToken } from './accessTokens.js';
 
 router.post('/auth/invite/redeem', async ({ req }) => {
   const body = await readJsonBody(req);
@@ -24,6 +25,7 @@ router.post('/auth/invite/redeem', async ({ req }) => {
   }
 
   const passwordHash = await hashPassword(password);
+  const accessToken = generateAccessToken();
 
   let userId;
   try {
@@ -36,9 +38,9 @@ router.post('/auth/invite/redeem', async ({ req }) => {
         // markRedeemed's own race guard: it also refuses to touch a row
         // that was somehow already converted or is no longer a guest.
         const { rowCount } = await client.query(
-          `UPDATE users SET password_hash = $2, is_guest = false, email_verified = true
+          `UPDATE users SET password_hash = $2, is_guest = false, email_verified = true, access_token = $3
            WHERE id = $1 AND is_guest = true AND password_hash IS NULL`,
-          [invitation.userId, passwordHash]
+          [invitation.userId, passwordHash, accessToken]
         );
         if (rowCount === 0) {
           const err = new Error('invitation already redeemed');
@@ -48,10 +50,10 @@ router.post('/auth/invite/redeem', async ({ req }) => {
         redeemedUserId = invitation.userId;
       } else {
         const { rows } = await client.query(
-          `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname, email_verified, account_data_enc)
-           VALUES ($1, $2, $3, $4, $5, $6, true, (SELECT account_data_enc FROM invitations WHERE id = $7))
+          `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname, email_verified, account_data_enc, access_token)
+           VALUES ($1, $2, $3, $4, $5, $6, true, (SELECT account_data_enc FROM invitations WHERE id = $7), $8)
            RETURNING id`,
-          [invitation.email, passwordHash, invitation.groupId, invitation.firstName, invitation.lastName, invitation.nickname ?? null, invitation.id]
+          [invitation.email, passwordHash, invitation.groupId, invitation.firstName, invitation.lastName, invitation.nickname ?? null, invitation.id, accessToken]
         );
         redeemedUserId = rows[0].id;
       }

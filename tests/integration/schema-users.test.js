@@ -19,7 +19,7 @@ const { GROUP_DEFAULTS } = await import('../../db/groupDefaults.js');
 const SEEDED_GROUP_KEYS = GROUP_DEFAULTS.map((g) => g.key);
 
 test('users/sessions/tokens tables exist after migration', async () => {
-  for (const table of ['users', 'sessions', 'email_verification_tokens', 'password_reset_tokens', 'groups', 'nsc_profile_schema']) {
+  for (const table of ['users', 'sessions', 'groups', 'nsc_profile_schema']) {
     const { rows } = await query('SELECT to_regclass($1) AS exists', [table]);
     assert.ok(rows[0].exists, `expected table "${table}" to exist`);
   }

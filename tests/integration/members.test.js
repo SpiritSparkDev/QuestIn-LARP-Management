@@ -757,7 +757,7 @@ test('DELETE /members/:id returns 409 when the member is still referenced (e.g. 
   }
 });
 
-test('POST /members/:id/resend-verification reissues the verification token for an unverified member', async () => {
+test('GET /members/:id/access-link returns the verify link for an unverified member and lazily creates its token', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
@@ -768,28 +768,69 @@ test('POST /members/:id/resend-verification reissues the verification token for 
     );
     const targetId = rows[0].id;
 
-    const res = await fetch(`http://localhost:${port}/members/${targetId}/resend-verification`, {
-      method: 'POST',
+    const res = await fetch(`http://localhost:${port}/members/${targetId}/access-link`, {
       headers: { Cookie: adminCookie },
     });
     assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.match(body.link, /\/verify\.html\?token=/);
 
-    const { rows: tokenRows } = await query('SELECT token FROM email_verification_tokens WHERE user_id = $1', [targetId]);
-    assert.equal(tokenRows.length, 1);
+    const { rows: userRows } = await query('SELECT access_token FROM users WHERE id = $1', [targetId]);
+    assert.ok(userRows[0].access_token);
   } finally {
     server.close();
   }
 });
 
-test('POST /members/:id/resend-verification rejects a member whose email is already verified', async () => {
+test('GET /members/:id/access-link returns the reset-password link for an already-verified member', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
     const { cookie: adminCookie } = await makeUserAndSession('admin');
     const { userId: targetId } = await makeUserAndSession('mitglied');
 
-    const res = await fetch(`http://localhost:${port}/members/${targetId}/resend-verification`, {
+    const res = await fetch(`http://localhost:${port}/members/${targetId}/access-link`, {
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.match(body.link, /\/reset-password\.html\?token=/);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /members/:id/access-link/send emails the member their current access link', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
+
+    const res = await fetch(`http://localhost:${port}/members/${targetId}/access-link/send`, {
       method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.sent, true);
+  } finally {
+    server.close();
+  }
+});
+
+test('GET /members/:id/access-link rejects a guest account', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { rows } = await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, email_verified, is_guest) VALUES ($1, 'Members', 'Guest', (SELECT id FROM groups WHERE key = 'mitglied'), true, true) RETURNING id",
+      [`members-guest-${crypto.randomUUID()}@example.com`]
+    );
+    const targetId = rows[0].id;
+
+    const res = await fetch(`http://localhost:${port}/members/${targetId}/access-link`, {
       headers: { Cookie: adminCookie },
     });
     assert.equal(res.status, 400);

@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { router } from '../routes.js';
 import { query } from '../db.js';
 import { hashPassword } from '../crypto/password.js';
@@ -7,8 +6,8 @@ import { readJsonBody } from '../httpBody.js';
 import { logger } from '../logger.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { isValidEmail, isValidPassword } from '../validation.js';
+import { generateAccessToken, getUserByAccessToken, rotateAccessToken, ensureAccessToken } from './accessTokens.js';
 
-const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const REGISTER_RATE_LIMIT = { keyPrefix: 'register', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 const RESEND_RATE_LIMIT = { keyPrefix: 'verify-resend', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
@@ -34,12 +33,13 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
   }
 
   const passwordHash = await hashPassword(password);
+  const token = generateAccessToken();
   let userId;
   try {
     const { rows } = await query(
-      `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname)
-       VALUES ($1, $2, (SELECT id FROM groups WHERE key = 'mitglied'), $3, $4, $5) RETURNING id`,
-      [email, passwordHash, firstName, lastName, nickname ?? null]
+      `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname, access_token)
+       VALUES ($1, $2, (SELECT id FROM groups WHERE key = 'mitglied'), $3, $4, $5, $6) RETURNING id`,
+      [email, passwordHash, firstName, lastName, nickname ?? null, token]
     );
     userId = rows[0].id;
   } catch (err) {
@@ -48,13 +48,6 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
     }
     throw err;
   }
-
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
-  await query(
-    'INSERT INTO email_verification_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)',
-    [token, userId, expiresAt]
-  );
 
   try {
     await sendVerificationEmail(email, token, { userId });
@@ -73,13 +66,7 @@ router.post('/auth/verify/resend', rateLimit(RESEND_RATE_LIMIT)(async ({ req, re
 
   const { rows } = await query('SELECT id FROM users WHERE email = $1 AND email_verified = false', [email]);
   if (rows.length > 0) {
-    await query('DELETE FROM email_verification_tokens WHERE user_id = $1', [rows[0].id]);
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
-    await query(
-      'INSERT INTO email_verification_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)',
-      [token, rows[0].id, expiresAt]
-    );
+    const token = await ensureAccessToken(rows[0].id);
     try {
       await sendVerificationEmail(email, token, { userId: rows[0].id });
     } catch (err) {
@@ -96,15 +83,12 @@ router.get('/auth/verify', async ({ req }) => {
   const token = searchParams.get('token');
   if (!token) return { status: 400, body: { error: 'token is required' } };
 
-  const { rows } = await query(
-    'SELECT user_id, expires_at FROM email_verification_tokens WHERE token = $1',
-    [token]
-  );
-  if (rows.length === 0 || new Date(rows[0].expires_at) < new Date()) {
+  const user = await getUserByAccessToken(token);
+  if (!user) {
     return { status: 400, body: { error: 'Ungültiger oder abgelaufener Link.' } };
   }
 
-  await query('UPDATE users SET email_verified = true WHERE id = $1', [rows[0].user_id]);
-  await query('DELETE FROM email_verification_tokens WHERE token = $1', [token]);
+  await query('UPDATE users SET email_verified = true WHERE id = $1', [user.id]);
+  await rotateAccessToken(user.id);
   return { status: 200, body: { verified: true } };
 });
