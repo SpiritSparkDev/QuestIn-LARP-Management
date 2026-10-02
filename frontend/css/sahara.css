@@ -1,3 +1,13 @@
+/* ---------- Color schemes ---------- */
+/* Each scheme is admin-selected instance-wide (see Branding settings,
+   frontend/admin/branding.html) via html[data-scheme] + html[data-theme],
+   applied by frontend/js/branding.js. The :root block below is the
+   "sahara" (desert) scheme's light palette -- also the fallback used
+   before branding.js runs. colorScheme 'custom' sets these same
+   properties inline on <html> from admin-picked hex values instead of
+   using a CSS block (see ALLOWED_CUSTOM_COLOR_KEYS in
+   backend/appSettings/routes.js), so it has no block here. */
+
 :root {
   --surface: #faf5ee;
   --surface-container-lowest: #ffffff;
@@ -22,6 +32,241 @@
   --error: #c0392b;
   --success: #2c5223;
   --shadow: rgba(58, 48, 42, 0.06);
+  --app-bg-image: none;
+}
+
+html[data-theme="dark"] {
+  --surface: #241c16;
+  --surface-container-lowest: #140f0b;
+  --surface-container-low: #1e1712;
+  --surface-container: #291f18;
+  --surface-container-high: #33271e;
+  --surface-container-highest: #3d2f24;
+  --on-surface: #f0e6da;
+  --on-surface-variant: #cdbfae;
+  --outline: #8a7c6c;
+  --outline-variant: #4a3f33;
+  --primary: #e68a46;
+  --primary-deep: #ffb380;
+  --primary-container: #5c3418;
+  --on-primary: #2a1505;
+  --on-primary-container: #ffd9b3;
+  --gold: #d97a7a;
+  --gold-container: #5a2a2a;
+  --on-gold-container: #ffd9d9;
+  --secondary: #b3a89c;
+  --secondary-container: #3d352c;
+  --error: #e57368;
+  --success: #7fbf6e;
+  --shadow: rgba(0, 0, 0, 0.4);
+}
+
+html[data-scheme="ozean"] {
+  --surface: #f2f8fa;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #eaf3f6;
+  --surface-container: #e1edf1;
+  --surface-container-high: #d7e6ec;
+  --surface-container-highest: #cde0e7;
+  --on-surface: #1c2e33;
+  --on-surface-variant: #46606a;
+  --outline: #7f9aa3;
+  --outline-variant: #c3d6dc;
+  --primary: #1870a8;
+  --primary-deep: #0f4d73;
+  --primary-container: #d3e9f7;
+  --on-primary: #ffffff;
+  --on-primary-container: #0f4d73;
+  --gold: #2a8c82;
+  --gold-container: #d6f0ec;
+  --on-gold-container: #16453f;
+  --secondary: #5c7b85;
+  --secondary-container: #dceaee;
+  --error: #c0392b;
+  --success: #1f7a52;
+  --shadow: rgba(10, 40, 50, 0.08);
+}
+
+html[data-scheme="ozean"][data-theme="dark"] {
+  --surface: #0d1b22;
+  --surface-container-lowest: #081216;
+  --surface-container-low: #11232b;
+  --surface-container: #152a33;
+  --surface-container-high: #1a333d;
+  --surface-container-highest: #1f3c47;
+  --on-surface: #dceaf0;
+  --on-surface-variant: #a9c2cb;
+  --outline: #6f8c96;
+  --outline-variant: #2d4652;
+  --primary: #5cb3e8;
+  --primary-deep: #8fd0f5;
+  --primary-container: #184c6b;
+  --on-primary: #002234;
+  --on-primary-container: #cbe8fb;
+  --gold: #4fd0c0;
+  --gold-container: #164d46;
+  --on-gold-container: #b6f3e9;
+  --secondary: #93b0ba;
+  --secondary-container: #223b43;
+  --error: #e8766a;
+  --success: #5fcf96;
+  --shadow: rgba(0, 0, 0, 0.5);
+}
+
+html[data-scheme="wald"] {
+  --surface: #f3f7ee;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #ebf2e3;
+  --surface-container: #e3ecd9;
+  --surface-container-high: #d9e5cc;
+  --surface-container-highest: #cedcbe;
+  --on-surface: #242e1c;
+  --on-surface-variant: #4b5a3e;
+  --outline: #849672;
+  --outline-variant: #cdd9bd;
+  --primary: #3f7d32;
+  --primary-deep: #2a5620;
+  --primary-container: #d7ecc9;
+  --on-primary: #ffffff;
+  --on-primary-container: #2a5620;
+  --gold: #a3792e;
+  --gold-container: #f3e3c4;
+  --on-gold-container: #5c3f12;
+  --secondary: #6b7a5c;
+  --secondary-container: #dde6d1;
+  --error: #c0392b;
+  --success: #2c5223;
+  --shadow: rgba(30, 40, 20, 0.08);
+}
+
+html[data-scheme="wald"][data-theme="dark"] {
+  --surface: #131a0f;
+  --surface-container-lowest: #0a0e07;
+  --surface-container-low: #182010;
+  --surface-container: #1d2614;
+  --surface-container-high: #222c18;
+  --surface-container-highest: #27321c;
+  --on-surface: #e4ecd9;
+  --on-surface-variant: #b9c7a8;
+  --outline: #7e9268;
+  --outline-variant: #384a2a;
+  --primary: #7fc363;
+  --primary-deep: #a6dd8c;
+  --primary-container: #2d4a21;
+  --on-primary: #0f2008;
+  --on-primary-container: #c9ecb8;
+  --gold: #d1a157;
+  --gold-container: #4d3813;
+  --on-gold-container: #f3dcab;
+  --secondary: #9bab87;
+  --secondary-container: #2c3a21;
+  --error: #e8766a;
+  --success: #7fcf6e;
+  --shadow: rgba(0, 0, 0, 0.45);
+}
+
+html[data-scheme="hoehle"] {
+  --surface: #eef0ee;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #e6e8e5;
+  --surface-container: #dddfdc;
+  --surface-container-high: #d2d5d1;
+  --surface-container-highest: #c6cac5;
+  --on-surface: #26282a;
+  --on-surface-variant: #52565a;
+  --outline: #868b85;
+  --outline-variant: #c6cac5;
+  --primary: #5a6b63;
+  --primary-deep: #3c4a44;
+  --primary-container: #dde6e0;
+  --on-primary: #ffffff;
+  --on-primary-container: #253029;
+  --gold: #b8823d;
+  --gold-container: #f3e0bf;
+  --on-gold-container: #5c3f12;
+  --secondary: #6e716d;
+  --secondary-container: #dfe1de;
+  --error: #c0392b;
+  --success: #3a6b4a;
+  --shadow: rgba(20, 22, 20, 0.1);
+}
+
+html[data-scheme="hoehle"][data-theme="dark"] {
+  --surface: #15171a;
+  --surface-container-lowest: #0a0b0d;
+  --surface-container-low: #1b1d20;
+  --surface-container: #212327;
+  --surface-container-high: #272a2e;
+  --surface-container-highest: #2e3135;
+  --on-surface: #e5e6e3;
+  --on-surface-variant: #b7bab6;
+  --outline: #7a7e7b;
+  --outline-variant: #3a3d40;
+  --primary: #8aa89a;
+  --primary-deep: #b0cdbe;
+  --primary-container: #2e4740;
+  --on-primary: #0c1a15;
+  --on-primary-container: #c8e5d8;
+  --gold: #e0a44e;
+  --gold-container: #4a3313;
+  --on-gold-container: #f6ddab;
+  --secondary: #a6a9a4;
+  --secondary-container: #35373a;
+  --error: #e8766a;
+  --success: #6fc98f;
+  --shadow: rgba(0, 0, 0, 0.55);
+}
+
+html[data-scheme="horror"] {
+  --surface: #f2eceb;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #ece3e2;
+  --surface-container: #e4d8d7;
+  --surface-container-high: #d8caca;
+  --surface-container-highest: #ccbcbc;
+  --on-surface: #241415;
+  --on-surface-variant: #5a3f41;
+  --outline: #8f7071;
+  --outline-variant: #d0bdbd;
+  --primary: #7a1f22;
+  --primary-deep: #4d1013;
+  --primary-container: #f3d2d3;
+  --on-primary: #ffffff;
+  --on-primary-container: #4d1013;
+  --gold: #4a4248;
+  --gold-container: #ded8de;
+  --on-gold-container: #26222a;
+  --secondary: #6e5355;
+  --secondary-container: #e8dadb;
+  --error: #9c1c1c;
+  --success: #2c5223;
+  --shadow: rgba(30, 10, 10, 0.1);
+}
+
+html[data-scheme="horror"][data-theme="dark"] {
+  --surface: #120a0b;
+  --surface-container-lowest: #080405;
+  --surface-container-low: #180f10;
+  --surface-container: #1e1314;
+  --surface-container-high: #251719;
+  --surface-container-highest: #2c1b1d;
+  --on-surface: #ece2e0;
+  --on-surface-variant: #bfa6a5;
+  --outline: #7a5c5c;
+  --outline-variant: #3d2527;
+  --primary: #c9393f;
+  --primary-deep: #e3626a;
+  --primary-container: #551518;
+  --on-primary: #fceeee;
+  --on-primary-container: #ffd9da;
+  --gold: #9c8f7a;
+  --gold-container: #3a3328;
+  --on-gold-container: #ede3cf;
+  --secondary: #a68d8d;
+  --secondary-container: #332223;
+  --error: #ff5c5c;
+  --success: #6fc98f;
+  --shadow: rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -34,6 +279,20 @@ body {
   color: var(--on-surface);
   font-family: "Manrope", system-ui, sans-serif;
   min-height: 100vh;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--app-bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.2;
+  pointer-events: none;
 }
 
 h1, h2, h3 {
@@ -590,6 +849,50 @@ textarea.invalid {
   display: flex;
   flex-direction: column;
   margin-bottom: 18px;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 24px;
+}
+
+@media (max-width: 560px) {
+  .color-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.color-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.color-field label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+  margin: 0;
+}
+
+.color-field input[type="color"] {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 6px;
+  background: var(--surface-container-lowest);
+  cursor: pointer;
+}
+
+.color-field input[type="text"] {
+  width: 90px;
+  flex: none;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 6px 8px;
 }
 
 .section-head {

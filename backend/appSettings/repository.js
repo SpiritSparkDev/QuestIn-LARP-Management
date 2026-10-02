@@ -3,8 +3,8 @@ import { query } from '../db.js';
 export const DEFAULT_BASE_URL = 'http://localhost:3000';
 
 export async function getAppSettings() {
-  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, waitlist_auto_promote, waiver_text, waiver_version, base_url, coming_soon_enabled, coming_soon_message, coming_soon_until, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background FROM app_settings LIMIT 1');
-  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: process.env.APP_BASE_URL || DEFAULT_BASE_URL, comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, hasUploadedLogo: false, hasUploadedTicketBackground: false };
+  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, waitlist_auto_promote, waiver_text, waiver_version, base_url, coming_soon_enabled, coming_soon_message, coming_soon_until, theme_mode, color_scheme, custom_colors, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background, background_image_data IS NOT NULL AS has_uploaded_background_image FROM app_settings LIMIT 1');
+  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: process.env.APP_BASE_URL || DEFAULT_BASE_URL, comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false };
   return {
     logoUrl: rows[0].logo_url,
     appTitle: rows[0].app_title,
@@ -20,14 +20,18 @@ export async function getAppSettings() {
     comingSoonEnabled: rows[0].coming_soon_enabled,
     comingSoonMessage: rows[0].coming_soon_message,
     comingSoonUntil: rows[0].coming_soon_until,
+    themeMode: rows[0].theme_mode,
+    colorScheme: rows[0].color_scheme,
+    customColors: rows[0].custom_colors,
     hasUploadedLogo: rows[0].has_uploaded_logo,
     hasUploadedTicketBackground: rows[0].has_uploaded_ticket_background,
+    hasUploadedBackgroundImage: rows[0].has_uploaded_background_image,
   };
 }
 
 export async function setAppSettings({
   logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
-  waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil,
+  waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors,
 }) {
   const id = await ensureSettingsRow();
   // Auto-bumps waiver_version whenever the text actually changes, so a
@@ -50,6 +54,11 @@ export async function setAppSettings({
   // keeps the stored value, '' or null clears it back to "no countdown".
   const comingSoonUntilProvided = comingSoonUntil !== undefined;
   const comingSoonUntilValue = (comingSoonUntil === '' || comingSoonUntil == null) ? null : new Date(comingSoonUntil);
+  // customColors needs the same tri-state handling as baseUrl: undefined
+  // keeps the stored palette, null clears it back to "no custom palette"
+  // (e.g. when the admin switches colorScheme away from 'custom').
+  const customColorsProvided = customColors !== undefined;
+  const customColorsValue = customColors == null ? null : JSON.stringify(customColors);
   await query(
     `UPDATE app_settings SET
        logo_url = COALESCE($2, logo_url),
@@ -64,13 +73,17 @@ export async function setAppSettings({
        base_url = CASE WHEN $11 THEN $12 ELSE base_url END,
        coming_soon_enabled = COALESCE($13, coming_soon_enabled),
        coming_soon_message = COALESCE($14, coming_soon_message),
-       coming_soon_until = CASE WHEN $15 THEN $16 ELSE coming_soon_until END
+       coming_soon_until = CASE WHEN $15 THEN $16 ELSE coming_soon_until END,
+       theme_mode = COALESCE($17, theme_mode),
+       color_scheme = COALESCE($18, color_scheme),
+       custom_colors = CASE WHEN $19 THEN $20 ELSE custom_colors END
      WHERE id = $1`,
     [
       id, logoUrl ?? null, appTitle ?? null, eventName ?? null, quotaMbPerCharacter ?? null,
       invitationTtlDays ?? null, characterBrowsingEnabled ?? null, waitlistAutoPromote ?? null,
       waiverText ?? null, waiverVersionBump, baseUrlProvided, baseUrlValue,
       comingSoonEnabled ?? null, comingSoonMessage ?? null, comingSoonUntilProvided, comingSoonUntilValue,
+      themeMode ?? null, colorScheme ?? null, customColorsProvided, customColorsValue,
     ]
   );
   return getAppSettings();
@@ -111,4 +124,19 @@ export async function setTicketBackground({ data, mimeType }) {
 
 export async function clearTicketBackground() {
   await query('UPDATE app_settings SET ticket_bg_data = NULL, ticket_bg_mime_type = NULL');
+}
+
+export async function getUploadedBackgroundImage() {
+  const { rows } = await query('SELECT background_image_data, background_image_mime_type FROM app_settings WHERE background_image_data IS NOT NULL LIMIT 1');
+  if (rows.length === 0) return null;
+  return { data: rows[0].background_image_data, mimeType: rows[0].background_image_mime_type };
+}
+
+export async function setBackgroundImage({ data, mimeType }) {
+  const id = await ensureSettingsRow();
+  await query('UPDATE app_settings SET background_image_data = $2, background_image_mime_type = $3 WHERE id = $1', [id, data, mimeType]);
+}
+
+export async function clearBackgroundImage() {
+  await query('UPDATE app_settings SET background_image_data = NULL, background_image_mime_type = NULL');
 }

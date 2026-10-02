@@ -30,7 +30,7 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
   });
 });
 
@@ -49,7 +49,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, hasUploadedLogo: false, hasUploadedTicketBackground: false });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: true, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
@@ -447,6 +447,145 @@ test('PUT /app-settings rejects a non-boolean comingSoonEnabled, a non-string co
       body: JSON.stringify({ comingSoonUntil: 'not-a-date' }),
     });
     assert.equal(badUntil.status, 400);
+  });
+});
+
+test('PUT/GET/DELETE /app-settings/background-image round-trips, validates, and clears', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+    const tinyPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+    const beforeRes = await fetch(`http://localhost:${port}/app-settings`);
+    assert.equal((await beforeRes.json()).hasUploadedBackgroundImage, false);
+
+    const badMimeRes = await fetch(`http://localhost:${port}/app-settings/background-image`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ dataBase64: tinyPngBase64, mimeType: 'application/pdf' }),
+    });
+    assert.equal(badMimeRes.status, 400);
+
+    const uploadRes = await fetch(`http://localhost:${port}/app-settings/background-image`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ dataBase64: tinyPngBase64, mimeType: 'image/png' }),
+    });
+    assert.equal(uploadRes.status, 200);
+    assert.equal((await uploadRes.json()).hasUploadedBackgroundImage, true);
+
+    const getRes = await fetch(`http://localhost:${port}/app-settings/background-image`);
+    assert.equal(getRes.status, 200);
+    assert.equal(getRes.headers.get('content-type'), 'image/png');
+    const bytes = Buffer.from(await getRes.arrayBuffer());
+    assert.deepEqual(bytes, Buffer.from(tinyPngBase64, 'base64'));
+
+    const deleteRes = await fetch(`http://localhost:${port}/app-settings/background-image`, { method: 'DELETE', headers: { Cookie: cookie } });
+    assert.equal(deleteRes.status, 200);
+    assert.equal((await deleteRes.json()).hasUploadedBackgroundImage, false);
+
+    const afterDeleteRes = await fetch(`http://localhost:${port}/app-settings/background-image`);
+    assert.equal(afterDeleteRes.status, 404);
+  });
+});
+
+test('PUT /app-settings/background-image rejects a non-admin group and an unauthenticated request', async () => {
+  await withTestServer(async (port) => {
+    const memberCookie = await makeUserAndSession('mitglied');
+    const asMember = await fetch(`http://localhost:${port}/app-settings/background-image`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: memberCookie },
+      body: JSON.stringify({ dataBase64: 'x', mimeType: 'image/png' }),
+    });
+    assert.equal(asMember.status, 403);
+
+    const anonymous = await fetch(`http://localhost:${port}/app-settings/background-image`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataBase64: 'x', mimeType: 'image/png' }),
+    });
+    assert.equal(anonymous.status, 401);
+  });
+});
+
+test('PUT /app-settings saves themeMode and colorScheme, rejecting unknown values', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+
+    const badTheme = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ themeMode: 'blue' }),
+    });
+    assert.equal(badTheme.status, 400);
+
+    const badScheme = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ colorScheme: 'space' }),
+    });
+    assert.equal(badScheme.status, 400);
+
+    const goodRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ themeMode: 'dark', colorScheme: 'ozean' }),
+    });
+    assert.equal(goodRes.status, 200);
+    const body = await goodRes.json();
+    assert.equal(body.themeMode, 'dark');
+    assert.equal(body.colorScheme, 'ozean');
+
+    const getBody = await (await fetch(`http://localhost:${port}/app-settings`)).json();
+    assert.equal(getBody.themeMode, 'dark');
+    assert.equal(getBody.colorScheme, 'ozean');
+
+    // Reset so this doesn't leak into later tests/files sharing the same row.
+    await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ themeMode: 'light', colorScheme: 'sahara' }),
+    });
+  });
+});
+
+test('PUT /app-settings saves and clears customColors, rejecting unknown keys and non-hex values', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+
+    const unknownKeyRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ customColors: { background: '#112233' } }),
+    });
+    assert.equal(unknownKeyRes.status, 400);
+
+    const badHexRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ customColors: { primary: 'orange' } }),
+    });
+    assert.equal(badHexRes.status, 400);
+
+    const goodRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ colorScheme: 'custom', customColors: { primary: '#112233', 'on-primary': '#ffffff' } }),
+    });
+    assert.equal(goodRes.status, 200);
+    const body = await goodRes.json();
+    assert.deepEqual(body.customColors, { primary: '#112233', 'on-primary': '#ffffff' });
+
+    // A later PUT that omits customColors must not clear the stored palette.
+    const untouchedRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ appTitle: 'Still custom' }),
+    });
+    assert.deepEqual((await untouchedRes.json()).customColors, { primary: '#112233', 'on-primary': '#ffffff' });
+
+    // Explicit null clears it back out.
+    const clearedRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ colorScheme: 'sahara', customColors: null }),
+    });
+    assert.equal((await clearedRes.json()).customColors, null);
   });
 });
 

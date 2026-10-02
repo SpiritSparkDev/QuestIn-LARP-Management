@@ -5,7 +5,26 @@ import { readJsonBody } from '../httpBody.js';
 import {
   getAppSettings, setAppSettings, getUploadedLogo, setLogo, clearLogo,
   getUploadedTicketBackground, setTicketBackground, clearTicketBackground,
+  getUploadedBackgroundImage, setBackgroundImage, clearBackgroundImage,
 } from './repository.js';
+
+const ALLOWED_THEME_MODES = ['light', 'dark'];
+const ALLOWED_COLOR_SCHEMES = ['sahara', 'ozean', 'wald', 'hoehle', 'horror', 'custom'];
+
+// The CSS custom properties (frontend/css/sahara.css :root, minus the "--"
+// prefix) an admin can override for colorScheme 'custom'. Kept in sync by
+// hand with frontend/js/branding.js's CUSTOM_COLOR_KEYS -- the frontend has
+// no access to backend modules to share this list directly. 'shadow' is
+// excluded because it's an rgba() value, not a plain hex color the admin
+// picker UI can express.
+export const ALLOWED_CUSTOM_COLOR_KEYS = [
+  'surface', 'surface-container-lowest', 'surface-container-low', 'surface-container',
+  'surface-container-high', 'surface-container-highest', 'on-surface', 'on-surface-variant',
+  'outline', 'outline-variant', 'primary', 'primary-deep', 'primary-container', 'on-primary',
+  'on-primary-container', 'gold', 'gold-container', 'on-gold-container', 'secondary',
+  'secondary-container', 'error', 'success',
+];
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 router.get('/app-settings', async () => {
   const settings = await getAppSettings();
@@ -17,7 +36,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const {
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
-    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil,
+    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors,
   } = body;
   if (waiverText !== undefined && typeof waiverText !== 'string') {
     return { status: 400, body: { error: 'waiverText must be a string' } };
@@ -53,10 +72,29 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req }) => {
       return { status: 400, body: { error: 'comingSoonUntil must be a valid date string' } };
     }
   }
+  if (themeMode !== undefined && !ALLOWED_THEME_MODES.includes(themeMode)) {
+    return { status: 400, body: { error: `themeMode must be one of: ${ALLOWED_THEME_MODES.join(', ')}` } };
+  }
+  if (colorScheme !== undefined && !ALLOWED_COLOR_SCHEMES.includes(colorScheme)) {
+    return { status: 400, body: { error: `colorScheme must be one of: ${ALLOWED_COLOR_SCHEMES.join(', ')}` } };
+  }
+  if (customColors !== undefined && customColors !== null) {
+    if (typeof customColors !== 'object' || Array.isArray(customColors)) {
+      return { status: 400, body: { error: 'customColors must be an object' } };
+    }
+    for (const [key, value] of Object.entries(customColors)) {
+      if (!ALLOWED_CUSTOM_COLOR_KEYS.includes(key)) {
+        return { status: 400, body: { error: `customColors has an unknown key: ${key}` } };
+      }
+      if (typeof value !== 'string' || !HEX_COLOR_RE.test(value)) {
+        return { status: 400, body: { error: `customColors.${key} must be a hex color like #a1b2c3` } };
+      }
+    }
+  }
   const saved = await setAppSettings({
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText,
     baseUrl: baseUrl === undefined ? undefined : baseUrl.replace(/\/+$/, ''),
-    comingSoonEnabled, comingSoonMessage, comingSoonUntil,
+    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors,
   });
   return { status: 200, body: saved };
 })));
@@ -133,5 +171,23 @@ router.delete('/app-settings/ticket-background', requireAuth(requireAdminGroup(a
 router.get('/app-settings/ticket-background', async () => {
   const image = await getUploadedTicketBackground();
   if (!image) return { status: 404, body: { error: 'no ticket background uploaded' } };
+  return { status: 200, isBinary: true, body: image.data, headers: { 'Content-Type': image.mimeType, 'X-Content-Type-Options': 'nosniff' } };
+});
+
+router.put('/app-settings/background-image', requireAuth(requireAdminGroup(async ({ req }) => {
+  const upload = await parseImageUpload(req, 'background image');
+  if (upload.error) return upload.error;
+  await setBackgroundImage(upload);
+  return { status: 200, body: await getAppSettings() };
+})));
+
+router.delete('/app-settings/background-image', requireAuth(requireAdminGroup(async () => {
+  await clearBackgroundImage();
+  return { status: 200, body: await getAppSettings() };
+})));
+
+router.get('/app-settings/background-image', async () => {
+  const image = await getUploadedBackgroundImage();
+  if (!image) return { status: 404, body: { error: 'no background image uploaded' } };
   return { status: 200, isBinary: true, body: image.data, headers: { 'Content-Type': image.mimeType, 'X-Content-Type-Options': 'nosniff' } };
 });

@@ -49,6 +49,31 @@
           <label for="quota-mb">Speicher-Kontingent pro Charakter (MB)</label>
           <input id="quota-mb" name="quotaMbPerCharacter" type="number" min="1" step="1" placeholder="100">
         </div>
+        <div class="field-grid">
+          <div class="field-below">
+            <label for="theme-mode">Theme-Modus</label>
+            <select id="theme-mode" name="themeMode">
+              <option value="light">Hell</option>
+              <option value="dark">Dunkel</option>
+            </select>
+          </div>
+          <div class="field-below">
+            <label for="color-scheme">Farbschema</label>
+            <select id="color-scheme" name="colorScheme">
+              <option value="sahara">Sahara (Standard)</option>
+              <option value="ozean">Ozean</option>
+              <option value="wald">Wald</option>
+              <option value="hoehle">Höhle</option>
+              <option value="horror">Horror/Gothic</option>
+              <option value="custom">Profi (eigene Farben)</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-below" id="custom-colors-section" style="display:none;">
+          <label>Profi-Farbschema</label>
+          <p class="sub">Eigene Farbe für jede Rolle. Die Felder starten mit den Farben des zuletzt aktiven Schemas.</p>
+          <div class="color-grid" id="custom-color-grid"></div>
+        </div>
         <button type="submit">Speichern</button>
       </form>
       <hr class="hr">
@@ -66,6 +91,14 @@
       <input type="file" id="ticket-bg-file" accept="image/jpeg,image/png,image/webp">
       <button type="button" id="ticket-bg-upload-btn">Hochladen</button>
       <button type="button" id="ticket-bg-remove-btn" style="display:none;">Hintergrund entfernen</button>
+      <hr class="hr">
+      <h2>Hintergrundbild hochladen</h2>
+      <p class="sub">Wird instanzweit mit 20% Deckkraft hinter allen Seiten angezeigt.</p>
+      <img id="bg-image-preview" alt="Aktuelles Hintergrundbild" style="max-width:200px;max-height:120px;display:none;">
+      <p id="bg-image-preview-empty" class="sub">Kein Hintergrundbild hochgeladen.</p>
+      <input type="file" id="bg-image-file" accept="image/jpeg,image/png,image/webp">
+      <button type="button" id="bg-image-upload-btn">Hochladen</button>
+      <button type="button" id="bg-image-remove-btn" style="display:none;">Hintergrundbild entfernen</button>
     </div>
   </div></div>
 </div>
@@ -75,12 +108,126 @@ import { api } from '/js/api.js';
 import { hideLoading } from '/js/loading.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 initSidebarToggle();
-import { applyBranding } from '/js/branding.js';
+import { applyBranding, applyColorScheme, CUSTOM_COLOR_KEYS } from '/js/branding.js';
 import { notify } from '/js/notifications.js';
 
 applyBranding();
 
 const form = document.getElementById('branding-form');
+
+const CUSTOM_COLOR_LABELS = {
+  'surface': 'Oberfläche',
+  'surface-container-lowest': 'Oberfläche – unterste Ebene',
+  'surface-container-low': 'Oberfläche – niedrige Ebene',
+  'surface-container': 'Oberfläche – Container',
+  'surface-container-high': 'Oberfläche – hohe Ebene',
+  'surface-container-highest': 'Oberfläche – höchste Ebene',
+  'on-surface': 'Text auf Oberfläche',
+  'on-surface-variant': 'Text auf Oberfläche (Variante)',
+  'outline': 'Rahmen',
+  'outline-variant': 'Rahmen (Variante)',
+  'primary': 'Primärfarbe',
+  'primary-deep': 'Primärfarbe (dunkel)',
+  'primary-container': 'Primärfarbe – Container',
+  'on-primary': 'Text auf Primärfarbe',
+  'on-primary-container': 'Text auf Primärfarbe-Container',
+  'gold': 'Akzentfarbe',
+  'gold-container': 'Akzentfarbe – Container',
+  'on-gold-container': 'Text auf Akzentfarbe-Container',
+  'secondary': 'Sekundärfarbe',
+  'secondary-container': 'Sekundärfarbe – Container',
+  'error': 'Fehlerfarbe',
+  'success': 'Erfolgsfarbe',
+};
+
+function currentComputedColors() {
+  const computed = getComputedStyle(document.documentElement);
+  const colors = {};
+  for (const key of CUSTOM_COLOR_KEYS) colors[key] = computed.getPropertyValue(`--${key}`).trim();
+  return colors;
+}
+
+function readCustomColors() {
+  const colors = {};
+  document.querySelectorAll('#custom-color-grid input[type="color"]').forEach((input) => {
+    colors[input.dataset.key] = input.value;
+  });
+  return colors;
+}
+
+function buildCustomColorGrid(initialColors) {
+  const grid = document.getElementById('custom-color-grid');
+  grid.innerHTML = '';
+  for (const key of CUSTOM_COLOR_KEYS) {
+    const value = initialColors[key] || '#000000';
+    const field = document.createElement('div');
+    field.className = 'color-field';
+
+    const label = document.createElement('label');
+    label.textContent = CUSTOM_COLOR_LABELS[key] || key;
+    label.setAttribute('for', `custom-color-${key}`);
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.id = `custom-color-${key}`;
+    colorInput.dataset.key = key;
+    colorInput.value = value;
+
+    const textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.value = value;
+
+    colorInput.addEventListener('input', () => {
+      textInput.value = colorInput.value;
+      previewCustomColors();
+    });
+    textInput.addEventListener('input', () => {
+      if (/^#[0-9a-fA-F]{6}$/.test(textInput.value)) {
+        colorInput.value = textInput.value;
+        previewCustomColors();
+      }
+    });
+
+    field.append(label, colorInput, textInput);
+    grid.appendChild(field);
+  }
+}
+
+function previewCustomColors() {
+  applyColorScheme({ themeMode: form.elements.themeMode.value, colorScheme: 'custom', customColors: readCustomColors() });
+}
+
+function previewScheme() {
+  const colorScheme = form.elements.colorScheme.value;
+  const themeMode = form.elements.themeMode.value;
+  applyColorScheme({ themeMode, colorScheme, customColors: colorScheme === 'custom' ? readCustomColors() : null });
+}
+
+form.elements.colorScheme.addEventListener('change', () => {
+  const isCustom = form.elements.colorScheme.value === 'custom';
+  document.getElementById('custom-colors-section').style.display = isCustom ? '' : 'none';
+  form.elements.themeMode.disabled = isCustom;
+  if (isCustom) buildCustomColorGrid(currentComputedColors());
+  previewScheme();
+});
+
+form.elements.themeMode.addEventListener('change', previewScheme);
+
+function refreshBgImagePreview(hasUploadedBackgroundImage) {
+  const preview = document.getElementById('bg-image-preview');
+  const empty = document.getElementById('bg-image-preview-empty');
+  const removeBtn = document.getElementById('bg-image-remove-btn');
+  if (hasUploadedBackgroundImage) {
+    preview.src = `/app-settings/background-image?t=${Date.now()}`;
+    preview.style.display = '';
+    empty.style.display = 'none';
+    removeBtn.style.display = '';
+  } else {
+    preview.style.display = 'none';
+    empty.style.display = '';
+    removeBtn.style.display = 'none';
+  }
+}
 
 async function loadSettings() {
   const settings = await api.get('/app-settings');
@@ -88,8 +235,15 @@ async function loadSettings() {
   form.elements.eventName.value = settings.eventName ?? '';
   form.elements.logoUrl.value = settings.logoUrl ?? '';
   form.elements.quotaMbPerCharacter.value = settings.quotaMbPerCharacter ?? '';
+  form.elements.themeMode.value = settings.themeMode ?? 'light';
+  form.elements.colorScheme.value = settings.colorScheme ?? 'sahara';
+  form.elements.themeMode.disabled = settings.colorScheme === 'custom';
+  applyColorScheme(settings);
+  document.getElementById('custom-colors-section').style.display = settings.colorScheme === 'custom' ? '' : 'none';
+  buildCustomColorGrid(currentComputedColors());
   refreshLogoPreview(settings.hasUploadedLogo);
   refreshTicketBgPreview(settings.hasUploadedTicketBackground);
+  refreshBgImagePreview(settings.hasUploadedBackgroundImage);
 }
 
 const IMAGE_MIME_ALLOWLIST = ['image/jpeg', 'image/png', 'image/webp'];
@@ -189,10 +343,17 @@ wireImageUpload({
   removeConfirmMessage: 'Ticket-Hintergrund wirklich entfernen?', uploadedMessage: 'Ticket-Hintergrund hochgeladen.', removedMessage: 'Ticket-Hintergrund entfernt.',
 });
 
+wireImageUpload({
+  fileInputId: 'bg-image-file', uploadBtnId: 'bg-image-upload-btn', removeBtnId: 'bg-image-remove-btn',
+  endpoint: '/app-settings/background-image', refreshPreview: refreshBgImagePreview,
+  removeConfirmMessage: 'Hintergrundbild wirklich entfernen?', uploadedMessage: 'Hintergrundbild hochgeladen.', removedMessage: 'Hintergrundbild entfernt.',
+});
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form));
   data.quotaMbPerCharacter = data.quotaMbPerCharacter ? Number(data.quotaMbPerCharacter) : undefined;
+  if (form.elements.colorScheme.value === 'custom') data.customColors = readCustomColors();
   try {
     await api.put('/app-settings', data);
     notify('Gespeichert.', 'success');
