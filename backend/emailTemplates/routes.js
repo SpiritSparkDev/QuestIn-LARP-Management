@@ -4,9 +4,11 @@ import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import {
   listEmailTemplates, getEmailTemplate, createEmailTemplate, updateEmailTemplate, deleteEmailTemplate,
+  listSlotAssignments, setSlotAssignment,
 } from './repository.js';
 import { listAvailableMergeFields, buildMergeContext } from './mergeFields.js';
 import { renderEmailTemplate } from './render.js';
+import { EMAIL_SLOTS, getEmailSlot } from './slots.js';
 import { listCharactersForUser } from '../characters/repository.js';
 import { getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
@@ -35,6 +37,29 @@ router.get('/admin/email-templates', requireAuth(requireAdminGroup(async () => {
 router.get('/admin/email-templates/fields', requireAuth(requireAdminGroup(async () => {
   const fields = await listAvailableMergeFields();
   return { status: 200, body: fields };
+})));
+
+// Lists every system-email "slot" (see backend/emailTemplates/slots.js)
+// together with its current template assignment, if any -- the UI uses
+// this to render one row per slot with a template picker.
+router.get('/admin/email-templates/slots', requireAuth(requireAdminGroup(async () => {
+  const assignments = await listSlotAssignments();
+  const slots = EMAIL_SLOTS.map((slot) => ({ ...slot, templateId: assignments[slot.key] ?? null }));
+  return { status: 200, body: slots };
+})));
+
+router.put('/admin/email-templates/slots/:slot', requireAuth(requireAdminGroup(async ({ req, params }) => {
+  const slotDef = getEmailSlot(params.slot);
+  if (!slotDef) return { status: 404, body: { error: 'unknown slot' } };
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const { templateId } = body;
+  if (templateId !== null && templateId !== undefined) {
+    const template = await getEmailTemplate(templateId);
+    if (!template) return { status: 400, body: { error: 'template not found' } };
+  }
+  const saved = await setSlotAssignment(params.slot, templateId ?? null);
+  return { status: 200, body: saved };
 })));
 
 router.get('/admin/email-templates/members/:userId/characters', requireAuth(requireAdminGroup(async ({ params }) => {

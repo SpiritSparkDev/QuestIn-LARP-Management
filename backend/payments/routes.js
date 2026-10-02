@@ -259,7 +259,7 @@ router.post('/events/:eventId/payment-reminders', requireAuth(requireMenu('check
       payUrl = `${resolvedBaseUrl}/guest-payment.html?token=${token}`;
     }
     try {
-      await sendPaymentReminderEmail(reg.email, { eventName: event.name, amountDueCents: reg.amountDueCents, payUrl }, { transporter, from });
+      await sendPaymentReminderEmail(reg.email, { eventName: event.name, amountDueCents: reg.amountDueCents, payUrl, userId: reg.userId }, { transporter, from });
       sent++;
     } catch (err) {
       logger.error('failed to send payment reminder', { error: err.message, eventId: params.eventId, userId: reg.userId });

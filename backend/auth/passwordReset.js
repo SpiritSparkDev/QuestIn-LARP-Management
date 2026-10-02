@@ -26,7 +26,7 @@ router.post('/auth/password-reset/request', rateLimit(RESET_RATE_LIMIT)(async ({
       [token, rows[0].id, expiresAt]
     );
     try {
-      await sendPasswordResetEmail(email, token);
+      await sendPasswordResetEmail(email, token, { userId: rows[0].id });
     } catch (err) {
       logger.error('failed to send password reset email', { error: err.message });
     }

@@ -145,24 +145,24 @@ export async function deleteEvent(id, { force = false, notify = false } = {}) {
     throw err;
   }
 
-  let participantEmails = [];
+  let participants = [];
   if (rows.length > 0 && notify) {
-    const { rows: emailRows } = await query(
-      'SELECT u.email FROM users u JOIN registrations r ON r.user_id = u.id WHERE r.event_id = $1',
+    const { rows: participantRows } = await query(
+      'SELECT u.id, u.email FROM users u JOIN registrations r ON r.user_id = u.id WHERE r.event_id = $1',
       [id]
     );
-    participantEmails = emailRows.map((r) => r.email);
+    participants = participantRows;
   }
 
   // events.registrations has ON DELETE CASCADE, so removing the event row
   // also removes its registrations (and their payments) in one statement.
   await query('DELETE FROM events WHERE id = $1', [id]);
 
-  if (participantEmails.length > 0) {
+  if (participants.length > 0) {
     const transport = await getTransporterAndFrom();
-    for (const to of participantEmails) {
+    for (const { id: userId, email: to } of participants) {
       try {
-        await sendEventDeletedEmail(to, { eventName: existing.name }, transport);
+        await sendEventDeletedEmail(to, { eventName: existing.name, userId }, transport);
       } catch (err) {
         logger.error('failed to send event-deleted notification', { error: err.message, to, eventId: id });
       }

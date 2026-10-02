@@ -111,7 +111,7 @@ router.post('/members/:id/resend-verification', requireAuth(requireMenu('mitglie
   );
 
   try {
-    await sendVerificationEmail(member.email, token);
+    await sendVerificationEmail(member.email, token, { userId: params.id });
   } catch (err) {
     logger.error('failed to resend verification email', { requestId, userId: params.id, email: member.email, error: err.message });
     return { status: 502, body: { error: 'failed to send email' } };
@@ -183,7 +183,7 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
   if (shouldSendEmail) {
     emailSent = true;
     try {
-      await sendInvitationEmail(invitation.email, invitation.token);
+      await sendInvitationEmail(invitation.email, invitation.token, { account: invitation });
     } catch (err) {
       emailSent = false;
       logger.error('failed to send invitation email', { error: err.message });
@@ -239,7 +239,7 @@ router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglied
   if (shouldSendEmail) {
     emailSent = true;
     try {
-      await sendInvitationEmail(updated.email, updated.token);
+      await sendInvitationEmail(updated.email, updated.token, { account: updated });
     } catch (err) {
       emailSent = false;
       logger.error('failed to resend invitation email', { error: err.message });

@@ -16,6 +16,7 @@ await seedGroups();
 
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
+const { sendWaitlistedEmail, sendVerificationEmail, sendInvitationEmail, getTransporterAndFrom } = await import('../../backend/auth/mailer.js');
 
 async function makeUserAndSession(groupKey, { firstName = 'Email', lastName = 'Templates Test' } = {}) {
   const { rows } = await query(
@@ -173,8 +174,139 @@ test('POST /admin/email-templates/:id/send-test sends via the (jsonTransport) fa
   });
 });
 
+test('GET /admin/email-templates/slots lists every system-email slot unassigned by default', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const res = await fetch(`http://localhost:${port}/admin/email-templates/slots`, { headers: { Cookie: cookie } });
+    assert.equal(res.status, 200);
+    const slots = await res.json();
+    const waitlisted = slots.find((s) => s.key === 'waitlisted');
+    assert.ok(waitlisted);
+    assert.equal(waitlisted.templateId, null);
+    assert.ok(waitlisted.extraFields.some((f) => f.key === 'eventName'));
+  });
+});
+
+test('PUT /admin/email-templates/slots/:slot assigns and clears a template, and rejects unknown slot/template', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: cookie };
+    const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
+      method: 'POST', headers, body: JSON.stringify({ name: 'Slot test', subject: 'S', body: 'B', isHtml: false }),
+    })).json();
+
+    const unknownSlot = await fetch(`http://localhost:${port}/admin/email-templates/slots/not-a-real-slot`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
+    });
+    assert.equal(unknownSlot.status, 404);
+
+    const badTemplate = await fetch(`http://localhost:${port}/admin/email-templates/slots/waitlisted`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: crypto.randomUUID() }),
+    });
+    assert.equal(badTemplate.status, 400);
+
+    const assignRes = await fetch(`http://localhost:${port}/admin/email-templates/slots/waitlisted`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
+    });
+    assert.equal(assignRes.status, 200);
+    const afterAssign = await (await fetch(`http://localhost:${port}/admin/email-templates/slots`, { headers })).json();
+    assert.equal(afterAssign.find((s) => s.key === 'waitlisted').templateId, template.id);
+
+    const clearRes = await fetch(`http://localhost:${port}/admin/email-templates/slots/waitlisted`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: null }),
+    });
+    assert.equal(clearRes.status, 200);
+    const afterClear = await (await fetch(`http://localhost:${port}/admin/email-templates/slots`, { headers })).json();
+    assert.equal(afterClear.find((s) => s.key === 'waitlisted').templateId, null);
+  });
+});
+
+test('assigning a template to the "waitlisted" slot changes what sendWaitlistedEmail actually sends', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: cookie };
+    const { userId: targetUserId } = await makeUserAndSession('mitglied', { firstName: 'Warteliste' });
+
+    // Baseline: no template assigned -> the hardcoded default text.
+    const { transporter, from } = await getTransporterAndFrom();
+    const defaultInfo = await sendWaitlistedEmail('wl-target@example.com', { eventName: 'TestCon', userId: targetUserId }, { transporter, from });
+    assert.ok(JSON.parse(defaultInfo.message).subject.includes('Warteliste: TestCon'));
+
+    const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'Waitlist custom', subject: 'Hallo {{account.firstName}} ({{eventName}})', body: 'Warteliste für {{eventName}}', isHtml: false }),
+    })).json();
+    await fetch(`http://localhost:${port}/admin/email-templates/slots/waitlisted`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
+    });
+
+    const customInfo = await sendWaitlistedEmail('wl-target@example.com', { eventName: 'TestCon', userId: targetUserId }, { transporter, from });
+    const parsed = JSON.parse(customInfo.message);
+    assert.equal(parsed.subject, 'Hallo Warteliste (TestCon)');
+    assert.equal(parsed.text, 'Warteliste für TestCon');
+
+    // Clean up the assignment so it doesn't leak into other test files
+    // sharing the same email_slot_assignments table.
+    await fetch(`http://localhost:${port}/admin/email-templates/slots/waitlisted`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: null }),
+    });
+  });
+});
+
+test('assigning a template to "verification" merges the recipient\'s own OT fields via userId', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: cookie };
+    const { userId: targetUserId } = await makeUserAndSession('mitglied', { firstName: 'Verifizier' });
+
+    const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'Verify custom', subject: 'Willkommen {{account.firstName}}', body: 'Bestätige hier: {{link}}', isHtml: false }),
+    })).json();
+    await fetch(`http://localhost:${port}/admin/email-templates/slots/verification`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
+    });
+
+    const info = await sendVerificationEmail('verify-target@example.com', 'sometoken123', { userId: targetUserId });
+    const parsed = JSON.parse(info.message);
+    assert.equal(parsed.subject, 'Willkommen Verifizier');
+    assert.ok(parsed.text.includes('.html?token=sometoken123'));
+
+    await fetch(`http://localhost:${port}/admin/email-templates/slots/verification`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: null }),
+    });
+  });
+});
+
+test('assigning a template to "invitation" merges the not-yet-redeemed invitation\'s own fields (no userId needed)', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: cookie };
+
+    const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'Invite custom', subject: 'Hallo {{account.firstName}} {{account.lastName}}', body: 'Link: {{link}}', isHtml: false }),
+    })).json();
+    await fetch(`http://localhost:${port}/admin/email-templates/slots/invitation`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
+    });
+
+    const info = await sendInvitationEmail('invitee@example.com', 'invite-token-xyz', {
+      account: { firstName: 'Neuer', lastName: 'Spieler', email: 'invitee@example.com' },
+    });
+    const parsed = JSON.parse(info.message);
+    assert.equal(parsed.subject, 'Hallo Neuer Spieler');
+    assert.ok(parsed.text.includes('.html?token=invite-token-xyz'));
+
+    await fetch(`http://localhost:${port}/admin/email-templates/slots/invitation`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: null }),
+    });
+  });
+});
+
 test.after(async () => {
   await query("DELETE FROM users WHERE email LIKE 'email-templates-%'");
   await query('DELETE FROM email_templates');
+  await query('DELETE FROM email_slot_assignments');
   await closePool();
 });

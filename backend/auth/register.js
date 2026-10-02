@@ -57,7 +57,7 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
   );
 
   try {
-    await sendVerificationEmail(email, token);
+    await sendVerificationEmail(email, token, { userId });
   } catch (err) {
     logger.error('failed to send verification email', { requestId, userId, email, error: err.message });
   }
@@ -81,7 +81,7 @@ router.post('/auth/verify/resend', rateLimit(RESEND_RATE_LIMIT)(async ({ req, re
       [token, rows[0].id, expiresAt]
     );
     try {
-      await sendVerificationEmail(email, token);
+      await sendVerificationEmail(email, token, { userId: rows[0].id });
     } catch (err) {
       logger.error('failed to resend verification email', { requestId, userId: rows[0].id, email, error: err.message });
     }

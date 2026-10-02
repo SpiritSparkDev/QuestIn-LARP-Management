@@ -268,7 +268,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
           const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
           if (userRows[0]) {
             const transport = await getTransporterAndFrom();
-            await sendWaitlistedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event' }, transport);
+            await sendWaitlistedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event', userId }, transport);
           }
         } catch (err) {
           logger.error('failed to send waitlisted notification', { error: err.message, userId, eventId });
@@ -432,7 +432,7 @@ export async function maybePromoteFromWaitlist(eventId) {
       for (const userId of promotedUserIds) {
         try {
           const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
-          if (userRows[0]) await sendWaitlistPromotedEmail(userRows[0].email, { eventName }, transport);
+          if (userRows[0]) await sendWaitlistPromotedEmail(userRows[0].email, { eventName, userId }, transport);
         } catch (err) {
           logger.error('failed to send waitlist-promoted notification', { error: err.message, userId, eventId });
         }
@@ -723,7 +723,7 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
         const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
         if (userRows[0]) {
           const transport = await getTransporterAndFrom();
-          await sendWaitlistPromotedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event' }, transport);
+          await sendWaitlistPromotedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event', userId }, transport);
         }
       } catch (err) {
         logger.error('failed to send waitlist-promoted notification (manual)', { error: err.message, userId, eventId });

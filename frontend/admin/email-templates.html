@@ -31,6 +31,12 @@
     <h1>E-Mail-Vorlagen</h1>
     <p class="sub">Erstelle Vorlagen für E-Mails. Felder aus den Konto- (OT) und Charakter- (IT) Daten eines Empfängers lassen sich per Klick als Platzhalter einfügen und werden beim Versand automatisch ersetzt.</p>
 
+    <div class="card form-pad">
+      <h2>System-E-Mails</h2>
+      <p class="sub">Legt fest, welche Vorlage für welche automatisch versendete E-Mail verwendet wird. Ohne Auswahl wird der eingebaute Standardtext verschickt.</p>
+      <div id="slot-list"></div>
+    </div>
+
     <div class="card">
       <div class="table-scroll">
       <table id="template-list">
@@ -196,6 +202,50 @@ async function loadTemplates() {
       }
     });
   });
+
+  // Re-render so renamed/new/deleted templates show up in the slot pickers
+  // too -- a no-op before loadSlots's first call (`slots` still empty then).
+  renderSlots();
+}
+
+let slots = [];
+
+function renderSlots() {
+  const slotListEl = document.getElementById('slot-list');
+  slotListEl.innerHTML = slots.map((slot) => {
+    const options = ['<option value="">Standardtext (System)</option>']
+      .concat(templates.map((t) => `<option value="${t.id}"${t.id === slot.templateId ? ' selected' : ''}>${escapeHtml(t.name)}</option>`));
+    const hintParts = [];
+    if (slot.supportsAccount) hintParts.push('OT-Felder (Konto)');
+    if (slot.extraFields.length > 0) hintParts.push(`Variablen: ${slot.extraFields.map((f) => `{{${f.key}}}`).join(', ')}`);
+    return `
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--outline-variant);">
+        <div style="min-width:260px;flex:1;">
+          <strong>${escapeHtml(slot.label)}</strong>
+          <p class="sub" style="margin:2px 0 0;">${escapeHtml(hintParts.join(' · '))}</p>
+        </div>
+        <select data-slot="${slot.key}" style="max-width:280px;">${options.join('')}</select>
+      </div>
+    `;
+  }).join('');
+
+  slotListEl.querySelectorAll('[data-slot]').forEach((select) => {
+    select.addEventListener('change', async () => {
+      const slot = slots.find((s) => s.key === select.dataset.slot);
+      try {
+        const saved = await api.put(`/admin/email-templates/slots/${select.dataset.slot}`, { templateId: select.value || null });
+        if (slot) slot.templateId = saved.templateId;
+        notify('Gespeichert.', 'success');
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+    });
+  });
+}
+
+async function loadSlots() {
+  slots = await api.get('/admin/email-templates/slots');
+  renderSlots();
 }
 
 form.addEventListener('submit', async (event) => {
@@ -293,6 +343,7 @@ try {
     notify('Kein Zugriff – nur für Admin.', 'error');
   } else {
     await Promise.all([loadFields(), loadTemplates(), loadMembersIntoTestPicker()]);
+    await loadSlots();
   }
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

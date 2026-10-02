@@ -121,7 +121,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
 
   const { token } = await setGuestPaymentToken(params.eventId, userId, PAYMENT_TOKEN_TTL_MS);
   try {
-    await sendGuestTicketEmail(email, { eventName: event.name, paymentToken: token });
+    await sendGuestTicketEmail(email, { eventName: event.name, paymentToken: token, userId });
   } catch (err) {
     logger.error('failed to send guest ticket email', { error: err.message, eventId: params.eventId, userId });
   }

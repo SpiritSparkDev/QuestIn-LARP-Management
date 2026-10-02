@@ -45,3 +45,26 @@ export async function deleteEmailTemplate(id) {
   const { rowCount } = await query('DELETE FROM email_templates WHERE id = $1', [id]);
   return rowCount > 0;
 }
+
+export async function listSlotAssignments() {
+  const { rows } = await query('SELECT slot, template_id FROM email_slot_assignments');
+  return Object.fromEntries(rows.map((r) => [r.slot, r.template_id]));
+}
+
+export async function getSlotAssignment(slot) {
+  const { rows } = await query('SELECT template_id FROM email_slot_assignments WHERE slot = $1', [slot]);
+  return rows[0]?.template_id ?? null;
+}
+
+export async function setSlotAssignment(slot, templateId) {
+  if (templateId) {
+    await query(
+      `INSERT INTO email_slot_assignments (slot, template_id) VALUES ($1, $2)
+       ON CONFLICT (slot) DO UPDATE SET template_id = $2`,
+      [slot, templateId]
+    );
+  } else {
+    await query('DELETE FROM email_slot_assignments WHERE slot = $1', [slot]);
+  }
+  return { slot, templateId: templateId ?? null };
+}
