@@ -61,6 +61,15 @@ bauen.
 ```sql
 ALTER TABLE users ADD COLUMN managed_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL;
 CREATE INDEX users_managed_by_user_id_idx ON users (managed_by_user_id) WHERE managed_by_user_id IS NOT NULL;
+
+-- 'E-Mail optional' (Abschnitt 2) ist mit dem bisherigen `email text unique
+-- not null` (Migration 001) nicht umsetzbar -- jede verwaltete Person ohne
+-- hinterlegte E-Mail (der Normalfall, z.B. kleine Kinder) bräuchte sonst
+-- einen künstlichen Platzhalterwert. NULL bleibt mit UNIQUE problemlos
+-- mehrfach vergebbar (Postgres behandelt NULL<>NULL als "nicht gleich").
+-- Jeder bestehende Konsument liest `email` nur für Login/Mail-Versand --
+-- beides existiert für eine verwaltete Person ohne E-Mail ohnehin nicht.
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
 ```
 
 `managed_by_user_id` unterscheidet eine vom Haupt-Account verwaltete
@@ -97,8 +106,11 @@ weiterhin über `admin/members.html` sehen und manuell konvertieren/löschen.
   `HAS_REGISTRATIONS`. Sonst `DELETE FROM users WHERE id = $1 AND managed_by_user_id = $2 RETURNING id`.
 
 `routes.js` (alle `requireAuth`, Ownership über `getManagedPerson`/die
-`AND managed_by_user_id = user.id`-Klauseln oben, kein `is_guest`-Account
-darf selbst verwaltete Personen anlegen — Prüfung `if (user.isGuest) return 403`):
+`AND managed_by_user_id = user.id`-Klauseln oben; ein eigener
+`is_guest`-Check ist nicht nötig, da ein Gast-Account strukturell nie eine
+Session bekommen kann — `password_hash IS NULL`, `backend/auth/login.js`
+lehnt das ab, und kein anderer Login-Pfad erzeugt für Gäste eine Session
+— `requireAuth` kann hier also gar nicht erst erfolgreich durchlaufen):
 - `POST /managed-persons`
 - `GET /managed-persons`
 - `GET /managed-persons/:id`
@@ -185,27 +197,45 @@ immer vom Haupt-Account übernommen, siehe 2.).
     (nur sichtbar mit hinterlegter E-Mail → `POST .../convert`, danach
     Erfolgsmeldung "Einladung verschickt").
   - Pro Person ein Link "Charaktere & Anmeldung verwalten" →
-    `characters.html?managedPersonId=<id>`.
+    `managed-person.html?id=<id>` (siehe 6.2).
 
-### 6.2 `frontend/characters.html`
+### 6.2 Neue Seite `frontend/managed-person.html?id=<uuid>`
 
-- Liest optional `?managedPersonId=` aus der URL. Wenn gesetzt: lädt die
-  verwaltete Person (`GET /managed-persons/:id`) für Namen/Header-Anzeige
-  ("Charaktere von Lena verwalten") und richtet alle Fetches auf die
-  `/managed-persons/:id/...`-Varianten statt `/characters`/
-  `/events/:id/register` — gleiche Formulare, gleiche Validierung, nur
-  andere Basis-URL (eine kleine `apiBase()`-Hilfsfunktion am Seitenanfang
-  statt jedes Fetch-Calls einzeln anzupassen).
+Es gibt kein separates `characters.html` mehr (seit der SC/NSC-Anmeldung-
+Redesign-Iteration lebt Charakter-Anlage + Event-Anmeldung direkt in
+`account.html`, zusammen mit Login/Passwort/OAuth/Discord-Verwaltung, die
+für eine verwaltete Person gar nicht zutrifft). Statt `account.html`s
+~1774 Zeilen und ~15 Fetch-Stellen auf einen zweiten Modus umzubauen
+(hohes Risiko für die bestehende, bereits durchgetestete Self-Service-
+Anmeldung), bekommt eine verwaltete Person eine eigene, schlanke Seite:
+
+- Lädt die verwaltete Person per `GET /managed-persons/:id` (Header:
+  "Lena verwalten", Bearbeiten-Link zurück zu `account.html#verwaltete-personen`).
+- OT-Mitgliedsdaten-Formular: identisches Schema/Rendering wie
+  `account.html`s Account-Formular (`renderAccountFieldInput`/
+  `collectAccountFieldValues` aus `formFields.js`, keine neue
+  Render-Logik), aber `PATCH /managed-persons/:id` statt `PATCH /account`.
+- Charakter-Anlage/-Bearbeitung/-Datei-Upload: identisches Markup/Schema-
+  Rendering wie `account.html`s SC/NSC-Abschnitt (`renderField`/
+  `collectFieldValues` aus `formFields.js`), aber gegen
+  `/managed-persons/:id/characters` (Liste/Anlage) bzw. die unveränderten
+  `/characters/:id`-Routen (Bearbeiten/Löschen/Dateien — dort reicht der
+  in 5.2 erweiterte Ownership-Check, keine neue Pfad-Variante nötig).
+- Event-Anmeldung/-Abmeldung: gleiches Formular/gleiche Validierung wie
+  `account.html`s Anmelde-Abschnitt, gegen
+  `/managed-persons/:id/events/:eventId/register` bzw.
+  `GET /managed-persons/:id/registrations`.
 - Zahlungs-Button (falls Betrag fällig) ruft
   `/events/:eventId/registrations/:managedPersonId/checkout-session` auf
   (bereits in 5.2 auf Ownership erweitert) statt der eigenen ID.
+- Explizit NICHT enthalten (anders als `account.html`): Passwort ändern,
+  OAuth/Discord-Verknüpfung, Logout, E-Mail-Verifizierungs-Hinweis — eine
+  verwaltete Person hat keinen Login.
 
 ## 7. Fehlerbehandlung
 
 - Jede `/managed-persons/:id...`-Route: verwaltete Person nicht gefunden
   oder nicht eigene → 404 (nie 403, siehe 5.1).
-- `is_guest`-Account versucht `POST /managed-persons` → 403
-  `"Gast-Accounts können keine Personen verwalten"`.
 - `DELETE /managed-persons/:id` mit bestehender Registrierung → 409
   `"Diese Person hat bereits Event-Anmeldungen und kann nicht gelöscht werden."`
 - `POST /managed-persons/:id/convert` ohne hinterlegte E-Mail → 400.
@@ -229,7 +259,6 @@ immer vom Haupt-Account übernommen, siehe 2.).
     Filter), Löschen (erlaubt ohne Historie, blockiert mit Registrierung).
   - Fremdzugriff: Account B kann Account A's verwaltete Person nicht lesen/
     bearbeiten/löschen (404, nicht 403).
-  - Gast-Account kann keine verwalteten Personen anlegen (403).
   - Charakter anlegen/auflisten für eine verwaltete Person; Zugriff über
     `GET/PUT/DELETE /characters/:id` als Haupt-Account funktioniert, als
     fremder Account nicht.
