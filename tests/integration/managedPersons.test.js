@@ -191,6 +191,92 @@ test('DELETE /managed-persons/:id succeeds with no registrations, 409s once one 
   }
 });
 
+test('an owner can upload/list/delete a file on their managed person\'s character', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('mitglied');
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'FileOwner' }),
+    });
+    const { id: managedId } = await personRes.json();
+    const { rows: charRows } = await query(
+      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Managed File Char', '{}') RETURNING id",
+      [managedId]
+    );
+    const characterId = charRows[0].id;
+    const tinyPng = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
+
+    const uploadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ kind: 'image', filename: 'a.png', mimeType: 'image/png', dataBase64: tinyPng, gdprConsent: true }),
+    });
+    assert.equal(uploadRes.status, 201);
+    const file = await uploadRes.json();
+
+    const listRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, { headers: { Cookie: cookie } });
+    assert.equal((await listRes.json()).length, 1);
+
+    const deleteRes = await fetch(`http://localhost:${port}/characters/${characterId}/files/${file.id}`, { method: 'DELETE', headers: { Cookie: cookie } });
+    assert.equal(deleteRes.status, 200);
+  } finally {
+    server.close();
+  }
+});
+
+test('POST and GET /managed-persons/:id/characters creates and lists a character for the managed person', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('mitglied');
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'CharCreate' }),
+    });
+    const { id: managedId } = await personRes.json();
+
+    const createRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ class: 'sc', name: 'Delegated Char', data: {} }),
+    });
+    assert.equal(createRes.status, 201);
+    const character = await createRes.json();
+    assert.equal(character.user_id, managedId);
+
+    const listRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/characters`, { headers: { Cookie: cookie } });
+    const list = await listRes.json();
+    assert.equal(list.length, 1);
+    assert.equal(list[0].id, character.id);
+  } finally {
+    server.close();
+  }
+});
+
+test('a stranger gets 404 from /managed-persons/:id/characters, not another account\'s data', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: ownerCookie } = await makeUserAndSession('mitglied');
+    const { cookie: strangerCookie } = await makeUserAndSession('mitglied');
+    const personRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: ownerCookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'CharStranger2' }),
+    });
+    const { id: managedId } = await personRes.json();
+
+    const res = await fetch(`http://localhost:${port}/managed-persons/${managedId}/characters`, { headers: { Cookie: strangerCookie } });
+    assert.equal(res.status, 404);
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM registrations WHERE event_id IN (SELECT id FROM events WHERE name LIKE 'Managed Delete Test%')");
   await query("DELETE FROM events WHERE name LIKE 'Managed Delete Test%'");

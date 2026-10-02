@@ -419,6 +419,62 @@ test('a staffOnly field cannot be changed by an elevated user editing their OWN 
   });
 });
 
+test('an owner can read/update/delete a character belonging to their managed person', async () => {
+  await withTestServer(async (port) => {
+    const { cookie: ownerCookie } = await makeUserAndSession('mitglied');
+    const createPersonRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: ownerCookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'CharOwner' }),
+    });
+    const { id: managedId } = await createPersonRes.json();
+
+    const { rows: charRows } = await query(
+      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Managed Char', '{}') RETURNING id",
+      [managedId]
+    );
+    const characterId = charRows[0].id;
+
+    const getRes = await fetch(`http://localhost:${port}/characters/${characterId}`, { headers: { Cookie: ownerCookie } });
+    assert.equal(getRes.status, 200);
+
+    const putRes = await fetch(`http://localhost:${port}/characters/${characterId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: ownerCookie },
+      body: JSON.stringify({ name: 'Managed Char Renamed', data: { fraction: 'Nordmark' } }),
+    });
+    assert.equal(putRes.status, 200);
+
+    const deleteRes = await fetch(`http://localhost:${port}/characters/${characterId}`, { method: 'DELETE', headers: { Cookie: ownerCookie } });
+    assert.equal(deleteRes.status, 200);
+  });
+});
+
+test('a stranger cannot read/update/delete another account\'s managed person\'s character', async () => {
+  await withTestServer(async (port) => {
+    const { cookie: ownerCookie } = await makeUserAndSession('mitglied');
+    const { cookie: strangerCookie } = await makeUserAndSession('mitglied');
+    const createPersonRes = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: ownerCookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'CharStranger' }),
+    });
+    const { id: managedId } = await createPersonRes.json();
+    const { rows: charRows } = await query(
+      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Managed Char 2', '{}') RETURNING id",
+      [managedId]
+    );
+    const characterId = charRows[0].id;
+
+    const putRes = await fetch(`http://localhost:${port}/characters/${characterId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: strangerCookie },
+      body: JSON.stringify({ name: 'Hijacked', data: {} }),
+    });
+    assert.equal(putRes.status, 403);
+  });
+});
+
 test.after(async () => {
   await setScSchema([]);
   await closePool();

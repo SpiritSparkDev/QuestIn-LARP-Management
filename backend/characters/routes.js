@@ -7,6 +7,7 @@ import { filterCharacterFields } from './visibility.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
+import { isManagedBy } from '../managedPersons/repository.js';
 
 router.post('/characters', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
@@ -55,7 +56,7 @@ router.get('/characters/:id', requireAuth(async ({ params, user }) => {
   const character = await getCharacter(params.id);
   if (!character) return { status: 404, body: { error: 'character not found' } };
 
-  const isOwner = character.user_id === user.id;
+  const isOwner = character.user_id === user.id || await isManagedBy(character.user_id, user.id);
   const isElevated = user.group.canOverrideCheckinStatus;
   if (isOwner || isElevated) {
     return { status: 200, body: character };
@@ -72,7 +73,7 @@ router.get('/characters/:id', requireAuth(async ({ params, user }) => {
 router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
   const character = await getCharacter(params.id);
   if (!character) return { status: 404, body: { error: 'character not found' } };
-  const isOwner = character.user_id === user.id;
+  const isOwner = character.user_id === user.id || await isManagedBy(character.user_id, user.id);
   const isElevated = user.group.canOverrideCheckinStatus;
   if (!isOwner && !isElevated) {
     return { status: 403, body: { error: 'forbidden' } };
@@ -99,7 +100,7 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
 router.delete('/characters/:id', requireAuth(async ({ params, user }) => {
   const character = await getCharacter(params.id);
   if (!character) return { status: 404, body: { error: 'character not found' } };
-  const isOwner = character.user_id === user.id;
+  const isOwner = character.user_id === user.id || await isManagedBy(character.user_id, user.id);
   const isElevated = user.group.canOverrideCheckinStatus;
   if (!isOwner && !isElevated) {
     return { status: 403, body: { error: 'forbidden' } };

@@ -6,6 +6,7 @@ import { getCharacter } from '../characters/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { getStorageSettingsForUse } from '../storageSettings/repository.js';
 import { getStorage } from '../storage/index.js';
+import { isManagedBy } from '../managedPersons/repository.js';
 import {
   createCharacterFile,
   getCharacterFile,
@@ -27,18 +28,19 @@ const MIME_ALLOWLIST = {
   document: ['application/pdf'],
 };
 
-function canManage(character, user) {
-  return character.user_id === user.id || user.group.canOverrideCheckinStatus;
+async function canManage(character, user) {
+  if (character.user_id === user.id || user.group.canOverrideCheckinStatus) return true;
+  return isManagedBy(character.user_id, user.id);
 }
 
-function canView(file, character, user) {
+async function canView(file, character, user) {
   return file.is_public || canManage(character, user);
 }
 
 router.post('/characters/:id/files', requireAuth(async ({ req, params, user }) => {
   const character = await getCharacter(params.id);
   if (!character) return { status: 404, body: { error: 'character not found' } };
-  if (!canManage(character, user)) return { status: 403, body: { error: 'forbidden' } };
+  if (!(await canManage(character, user))) return { status: 403, body: { error: 'forbidden' } };
 
   const body = await readJsonBody(req, MAX_UPLOAD_BODY_BYTES);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
@@ -104,7 +106,7 @@ router.get('/characters/:characterId/files', requireAuth(async ({ params, user }
   const character = await getCharacter(params.characterId);
   if (!character) return { status: 404, body: { error: 'character not found' } };
   const files = await listCharacterFiles(character.id);
-  const visible = canManage(character, user) ? files : files.filter((f) => f.is_public);
+  const visible = (await canManage(character, user)) ? files : files.filter((f) => f.is_public);
   return { status: 200, body: visible };
 }));
 
@@ -112,7 +114,7 @@ router.get('/characters/:characterId/files/:fileId', requireAuth(async ({ params
   const file = await getCharacterFile(params.fileId);
   if (!file || file.character_id !== params.characterId) return { status: 404, body: { error: 'not found' } };
   const character = await getCharacter(file.character_id);
-  if (!character || !canView(file, character, user)) return { status: 404, body: { error: 'not found' } };
+  if (!character || !(await canView(file, character, user))) return { status: 404, body: { error: 'not found' } };
 
   const storageSettings = await getStorageSettingsForUse();
   const storage = getStorage(file.storage_backend, storageSettings);
@@ -146,7 +148,7 @@ router.delete('/characters/:characterId/files/:fileId', requireAuth(async ({ par
   const file = await getCharacterFile(params.fileId);
   if (!file || file.character_id !== params.characterId) return { status: 404, body: { error: 'not found' } };
   const character = await getCharacter(file.character_id);
-  if (!character || !canManage(character, user)) return { status: 403, body: { error: 'forbidden' } };
+  if (!character || !(await canManage(character, user))) return { status: 403, body: { error: 'forbidden' } };
 
   await deleteCharacterFile(file.id);
   const storageSettings = await getStorageSettingsForUse();
