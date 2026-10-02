@@ -92,10 +92,92 @@
         </dialog>
 
         <div class="tab-panel" id="nsc-tab" hidden>
-          <!-- filled in by Task 3 -->
+          <div id="nsc-section" style="display:none;">
+            <div class="dashboard-layout">
+              <div class="dashboard-main">
+                <div class="action-row">
+                  <button type="button" id="new-nsc-character-btn" class="btn-ghost">Neuen NSC-Charakter anlegen</button>
+                </div>
+                <div id="nsc-form-section" class="card" style="display:none;">
+                  <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
+                  <hr class="rule">
+                  <form id="nsc-character-form">
+                    <h3>1. Charaktername</h3>
+                    <input id="nsc-character-name" name="name" type="text" required>
+                    <label for="nsc-character-name">Charaktername</label>
+                    <h3>2. Charakterdaten</h3>
+                    <div id="nsc-dynamic-fields" class="field-grid"></div>
+                    <div class="dialog-actions">
+                      <button type="submit">Speichern</button>
+                      <button type="button" id="nsc-cancel-edit" class="btn-ghost">Abbrechen</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+              <div>
+                <div id="nsc-character-list" class="char-grid"></div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="tab-panel" id="anmelden-tab" hidden>
-          <!-- filled in by Task 3 -->
+          <h2>Anmeldungen</h2>
+          <dialog id="edit-ot-dialog">
+            <h3>Anmeldungsdaten bearbeiten</h3>
+            <div id="edit-flags"></div>
+            <div id="edit-ot-fields"></div>
+            <div class="dialog-actions">
+              <button type="button" id="edit-ot-save">Speichern</button>
+              <button type="button" id="edit-ot-cancel" class="btn-ghost">Abbrechen</button>
+            </div>
+          </dialog>
+
+          <div id="registrations-list"></div>
+
+          <div id="registration-card" class="card">
+            <h2>Neu anmelden</h2>
+            <form id="registration-form">
+              <h3>1. Veranstaltung</h3>
+              <select id="event-select" required></select>
+              <label for="event-select">Event</label>
+
+              <h3>2. Wie nimmt die Person am Event teil?</h3>
+              <div class="role-cards" id="registration-role-tabs">
+                <button type="button" class="role-card active" data-role="sc">
+                  <span class="role-card-title">Als Spielercharakter (SC)</span>
+                </button>
+                <button type="button" class="role-card" data-role="nsc" id="nsc-role-tab-btn" style="display:none;">
+                  <span class="role-card-title">Als Nichtspieler (NSC)</span>
+                </button>
+              </div>
+
+              <div id="sc-role-panel">
+                <select id="character-select" style="display:none;"></select>
+                <label for="character-select" id="character-select-label" style="display:none;">Als welcher Charakter?</label>
+                <p id="no-character-hint" class="sub" style="display:none;">Noch kein passender Charakter angelegt.</p>
+              </div>
+              <div id="nsc-role-panel" hidden>
+                <select id="nsc-character-select"></select>
+                <label for="nsc-character-select">NSC-Charakter (optional)</label>
+              </div>
+
+              <div id="registration-price-group"></div>
+              <div id="registration-flags"></div>
+
+              <h3>3. Weitere Angaben</h3>
+              <div id="ot-fields" class="field-grid"></div>
+
+              <div id="registration-waiver" style="display:none;">
+                <h3>4. Einverständniserklärung</h3>
+                <p class="sub" id="registration-waiver-text" style="white-space:pre-wrap;"></p>
+                <label><input type="checkbox" id="registration-waiver-checkbox" required> Einverständniserklärung gelesen und akzeptiert.</label>
+              </div>
+
+              <div class="dialog-actions">
+                <button type="submit" id="register-button">Anmelden</button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>
@@ -114,6 +196,9 @@
       renderAccountFieldInput,
       collectAccountFieldValues,
       nullifyBlankNumberFields,
+      STATUS_LABELS,
+      renderEventOptions,
+      otFieldValuesEqual,
     } from "/js/formFields.js";
     import { notify } from "/js/notifications.js";
 
@@ -267,6 +352,11 @@
     async function loadCharacters() {
       characters = await api.get(`/managed-persons/${managedPersonId}/characters`);
       renderCharacterList();
+      populateRegistrationCharacterFields();
+      if (nscSection.style.display !== "none") {
+        nscCharacters = characters.filter((c) => c.class === "nsc");
+        renderNscList();
+      }
     }
 
     function startEdit(characterId) {
@@ -349,6 +439,290 @@
       }
     });
 
+    let nscSchema = [];
+    let nscSchemaAvailable = false;
+    let nscCharacters = [];
+    let editingNscCharacterId = null;
+    const nscSection = document.getElementById("nsc-section");
+    const nscTabButton = document.getElementById("nsc-tab-btn");
+    const nscRoleTabButton = document.getElementById("nsc-role-tab-btn");
+
+    function renderNscSchemaFields(data = {}) {
+      document.getElementById("nsc-dynamic-fields").innerHTML = nscSchema
+        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true })}</div>`)
+        .join("");
+      attachLiveValidation(document.getElementById("nsc-dynamic-fields"));
+    }
+
+    function renderNscList() {
+      const nscListBody = document.getElementById("nsc-character-list");
+      nscListBody.innerHTML = nscCharacters
+        .map((c) => `<div class="char-card" data-card-for="${c.id}">
+      <button type="button" class="char-card-delete" data-delete="${c.id}" aria-label="Charakter löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+      <h3>${escapeHtml(c.name)}</h3>
+    </div>`)
+        .join("");
+      nscListBody.querySelectorAll("[data-card-for]").forEach((card) => {
+        card.addEventListener("click", () => startNscEdit(card.dataset.cardFor));
+      });
+      nscListBody.querySelectorAll("[data-delete]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openDeleteCharacterDialog(button.dataset.delete);
+        });
+      });
+    }
+
+    function startNscEdit(characterId) {
+      const character = nscCharacters.find((c) => c.id === characterId);
+      if (!character) return;
+      editingNscCharacterId = characterId;
+      document.getElementById("nsc-form-title").textContent = `NSC-Charakter bearbeiten: ${character.name}`;
+      document.getElementById("nsc-character-form").elements.name.value = character.name;
+      renderNscSchemaFields(character.data);
+      document.getElementById("nsc-form-section").style.display = "";
+    }
+
+    function resetNscForm() {
+      editingNscCharacterId = null;
+      document.getElementById("nsc-form-title").textContent = "Neuen NSC-Charakter anlegen";
+      document.getElementById("nsc-character-form").reset();
+      renderNscSchemaFields();
+    }
+
+    document.getElementById("new-nsc-character-btn").addEventListener("click", () => {
+      resetNscForm();
+      document.getElementById("nsc-form-section").style.display = "";
+    });
+    document.getElementById("nsc-cancel-edit").addEventListener("click", () => {
+      resetNscForm();
+      document.getElementById("nsc-form-section").style.display = "none";
+    });
+    document.getElementById("nsc-character-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const name = document.getElementById("nsc-character-form").elements.name.value;
+      const data = collectFieldValues(document.getElementById("nsc-character-form"), nscSchema);
+      try {
+        if (editingNscCharacterId) {
+          await api.put(`/characters/${editingNscCharacterId}`, { name, data });
+        } else {
+          await api.post(`/managed-persons/${managedPersonId}/characters`, { class: "nsc", name, data });
+        }
+        notify("Gespeichert.", "success");
+        resetNscForm();
+        document.getElementById("nsc-form-section").style.display = "none";
+        await loadCharacters();
+      } catch (err) {
+        notify(err.status === 400 && err.body?.details ? err.body.details.join(", ") : err.message, "error");
+      }
+    });
+
+    // registration section
+    let events = [];
+    let currentRegistrations = [];
+    let registrationSchema = [];
+    let selectedRegistrationRole = "sc";
+    const eventSelect = document.getElementById("event-select");
+    const characterSelect = document.getElementById("character-select");
+    const nscCharacterSelect = document.getElementById("nsc-character-select");
+    const scRolePanel = document.getElementById("sc-role-panel");
+    const nscRolePanel = document.getElementById("nsc-role-panel");
+    const otFieldsContainer = document.getElementById("ot-fields");
+    const registrationFlagsContainer = document.getElementById("registration-flags");
+    const registrationPriceGroupContainer = document.getElementById("registration-price-group");
+    const registrationWaiverSection = document.getElementById("registration-waiver");
+    const registrationWaiverCheckbox = document.getElementById("registration-waiver-checkbox");
+
+    function flagsFieldFor(event) {
+      return { key: "flags", label: "Sonderrollen", type: "multiselect", options: event?.flags ?? [] };
+    }
+    function renderRegistrationFlags() {
+      const event = events.find((e) => e.id === eventSelect.value);
+      const field = flagsFieldFor(event);
+      registrationFlagsContainer.innerHTML = field.options.length > 0 ? renderAccountFieldInput(field, [], { idPrefix: "register-" }) : "";
+    }
+    function collectRegistrationFlags() {
+      return collectAccountFieldValues(registrationFlagsContainer, [flagsFieldFor(events.find((e) => e.id === eventSelect.value))]).flags ?? [];
+    }
+    function priceGroupFieldFor(event) {
+      const groups = event?.pricing?.groups ?? [];
+      return { key: "priceGroup", label: "Teilnahmegruppe", type: "select", options: groups, required: groups.length > 0 };
+    }
+    function renderRegistrationPriceGroup() {
+      const event = events.find((e) => e.id === eventSelect.value);
+      const field = priceGroupFieldFor(event);
+      registrationPriceGroupContainer.innerHTML = field.options.length > 0 ? renderAccountFieldInput(field, "", { idPrefix: "register-" }) : "";
+    }
+    function collectRegistrationPriceGroup() {
+      const value = collectAccountFieldValues(registrationPriceGroupContainer, [priceGroupFieldFor(events.find((e) => e.id === eventSelect.value))]).priceGroup;
+      return value || undefined;
+    }
+    function isNscRoleSelected() { return selectedRegistrationRole === "nsc"; }
+
+    [...document.querySelectorAll("#registration-role-tabs .role-card")].forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedRegistrationRole = btn.dataset.role;
+        document.querySelectorAll("#registration-role-tabs .role-card").forEach((b) => b.classList.toggle("active", b === btn));
+        scRolePanel.hidden = isNscRoleSelected();
+        nscRolePanel.hidden = !isNscRoleSelected();
+      });
+    });
+
+    function renderOtFields(values = {}) {
+      otFieldsContainer.innerHTML = registrationSchema.map((field) => renderAccountFieldInput(field, values[field.key], { idPrefix: "register-" })).join("");
+      attachLiveValidation(otFieldsContainer);
+    }
+    function collectOtFields() {
+      return collectAccountFieldValues(otFieldsContainer, registrationSchema);
+    }
+
+    function populateRegistrationCharacterFields() {
+      const matchingSc = characters.filter((c) => c.class === "sc" && !c.registeredFor);
+      characterSelect.innerHTML = ['<option value="">Bitte wählen</option>'].concat(matchingSc.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`)).join("");
+      const hasNone = matchingSc.length === 0;
+      document.getElementById("no-character-hint").style.display = hasNone ? "" : "none";
+      characterSelect.style.display = hasNone ? "none" : "";
+      document.getElementById("character-select-label").style.display = hasNone ? "none" : "";
+
+      const matchingNsc = characters.filter((c) => c.class === "nsc");
+      nscCharacterSelect.innerHTML = ['<option value="">Kein bestimmter NSC-Charakter</option>'].concat(matchingNsc.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`)).join("");
+    }
+
+    eventSelect.addEventListener("change", () => {
+      renderRegistrationFlags();
+      renderRegistrationPriceGroup();
+    });
+
+    async function loadEvents() {
+      events = (await api.get("/events")).filter((e) => e.is_active);
+      eventSelect.innerHTML = renderEventOptions(events);
+      renderRegistrationFlags();
+      renderRegistrationPriceGroup();
+    }
+
+    async function loadRegistrationWaiver() {
+      const { waiverText } = await api.get("/app-settings");
+      if (waiverText) {
+        document.getElementById("registration-waiver-text").textContent = waiverText;
+        registrationWaiverSection.style.display = "";
+        registrationWaiverCheckbox.required = true;
+      } else {
+        registrationWaiverSection.style.display = "none";
+        registrationWaiverCheckbox.required = false;
+      }
+    }
+
+    const CON_ROLE_LABELS = { sc: "SC", nsc: "NSC", helfer: "Helfer" };
+    function labelForRegisteredAs(r) {
+      const flagsSuffix = r.flags && r.flags.length > 0 ? ` (${r.flags.join(", ")})` : "";
+      if (r.conRole === "sc") return `Angemeldet als SC${flagsSuffix}: ${r.characterName}`;
+      if (r.conRole === "nsc") return r.characterName ? `Angemeldet als NSC${flagsSuffix}: ${r.characterName}` : `Angemeldet als NSC${flagsSuffix}`;
+      return `Angemeldet als ${CON_ROLE_LABELS[r.conRole] ?? r.conRole}${flagsSuffix}`;
+    }
+
+    function renderRegistrationsList() {
+      const container = document.getElementById("registrations-list");
+      if (currentRegistrations.length === 0) {
+        container.innerHTML = '<p class="sub">Noch keine Anmeldungen.</p>';
+        return;
+      }
+      container.innerHTML = currentRegistrations.map((r) => `<div class="card form-pad" data-reg-for="${r.eventId}">
+      <h3>${escapeHtml(r.eventName)}</h3>
+      <p>${escapeHtml(labelForRegisteredAs(r))} &ndash; <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
+      <div class="action-row">
+        <button type="button" data-reg-edit="${r.eventId}" class="btn-ghost">Bearbeiten</button>
+        ${(r.status === "pending" || r.status === "waitlisted") ? `<button type="button" data-reg-unregister="${r.eventId}" class="btn-secondary">Abmelden</button>` : ""}
+      </div>
+    </div>`).join("");
+      container.querySelectorAll("[data-reg-edit]").forEach((btn) => btn.addEventListener("click", () => openEditOtDialog(btn.dataset.regEdit)));
+      container.querySelectorAll("[data-reg-unregister]").forEach((btn) => btn.addEventListener("click", () => unregister(btn.dataset.regUnregister)));
+    }
+
+    async function loadRegistrations() {
+      currentRegistrations = await api.get(`/managed-persons/${managedPersonId}/registrations`);
+      renderRegistrationsList();
+      const wantsNsc = nscSchemaAvailable;
+      nscSection.style.display = wantsNsc ? "" : "none";
+      nscTabButton.style.display = wantsNsc ? "" : "none";
+      nscRoleTabButton.style.display = wantsNsc ? "" : "none";
+    }
+
+    async function unregister(eventId) {
+      if (!confirm("Diese Person wirklich von diesem Event abmelden?")) return;
+      try {
+        await api.delete(`/managed-persons/${managedPersonId}/events/${eventId}/register`);
+        await loadRegistrations();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    }
+
+    const editOtDialog = document.getElementById("edit-ot-dialog");
+    let editingEventId = null;
+    function openEditOtDialog(eventId) {
+      const registration = currentRegistrations.find((r) => r.eventId === eventId);
+      if (!registration) return;
+      editingEventId = eventId;
+      const event = events.find((e) => e.id === eventId);
+      const flagsField = flagsFieldFor(event);
+      document.getElementById("edit-flags").innerHTML = flagsField.options.length > 0 ? renderAccountFieldInput(flagsField, registration.flags ?? [], { idPrefix: "edit-" }) : "";
+      document.getElementById("edit-ot-fields").innerHTML = registrationSchema.map((field) => renderAccountFieldInput(field, registration[field.key], { idPrefix: "edit-" })).join("");
+      attachLiveValidation(document.getElementById("edit-ot-fields"));
+      editOtDialog.showModal();
+    }
+    document.getElementById("edit-ot-cancel").addEventListener("click", () => editOtDialog.close());
+    document.getElementById("edit-ot-save").addEventListener("click", async () => {
+      const registration = currentRegistrations.find((r) => r.eventId === editingEventId);
+      const collected = nullifyBlankNumberFields(registrationSchema, collectAccountFieldValues(document.getElementById("edit-ot-fields"), registrationSchema));
+      const payload = {};
+      for (const field of registrationSchema) {
+        if (otFieldValuesEqual(field, registration?.[field.key] ?? (field.type === "boolean" ? false : ""), collected[field.key])) continue;
+        payload[field.key] = collected[field.key];
+      }
+      const flagsField = flagsFieldFor(events.find((e) => e.id === editingEventId));
+      const collectedFlags = collectAccountFieldValues(document.getElementById("edit-flags"), [flagsField]).flags;
+      const representableCurrentFlags = (registration?.flags ?? []).filter((f) => flagsField.options.includes(f));
+      if (!otFieldValuesEqual(flagsField, representableCurrentFlags, collectedFlags ?? [])) payload.flags = collectedFlags ?? [];
+      if (Object.keys(payload).length === 0) { editOtDialog.close(); return; }
+      try {
+        await api.put(`/events/${editingEventId}/registrations/${managedPersonId}/ot-fields`, payload);
+        editOtDialog.close();
+        notify("Gespeichert.", "success");
+        await loadRegistrations();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    document.getElementById("registration-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const eventId = eventSelect.value;
+      let conRole, characterId;
+      if (isNscRoleSelected()) {
+        conRole = "nsc";
+        characterId = nscCharacterSelect.value || undefined;
+      } else {
+        characterId = characterSelect.value || undefined;
+        if (!characterId) { notify("Wähle einen Charakter.", "error"); return; }
+        conRole = "sc";
+      }
+      try {
+        await api.post(`/managed-persons/${managedPersonId}/events/${eventId}/register`, {
+          conRole, characterId,
+          flags: collectRegistrationFlags(),
+          priceGroup: collectRegistrationPriceGroup(),
+          otFields: collectOtFields(),
+          waiverAccepted: registrationWaiverCheckbox.checked,
+        });
+        notify("Angemeldet.", "success");
+        renderOtFields();
+        await loadRegistrations();
+        await loadCharacters();
+      } catch (err) {
+        notify(err.status === 400 && err.body?.details ? err.body.details.join(", ") : err.message, "error");
+      }
+    });
+
     try {
       const person = await api.get(`/managed-persons/${managedPersonId}`);
       document.getElementById("managed-person-heading").textContent = `${person.name} verwalten`;
@@ -367,6 +741,19 @@
       scSchema = await api.get("/sc-schema");
       renderScSchemaFields();
       await loadCharacters();
+
+      try {
+        nscSchema = await api.get("/nsc-schema");
+        nscSchemaAvailable = true;
+        renderNscSchemaFields();
+      } catch {
+        // NSC schema is optional-ish, same as account.html's own bootstrap.
+      }
+      registrationSchema = await api.get("/registration-schema");
+      renderOtFields();
+      await loadEvents();
+      await loadRegistrationWaiver();
+      await loadRegistrations();
     } catch (err) {
       if (err.status === 401) window.location.href = "/login.html";
       else if (err.status === 404) document.body.innerHTML = '<p class="error">Diese Person existiert nicht oder gehört nicht zu deinem Konto.</p>';
