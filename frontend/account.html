@@ -827,8 +827,16 @@
     const managedPersonOtFieldsContainer = document.getElementById("managed-person-ot-fields");
     let editingManagedPersonId = null;
 
+    // POST/PATCH /managed-persons rejects any OT field the caller isn't
+    // permitted to set on their OWN account (same filterToAllowedFields
+    // gate /members/invite uses) -- rendering the full accountSchema here
+    // would always submit every field's key, even left blank, and trip
+    // that 400 the moment the caller's own group lacks even one schema
+    // field (e.g. medicalNotes). Restrict to what this account itself may set.
+    let managedPersonSchema = [];
+
     function renderManagedPersonOtFields(values = {}) {
-      managedPersonOtFieldsContainer.innerHTML = accountSchema
+      managedPersonOtFieldsContainer.innerHTML = managedPersonSchema
         .map((field) => renderAccountFieldInput(field, values[field.key], { idPrefix: "managed-person-" }))
         .join("");
       attachLiveValidation(managedPersonOtFieldsContainer);
@@ -854,7 +862,7 @@
       event.preventDefault();
       const data = {
         ...Object.fromEntries(new FormData(managedPersonForm)),
-        ...nullifyBlankNumberFields(accountSchema, collectAccountFieldValues(managedPersonOtFieldsContainer, accountSchema)),
+        ...nullifyBlankNumberFields(managedPersonSchema, collectAccountFieldValues(managedPersonOtFieldsContainer, managedPersonSchema)),
       };
       try {
         if (editingManagedPersonId) {
@@ -1879,6 +1887,7 @@
       accountForm.elements.lastName.value = account.lastName ?? "";
       accountForm.elements.nickname.value = account.nickname ?? "";
       accountSchema = await api.get("/account-schema");
+      managedPersonSchema = accountSchema.filter((field) => account.accountFields.includes(field.key));
       accountOtFieldsContainer.innerHTML = accountSchema
         .map((field) => renderAccountFieldInput(field, account[field.key], {
           sealedBadge: ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>',
