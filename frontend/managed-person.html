@@ -632,10 +632,12 @@
       <div class="action-row">
         <button type="button" data-reg-edit="${r.eventId}" class="btn-ghost">Bearbeiten</button>
         ${(r.status === "pending" || r.status === "waitlisted") ? `<button type="button" data-reg-unregister="${r.eventId}" class="btn-secondary">Abmelden</button>` : ""}
+        ${(r.amountDueCents != null && !r.paidAt) ? `<button type="button" data-reg-pay="${r.eventId}">Jetzt zahlen (${(r.amountDueCents / 100).toFixed(2).replace(".", ",")} &euro;)</button>` : ""}
       </div>
     </div>`).join("");
       container.querySelectorAll("[data-reg-edit]").forEach((btn) => btn.addEventListener("click", () => openEditOtDialog(btn.dataset.regEdit)));
       container.querySelectorAll("[data-reg-unregister]").forEach((btn) => btn.addEventListener("click", () => unregister(btn.dataset.regUnregister)));
+      container.querySelectorAll("[data-reg-pay]").forEach((btn) => btn.addEventListener("click", () => payForRegistration(btn.dataset.regPay)));
     }
 
     async function loadRegistrations() {
@@ -652,6 +654,15 @@
       try {
         await api.delete(`/managed-persons/${managedPersonId}/events/${eventId}/register`);
         await loadRegistrations();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    }
+
+    async function payForRegistration(eventId) {
+      try {
+        const { url } = await api.post(`/events/${eventId}/registrations/${managedPersonId}/checkout-session`, { method: "card" });
+        window.location.href = url;
       } catch (err) {
         notify(err.message, "error");
       }
