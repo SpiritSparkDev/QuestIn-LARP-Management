@@ -1,0 +1,135 @@
+import { query } from '../db.js';
+import { displayName } from '../displayName.js';
+import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
+import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
+
+const SELECT_COLUMNS = `
+  id, email, first_name, last_name, nickname, account_data_enc,
+  NOT EXISTS (SELECT 1 FROM registrations WHERE registrations.user_id = users.id) AS can_delete
+`;
+
+function decryptManagedPerson(row) {
+  return {
+    id: row.id,
+    email: row.email,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    nickname: row.nickname,
+    name: displayName({ firstName: row.first_name, lastName: row.last_name, nickname: row.nickname }),
+    canDelete: row.can_delete,
+    ...decryptFieldBlob(row.account_data_enc),
+  };
+}
+
+// True only for an existing managed person owned by ownerId -- NOT true
+// for ownerId itself (callers that also need to allow "acting on your own
+// id" check that separately, matching the existing isOwner pattern in
+// characters/routes.js and payments/routes.js).
+export async function isManagedBy(targetUserId, ownerId) {
+  const { rows } = await query(
+    'SELECT 1 FROM users WHERE id = $1 AND managed_by_user_id = $2',
+    [targetUserId, ownerId]
+  );
+  return rows.length > 0;
+}
+
+export async function listManagedPersons(ownerId) {
+  const { rows } = await query(
+    `SELECT ${SELECT_COLUMNS} FROM users WHERE managed_by_user_id = $1 ORDER BY first_name, last_name`,
+    [ownerId]
+  );
+  return rows.map(decryptManagedPerson);
+}
+
+export async function getManagedPerson(id, ownerId) {
+  const { rows } = await query(
+    `SELECT ${SELECT_COLUMNS} FROM users WHERE id = $1 AND managed_by_user_id = $2`,
+    [id, ownerId]
+  );
+  return rows[0] ? decryptManagedPerson(rows[0]) : null;
+}
+
+export async function createManagedPerson({ ownerId, groupId, email, firstName, lastName, nickname, ...otFields }) {
+  const schema = await getAccountFieldSchema();
+  const data = {};
+  for (const field of schema) {
+    if (otFields[field.key] !== undefined) data[field.key] = otFields[field.key];
+  }
+  try {
+    const { rows } = await query(
+      `INSERT INTO users (email, first_name, last_name, nickname, group_id, is_guest, email_verified, account_data_enc, managed_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, true, false, $6, $7)
+       RETURNING id`,
+      [email || null, firstName, lastName, nickname || null, groupId, encryptFieldBlob(data), ownerId]
+    );
+    return getManagedPerson(rows[0].id, ownerId);
+  } catch (err) {
+    if (err.code === '23505') {
+      const dup = new Error('Diese E-Mail-Adresse wird bereits verwendet.');
+      dup.code = 'EMAIL_TAKEN';
+      throw dup;
+    }
+    throw err;
+  }
+}
+
+export async function updateManagedPerson(id, ownerId, fields) {
+  const schema = await getAccountFieldSchema();
+  const { rows: currentRows } = await query(
+    'SELECT account_data_enc FROM users WHERE id = $1 AND managed_by_user_id = $2',
+    [id, ownerId]
+  );
+  if (currentRows.length === 0) return null;
+  const nextData = decryptFieldBlob(currentRows[0].account_data_enc);
+  for (const field of schema) {
+    if (fields[field.key] !== undefined) nextData[field.key] = fields[field.key];
+  }
+
+  try {
+    const { rows } = await query(
+      `UPDATE users SET
+         first_name = COALESCE($3, first_name),
+         last_name = COALESCE($4, last_name),
+         nickname = COALESCE($5, nickname),
+         email = COALESCE($6, email),
+         account_data_enc = $7
+       WHERE id = $1 AND managed_by_user_id = $2
+       RETURNING id`,
+      [
+        id, ownerId,
+        fields.firstName ?? null,
+        fields.lastName ?? null,
+        fields.nickname ?? null,
+        fields.email || null,
+        encryptFieldBlob(nextData),
+      ]
+    );
+    if (rows.length === 0) return null;
+    return getManagedPerson(id, ownerId);
+  } catch (err) {
+    if (err.code === '23505') {
+      const dup = new Error('Diese E-Mail-Adresse wird bereits verwendet.');
+      dup.code = 'EMAIL_TAKEN';
+      throw dup;
+    }
+    throw err;
+  }
+}
+
+export async function deleteManagedPerson(id, ownerId) {
+  const { rows: regRows } = await query(
+    `SELECT 1 FROM registrations r JOIN users u ON u.id = r.user_id
+     WHERE r.user_id = $1 AND u.managed_by_user_id = $2`,
+    [id, ownerId]
+  );
+  if (regRows.length > 0) {
+    const err = new Error('Diese Person hat bereits Event-Anmeldungen und kann nicht gelöscht werden.');
+    err.code = 'HAS_REGISTRATIONS';
+    throw err;
+  }
+  const { rows } = await query(
+    'DELETE FROM users WHERE id = $1 AND managed_by_user_id = $2 RETURNING id',
+    [id, ownerId]
+  );
+  return rows.length > 0;
+}

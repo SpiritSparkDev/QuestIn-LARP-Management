@@ -12,7 +12,7 @@ import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { isValidEmail } from '../validation.js';
 import { ensureAccessToken } from '../auth/accessTokens.js';
 
-async function filterToAllowedFields(body, allowedFields) {
+export async function filterToAllowedFields(body, allowedFields) {
   const schemaKeys = (await getAccountFieldSchema()).map((f) => f.key);
   const accountFieldKeys = ['group', ...schemaKeys];
   return Object.keys(body).filter((key) => accountFieldKeys.includes(key) && !allowedFields.includes(key));

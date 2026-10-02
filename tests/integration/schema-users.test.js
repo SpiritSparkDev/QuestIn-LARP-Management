@@ -106,6 +106,23 @@ test('users.account_data_enc column exists after migration', async () => {
   assert.equal(rows.length, 1);
 });
 
+test('users.managed_by_user_id column exists, nullable, FK to users', async () => {
+  const { rows } = await query(
+    `SELECT is_nullable FROM information_schema.columns
+     WHERE table_name = 'users' AND column_name = 'managed_by_user_id'`
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].is_nullable, 'YES');
+});
+
+test('users.email is nullable after migration', async () => {
+  const { rows } = await query(
+    `SELECT is_nullable FROM information_schema.columns
+     WHERE table_name = 'users' AND column_name = 'email'`
+  );
+  assert.equal(rows[0].is_nullable, 'YES');
+});
+
 test.after(async () => {
   await closePool();
 });
