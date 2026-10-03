@@ -577,6 +577,22 @@
           ? '<button type="button" class="btn-secondary" data-info="briefing">Plot &amp; Briefing</button>'
           : "",
       ].join("");
+      const addressText = (activeEvent.address ?? "").trim();
+      const addressQuery = encodeURIComponent(addressText.replace(/\s*\n\s*/g, ", "));
+      const mapsUrl = activeEvent.maps_url || (addressText ? `https://www.google.com/maps/search/?api=1&query=${addressQuery}` : "");
+      const osmUrl = activeEvent.osm_url || (addressText ? `https://www.openstreetmap.org/search?query=${addressQuery}` : "");
+      const locationBlock = addressText || mapsUrl || osmUrl
+        ? `<div class="event-location">
+        <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+        <div>
+          ${addressText ? `<address>${escapeHtml(addressText).replace(/\n/g, "<br>")}</address>` : ""}
+          <div class="event-location-links">
+            ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="btn-ghost">Google Maps</a>` : ""}
+            ${osmUrl ? `<a href="${escapeHtml(osmUrl)}" target="_blank" rel="noopener noreferrer" class="btn-ghost">OpenStreetMap</a>` : ""}
+          </div>
+        </div>
+      </div>`
+        : "";
       card.innerHTML = `<div class="event-card-head">
         <h2>${escapeHtml(activeEvent.name)}</h2>
         ${statusPill}
@@ -585,6 +601,7 @@
       </div>
       ${countdown}
       <p class="event-date"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span> ${escapeHtml(formatEventDate(activeEvent.event_date))}</p>
+      ${locationBlock}
       ${registration ? "" : '<p>Du bist noch nicht angemeldet.</p>'}
       ${infoButtons ? `<div class="event-info-buttons">${infoButtons}</div>` : ""}`;
       card.querySelectorAll("[data-info]").forEach((button) => {

@@ -30,6 +30,9 @@
   <div class="main"><div class="content">
     <h1>Events verwalten</h1>
     <p class="sub">Lege Events an und bestimme, für welches Event sich Teilnehmende aktuell anmelden können.</p>
+    <div class="event-admin-toolbar">
+      <button type="button" id="new-event-btn">Neues Event</button>
+    </div>
     <div class="card">
       <div class="table-scroll">
       <table id="event-list">
@@ -48,9 +51,10 @@
       <button type="button" id="force-delete-cancel" class="btn-ghost">Abbrechen</button>
     </dialog>
 
-    <div class="card form-pad">
+    <div class="card form-pad" id="event-form-card" hidden>
       <h2 id="form-title">Neues Event anlegen</h2>
       <form id="event-form">
+        <h3 class="event-form-section">Grunddaten</h3>
         <input id="event-name" name="name" type="text" required>
         <label for="event-name">Name</label>
         <input id="event-date" name="eventDate" type="date" required>
@@ -58,6 +62,27 @@
         <input id="event-code" name="code" type="text" placeholder="P17/2027">
         <label for="event-code">QR-Code-Kennung <span style="opacity:0.6;font-size:12px;">optional, z.B. P17/2027</span></label>
 
+        <input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt">
+        <label for="event-capacity">Max. Teilnehmerzahl <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
+        <input id="event-flags" name="flags" type="text" placeholder="GSC, VP, Ersthelfer">
+        <label for="event-flags">Sonderrollen <span style="opacity:0.6;font-size:12px;">optional, Komma-getrennt, z.B. GSC, VP, Ersthelfer</span></label>
+
+        <h3 class="event-form-section">Ort</h3>
+        <p class="sub">Erscheint im Dashboard nur, wenn ausgefüllt. Ohne eigene Links werden Google-Maps- und OpenStreetMap-Link automatisch aus der Adresse erzeugt.</p>
+        <textarea id="event-address" name="address" rows="3" placeholder="Burg Beispiel&#10;Musterweg 1&#10;12345 Musterstadt"></textarea>
+        <label for="event-address">Adresse</label>
+        <input id="event-maps-url" name="mapsUrl" type="url" placeholder="https://maps.google.com/…">
+        <label for="event-maps-url">Google-Maps-Link <span style="opacity:0.6;font-size:12px;">optional, überschreibt den automatischen Link</span></label>
+        <input id="event-osm-url" name="osmUrl" type="url" placeholder="https://www.openstreetmap.org/…">
+        <label for="event-osm-url">OpenStreetMap-Link <span style="opacity:0.6;font-size:12px;">optional, überschreibt den automatischen Link</span></label>
+
+        <h3 class="event-form-section">Texte</h3>
+        <textarea id="event-directions" name="directions" rows="4"></textarea>
+        <label for="event-directions">Anfahrtsbeschreibung <span style="opacity:0.6;font-size:12px;">optional, erscheint im Dashboard nur wenn ausgefüllt</span></label>
+        <textarea id="event-briefing" name="briefing" rows="6"></textarea>
+        <label for="event-briefing">Plot &amp; Briefing <span style="opacity:0.6;font-size:12px;">optional, erscheint im Dashboard nur wenn ausgefüllt</span></label>
+
+        <h3 class="event-form-section">Gast-Widget</h3>
         <div id="guest-widget-help" style="margin:4px 0 20px;padding:12px 16px;border:1px solid var(--border-color, #ddd);border-radius:8px;">
           <strong>Gast-Widget einbetten</strong>
           <p class="sub" style="margin-top:4px;">Damit können Gäste sich ohne Konto für dieses Event ein Ticket sichern (z.B. eingebettet auf eurer Website).</p>
@@ -76,16 +101,7 @@
           </div>
         </div>
 
-        <input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt">
-        <label for="event-capacity">Max. Teilnehmerzahl <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
-        <textarea id="event-directions" name="directions" rows="4"></textarea>
-        <label for="event-directions">Anfahrtsbeschreibung <span style="opacity:0.6;font-size:12px;">optional, erscheint im Dashboard nur wenn ausgefüllt</span></label>
-        <textarea id="event-briefing" name="briefing" rows="6"></textarea>
-        <label for="event-briefing">Plot &amp; Briefing <span style="opacity:0.6;font-size:12px;">optional, erscheint im Dashboard nur wenn ausgefüllt</span></label>
-        <input id="event-flags" name="flags" type="text" placeholder="GSC, VP, Ersthelfer">
-        <label for="event-flags">Sonderrollen <span style="opacity:0.6;font-size:12px;">optional, Komma-getrennt, z.B. GSC, VP, Ersthelfer</span></label>
-
-        <h3>Preisstufen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
+        <h3 class="event-form-section">Preisstufen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Lege Teilnahmegruppen (z.B. Erwachsene, Kinder) und terminierte Preisstufen (z.B. Frühbucher) an. Bei der Anmeldung wird automatisch die erste noch gültige Stufe verwendet.</p>
 
         <label>Teilnahmegruppen</label>
@@ -96,8 +112,10 @@
         <div id="price-tiers"></div>
         <button type="button" id="add-price-tier" class="btn-sm">+ Preisstufe hinzufügen</button>
 
-        <button type="submit">Speichern</button>
-        <button type="button" id="event-cancel-edit" class="btn-ghost">Abbrechen</button>
+        <div class="event-form-actions">
+          <button type="submit">Speichern</button>
+          <button type="button" id="event-cancel-edit" class="btn-ghost">Abbrechen</button>
+        </div>
       </form>
     </div>
   </div></div>
@@ -116,6 +134,7 @@ initSidebarToggle();
 const listBody = document.querySelector('#event-list tbody');
 const form = document.getElementById('event-form');
 const formTitle = document.getElementById('form-title');
+const formCard = document.getElementById('event-form-card');
 const forceDeleteDialog = document.getElementById('force-delete-dialog');
 const forceDeleteWarning = document.getElementById('force-delete-warning');
 const forceDeleteNotify = document.getElementById('force-delete-notify');
@@ -292,7 +311,21 @@ document.getElementById('force-delete-confirm').addEventListener('click', async 
 
 let editingEventId = null;
 
-document.getElementById('event-cancel-edit').addEventListener('click', () => resetForm());
+function showForm() {
+  formCard.hidden = false;
+  formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function hideForm() {
+  formCard.hidden = true;
+}
+
+document.getElementById('new-event-btn').addEventListener('click', () => {
+  resetForm();
+  showForm();
+});
+
+document.getElementById('event-cancel-edit').addEventListener('click', () => { resetForm(); hideForm(); });
 
 async function loadEvents() {
   listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
@@ -351,6 +384,9 @@ function startEdit(eventData) {
   form.elements.flags.value = (eventData.flags ?? []).join(', ');
   form.elements.directions.value = eventData.directions ?? '';
   form.elements.briefing.value = eventData.briefing ?? '';
+  form.elements.address.value = eventData.address ?? '';
+  form.elements.mapsUrl.value = eventData.maps_url ?? '';
+  form.elements.osmUrl.value = eventData.osm_url ?? '';
   priceGroups = [...(eventData.pricing?.groups ?? [])];
   priceTiers = (eventData.pricing?.tiers ?? []).map((t) => ({
     name: t.name,
@@ -361,6 +397,7 @@ function startEdit(eventData) {
   renderPriceTiers();
   renderGuestWidgetHelp();
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
+  showForm();
 }
 
 function resetForm() {
@@ -388,6 +425,9 @@ form.addEventListener('submit', async (event) => {
     pricing: collectPricing(),
     directions: form.elements.directions.value,
     briefing: form.elements.briefing.value,
+    address: form.elements.address.value,
+    mapsUrl: form.elements.mapsUrl.value,
+    osmUrl: form.elements.osmUrl.value,
   };
   try {
     if (editingEventId) {
@@ -397,6 +437,7 @@ form.addEventListener('submit', async (event) => {
     }
     notify('Gespeichert.', 'success');
     resetForm();
+    hideForm();
     await loadEvents();
   } catch (err) {
     notify(err.message, 'error');

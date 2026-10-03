@@ -369,6 +369,44 @@ test('directions and briefing default to null, can be set, and blank text clears
   });
 });
 
+test('address and map links default to null, can be set, reject non-http URLs, and blank clears them', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
+
+    const createRes = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'Ort-Con', eventDate: '2027-09-03' }),
+    });
+    const created = await createRes.json();
+    assert.equal(created.address, null);
+    assert.equal(created.maps_url, null);
+    assert.equal(created.osm_url, null);
+
+    const setRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ address: 'Burg Beispiel\nMusterweg 1\n12345 Musterstadt', mapsUrl: 'https://maps.google.com/?q=x', osmUrl: 'https://www.openstreetmap.org/?mlat=1&mlon=2' }),
+    });
+    const set = await setRes.json();
+    assert.equal(set.address, 'Burg Beispiel\nMusterweg 1\n12345 Musterstadt');
+    assert.equal(set.maps_url, 'https://maps.google.com/?q=x');
+    assert.equal(set.osm_url, 'https://www.openstreetmap.org/?mlat=1&mlon=2');
+
+    const badRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT', headers, body: JSON.stringify({ mapsUrl: 'javascript:alert(1)' }),
+    });
+    assert.equal(badRes.status, 400);
+
+    const clearRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT', headers, body: JSON.stringify({ address: ' ', mapsUrl: '', osmUrl: '' }),
+    });
+    const cleared = await clearRes.json();
+    assert.equal(cleared.address, null);
+    assert.equal(cleared.maps_url, null);
+    assert.equal(cleared.osm_url, null);
+  });
+});
+
 test('an event created without capacity defaults to unlimited (null)', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');

@@ -7,6 +7,18 @@ import { maybePromoteFromWaitlist } from '../registrations/repository.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Map links end up as <a href> on the dashboard, so only http(s) is allowed
+// (blocks javascript: URLs). Blank/absent means "not set".
+function validateMapUrls({ mapsUrl, osmUrl }) {
+  for (const [field, value] of [['mapsUrl', mapsUrl], ['osmUrl', osmUrl]]) {
+    if (value === undefined || value === null || String(value).trim() === '') continue;
+    if (typeof value !== 'string' || !/^https?:\/\/\S+$/i.test(value.trim())) {
+      return `${field} must be an http(s) URL`;
+    }
+  }
+  return null;
+}
+
 // Structural validation for the admin-submitted pricing config -- unlike
 // normalizeFlags (which silently cleans up a flat comma-separated
 // textfield), a grid of groups x tiers x amounts is built by a dedicated
@@ -59,7 +71,7 @@ function validatePricing(pricing) {
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, code, capacity, flags, pricing, directions, briefing } = body;
+  const { name, eventDate, code, capacity, flags, pricing, directions, briefing, address, mapsUrl, osmUrl } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
@@ -73,7 +85,9 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
     const pricingError = validatePricing(pricing);
     if (pricingError) return { status: 400, body: { error: pricingError } };
   }
-  const event = await createEvent({ name, eventDate, code, capacity, flags, pricing, directions, briefing });
+  const urlError = validateMapUrls({ mapsUrl, osmUrl });
+  if (urlError) return { status: 400, body: { error: urlError } };
+  const event = await createEvent({ name, eventDate, code, capacity, flags, pricing, directions, briefing, address, mapsUrl, osmUrl });
   return { status: 201, body: event };
 })));
 
@@ -101,6 +115,8 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
     const pricingError = validatePricing(body.pricing);
     if (pricingError) return { status: 400, body: { error: pricingError } };
   }
+  const urlError = validateMapUrls(body);
+  if (urlError) return { status: 400, body: { error: urlError } };
   const before = await getEvent(params.id);
   if (!before) return { status: 404, body: { error: 'event not found' } };
   const event = await updateEvent(params.id, body);
