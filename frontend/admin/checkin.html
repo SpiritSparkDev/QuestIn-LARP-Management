@@ -88,6 +88,7 @@
         <span>Tabelle</span>
         <div id="base-column-checkboxes" class="checkbox-group"></div>
       </div>
+      <p class="sub">Spalten lassen sich per Drag &amp; Drop an der Überschrift umsortieren. Die Einstellungen werden in diesem Browser gespeichert. <button type="button" id="reset-column-order" class="btn-ghost btn-sm">Reihenfolge zurücksetzen</button></p>
       <div>
         <span>Charakter-Felder (IT)</span>
         <div id="it-column-checkboxes" class="checkbox-group"></div>
@@ -165,74 +166,93 @@ function saveSelectedColumns() {
   localStorage.setItem(`checkinColumns:${eventSelect.value}`, JSON.stringify(selectedColumns));
 }
 
-// Built-in columns. `locked` ones can't be hidden (the row is useless
-// without a name or its actions). Extra IT/OT columns are spliced in right
-// after "Rolle". Defined as a function so the render* helpers (declared
-// further down) are only referenced once the page has fully loaded.
-function baseColumns() {
-  return [
-    { key: 'name', label: 'Name', locked: true, track: 'minmax(150px, 1.3fr)', render: (p) => escapeHtml(p.name) },
-    { key: 'characters', label: 'Charaktere', track: 'minmax(140px, 1.2fr)', render: (p) => escapeHtml(p.characters.map((c) => c.name).join(', ')) },
-    { key: 'role', label: 'Rolle', track: 'minmax(120px, 0.9fr)', cls: 'cell-stack', render: renderConRoleCell },
-    { key: '__extra' },
-    { key: 'amount', label: 'Betrag', track: 'minmax(150px, 1fr)', render: renderAmountDueCell },
-    { key: 'payment', label: 'Zahlung', track: 'minmax(170px, 1.2fr)', cls: 'cell-stack', render: renderPaymentStatusCell },
-    { key: 'status', label: 'Status', track: 'minmax(110px, 0.7fr)', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span>` },
-    { key: 'actions', label: 'Aktionen', locked: true, track: 'minmax(200px, 1.2fr)', cls: 'cell-actions', render: (p) => renderApproveCell(p) + renderCheckinCell(p) + renderCheckoutCell(p) + renderCancelCell(p) + renderEditCell(p) },
-    ...(canOverride ? [{ key: 'override', label: 'Override', track: 'minmax(110px, 0.7fr)', render: renderOverrideCell }] : []),
+// Every column the table can show, in default order. `locked` ones can't be
+// hidden (the row is useless without a name or its actions). Ids: built-in
+// columns use their key, IT/OT extras are "it:<key>" / "ot:<key>". Defined as
+// a function so the render* helpers (declared further down) are only
+// referenced once the page has fully loaded.
+function allColumns() {
+  const base = [
+    { id: 'name', label: 'Name', locked: true, track: 'minmax(150px, 1.2fr)', render: (p) => escapeHtml(p.name) },
+    { id: 'characters', label: 'Charaktere', track: 'minmax(130px, 1fr)', render: (p) => escapeHtml(p.characters.map((c) => c.name).join(', ')) },
+    { id: 'role', label: 'Rolle', track: 'minmax(140px, 0.9fr)', cls: 'cell-stack', render: renderConRoleCell },
   ];
-}
-
-function loadHiddenBaseColumns() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem('checkinHiddenColumns'));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-let hiddenBaseColumns = loadHiddenBaseColumns();
-let currentParticipants = [];
-
-function extraColumns() {
   const it = selectedColumns.it.map((key) => {
     const field = currentSchema.find((f) => f.key === key) ?? { key };
     return {
+      id: `it:${key}`,
       label: field.label ?? key,
-      track: 'minmax(120px, 1fr)',
+      track: 'minmax(110px, 1fr)',
+      extra: true,
       render: (p) => escapeHtml(p.characters.map((c) => formatFieldValue(field, c.data?.[key])).filter((v) => v !== undefined).join(', ')),
     };
   });
   const ot = selectedColumns.ot.map((key) => {
     const field = otFieldsByKey.get(key) ?? { key };
     return {
+      id: `ot:${key}`,
       label: field.label ?? key,
-      track: 'minmax(120px, 1fr)',
+      track: 'minmax(110px, 1fr)',
+      extra: true,
       render: (p) => escapeHtml(formatFieldValue(field, p.otFields?.[key]) ?? ''),
     };
   });
-  return [...it, ...ot];
+  const rest = [
+    { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
+    { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-stack', render: renderPaymentStatusCell },
+    { id: 'status', label: 'Status', track: '130px', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span>` },
+    { id: 'actions', label: 'Aktionen', locked: true, track: 'minmax(210px, 1.3fr)', cls: 'cell-actions', render: (p) => renderApproveCell(p) + renderCheckinCell(p) + renderCheckoutCell(p) + renderCancelCell(p) + renderEditCell(p) },
+    ...(canOverride ? [{ id: 'override', label: 'Override', track: '150px', render: renderOverrideCell }] : []),
+  ];
+  return [...base, ...it, ...ot, ...rest];
+}
+
+function loadStoredList(key) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeList(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Storage unavailable (private mode) -- the setting just won't persist.
+  }
+}
+
+let hiddenBaseColumns = loadStoredList('checkinHiddenColumns');
+let columnOrder = loadStoredList('checkinColumnOrder');
+let currentParticipants = [];
+
+// Saved order first (ids that no longer exist are skipped), then any column
+// the saved order doesn't know yet in its default position-order.
+function orderedColumns(columns) {
+  const byId = new Map(columns.map((c) => [c.id, c]));
+  const ordered = columnOrder.filter((id) => byId.has(id)).map((id) => byId.get(id));
+  const seen = new Set(ordered.map((c) => c.id));
+  return [...ordered, ...columns.filter((c) => !seen.has(c.id))];
 }
 
 function visibleColumns() {
-  return baseColumns().flatMap((col) => {
-    if (col.key === '__extra') return extraColumns();
-    return col.locked || !hiddenBaseColumns.includes(col.key) ? [col] : [];
-  });
+  const visible = allColumns().filter((c) => c.extra || c.locked || !hiddenBaseColumns.includes(c.id));
+  return orderedColumns(visible);
 }
 
 function renderColumnCheckboxes() {
   const baseCheckboxes = document.getElementById('base-column-checkboxes');
-  baseCheckboxes.innerHTML = baseColumns().filter((c) => c.label && !c.locked).map((col) => `
-    <label><input type="checkbox" data-base-column="${col.key}" ${hiddenBaseColumns.includes(col.key) ? '' : 'checked'}> ${escapeHtml(col.label)}</label>
+  baseCheckboxes.innerHTML = allColumns().filter((c) => !c.extra && !c.locked).map((col) => `
+    <label><input type="checkbox" data-base-column="${col.id}" ${hiddenBaseColumns.includes(col.id) ? '' : 'checked'}> ${escapeHtml(col.label)}</label>
   `).join('');
   baseCheckboxes.querySelectorAll('[data-base-column]').forEach((cb) => {
     cb.addEventListener('change', () => {
       const set = new Set(hiddenBaseColumns);
       if (cb.checked) set.delete(cb.dataset.baseColumn); else set.add(cb.dataset.baseColumn);
       hiddenBaseColumns = [...set];
-      localStorage.setItem('checkinHiddenColumns', JSON.stringify(hiddenBaseColumns));
+      storeList('checkinHiddenColumns', hiddenBaseColumns);
       renderTableHead();
       renderParticipants(currentParticipants, eventSelect.value);
     });
@@ -265,9 +285,51 @@ function toggleColumn(group, key, checked) {
 
 function renderTableHead() {
   const columns = visibleColumns();
-  tableHeadRow.innerHTML = columns.map((col) => `<div class="grid-cell" role="columnheader">${escapeHtml(col.label)}</div>`).join('');
+  tableHeadRow.innerHTML = columns.map((col) => `<div class="grid-cell" role="columnheader" draggable="true" data-col-id="${escapeHtml(col.id)}" title="Zum Umsortieren ziehen"><span class="col-grip material-symbols-outlined" aria-hidden="true">drag_indicator</span>${escapeHtml(col.label)}</div>`).join('');
   participantList.style.setProperty('--column-tracks', columns.map((col) => col.track ?? 'auto').join(' '));
 }
+
+// Drag a header cell onto another to move that column to its position; the
+// resulting order is persisted for this browser.
+let draggedColumnId = null;
+tableHeadRow.addEventListener('dragstart', (e) => {
+  const cell = e.target.closest('[data-col-id]');
+  if (!cell) return;
+  draggedColumnId = cell.dataset.colId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', draggedColumnId);
+  cell.classList.add('dragging');
+});
+tableHeadRow.addEventListener('dragover', (e) => {
+  if (!draggedColumnId || !e.target.closest('[data-col-id]')) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+});
+tableHeadRow.addEventListener('dragend', () => {
+  draggedColumnId = null;
+  tableHeadRow.querySelectorAll('.dragging').forEach((el) => el.classList.remove('dragging'));
+});
+tableHeadRow.addEventListener('drop', (e) => {
+  const target = e.target.closest('[data-col-id]');
+  if (!draggedColumnId || !target || target.dataset.colId === draggedColumnId) return;
+  e.preventDefault();
+  const ids = visibleColumns().map((c) => c.id);
+  ids.splice(ids.indexOf(draggedColumnId), 1);
+  ids.splice(ids.indexOf(target.dataset.colId), 0, draggedColumnId);
+  // Hidden columns keep their stored slot behind the visible ones.
+  columnOrder = [...ids, ...columnOrder.filter((id) => !ids.includes(id))];
+  storeList('checkinColumnOrder', columnOrder);
+  draggedColumnId = null;
+  renderTableHead();
+  renderParticipants(currentParticipants, eventSelect.value);
+});
+
+document.getElementById('reset-column-order').addEventListener('click', () => {
+  columnOrder = [];
+  storeList('checkinColumnOrder', columnOrder);
+  renderTableHead();
+  renderParticipants(currentParticipants, eventSelect.value);
+});
 
 function onEventChanged() {
   selectedColumns = loadSelectedColumns(eventSelect.value);

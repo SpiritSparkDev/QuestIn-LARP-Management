@@ -2458,3 +2458,24 @@ input[type="checkbox"].group-feature-switch:checked {
   background: var(--primary-container);
   color: var(--primary-deep);
 }
+
+/* Draggable check-in column headers */
+.grid-header .grid-cell[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+  gap: 2px;
+}
+
+.grid-header .grid-cell.dragging {
+  opacity: 0.4;
+}
+
+.grid-header .col-grip {
+  font-size: 14px;
+  opacity: 0.35;
+  margin-left: -4px;
+}
+
+.grid-header .grid-cell:hover .col-grip {
+  opacity: 0.8;
+}
