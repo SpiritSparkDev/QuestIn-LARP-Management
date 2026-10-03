@@ -2371,3 +2371,67 @@ input[type="checkbox"].group-feature-switch:checked {
 .event-date-large .material-symbols-outlined {
   font-size: 1.8rem;
 }
+
+/* Dashboard character cards */
+.dashboard-col .char-grid {
+  gap: 14px;
+}
+
+.dash-char {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-left: 4px solid var(--primary);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px var(--shadow);
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.dash-char:hover,
+.dash-char:focus-visible {
+  box-shadow: 0 4px 12px var(--shadow);
+  transform: translateY(-1px);
+}
+
+.dash-char-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--primary-container);
+  color: var(--primary-deep);
+  font-family: "EB Garamond", Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.dash-char-body {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.dash-char-body h3,
+.dash-char-body .sub {
+  margin: 0;
+  text-align: left;
+}
+
+.dash-char-body .sub {
+  margin-top: 4px;
+}
+
+.dash-char-tag {
+  flex: none;
+}
+
+.dash-char-tag.is-registered {
+  background: var(--primary-container);
+  color: var(--primary-deep);
+}

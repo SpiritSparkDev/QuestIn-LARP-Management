@@ -631,12 +631,24 @@
         .map((c) => {
           const statusLine =
             c.class === "nsc" ? "NSC-Charakter" : statusLineForCharacter(c);
-          return `<div class="char-card">
-      <h3>${escapeHtml(c.name)}</h3>
-      <p class="sub">${statusLine}</p>
+          const isNsc = c.class === "nsc";
+          const registered = Boolean(c.registeredFor);
+          return `<div class="dash-char" role="link" tabindex="0" data-dash-char>
+      <span class="dash-char-avatar" aria-hidden="true">${escapeHtml((c.name || "?").trim().charAt(0).toUpperCase())}</span>
+      <div class="dash-char-body">
+        <h3>${escapeHtml(c.name)}</h3>
+        <p class="sub">${statusLine}</p>
+      </div>
+      <span class="tag dash-char-tag ${registered ? "is-registered" : ""}">${isNsc ? "NSC" : registered ? "Angemeldet" : "SC"}</span>
     </div>`;
         })
         .join("");
+      container.querySelectorAll("[data-dash-char]").forEach((card) => {
+        card.addEventListener("click", () => goToTab("charaktere"));
+        card.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") goToTab("charaktere");
+        });
+      });
     }
 
     function renderDashboardAccountHint(account) {
