@@ -14,6 +14,7 @@ import {
   createPdfImport, listPdfImports, getPdfImport, deletePdfImport, markPdfImportEmail, markPdfImportAdopted,
 } from './repository.js';
 import { adoptImport } from './adopt.js';
+import { suggestMapping } from './suggest.js';
 import { getEvent } from '../events/repository.js';
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
@@ -114,11 +115,17 @@ router.post('/pdf-import/template', requireAddon(async ({ req }) => {
   try {
     const fields = await readPdfFields(decoded.buffer);
     const config = await setPdfTemplate({ filename: decoded.filename, pdfFields: fields });
-    return { status: 200, body: { config, targets: await buildTargets() } };
+    const targets = await buildTargets();
+    return { status: 200, body: { config, targets, suggestions: suggestMapping(config.pdfFields, targets) } };
   } catch (err) {
     if (err.code === 'INVALID_PDF') return { status: 400, body: { error: err.message } };
     throw err;
   }
+}));
+
+router.get('/pdf-import/suggestions', requireAddon(async () => {
+  const config = await getPdfImportConfig();
+  return { status: 200, body: suggestMapping(config.pdfFields, await buildTargets()) };
 }));
 
 router.put('/pdf-import/config', requireAddon(async ({ req }) => {

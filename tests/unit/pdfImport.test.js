@@ -57,3 +57,33 @@ test('applyMapping groups values by target, translates option labels and skips e
   assert.equal(mapped.registration.rolle, 'NSC');
   assert.equal(mapped.registration.datenschutz, true);
 });
+
+const { suggestMapping } = await import('../../backend/pdfImport/suggest.js');
+
+test('suggestMapping recognises common German form field names and leaves unknown ones out', () => {
+  const targets = [
+    { value: 'sender:email', label: 'E-Mail des Einsenders' },
+    { value: 'account:firstName', label: 'Vorname' },
+    { value: 'account:lastName', label: 'Nachname' },
+    { value: 'account:phone', label: 'Telefon' },
+    { value: 'account:birthdate', label: 'Geburtsdatum' },
+    { value: 'meta:conRole', label: 'Rolle (Spieler / NSC / Helfer)' },
+    { value: 'meta:waiver', label: 'Einverständnis akzeptiert' },
+    { value: 'character:name', label: 'Charaktername' },
+    { value: 'character:profession', label: 'Beruf' },
+  ];
+  const fields = ['Name', 'Vorname', 'Email', 'Telefon', 'Geburtsdatum', 'Rolle', 'Datenschutz1', 'Datenschutz2', 'Charaktername', 'Beruf', 'Zeltdaten']
+    .map((name) => ({ name }));
+  const s = suggestMapping(fields, targets);
+  assert.equal(s.Name.target, 'account:lastName');
+  assert.equal(s.Vorname.target, 'account:firstName');
+  assert.equal(s.Email.target, 'sender:email');
+  assert.equal(s.Telefon.target, 'account:phone');
+  assert.equal(s.Geburtsdatum.target, 'account:birthdate');
+  assert.equal(s.Rolle.target, 'meta:conRole');
+  assert.equal(s.Datenschutz1.target, 'meta:waiver');
+  assert.equal(s.Datenschutz2.target, 'meta:waiver');
+  assert.equal(s.Charaktername.target, 'character:name');
+  assert.equal(s.Beruf.target, 'character:profession');
+  assert.equal(s.Zeltdaten, undefined);
+});

@@ -2497,3 +2497,9 @@ input[type="checkbox"].group-feature-switch:checked {
 [hidden] {
   display: none !important;
 }
+
+/* PDF import: a field assignment guessed by the auto-detection */
+select.suggested {
+  border-color: var(--primary);
+  background: var(--primary-container);
+}

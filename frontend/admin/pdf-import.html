@@ -44,6 +44,7 @@
         <label for="template-file">Vorlagen-PDF</label>
 
         <div id="mapping-section" hidden>
+          <p><button type="button" id="auto-detect" class="btn-ghost">Felder automatisch erkennen</button> <span class="sub">Füllt nur noch nicht zugeordnete Felder aus. Prüfe die Vorschläge und speichere danach.</span></p>
           <div class="table-scroll">
             <table id="mapping-table">
               <thead><tr><th>PDF-Feld</th><th>Typ</th><th>Zuordnung in der App</th><th>Beschriftung der Auswahl</th></tr></thead>
@@ -179,6 +180,31 @@ function collectMapping() {
   return mapping;
 }
 
+// Fills only still-empty selects from the server's name-based suggestions
+// and flags them, so the admin can see what was guessed before saving.
+function applySuggestions(suggestions) {
+  let count = 0;
+  config.pdfFields.forEach((field, i) => {
+    const select = document.querySelector(`[data-target="${i}"]`);
+    const suggestion = suggestions[field.name];
+    if (!select || select.value || !suggestion) return;
+    select.value = suggestion.target;
+    select.classList.add('suggested');
+    select.title = 'Automatisch erkannt – bitte prüfen';
+    count += 1;
+  });
+  return count;
+}
+
+document.getElementById('auto-detect').addEventListener('click', async () => {
+  try {
+    const count = applySuggestions(await api.get('/pdf-import/suggestions'));
+    notify(count ? `${count} Felder erkannt. Bitte prüfen und speichern.` : 'Keine weiteren Felder erkannt.', count ? 'success' : 'error');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
 document.getElementById('template-file').addEventListener('change', async (event) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -187,7 +213,8 @@ document.getElementById('template-file').addEventListener('change', async (event
     config = result.config;
     targets = result.targets;
     renderMapping();
-    notify('Vorlage eingelesen. Bitte Felder zuordnen.', 'success');
+    const count = applySuggestions(result.suggestions ?? {});
+    notify(count ? `Vorlage eingelesen, ${count} Felder automatisch erkannt. Bitte prüfen und speichern.` : 'Vorlage eingelesen. Bitte Felder zuordnen.', 'success');
   } catch (err) {
     notify(err.message, 'error');
   }
