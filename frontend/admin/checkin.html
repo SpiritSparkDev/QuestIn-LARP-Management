@@ -68,7 +68,11 @@
       <button type="button" id="edit-cancel" class="btn-ghost">Schließen</button>
     </dialog>
     <details id="column-settings" class="card form-pad">
-      <summary>Spalten</summary>
+      <summary>Spalten ein- und ausblenden</summary>
+      <div>
+        <span>Tabelle</span>
+        <div id="base-column-checkboxes" class="checkbox-group"></div>
+      </div>
       <div>
         <span>Charakter-Felder (IT)</span>
         <div id="it-column-checkboxes" class="checkbox-group"></div>
@@ -144,7 +148,79 @@ function saveSelectedColumns() {
   localStorage.setItem(`checkinColumns:${eventSelect.value}`, JSON.stringify(selectedColumns));
 }
 
+// Built-in columns. `locked` ones can't be hidden (the row is useless
+// without a name or its actions). Extra IT/OT columns are spliced in right
+// after "Rolle". Defined as a function so the render* helpers (declared
+// further down) are only referenced once the page has fully loaded.
+function baseColumns() {
+  return [
+    { key: 'name', label: 'Name', locked: true, track: 'minmax(150px, 1.3fr)', render: (p) => escapeHtml(p.name) },
+    { key: 'characters', label: 'Charaktere', track: 'minmax(140px, 1.2fr)', render: (p) => escapeHtml(p.characters.map((c) => c.name).join(', ')) },
+    { key: 'role', label: 'Rolle', track: 'minmax(120px, 0.9fr)', cls: 'cell-stack', render: renderConRoleCell },
+    { key: '__extra' },
+    { key: 'amount', label: 'Betrag', track: 'minmax(150px, 1fr)', render: renderAmountDueCell },
+    { key: 'payment', label: 'Zahlung', track: 'minmax(170px, 1.2fr)', cls: 'cell-stack', render: renderPaymentStatusCell },
+    { key: 'status', label: 'Status', track: 'minmax(110px, 0.7fr)', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span>` },
+    { key: 'actions', label: 'Aktionen', locked: true, track: 'minmax(200px, 1.2fr)', cls: 'cell-actions', render: (p) => renderApproveCell(p) + renderCheckinCell(p) + renderCheckoutCell(p) + renderCancelCell(p) + renderEditCell(p) },
+    ...(canOverride ? [{ key: 'override', label: 'Override', track: 'minmax(110px, 0.7fr)', render: renderOverrideCell }] : []),
+  ];
+}
+
+function loadHiddenBaseColumns() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('checkinHiddenColumns'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+let hiddenBaseColumns = loadHiddenBaseColumns();
+let currentParticipants = [];
+
+function extraColumns() {
+  const it = selectedColumns.it.map((key) => {
+    const field = currentSchema.find((f) => f.key === key) ?? { key };
+    return {
+      label: field.label ?? key,
+      track: 'minmax(120px, 1fr)',
+      render: (p) => escapeHtml(p.characters.map((c) => formatFieldValue(field, c.data?.[key])).filter((v) => v !== undefined).join(', ')),
+    };
+  });
+  const ot = selectedColumns.ot.map((key) => {
+    const field = otFieldsByKey.get(key) ?? { key };
+    return {
+      label: field.label ?? key,
+      track: 'minmax(120px, 1fr)',
+      render: (p) => escapeHtml(formatFieldValue(field, p.otFields?.[key]) ?? ''),
+    };
+  });
+  return [...it, ...ot];
+}
+
+function visibleColumns() {
+  return baseColumns().flatMap((col) => {
+    if (col.key === '__extra') return extraColumns();
+    return col.locked || !hiddenBaseColumns.includes(col.key) ? [col] : [];
+  });
+}
+
 function renderColumnCheckboxes() {
+  const baseCheckboxes = document.getElementById('base-column-checkboxes');
+  baseCheckboxes.innerHTML = baseColumns().filter((c) => c.label && !c.locked).map((col) => `
+    <label><input type="checkbox" data-base-column="${col.key}" ${hiddenBaseColumns.includes(col.key) ? '' : 'checked'}> ${escapeHtml(col.label)}</label>
+  `).join('');
+  baseCheckboxes.querySelectorAll('[data-base-column]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const set = new Set(hiddenBaseColumns);
+      if (cb.checked) set.delete(cb.dataset.baseColumn); else set.add(cb.dataset.baseColumn);
+      hiddenBaseColumns = [...set];
+      localStorage.setItem('checkinHiddenColumns', JSON.stringify(hiddenBaseColumns));
+      renderTableHead();
+      renderParticipants(currentParticipants, eventSelect.value);
+    });
+  });
+
   itColumnCheckboxes.innerHTML = currentSchema.map((field) => `
     <label><input type="checkbox" data-it-column="${escapeHtml(field.key)}" ${selectedColumns.it.includes(field.key) ? 'checked' : ''}> ${escapeHtml(field.label ?? field.key)}</label>
   `).join('');
@@ -167,36 +243,13 @@ function toggleColumn(group, key, checked) {
   selectedColumns[group] = [...set];
   saveSelectedColumns();
   renderTableHead();
-  loadParticipants(eventSelect.value);
+  renderParticipants(currentParticipants, eventSelect.value);
 }
 
 function renderTableHead() {
-  const itLabels = selectedColumns.it.map((key) => currentSchema.find((f) => f.key === key)?.label ?? key);
-  const otLabels = selectedColumns.ot.map((key) => otFieldsByKey.get(key)?.label ?? key);
-  const extraLabels = [...itLabels, ...otLabels];
-  const extraTh = extraLabels.map((label) => `<div class="grid-cell" role="columnheader">${escapeHtml(label)}</div>`).join('');
-  tableHeadRow.innerHTML = `<div class="grid-cell" role="columnheader">Name</div><div class="grid-cell" role="columnheader">Charaktere</div><div class="grid-cell" role="columnheader">Rolle</div>${extraTh}<div class="grid-cell" role="columnheader">Betrag</div><div class="grid-cell" role="columnheader">Zahlung</div><div class="grid-cell" role="columnheader">Status</div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader"></div><div class="grid-cell" role="columnheader">Override</div>`;
-  // grid-template-columns (sahara.css) splices this track-list string in
-  // between its fixed tracks -- built here rather than passing a bare
-  // count, since repeat()'s count must be >=1 and this needs to handle 0
-  // selected IT/OT columns (the default) without producing invalid CSS.
-  const extraTracks = extraLabels.length > 0
-    ? `repeat(${extraLabels.length}, minmax(120px, 1fr))`
-    : '';
-  participantList.style.setProperty('--extra-column-tracks', extraTracks);
-}
-
-function renderExtraCells(p) {
-  const itCells = selectedColumns.it.map((key) => {
-    const field = currentSchema.find((f) => f.key === key) ?? { key };
-    const values = p.characters.map((c) => formatFieldValue(field, c.data?.[key])).filter((v) => v !== undefined);
-    return `<div class="grid-cell">${escapeHtml(values.join(', '))}</div>`;
-  }).join('');
-  const otCells = selectedColumns.ot.map((key) => {
-    const field = otFieldsByKey.get(key) ?? { key };
-    return `<div class="grid-cell">${escapeHtml(formatFieldValue(field, p.otFields?.[key]) ?? '')}</div>`;
-  }).join('');
-  return itCells + otCells;
+  const columns = visibleColumns();
+  tableHeadRow.innerHTML = columns.map((col) => `<div class="grid-cell" role="columnheader">${escapeHtml(col.label)}</div>`).join('');
+  participantList.style.setProperty('--column-tracks', columns.map((col) => col.track ?? 'auto').join(' '));
 }
 
 function onEventChanged() {
@@ -446,9 +499,7 @@ scanStartButton.style.display = savedScanMode === 'push' ? '' : 'none';
 function applySearchFilter() {
   const term = currentSearch.trim().toLowerCase();
   listBody.querySelectorAll('.grid-row').forEach((row) => {
-    const cells = row.querySelectorAll('.grid-cell');
-    const text = `${cells[0]?.textContent ?? ''} ${cells[1]?.textContent ?? ''}`.toLowerCase();
-    row.style.display = !term || text.includes(term) ? '' : 'none';
+    row.style.display = !term || (row.dataset.search ?? '').includes(term) ? '' : 'none';
   });
 }
 
@@ -496,11 +547,11 @@ function renderPaymentStatusCell(p) {
     if (p.refundedAt) {
       const fullyRefunded = p.refundAmountCents >= p.amountDueCents;
       const refundNote = fullyRefunded ? 'Vollständig erstattet' : `Teilerstattet: ${(p.refundAmountCents / 100).toFixed(2)} €`;
-      return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <span class="sub">${refundNote}</span> <button type="button" class="btn-ghost" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
+      return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <span class="sub">${refundNote}</span> <button type="button" class="btn-ghost btn-sm" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
     }
-    return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <button type="button" class="btn-ghost" data-refund="${escapeHtml(p.userId)}">Erstatten</button> <button type="button" class="btn-ghost" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
+    return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <button type="button" class="btn-ghost btn-sm" data-refund="${escapeHtml(p.userId)}">Erstatten</button> <button type="button" class="btn-ghost btn-sm" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
   }
-  return `<span class="status-pill status-pending">Offen</span> <button type="button" class="btn-ghost" data-mark-paid="${escapeHtml(p.userId)}">Als bezahlt markieren</button>`;
+  return `<span class="status-pill status-pending">Offen</span> <button type="button" class="btn-ghost btn-sm" data-mark-paid="${escapeHtml(p.userId)}">Als bezahlt markieren</button>`;
 }
 
 searchInput.addEventListener('input', () => {
@@ -517,17 +568,17 @@ searchInput.addEventListener('input', () => {
 
 function renderApproveCell(p) {
   if (p.status !== 'pending' || !canOverride) return '';
-  return `<button type="button" class="btn" data-approve="${p.userId}">Freigeben</button>`;
+  return `<button type="button" class="btn btn-sm" data-approve="${p.userId}">Freigeben</button>`;
 }
 
 function renderCheckinCell(p) {
   if (p.status === 'notified') return '';
-  return `<button type="button" class="btn" data-checkin="${p.userId}" ${p.status !== 'confirmed' ? 'disabled' : ''}>Check-In</button>`;
+  return `<button type="button" class="btn btn-sm" data-checkin="${p.userId}" ${p.status !== 'confirmed' ? 'disabled' : ''}>Check-In</button>`;
 }
 
 function renderCheckoutCell(p) {
   if (p.status === 'notified') return '';
-  return `<button type="button" class="btn btn-ghost" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>`;
+  return `<button type="button" class="btn-ghost btn-sm" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>`;
 }
 
 // "Absagen" cancels two different things depending on status (an open
@@ -535,10 +586,10 @@ function renderCheckoutCell(p) {
 // exclusive per row and share the same label, so they share one column.
 function renderCancelCell(p) {
   if (p.status === 'notified') {
-    return canManageMembers ? `<button type="button" class="btn btn-ghost" data-cancel-invitation="${p.invitationId}">Absagen</button>` : '';
+    return canManageMembers ? `<button type="button" class="btn-ghost btn-sm" data-cancel-invitation="${p.invitationId}">Absagen</button>` : '';
   }
   if ((p.status === 'pending' || p.status === 'confirmed') && canOverride) {
-    return `<button type="button" class="btn btn-ghost" data-cancel="${p.userId}">Absagen</button>`;
+    return `<button type="button" class="btn-ghost btn-sm" data-cancel="${p.userId}">Absagen</button>`;
   }
   return '';
 }
@@ -548,27 +599,21 @@ function renderEditCell(p) {
   const canEditOt = canManageMembers && [...otFieldsByKey.keys()].some((key) => myAccountFields.includes(key));
   const canEditCharacters = canOverride && (p.characters ?? []).length > 0;
   if (!canEditOt && !canEditCharacters) return '';
-  return `<button type="button" class="btn-ghost" data-edit="${p.userId}">Bearbeiten</button>`;
+  return `<button type="button" class="btn-ghost btn-sm" data-edit="${p.userId}">Bearbeiten</button>`;
 }
 
 async function loadParticipants(eventId) {
   listBody.innerHTML = '<div class="grid-row"><div class="grid-cell" style="grid-column:1/-1;">Wird geladen …</div></div>';
   const participants = await api.get(`/events/${eventId}/participants`);
   participantsById = new Map(participants.map((p) => [p.userId, p]));
-  listBody.innerHTML = participants.map((p) => `<div class="grid-row" role="row">
-    <div class="grid-cell">${escapeHtml(p.name)}</div>
-    <div class="grid-cell">${escapeHtml(p.characters.map((c) => c.name).join(', '))}</div>
-    <div class="grid-cell">${renderConRoleCell(p)}</div>
-    ${renderExtraCells(p)}
-    <div class="grid-cell">${renderAmountDueCell(p)}</div>
-    <div class="grid-cell">${renderPaymentStatusCell(p)}</div>
-    <div class="grid-cell"><span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span></div>
-    <div class="grid-cell">${renderApproveCell(p)}</div>
-    <div class="grid-cell">${renderCheckinCell(p)}</div>
-    <div class="grid-cell">${renderCheckoutCell(p)}</div>
-    <div class="grid-cell">${renderCancelCell(p)}</div>
-    <div class="grid-cell">${renderEditCell(p)}</div>
-    <div class="grid-cell">${renderOverrideCell(p)}</div>
+  currentParticipants = participants;
+  renderParticipants(participants, eventId);
+}
+
+function renderParticipants(participants, eventId) {
+  const columns = visibleColumns();
+  listBody.innerHTML = participants.map((p) => `<div class="grid-row" role="row" data-search="${escapeHtml(`${p.name} ${p.characters.map((c) => c.name).join(' ')}`.toLowerCase())}">
+    ${columns.map((col) => `<div class="grid-cell ${col.cls ?? ''}">${col.render(p)}</div>`).join('')}
   </div>`).join('');
 
   statTotal.textContent = participants.length;
