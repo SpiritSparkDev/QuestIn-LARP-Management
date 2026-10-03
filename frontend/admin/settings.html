@@ -40,6 +40,7 @@
           </p>
           <div class="tabs" id="settings-tabs">
             <button type="button" class="tab-btn active" data-tab="settings-tab-allgemein">Allgemein</button>
+            <button type="button" class="tab-btn" data-tab="settings-tab-checkin">Check-In</button>
             <button type="button" class="tab-btn" data-tab="settings-tab-email">E-Mail</button>
             <button type="button" class="tab-btn" data-tab="settings-tab-zahlungen">Zahlungen</button>
             <button type="button" class="tab-btn" data-tab="settings-tab-startseite">Startseite</button>
@@ -63,7 +64,10 @@
               />
               <label for="base-url">Basis-URL</label>
               <p class="sub" id="base-url-effective-note"></p>
-              <button type="submit">Speichern</button>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
             </form>
           </div>
 
@@ -80,7 +84,10 @@
                 min="1"
               />
               <label for="invitation-ttl-days">Gültig für (Tage)</label>
-              <button type="submit">Speichern</button>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
             </form>
           </div>
           <div class="card form-pad">
@@ -90,10 +97,11 @@
               automatisch die am längsten wartende Person nach. Ist der Schalter
               aus, muss Staff im Check-In-Bereich manuell nachrücken lassen.
             </p>
-            <label
-              ><input type="checkbox" id="waitlist-auto-promote-toggle" />
+            <label class="switch-row"
+              ><input type="checkbox" class="switch" id="waitlist-auto-promote-toggle" />
               Automatisch nachrücken lassen</label
             >
+            <p class="settings-hint">Änderungen werden sofort gespeichert.</p>
           </div>
           <div class="card form-pad">
             <h2>Charaktere durchsuchen</h2>
@@ -101,10 +109,11 @@
               Schaltet die öffentliche "Charaktere anderer Spieler
               durchsuchen"-Seite für alle Nutzer ein oder aus.
             </p>
-            <label
-              ><input type="checkbox" id="character-browsing-toggle" />
+            <label class="switch-row"
+              ><input type="checkbox" class="switch" id="character-browsing-toggle" />
               Charaktere durchsuchen aktiviert</label
             >
+            <p class="settings-hint">Änderungen werden sofort gespeichert.</p>
           </div>
           <div class="card form-pad">
             <h2>Einverständniserklärung</h2>
@@ -119,15 +128,21 @@
               <textarea id="waiver-text" name="waiverText" rows="6"></textarea>
               <label for="waiver-text">Text der Einverständniserklärung</label>
               <p class="sub" id="waiver-version-note"></p>
-              <button type="submit">Speichern</button>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
             </form>
           </div>
+          </div>
+          <div class="tab-panel grid col2 settings-panel" id="settings-tab-checkin" hidden>
           <div class="card form-pad">
             <h2>Hotkeys</h2>
             <p class="sub">
               Klicke in ein Feld und drücke die gewünschte Taste. Gilt für den
               Check-In-Scanner.
             </p>
+            <p class="settings-hint">Die Taste wird sofort gespeichert.</p>
             <input id="hotkey-confirm" readonly />
             <label for="hotkey-confirm">Einchecken (im Pop-up)</label>
             <input id="hotkey-cancel" readonly />
@@ -186,7 +201,10 @@
                 placeholder="no-reply@pakyrion.local"
               />
               <label for="smtp-from">Absender-Adresse</label>
-              <button type="submit">Speichern</button>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
             </form>
           </div>
 
@@ -241,7 +259,10 @@
                 type="text"
               />
               <label for="bank-account-holder">Kontoinhaber</label>
-              <button type="submit">Speichern</button>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
             </form>
           </div>
           </div>
@@ -256,10 +277,11 @@
               <a href="/login.html" target="_blank">/login.html</a> weiterhin
               normal anmelden.
             </p>
-            <label
-              ><input type="checkbox" id="coming-soon-toggle" />
+            <label class="switch-row"
+              ><input type="checkbox" class="switch" id="coming-soon-toggle" />
               Hinweisseite aktiviert</label
             >
+            <p class="settings-hint">Änderungen werden sofort gespeichert.</p>
             <form id="coming-soon-form" style="margin-top:16px;">
               <textarea
                 id="coming-soon-message"
@@ -277,7 +299,10 @@
                 >Countdown-Ziel (optional, leer lassen für keinen
                 Countdown)</label
               >
-              <button type="submit">Speichern</button>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
             </form>
             <p class="text-center" style="margin-top:12px;">
               <a href="/coming-soon.html" target="_blank" class="btn-ghost"
@@ -294,10 +319,11 @@
               Abbuchen. Wenn aktiv, erscheint "Taverne" in der Seitenleiste
               (für Admins und Gruppen mit dem Menü "Taverne").
             </p>
-            <label
-              ><input type="checkbox" id="tavern-toggle" />
+            <label class="switch-row"
+              ><input type="checkbox" class="switch" id="tavern-toggle" />
               Tavernenkonto aktiviert</label
             >
+            <p class="settings-hint">Änderungen werden sofort gespeichert.</p>
           </div>
           <div class="card form-pad">
             <h2>Add-on: PDF-Import</h2>
@@ -305,10 +331,11 @@
               Liest ausgefüllte PDF-Anmeldeformulare ein und speichert sie.
               Wenn aktiv, erscheint "PDF-Import" in der Seitenleiste.
             </p>
-            <label
-              ><input type="checkbox" id="pdf-import-toggle" />
+            <label class="switch-row"
+              ><input type="checkbox" class="switch" id="pdf-import-toggle" />
               PDF-Import aktiviert</label
             >
+            <p class="settings-hint">Änderungen werden sofort gespeichert.</p>
           </div>
           <div class="card form-pad" id="test-mode-card">
             <h2>Test-Modus</h2>
@@ -342,7 +369,39 @@
         renderSidebarUser,
         initSidebarToggle,
       } from "/js/nav.js";
-      import { notify } from "/js/notifications.js";
+      import { notify as showToast } from "/js/notifications.js";
+
+      // Save feedback shared by every settings form: a form shows "Nicht
+      // gespeichert" as soon as a field changes and "Gespeichert" once the
+      // page reports a successful save. The handlers below all report through
+      // notify(), so wrapping it keeps them unchanged.
+      let lastSubmittedForm = null;
+      function setFormState(form, kind) {
+        const el = form.querySelector(".settings-state");
+        if (!el) return;
+        el.classList.toggle("is-dirty", kind === "dirty");
+        el.classList.toggle("is-saved", kind === "saved");
+        el.textContent = kind === "dirty" ? "Nicht gespeichert" : kind === "saved" ? "Gespeichert ✓" : "";
+        if (kind === "saved") setTimeout(() => { if (el.classList.contains("is-saved")) setFormState(form, ""); }, 4000);
+      }
+      function notify(message, type) {
+        showToast(message, type);
+        if (type === "success" && lastSubmittedForm) {
+          setFormState(lastSubmittedForm, "saved");
+          lastSubmittedForm = null;
+        }
+      }
+      document.querySelectorAll(".settings-panel form").forEach((formEl) => {
+        formEl.addEventListener("input", () => setFormState(formEl, "dirty"));
+        formEl.addEventListener("change", () => setFormState(formEl, "dirty"));
+        formEl.addEventListener("submit", () => {
+          lastSubmittedForm = formEl;
+          setTimeout(() => { if (lastSubmittedForm === formEl) lastSubmittedForm = null; }, 8000);
+        }, true);
+      });
+      window.addEventListener("beforeunload", (event) => {
+        if (document.querySelector(".settings-state.is-dirty")) event.preventDefault();
+      });
       initSidebarToggle();
 
       // Settings tabs; the open tab is kept in the URL hash so a reload (or a

@@ -65,6 +65,36 @@ function showTestModeBanner(account) {
   document.body.prepend(banner);
 }
 
+const ADMIN_OPEN_KEY = 'sidebarAdminOpen';
+
+function readAdminSectionOpen() {
+  try {
+    return localStorage.getItem(ADMIN_OPEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+// Only a click on the summary counts as the person's choice -- the `toggle`
+// event also fires when the section is rendered open because the current
+// page lives inside it, and that must not be remembered. Delegated, so it
+// keeps working however often the nav HTML is re-rendered.
+document.addEventListener('click', (event) => {
+  const summary = event.target.closest?.('.sidebar-admin > summary');
+  if (!summary) return;
+  const details = summary.parentElement;
+  // The browser flips `open` after this handler runs.
+  setTimeout(() => {
+    // Opening it near the bottom of a long nav: bring the new entries into view.
+    if (details.open) details.lastElementChild?.scrollIntoView({ block: 'nearest' });
+    try {
+      localStorage.setItem(ADMIN_OPEN_KEY, details.open ? '1' : '0');
+    } catch {
+      // Storage unavailable (private mode) -- the choice just isn't remembered.
+    }
+  }, 0);
+});
+
 export function renderNavLinks(account, currentPath) {
   showTestModeBanner(account);
   // Add-on entries (item.flag) also need the add-on switched on; admins see
@@ -72,14 +102,18 @@ export function renderNavLinks(account, currentPath) {
   const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]));
   let html = items.map((item) => renderNavItem(item, currentPath)).join('');
   
-  // A visual divider before the admin-only section -- keeps the role-gated
-  // items (everything above) and the admin-only items (everything below)
-  // visibly distinct, since both render through this same, single,
-  // role-driven function rather than any page-specific special-casing.
+  // Admin-only entries and enabled add-ons live in a collapsible
+  // "Administration" section so the sidebar stays short. It is forced open
+  // while one of its pages is current (so the highlighted entry is visible);
+  // otherwise the person's last choice is remembered.
   if (account.group.key === 'admin') {
-    html += '<hr class="sidebar-nav-divider">';
-    html += ADMIN_ONLY_LINKS.map((item) => renderNavItem(item, currentPath)).join('');
-    html += ADDON_LINKS.filter((item) => account[item.flag]).map((item) => renderNavItem(item, currentPath)).join('');
+    const adminItems = [...ADMIN_ONLY_LINKS, ...ADDON_LINKS.filter((item) => account[item.flag])];
+    const containsCurrent = adminItems.some((item) => item.href === currentPath);
+    const open = containsCurrent || readAdminSectionOpen();
+    html += `<details class="sidebar-admin"${open ? ' open' : ''}>
+      <summary><span class="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span><span>Administration</span><span class="material-symbols-outlined sidebar-admin-chevron" aria-hidden="true">expand_more</span></summary>
+      ${adminItems.map((item) => renderNavItem(item, currentPath)).join('')}
+    </details>`;
   }
   return html;
 }
