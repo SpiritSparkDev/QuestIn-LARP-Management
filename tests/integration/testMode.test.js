@@ -19,6 +19,7 @@ const { query, closePool } = await import('../../backend/db.js');
 after(async () => {
   const { removeTestData } = await import('../../backend/testMode/load.js');
   await removeTestData();
+  await query('UPDATE app_settings SET tavern_enabled = false');
   await closePool();
 });
 
@@ -46,12 +47,18 @@ test('test mode loads 75 fictional people with characters, groups and an event, 
     assert.equal((await (await fetch(`${base}/test-mode`, { headers })).json()).enabled, false);
     assert.equal((await (await fetch(`${base}/account`, { headers })).json()).testMode, false);
 
+    // With the tavern add-on on, test people also get accounts, top-ups and charges.
+    await fetch(`${base}/app-settings`, { method: 'PUT', headers, body: JSON.stringify({ tavernEnabled: true }) });
     const loaded = await fetch(`${base}/test-mode`, { method: 'POST', headers });
     assert.equal(loaded.status, 201);
     const summary = await loaded.json();
     assert.equal(summary.people, 75);
     assert.equal(summary.events, 1);
     assert.ok(summary.characters >= 75);
+    assert.equal(summary.menuItems, 16);
+    const { rows: tavern } = await query("SELECT COUNT(*) FILTER (WHERE t.type = 'topup')::int AS topups, COUNT(*) FILTER (WHERE t.type = 'charge')::int AS charges FROM tavern_transactions t JOIN tavern_accounts a ON a.id = t.account_id JOIN events e ON e.id = a.event_id WHERE e.is_test");
+    assert.ok(tavern[0].topups > 20);
+    assert.ok(tavern[0].charges > 20);
 
     assert.equal((await fetch(`${base}/test-mode`, { method: 'POST', headers })).status, 409);
     assert.equal((await (await fetch(`${base}/account`, { headers })).json()).testMode, true);
@@ -75,6 +82,8 @@ test('test mode loads 75 fictional people with characters, groups and an event, 
     assert.equal(status.events, 0);
     const { rows: stillThere } = await query('SELECT 1 FROM users WHERE id = $1', [admin.userId]);
     assert.equal(stillThere.length, 1);
+    const { rows: menuLeft } = await query('SELECT COUNT(*)::int AS n FROM tavern_items WHERE is_test');
+    assert.equal(menuLeft[0].n, 0);
     const { rows: leftover } = await query("SELECT COUNT(*)::int AS n FROM registrations r JOIN events e ON e.id = r.event_id WHERE e.name LIKE 'Testcon:%'");
     assert.equal(leftover[0].n, 0);
   });

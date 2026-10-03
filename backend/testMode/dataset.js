@@ -21,6 +21,26 @@ const LAST_NAMES = ['Falk', 'Berg', 'Wolf', 'Roth', 'Brandt', 'Vogel', 'Keller',
 const CHARACTER_FIRST = ['Aldric', 'Brienne', 'Corvin', 'Dara', 'Eldrin', 'Fenna', 'Garrick', 'Hilda', 'Ivo', 'Jorun', 'Kaelen', 'Laciel', 'Mirabel', 'Noldor', 'Orla', 'Perrin', 'Quill', 'Rhea', 'Sigmund', 'Tamsin', 'Ulric', 'Vesna', 'Wulf', 'Xandra', 'Ysolde', 'Zephyr', 'Arvid', 'Bryn', 'Caelum', 'Dorian', 'Elowen', 'Fargrim', 'Gwyn', 'Halvar', 'Isolde', 'Jarek', 'Kirsa', 'Lorcan', 'Maeve', 'Nyx', 'Osric', 'Petra', 'Rurik', 'Sunniva', 'Torin', 'Una', 'Valdis', 'Wren', 'Yorick', 'Zora', 'Alaric', 'Bertram', 'Cinder', 'Dunstan', 'Edda', 'Frode', 'Gisela', 'Hakon', 'Ilse', 'Jasper', 'Katla', 'Leif', 'Morwen', 'Nerys', 'Odo', 'Pelia', 'Ragna', 'Sten', 'Thessaly', 'Uther', 'Vigdis', 'Wystan', 'Ylva', 'Zeno', 'Astrid', 'Bruno', 'Cora'];
 const CHARACTER_EPITHETS = ['Nachtwind', 'Eisenhand', 'Silberzunge', 'Aschenbart', 'Rabenfeder', 'Dornenherz', 'Sturmfels', 'Goldkehle', 'Nebelschritt', 'Wolfsblut', 'Eichenschild', 'Funkenflug', 'Mondschatten', 'Kupferkessel', 'Tannenwacht'];
 
+// Sample drinks menu (Getränkekarte) for the tavern add-on, prices in cents.
+export const TEST_MENU = [
+  { category: 'Bier', name: 'Helles 0,5 l', priceCents: 350 },
+  { category: 'Bier', name: 'Weizen 0,5 l', priceCents: 400 },
+  { category: 'Bier', name: 'Dunkles 0,5 l', priceCents: 400 },
+  { category: 'Met', name: 'Met 0,25 l', priceCents: 450 },
+  { category: 'Met', name: 'Honigwein, warm 0,25 l', priceCents: 500 },
+  { category: 'Wein', name: 'Würzwein 0,25 l', priceCents: 400 },
+  { category: 'Wein', name: 'Rotwein 0,2 l', priceCents: 450 },
+  { category: 'Wein', name: 'Weißwein 0,2 l', priceCents: 450 },
+  { category: 'Schnaps', name: 'Kräuterlikör 2 cl', priceCents: 300 },
+  { category: 'Alkoholfrei', name: 'Apfelschorle 0,4 l', priceCents: 250 },
+  { category: 'Alkoholfrei', name: 'Wasser 0,4 l', priceCents: 150 },
+  { category: 'Alkoholfrei', name: 'Kräutertee', priceCents: 200 },
+  { category: 'Speisen', name: 'Brot & Käse', priceCents: 600 },
+  { category: 'Speisen', name: 'Eintopf', priceCents: 700 },
+  { category: 'Speisen', name: 'Bratwurst im Brot', priceCents: 450 },
+  { category: 'Speisen', name: 'Kuchenstück', priceCents: 300 },
+];
+
 export const GROUPS = [
   { name: 'Haus Falkenstein', size: 6 },
   { name: 'Die Rabenschar', size: 5 },

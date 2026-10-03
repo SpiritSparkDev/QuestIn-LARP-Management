@@ -342,7 +342,8 @@
             <p class="sub">
               Lädt einen fiktiven Datensatz: 75 Personen (einige in Gruppen,
               die meisten einzeln) mit Charakteren, Anmeldungen in
-              verschiedenen Status und ein fiktives Event. Alles ist als
+              verschiedenen Status, ein fiktives Event und eine Beispiel-
+              Getränkekarte für das Tavernenkonto. Alles ist als
               Testdaten markiert und lässt sich mit einem Klick wieder
               vollständig entfernen – echte Daten bleiben unberührt. Die
               Testpersonen können sich nicht einloggen und erhalten keine
@@ -634,7 +635,7 @@
       async function refreshTestMode() {
         const status = await api.get("/test-mode");
         document.getElementById("test-mode-status").textContent = status.enabled
-          ? `Testdaten sind geladen: ${status.people} Personen, ${status.characters} Charaktere, ${status.events} Event.`
+          ? `Testdaten sind geladen: ${status.people} Personen, ${status.characters} Charaktere, ${status.events} Event, ${status.menuItems ?? 0} Getränkekarten-Artikel.`
           : "Es sind keine Testdaten geladen.";
         document.getElementById("test-mode-load").hidden = status.enabled;
         document.getElementById("test-mode-remove").hidden = !status.enabled;

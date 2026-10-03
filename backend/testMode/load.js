@@ -7,8 +7,8 @@ import { getAppSettings } from '../appSettings/repository.js';
 import { encryptFieldBlob } from '../accountFields.js';
 import { encryptFieldBlob as encryptRegistrationBlob } from '../registrationFields.js';
 import { createCharacter } from '../characters/repository.js';
-import { createAccount as createTavernAccount, topUp as tavernTopUp } from '../tavern/repository.js';
-import { buildTestDataset } from './dataset.js';
+import { createAccount as createTavernAccount, topUp as tavernTopUp, charge as tavernCharge } from '../tavern/repository.js';
+import { buildTestDataset, TEST_MENU } from './dataset.js';
 
 function testModeError(message, code) {
   const err = new Error(message);
@@ -79,10 +79,11 @@ export async function getTestModeStatus() {
     `SELECT (SELECT COUNT(*)::int FROM users WHERE is_test) AS people,
             (SELECT COUNT(*)::int FROM events WHERE is_test) AS events,
             (SELECT COUNT(*)::int FROM characters c JOIN users u ON u.id = c.user_id WHERE u.is_test) AS characters,
+            (SELECT COUNT(*)::int FROM tavern_items WHERE is_test) AS menu_items,
             COALESCE((SELECT test_mode_enabled FROM app_settings LIMIT 1), false) AS enabled`
   );
   const r = rows[0];
-  return { enabled: r.enabled || r.people > 0 || r.events > 0, people: r.people, events: r.events, characters: r.characters };
+  return { enabled: r.enabled || r.people > 0 || r.events > 0, people: r.people, events: r.events, characters: r.characters, menuItems: r.menu_items };
 }
 
 export async function isTestModeEnabled() {
@@ -166,11 +167,29 @@ export async function loadTestData() {
       if (p.status === 'waitlisted') waitlistPosition += 1;
     }
 
-    // Tavern accounts for every other participant, when that add-on is on.
+    // Sample drinks menu: always created (it is just data), so it is there
+    // as soon as the tavern add-on is switched on.
+    const menuItemIds = [];
+    for (const [order, item] of TEST_MENU.entries()) {
+      const { rows } = await query(
+        'INSERT INTO tavern_items (name, category, price_cents, sort_order, is_test) VALUES ($1, $2, $3, $4, true) RETURNING id',
+        [item.name, item.category, item.priceCents, order]
+      );
+      menuItemIds.push(rows[0].id);
+    }
+
+    // Tavern accounts for every other participant, when that add-on is on:
+    // a top-up, then a round or two from the sample menu.
     if (settings.tavernEnabled) {
       for (const p of dataset.persons.filter((x) => x.index % 2 === 0 && x.status !== 'cancelled')) {
         const account = await createTavernAccount({ eventId, userId: userIdByIndex.get(p.index) });
         await tavernTopUp(account.id, { amountCents: 1000 + (p.index % 5) * 500, method: p.index % 4 === 0 ? 'card' : 'cash' });
+        for (let round = 0; round <= p.index % 3; round += 1) {
+          const itemId = menuItemIds[(p.index + round * 5) % menuItemIds.length];
+          await tavernCharge(account.id, { items: [{ itemId, quantity: 1 + (round % 2) }] }).catch((err) => {
+            if (err.code !== 'INSUFFICIENT_FUNDS') throw err;
+          });
+        }
       }
     }
 
@@ -188,6 +207,7 @@ export async function loadTestData() {
 export async function removeTestData() {
   await withTransaction(async (client) => {
     await client.query('DELETE FROM events WHERE is_test');
+    await client.query('DELETE FROM tavern_items WHERE is_test');
     await client.query('DELETE FROM users WHERE is_test');
   });
   await setTestModeFlag(false);
