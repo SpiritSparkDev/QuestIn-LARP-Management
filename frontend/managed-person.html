@@ -614,10 +614,17 @@
       return collectAccountFieldValues(otFieldsContainer, registrationSchema);
     }
 
+    // Characters already bound to an event stay listed (disabled, with the
+    // event named) so they don't look like they're missing.
+    function scCharacterOption(c) {
+      if (!c.registeredFor) return `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`;
+      return `<option value="${escapeHtml(c.id)}" disabled>${escapeHtml(c.name)} – angemeldet für ${escapeHtml(c.registeredFor.eventName)}</option>`;
+    }
+
     function populateRegistrationCharacterFields() {
-      const matchingSc = characters.filter((c) => c.class === "sc" && !c.registeredFor);
-      characterSelect.innerHTML = ['<option value="">Bitte wählen</option>'].concat(matchingSc.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`)).join("");
-      const hasNone = matchingSc.length === 0;
+      const scCharacters = characters.filter((c) => c.class === "sc");
+      characterSelect.innerHTML = ['<option value="">Bitte wählen</option>'].concat(scCharacters.map(scCharacterOption)).join("");
+      const hasNone = scCharacters.length === 0;
       document.getElementById("no-character-hint").style.display = hasNone ? "" : "none";
       characterSelect.style.display = hasNone ? "none" : "";
       document.getElementById("character-select-label").style.display = hasNone ? "none" : "";
