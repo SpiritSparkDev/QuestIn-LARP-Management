@@ -2860,3 +2860,251 @@ select.suggested {
     margin-top: 10px;
   }
 }
+
+/* ---------- Tavernenkonto ---------- */
+.tavern-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  margin: 12px 0 20px;
+}
+
+.tavern-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-height: 64px;
+  cursor: pointer;
+}
+
+.tavern-result:hover {
+  border-color: var(--primary);
+  background: var(--surface-container-low);
+}
+
+.tavern-result-number {
+  flex: none;
+  min-width: 44px;
+  text-align: center;
+  font-family: "EB Garamond", Georgia, serif;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--primary-deep);
+}
+
+.tavern-result-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tavern-result-balance {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tavern-result-balance.is-empty,
+.tavern-balance.is-empty {
+  color: var(--error);
+}
+
+.tavern-account-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.tavern-balance-box {
+  text-align: right;
+}
+
+.tavern-balance {
+  font-family: "EB Garamond", Georgia, serif;
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--primary-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.tavern-cat {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+
+.tavern-tile-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.tavern-tile {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-container-lowest);
+  overflow: hidden;
+}
+
+.tavern-tile.has-qty {
+  border-color: var(--primary);
+  background: var(--primary-container);
+}
+
+.tavern-tile-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 64px;
+  padding: 12px;
+  background: none;
+  color: var(--on-surface);
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+}
+
+.tavern-tile-main:hover {
+  background: transparent;
+  color: var(--on-surface);
+}
+
+.tavern-tile-main span {
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+
+.tavern-qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.tavern-qty button {
+  flex: 1;
+  min-height: 44px;
+  font-size: 22px;
+  border-radius: 0;
+}
+
+.tavern-qty span {
+  min-width: 36px;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tavern-custom,
+.tavern-topup {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px 16px;
+  margin-top: 12px;
+}
+
+.tavern-total-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin: 14px -4px 8px;
+  padding: 12px 4px;
+  background: var(--surface-container-lowest);
+  border-top: 1px solid var(--outline-variant);
+}
+
+.tavern-total-bar strong {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tavern-total-bar .error {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.tavern-actions,
+.tavern-quick {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tavern-quick button {
+  min-width: 72px;
+  min-height: 48px;
+}
+
+.tavern-entry {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.tavern-entry > div:first-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.tavern-entry.is-voided {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.tavern-entry-amount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--success);
+}
+
+.tavern-entry-amount.is-neg {
+  color: var(--error);
+}
+
+@media (max-width: 700px) {
+  .tavern-balance-box {
+    text-align: left;
+  }
+
+  .tavern-tile-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tavern-actions button,
+  #topup-submit {
+    flex: 1;
+  }
+}
+
+.tavern-dash {
+  margin-top: 16px;
+}
+
+.tavern-dash-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}

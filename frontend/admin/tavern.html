@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taverne – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Taverne</span></div>
+      </div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
+    <h1>Taverne</h1>
+    <select id="event-select"></select>
+    <label for="event-select">Event</label>
+
+    <div class="tabs" id="tavern-tabs">
+      <button type="button" class="tab-btn active" data-tab="pos-tab">Kasse</button>
+      <button type="button" class="tab-btn" data-tab="accounts-tab">Konten</button>
+      <button type="button" class="tab-btn" data-tab="menu-tab">Getränkekarte</button>
+    </div>
+
+    <!-- ===== Kasse ===== -->
+    <div class="tab-panel" id="pos-tab">
+      <div class="search-wrap"><input class="search" id="account-search" placeholder="Nummer, Name oder Charakter …" autocomplete="off"></div>
+      <div id="account-results" class="tavern-results"></div>
+
+      <div class="card form-pad" id="account-panel" hidden>
+        <div class="tavern-account-head">
+          <div>
+            <p class="eyebrow" id="account-number"></p>
+            <h2 id="account-name"></h2>
+            <p class="sub" id="account-names"></p>
+          </div>
+          <div class="tavern-balance-box">
+            <div class="stat-label">Guthaben</div>
+            <div class="tavern-balance" id="account-balance"></div>
+            <span class="status-pill status-cancelled" id="account-locked" hidden>Gesperrt</span>
+          </div>
+        </div>
+
+        <h3>Abbuchen</h3>
+        <div id="menu-tiles" class="tavern-tiles"></div>
+        <p class="sub" id="menu-empty" hidden>Noch keine Getränkekarte angelegt – unter „Getränkekarte“ Artikel hinzufügen.</p>
+        <div class="tavern-custom">
+          <div>
+            <input id="custom-amount" type="number" min="0" step="0.10" inputmode="decimal" placeholder="0,00">
+            <label for="custom-amount">Sonstiger Betrag (€)</label>
+          </div>
+        </div>
+        <div class="tavern-total-bar">
+          <div><span class="stat-label">Summe</span> <strong id="cart-total">0,00 €</strong></div>
+          <p class="error" id="cart-warning" hidden></p>
+          <div class="tavern-actions">
+            <button type="button" id="cart-clear" class="btn-ghost">Leeren</button>
+            <button type="button" id="cart-charge">Abbuchen</button>
+          </div>
+        </div>
+
+        <h3>Aufladen</h3>
+        <div class="tavern-quick" id="topup-quick">
+          <button type="button" class="btn-secondary" data-amount="5">5 €</button>
+          <button type="button" class="btn-secondary" data-amount="10">10 €</button>
+          <button type="button" class="btn-secondary" data-amount="20">20 €</button>
+          <button type="button" class="btn-secondary" data-amount="50">50 €</button>
+        </div>
+        <div class="tavern-topup">
+          <div>
+            <input id="topup-amount" type="number" min="0" step="0.10" inputmode="decimal" placeholder="0,00">
+            <label for="topup-amount">Betrag (€)</label>
+          </div>
+          <div>
+            <select id="topup-method">
+              <option value="cash">Bar</option>
+              <option value="card">Karte</option>
+              <option value="paypal">PayPal</option>
+              <option value="bank_transfer">Überweisung</option>
+            </select>
+            <label for="topup-method">Zahlungsart</label>
+          </div>
+        </div>
+        <button type="button" id="topup-submit">Aufladen</button>
+
+        <h3>Verlauf</h3>
+        <div id="history"></div>
+
+        <div class="event-form-actions">
+          <button type="button" id="lock-toggle" class="btn-ghost"></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Konten ===== -->
+    <div class="tab-panel" id="accounts-tab" hidden>
+      <div class="card form-pad">
+        <h2>Neues Konto</h2>
+        <p class="sub">Eine angemeldete Person verknüpfen (dann findet man das Konto auch über OT- und IT-Namen) oder ein Konto ohne Anmeldung für Laufkundschaft anlegen.</p>
+        <input class="search" id="participant-search" placeholder="Angemeldete Person suchen (Name oder Charakter) …" autocomplete="off">
+        <div id="participant-results" class="tavern-results"></div>
+        <div class="tavern-topup">
+          <div>
+            <input id="walkin-label" type="text" placeholder="z.B. Händler am Tor">
+            <label for="walkin-label">Bezeichnung (ohne Person)</label>
+          </div>
+          <div><button type="button" id="walkin-create">Konto anlegen</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-scroll">
+          <table id="accounts-table">
+            <thead><tr><th>Nr.</th><th>Name</th><th>Charaktere</th><th>Guthaben</th><th>Status</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Getränkekarte ===== -->
+    <div class="tab-panel" id="menu-tab" hidden>
+      <div class="card form-pad">
+        <h2>Artikel hinzufügen</h2>
+        <div class="tavern-topup">
+          <div><input id="new-item-name" type="text"><label for="new-item-name">Name</label></div>
+          <div><input id="new-item-category" type="text" placeholder="z.B. Bier, Met, Speisen"><label for="new-item-category">Kategorie</label></div>
+          <div><input id="new-item-price" type="number" min="0" step="0.10" inputmode="decimal"><label for="new-item-price">Preis (€)</label></div>
+        </div>
+        <button type="button" id="new-item-add">Hinzufügen</button>
+      </div>
+      <div class="card">
+        <div class="table-scroll">
+          <table id="items-table">
+            <thead><tr><th>Name</th><th>Kategorie</th><th>Preis (€)</th><th>Aktiv</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
+applyBranding();
+import { escapeHtml, renderEventOptions } from '/js/formFields.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
+initSidebarToggle();
+
+const METHOD_LABELS = { cash: 'Bar', card: 'Karte', paypal: 'PayPal', bank_transfer: 'Überweisung' };
+
+const eventSelect = document.getElementById('event-select');
+let items = [];
+let currentAccount = null;
+let currentTransactions = [];
+let cart = new Map(); // itemId -> quantity
+
+const euro = (cents) => `${(cents / 100).toFixed(2).replace('.', ',')} €`;
+const toCents = (text) => Math.round(Number(String(text).replace(',', '.')) * 100);
+const debounce = (fn, ms = 250) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+// ---- tabs ----
+document.querySelectorAll('#tavern-tabs .tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tavern-tabs .tab-btn').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+      document.getElementById(b.dataset.tab).hidden = b !== btn;
+    });
+    if (btn.dataset.tab === 'accounts-tab') loadAccountsTable();
+  });
+});
+
+// ---- account search (Kasse) ----
+function accountCard(a) {
+  const names = [a.otName && a.label ? a.label : null, ...a.characterNames].filter(Boolean).join(' · ');
+  return `<button type="button" class="tavern-result" data-account="${escapeHtml(a.id)}">
+    <span class="tavern-result-number">${a.number}</span>
+    <span class="tavern-result-text"><strong>${escapeHtml(a.displayName)}</strong><span class="sub">${escapeHtml(names)}</span></span>
+    <span class="tavern-result-balance ${a.balanceCents <= 0 ? 'is-empty' : ''}">${euro(a.balanceCents)}</span>
+    ${a.locked ? '<span class="status-pill status-cancelled">Gesperrt</span>' : ''}
+  </button>`;
+}
+
+async function searchAccounts() {
+  const q = document.getElementById('account-search').value.trim();
+  const accounts = await api.get(`/tavern/accounts?eventId=${encodeURIComponent(eventSelect.value)}&q=${encodeURIComponent(q)}`);
+  const box = document.getElementById('account-results');
+  box.innerHTML = accounts.length
+    ? accounts.map(accountCard).join('')
+    : '<p class="sub">Kein Konto gefunden. Unter „Konten“ lässt sich eines anlegen.</p>';
+  box.querySelectorAll('[data-account]').forEach((b) => b.addEventListener('click', () => openAccount(b.dataset.account)));
+}
+document.getElementById('account-search').addEventListener('input', debounce(searchAccounts));
+
+// ---- account panel ----
+async function openAccount(id) {
+  const detail = await api.get(`/tavern/accounts/${id}`);
+  showAccount(detail);
+  document.getElementById('account-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function showAccount({ account, transactions }) {
+  if (!currentAccount || currentAccount.id !== account.id) cart = new Map();
+  currentAccount = account;
+  currentTransactions = transactions;
+  document.getElementById('account-panel').hidden = false;
+  document.getElementById('account-number').textContent = `Tavernen-Nr. ${account.number}`;
+  document.getElementById('account-name').textContent = account.displayName;
+  document.getElementById('account-names').textContent = [account.characterNames.length ? `IT: ${account.characterNames.join(', ')}` : '', account.label && account.otName ? account.label : ''].filter(Boolean).join(' · ');
+  const balance = document.getElementById('account-balance');
+  balance.textContent = euro(account.balanceCents);
+  balance.classList.toggle('is-empty', account.balanceCents <= 0);
+  document.getElementById('account-locked').hidden = !account.locked;
+  document.getElementById('lock-toggle').textContent = account.locked ? 'Konto entsperren' : 'Konto sperren';
+  renderTiles();
+  renderCart();
+  renderHistory();
+}
+
+function renderTiles() {
+  const active = items.filter((i) => i.active);
+  document.getElementById('menu-empty').hidden = active.length > 0;
+  const categories = [...new Set(active.map((i) => i.category ?? ''))];
+  document.getElementById('menu-tiles').innerHTML = categories.map((cat) => `
+    ${cat ? `<h4 class="tavern-cat">${escapeHtml(cat)}</h4>` : ''}
+    <div class="tavern-tile-row">${active.filter((i) => (i.category ?? '') === cat).map((i) => `
+      <div class="tavern-tile ${cart.get(i.id) ? 'has-qty' : ''}">
+        <button type="button" class="tavern-tile-main" data-add="${escapeHtml(i.id)}">
+          <strong>${escapeHtml(i.name)}</strong><span>${euro(i.priceCents)}</span>
+        </button>
+        <div class="tavern-qty">
+          <button type="button" class="btn-ghost" data-sub="${escapeHtml(i.id)}" aria-label="Weniger">−</button>
+          <span>${cart.get(i.id) ?? 0}</span>
+          <button type="button" class="btn-ghost" data-add="${escapeHtml(i.id)}" aria-label="Mehr">+</button>
+        </div>
+      </div>`).join('')}</div>`).join('');
+  document.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => changeQty(b.dataset.add, 1)));
+  document.querySelectorAll('[data-sub]').forEach((b) => b.addEventListener('click', () => changeQty(b.dataset.sub, -1)));
+}
+
+function changeQty(itemId, delta) {
+  const next = Math.max(0, Math.min(99, (cart.get(itemId) ?? 0) + delta));
+  if (next === 0) cart.delete(itemId); else cart.set(itemId, next);
+  renderTiles();
+  renderCart();
+}
+
+function cartTotalCents() {
+  let total = 0;
+  for (const [itemId, qty] of cart) total += (items.find((i) => i.id === itemId)?.priceCents ?? 0) * qty;
+  const custom = toCents(document.getElementById('custom-amount').value || 0);
+  return total + (custom > 0 ? custom : 0);
+}
+
+function renderCart() {
+  const total = cartTotalCents();
+  document.getElementById('cart-total').textContent = euro(total);
+  const warning = document.getElementById('cart-warning');
+  let blocked = total <= 0;
+  warning.hidden = true;
+  if (currentAccount?.locked) { warning.textContent = 'Konto ist gesperrt.'; warning.hidden = false; blocked = true; }
+  else if (total > (currentAccount?.balanceCents ?? 0)) { warning.textContent = `Guthaben reicht nicht aus (fehlen ${euro(total - currentAccount.balanceCents)}).`; warning.hidden = false; blocked = true; }
+  document.getElementById('cart-charge').disabled = blocked;
+}
+
+document.getElementById('custom-amount').addEventListener('input', renderCart);
+document.getElementById('cart-clear').addEventListener('click', () => {
+  cart = new Map();
+  document.getElementById('custom-amount').value = '';
+  renderTiles();
+  renderCart();
+});
+
+document.getElementById('cart-charge').addEventListener('click', async () => {
+  const custom = toCents(document.getElementById('custom-amount').value || 0);
+  try {
+    const result = await api.post(`/tavern/accounts/${currentAccount.id}/charge`, {
+      items: [...cart].map(([itemId, quantity]) => ({ itemId, quantity })),
+      ...(custom > 0 ? { customAmountCents: custom } : {}),
+    });
+    cart = new Map();
+    document.getElementById('custom-amount').value = '';
+    showAccount(result);
+    notify('Abgebucht.', 'success');
+    searchAccounts();
+  } catch (err) {
+    notify(err.message, 'error');
+    openAccount(currentAccount.id);
+  }
+});
+
+// ---- top-up ----
+document.querySelectorAll('#topup-quick [data-amount]').forEach((b) => {
+  b.addEventListener('click', () => { document.getElementById('topup-amount').value = b.dataset.amount; });
+});
+
+document.getElementById('topup-submit').addEventListener('click', async () => {
+  const amountCents = toCents(document.getElementById('topup-amount').value || 0);
+  if (!(amountCents > 0)) { notify('Bitte einen Betrag eingeben.', 'error'); return; }
+  try {
+    const result = await api.post(`/tavern/accounts/${currentAccount.id}/topup`, { amountCents, method: document.getElementById('topup-method').value });
+    document.getElementById('topup-amount').value = '';
+    showAccount(result);
+    notify(`${euro(amountCents)} aufgeladen.`, 'success');
+    searchAccounts();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+// ---- history / storno / lock ----
+function describeEntry(t) {
+  if (t.type === 'topup') return `Aufladung (${METHOD_LABELS[t.method] ?? t.method ?? '–'})`;
+  if (t.type === 'void') return 'Storno';
+  return (t.items ?? []).map((i) => `${i.quantity}× ${i.name}`).join(', ') || 'Abbuchung';
+}
+
+function renderHistory() {
+  const box = document.getElementById('history');
+  box.innerHTML = currentTransactions.length ? currentTransactions.map((t) => `
+    <div class="tavern-entry ${t.voidedAt ? 'is-voided' : ''}">
+      <div><strong>${escapeHtml(describeEntry(t))}</strong><span class="sub">${escapeHtml(new Date(t.createdAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}${t.voidedAt ? ' · storniert' : ''}</span></div>
+      <div class="tavern-entry-amount ${t.amountCents < 0 ? 'is-neg' : ''}">${t.amountCents > 0 ? '+' : ''}${euro(t.amountCents)}</div>
+      ${t.type !== 'void' && !t.voidedAt ? `<button type="button" class="btn-ghost btn-sm" data-void="${escapeHtml(t.id)}">Storno</button>` : '<span></span>'}
+    </div>`).join('') : '<p class="sub">Noch keine Buchungen.</p>';
+  box.querySelectorAll('[data-void]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Diese Buchung wirklich stornieren?')) return;
+    try {
+      await api.post(`/tavern/transactions/${b.dataset.void}/void`, {});
+      openAccount(currentAccount.id);
+      searchAccounts();
+    } catch (err) {
+      notify(err.message, 'error');
+    }
+  }));
+}
+
+document.getElementById('lock-toggle').addEventListener('click', async () => {
+  try {
+    await api.put(`/tavern/accounts/${currentAccount.id}/lock`, { locked: !currentAccount.locked });
+    await openAccount(currentAccount.id);
+    searchAccounts();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+// ---- Konten tab ----
+async function loadAccountsTable() {
+  const accounts = await api.get(`/tavern/accounts?eventId=${encodeURIComponent(eventSelect.value)}`);
+  const tbody = document.querySelector('#accounts-table tbody');
+  tbody.innerHTML = accounts.length ? accounts.map((a) => `<tr>
+    <td>${a.number}</td>
+    <td>${escapeHtml(a.displayName)}</td>
+    <td>${escapeHtml(a.characterNames.join(', '))}</td>
+    <td>${euro(a.balanceCents)}</td>
+    <td>${a.locked ? 'Gesperrt' : ''}</td>
+  </tr>`).join('') : '<tr><td colspan="5" class="sub">Noch keine Konten für dieses Event.</td></tr>';
+}
+
+async function searchParticipants() {
+  const q = document.getElementById('participant-search').value.trim();
+  const people = await api.get(`/tavern/participants?eventId=${encodeURIComponent(eventSelect.value)}&q=${encodeURIComponent(q)}`);
+  const box = document.getElementById('participant-results');
+  box.innerHTML = people.map((p) => `<button type="button" class="tavern-result" data-person="${escapeHtml(p.userId)}">
+    <span class="tavern-result-text"><strong>${escapeHtml(p.name)}</strong><span class="sub">${escapeHtml(p.characterNames.join(' · '))}</span></span>
+    <span class="tavern-result-balance">Konto anlegen</span>
+  </button>`).join('') || '<p class="sub">Keine angemeldete Person ohne Konto gefunden.</p>';
+  box.querySelectorAll('[data-person]').forEach((b) => b.addEventListener('click', () => createAccount({ userId: b.dataset.person })));
+}
+document.getElementById('participant-search').addEventListener('input', debounce(searchParticipants));
+
+async function createAccount(body) {
+  try {
+    const account = await api.post('/tavern/accounts', { eventId: eventSelect.value, ...body });
+    notify(`Konto ${account.number} angelegt.`, 'success');
+    document.getElementById('walkin-label').value = '';
+    document.getElementById('participant-search').value = '';
+    document.getElementById('participant-results').innerHTML = '';
+    loadAccountsTable();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+}
+document.getElementById('walkin-create').addEventListener('click', () => {
+  const label = document.getElementById('walkin-label').value.trim();
+  if (!label) { notify('Bitte eine Bezeichnung eingeben.', 'error'); return; }
+  createAccount({ label });
+});
+
+// ---- Getränkekarte tab ----
+async function loadItems() {
+  items = await api.get('/tavern/items');
+  const tbody = document.querySelector('#items-table tbody');
+  tbody.innerHTML = items.length ? items.map((i) => `<tr data-item-row="${escapeHtml(i.id)}">
+    <td><input type="text" data-field="name" value="${escapeHtml(i.name)}"></td>
+    <td><input type="text" data-field="category" value="${escapeHtml(i.category ?? '')}"></td>
+    <td><input type="number" min="0" step="0.10" inputmode="decimal" data-field="price" value="${(i.priceCents / 100).toFixed(2)}"></td>
+    <td><input type="checkbox" data-field="active" ${i.active ? 'checked' : ''}></td>
+    <td><button type="button" class="btn-sm" data-save-item="${escapeHtml(i.id)}">Speichern</button> <button type="button" class="btn-sm btn-ghost" data-delete-item="${escapeHtml(i.id)}">Löschen</button></td>
+  </tr>`).join('') : '<tr><td colspan="5" class="sub">Noch keine Artikel.</td></tr>';
+  tbody.querySelectorAll('[data-save-item]').forEach((b) => b.addEventListener('click', async () => {
+    const row = b.closest('tr');
+    const field = (name) => row.querySelector(`[data-field="${name}"]`);
+    try {
+      await api.put(`/tavern/items/${b.dataset.saveItem}`, {
+        name: field('name').value, category: field('category').value || null,
+        priceCents: toCents(field('price').value), active: field('active').checked,
+      });
+      notify('Gespeichert.', 'success');
+      await loadItems();
+    } catch (err) { notify(err.message, 'error'); }
+  }));
+  tbody.querySelectorAll('[data-delete-item]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Artikel wirklich löschen? Bereits gebuchte Abbuchungen bleiben unverändert.')) return;
+    try { await api.delete(`/tavern/items/${b.dataset.deleteItem}`); await loadItems(); } catch (err) { notify(err.message, 'error'); }
+  }));
+}
+
+document.getElementById('new-item-add').addEventListener('click', async () => {
+  const name = document.getElementById('new-item-name').value.trim();
+  const price = document.getElementById('new-item-price').value;
+  if (!name || price === '') { notify('Name und Preis sind nötig.', 'error'); return; }
+  try {
+    await api.post('/tavern/items', { name, category: document.getElementById('new-item-category').value.trim() || null, priceCents: toCents(price) });
+    ['new-item-name', 'new-item-category', 'new-item-price'].forEach((id) => { document.getElementById(id).value = ''; });
+    await loadItems();
+    notify('Artikel hinzugefügt.', 'success');
+  } catch (err) { notify(err.message, 'error'); }
+});
+
+eventSelect.addEventListener('change', () => {
+  currentAccount = null;
+  document.getElementById('account-panel').hidden = true;
+  searchAccounts();
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  const events = await api.get('/events');
+  eventSelect.innerHTML = renderEventOptions(events);
+  const active = events.find((e) => e.is_active);
+  if (active) eventSelect.value = active.id;
+  await loadItems();
+  if (events.length > 0) await searchAccounts();
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else notify(err.status === 404 ? 'Das Tavernenkonto ist nicht aktiviert.' : err.message, 'error');
+} finally {
+  hideLoading();
+}
+</script>
+</body>
+</html>

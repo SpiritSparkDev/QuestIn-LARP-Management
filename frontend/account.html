@@ -53,6 +53,8 @@
 
               <div class="card" id="dashboard-event-card"></div>
 
+              <div class="card tavern-dash" id="dashboard-tavern-card" hidden></div>
+
               <dialog id="event-info-dialog">
                 <h3 id="event-info-title"></h3>
                 <p id="event-info-body" class="event-info-body"></p>
@@ -542,6 +544,27 @@
       document.getElementById("event-info-title").textContent = title;
       document.getElementById("event-info-body").textContent = text;
       eventInfoDialog.showModal();
+    }
+
+    // Self-service balance of the Tavernenkonto add-on: shown only when the
+    // add-on is on and the person has an account for the active event.
+    async function renderDashboardTavernCard() {
+      const card = document.getElementById("dashboard-tavern-card");
+      try {
+        const accounts = await api.get("/tavern/my-balance");
+        const active = accounts.find((a) => a.isActive);
+        if (!active) { card.hidden = true; return; }
+        const euro = `${(active.balanceCents / 100).toFixed(2).replace(".", ",")} €`;
+        card.innerHTML = `<p class="eyebrow">Tavernenkonto</p>
+          <div class="tavern-dash-row">
+            <div><div class="tavern-balance ${active.balanceCents <= 0 ? "is-empty" : ""}">${escapeHtml(euro)}</div>
+            <p class="sub">Guthaben · Tavernen-Nr. ${active.number}</p></div>
+            ${active.locked ? '<span class="status-pill status-cancelled">Gesperrt</span>' : ""}
+          </div>`;
+        card.hidden = false;
+      } catch {
+        card.hidden = true;
+      }
     }
 
     function renderDashboardEventCard() {
@@ -1059,6 +1082,7 @@
         notify("Gespeichert.", "success");
         managedPersonDialog.close();
         await loadManagedPersons();
+      renderDashboardTavernCard();
       } catch (err) {
         notify(err.message, "error");
       }
