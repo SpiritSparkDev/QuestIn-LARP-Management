@@ -406,14 +406,27 @@ h1, h2, h3 {
 
 .sidebar-brand-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
 }
 
+/* The logo sits above the title and takes the full width the sidebar allows
+   (!important wins over the width branding.js measures from the title). */
 .sidebar-brand-row .brand-seal {
-  height: 36px;
-  width: 36px !important;
+  width: 100% !important;
+  height: auto;
+  max-height: 180px;
   flex: none;
+}
+
+.sidebar-brand-row .brand-seal img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .sidebar-brand {
