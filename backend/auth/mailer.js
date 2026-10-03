@@ -137,3 +137,11 @@ export async function sendEventDeletedEmail(to, { eventName, userId }, { transpo
   }), { userId, extra: { eventName } });
   return deliver(transporter, from, to, rendered);
 }
+
+export async function sendPdfImportReceivedEmail(to, { name }, { transporter, from }) {
+  const rendered = await renderSlotEmail('pdf_import_received', () => ({
+    subject: 'Deine Anmeldung ist eingegangen',
+    body: `Hallo ${name}, deine Anmeldung per PDF ist bei uns eingegangen. Wir melden uns, sobald sie bearbeitet wurde.`,
+  }), { extra: { name } });
+  return deliver(transporter, from, to, rendered);
+}

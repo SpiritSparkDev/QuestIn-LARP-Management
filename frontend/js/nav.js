@@ -26,6 +26,12 @@ const ADMIN_ONLY_LINKS = [
   { label: 'Speicher', href: '/admin/storage.html', icon: 'storage' },
 ];
 
+// Opt-in add-ons (switched on under Einstellungen); `flag` is the /account
+// property that says whether the add-on is enabled.
+const ADDON_LINKS = [
+  { flag: 'pdfImportEnabled', label: 'PDF-Import', href: '/admin/pdf-import.html', icon: 'picture_as_pdf' },
+];
+
 function renderNavItem({ href, label, icon }, currentPath) {
   const current = href === currentPath ? 'sidebar-nav-item current' : 'sidebar-nav-item';
   return `<a href="${href}" class="${current}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span></a>`;
@@ -42,6 +48,7 @@ export function renderNavLinks(account, currentPath) {
   if (account.group.key === 'admin') {
     html += '<hr class="sidebar-nav-divider">';
     html += ADMIN_ONLY_LINKS.map((item) => renderNavItem(item, currentPath)).join('');
+    html += ADDON_LINKS.filter((item) => account[item.flag]).map((item) => renderNavItem(item, currentPath)).join('');
   }
   return html;
 }

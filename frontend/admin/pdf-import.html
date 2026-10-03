@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF-Import – Pakyrion Admin</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
+    <h1>PDF-Import</h1>
+    <p class="sub">Liest ausgefüllte PDF-Anmeldeformulare ein. Einmal die Felder der Vorlage den App-Feldern zuordnen, danach landen alle weiteren PDFs automatisch in der Datenbank.</p>
+
+    <div class="card form-pad" id="disabled-hint" hidden>
+      <h2>Add-on nicht aktiviert</h2>
+      <p class="sub">Der PDF-Import ist ausgeschaltet. Du kannst ihn unter <a href="/admin/settings.html">Einstellungen</a> aktivieren.</p>
+    </div>
+
+    <div id="addon-body" hidden>
+      <div class="card form-pad">
+        <h2>1. Vorlage &amp; Feldzuordnung</h2>
+        <p class="sub" id="template-info">Noch keine Vorlage hochgeladen. Lade ein (leeres oder ausgefülltes) Formular-PDF hoch, um dessen Felder zu erkennen.</p>
+        <input type="file" id="template-file" accept="application/pdf">
+        <label for="template-file">Vorlagen-PDF</label>
+
+        <div id="mapping-section" hidden>
+          <div class="table-scroll">
+            <table id="mapping-table">
+              <thead><tr><th>PDF-Feld</th><th>Typ</th><th>Zuordnung in der App</th><th>Beschriftung der Auswahl</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <label style="margin-top:16px;"><input type="checkbox" id="email-enabled"> Eingangsbestätigung per E-Mail an den Einsender ermöglichen (benötigt ein Feld, das der „E-Mail des Einsenders“ zugeordnet ist)</label>
+          <div class="event-form-actions">
+            <button type="button" id="save-mapping">Zuordnung speichern</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card form-pad" id="upload-card" hidden>
+        <h2>2. PDFs einlesen</h2>
+        <input type="file" id="pdf-files" accept="application/pdf" multiple>
+        <label for="pdf-files">Ausgefüllte Anmelde-PDFs</label>
+        <label id="send-email-wrap" hidden><input type="checkbox" id="send-email"> Eingangsbestätigung an die E-Mail-Adresse im PDF senden</label>
+        <div class="event-form-actions">
+          <button type="button" id="upload-pdfs">Einlesen</button>
+        </div>
+        <ul id="upload-results" class="sub"></ul>
+      </div>
+
+      <div class="card">
+        <div class="table-scroll">
+          <table id="import-list">
+            <thead><tr><th>Eingegangen</th><th>Name</th><th>E-Mail</th><th>Datei</th><th>Bestätigung</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <dialog id="import-dialog">
+      <h2 id="import-dialog-title">Import</h2>
+      <div id="import-dialog-body"></div>
+      <button type="button" id="import-send-email" class="btn-ghost">Bestätigung senden</button>
+      <button type="button" id="import-delete" class="btn-danger">Löschen</button>
+      <button type="button" id="import-close" class="btn-ghost">Schließen</button>
+    </dialog>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
+applyBranding();
+import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
+initSidebarToggle();
+
+const TYPE_LABELS = { text: 'Text', checkbox: 'Kontrollkästchen', radio: 'Auswahl (Radio)', dropdown: 'Dropdown' };
+
+let config = null;
+let targets = [];
+let currentImportId = null;
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function targetLabel(value) {
+  return targets.find((t) => t.value === value)?.label ?? value;
+}
+
+function targetOptions(selected) {
+  const groups = [...new Set(targets.map((t) => t.group))];
+  return '<option value="">– nicht übernehmen –</option>' + groups.map((group) => `
+    <optgroup label="${escapeHtml(group)}">
+      ${targets.filter((t) => t.group === group).map((t) => `<option value="${escapeHtml(t.value)}" ${t.value === selected ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}
+    </optgroup>`).join('');
+}
+
+function renderMapping() {
+  const hasTemplate = config.pdfFields.length > 0;
+  document.getElementById('mapping-section').hidden = !hasTemplate;
+  document.getElementById('upload-card').hidden = !hasTemplate || Object.keys(config.mapping).length === 0;
+  document.getElementById('template-info').textContent = hasTemplate
+    ? `Vorlage: ${config.templateFilename} – ${config.pdfFields.length} Felder erkannt.`
+    : 'Noch keine Vorlage hochgeladen. Lade ein (leeres oder ausgefülltes) Formular-PDF hoch, um dessen Felder zu erkennen.';
+  document.getElementById('email-enabled').checked = config.emailEnabled;
+
+  document.querySelector('#mapping-table tbody').innerHTML = config.pdfFields.map((field, i) => {
+    const rule = config.mapping[field.name] ?? {};
+    const labels = field.options.length
+      ? field.options.map((opt) => `<div class="option-label-row"><input type="text" data-option-label="${i}" data-option="${escapeHtml(opt)}" value="${escapeHtml(rule.optionLabels?.[opt] ?? '')}" placeholder="${escapeHtml(opt)}"><label>${escapeHtml(opt)}</label></div>`).join('')
+      : '<span class="sub">–</span>';
+    return `<tr>
+      <td>${escapeHtml(field.name)}</td>
+      <td>${escapeHtml(TYPE_LABELS[field.type] ?? field.type)}</td>
+      <td><select data-target="${i}">${targetOptions(rule.target)}</select></td>
+      <td>${labels}</td>
+    </tr>`;
+  }).join('');
+  updateEmailControls();
+}
+
+function hasSenderEmailMapping() {
+  return Object.values(config.mapping).some((rule) => rule.target === 'sender:email');
+}
+
+function updateEmailControls() {
+  document.getElementById('send-email-wrap').hidden = !(config.emailEnabled && hasSenderEmailMapping());
+}
+
+function collectMapping() {
+  const mapping = {};
+  config.pdfFields.forEach((field, i) => {
+    const target = document.querySelector(`[data-target="${i}"]`).value;
+    if (!target) return;
+    const optionLabels = {};
+    document.querySelectorAll(`[data-option-label="${i}"]`).forEach((input) => {
+      if (input.value.trim()) optionLabels[input.dataset.option] = input.value.trim();
+    });
+    mapping[field.name] = { target, ...(Object.keys(optionLabels).length ? { optionLabels } : {}) };
+  });
+  return mapping;
+}
+
+document.getElementById('template-file').addEventListener('change', async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const result = await api.post('/pdf-import/template', { filename: file.name, dataBase64: await fileToBase64(file) });
+    config = result.config;
+    targets = result.targets;
+    renderMapping();
+    notify('Vorlage eingelesen. Bitte Felder zuordnen.', 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+  event.target.value = '';
+});
+
+document.getElementById('save-mapping').addEventListener('click', async () => {
+  try {
+    const result = await api.put('/pdf-import/config', {
+      mapping: collectMapping(),
+      emailEnabled: document.getElementById('email-enabled').checked,
+    });
+    config = result.config;
+    renderMapping();
+    notify('Gespeichert.', 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+document.getElementById('email-enabled').addEventListener('change', () => {
+  config.emailEnabled = document.getElementById('email-enabled').checked;
+  updateEmailControls();
+});
+
+document.getElementById('upload-pdfs').addEventListener('click', async () => {
+  const input = document.getElementById('pdf-files');
+  const results = document.getElementById('upload-results');
+  const sendEmail = document.getElementById('send-email').checked;
+  if (input.files.length === 0) { notify('Bitte mindestens ein PDF auswählen.', 'error'); return; }
+  results.innerHTML = '';
+  for (const file of input.files) {
+    try {
+      const { email } = await api.post('/pdf-import/submissions', { filename: file.name, dataBase64: await fileToBase64(file), sendEmail });
+      const note = sendEmail ? (email.sent ? ' – Bestätigung gesendet' : ` – keine Bestätigung (${email.reason ?? 'unbekannt'})`) : '';
+      results.insertAdjacentHTML('beforeend', `<li>✓ ${escapeHtml(file.name)}${escapeHtml(note)}</li>`);
+    } catch (err) {
+      results.insertAdjacentHTML('beforeend', `<li class="error">✗ ${escapeHtml(file.name)}: ${escapeHtml(err.message)}</li>`);
+    }
+  }
+  input.value = '';
+  await loadImports();
+});
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function emailStatus(record) {
+  if (record.emailSentAt) return `Gesendet ${escapeHtml(formatDate(record.emailSentAt))}`;
+  if (record.emailError) return `<span class="error">Fehler</span>`;
+  return '–';
+}
+
+async function loadImports() {
+  const imports = await api.get('/pdf-import/submissions');
+  const tbody = document.querySelector('#import-list tbody');
+  tbody.innerHTML = imports.length ? imports.map((r) => {
+    const name = [r.mapped.account?.firstName, r.mapped.account?.lastName].filter(Boolean).join(' ') || '–';
+    return `<tr>
+      <td>${escapeHtml(formatDate(r.createdAt))}</td>
+      <td>${escapeHtml(name)}</td>
+      <td>${escapeHtml(r.mapped.sender?.email ?? '–')}</td>
+      <td>${escapeHtml(r.sourceFilename)}</td>
+      <td>${emailStatus(r)}</td>
+      <td><button type="button" class="btn-sm btn-ghost" data-open="${escapeHtml(r.id)}">Anzeigen</button></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="sub">Noch keine PDFs eingelesen.</td></tr>';
+  tbody.querySelectorAll('[data-open]').forEach((button) => {
+    button.addEventListener('click', () => openImport(button.dataset.open));
+  });
+}
+
+const GROUP_TITLES = { sender: 'Einsender', account: 'Person (OT)', registration: 'Anmeldung (OT)', character: 'Charakter (IT)' };
+
+async function openImport(id) {
+  const record = await api.get(`/pdf-import/submissions/${id}`);
+  currentImportId = id;
+  document.getElementById('import-dialog-title').textContent = record.sourceFilename;
+  const mappedHtml = Object.entries(record.mapped).filter(([, values]) => Object.keys(values).length).map(([group, values]) => `
+    <h3>${escapeHtml(GROUP_TITLES[group] ?? group)}</h3>
+    <dl class="confirm-list">${Object.entries(values).map(([key, value]) => `<div class="confirm-row"><dt>${escapeHtml(targetLabel(`${group}:${key}`))}</dt><dd>${escapeHtml(value === true ? 'Ja' : value)}</dd></div>`).join('')}</dl>`).join('');
+  const rawHtml = Object.entries(record.raw).filter(([, v]) => v !== '' && v !== false).map(([key, value]) => `<div class="confirm-row"><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(value === true ? 'Ja' : value)}</dd></div>`).join('');
+  document.getElementById('import-dialog-body').innerHTML = `${mappedHtml || '<p class="sub">Keine zugeordneten Werte.</p>'}
+    <details><summary>Alle PDF-Rohwerte</summary><dl class="confirm-list">${rawHtml}</dl></details>`;
+  document.getElementById('import-send-email').hidden = !record.mapped.sender?.email;
+  document.getElementById('import-dialog').showModal();
+}
+
+document.getElementById('import-close').addEventListener('click', () => document.getElementById('import-dialog').close());
+
+document.getElementById('import-send-email').addEventListener('click', async () => {
+  try {
+    await api.post(`/pdf-import/submissions/${currentImportId}/send-email`, {});
+    notify('Bestätigung gesendet.', 'success');
+    await loadImports();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+document.getElementById('import-delete').addEventListener('click', async () => {
+  if (!confirm('Diesen Import wirklich löschen? Das kann nicht rückgängig gemacht werden.')) return;
+  try {
+    await api.delete(`/pdf-import/submissions/${currentImportId}`);
+    document.getElementById('import-dialog').close();
+    notify('Gelöscht.', 'success');
+    await loadImports();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  if (!account.pdfImportEnabled) {
+    document.getElementById('disabled-hint').hidden = false;
+  } else {
+    document.getElementById('addon-body').hidden = false;
+    const result = await api.get('/pdf-import/config');
+    config = result.config;
+    targets = result.targets;
+    renderMapping();
+    await loadImports();
+  }
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else if (err.status === 403) notify('Kein Zugriff – nur für Admins.', 'error');
+  else notify(err.message, 'error');
+} finally {
+  hideLoading();
+}
+</script>
+</body>
+</html>

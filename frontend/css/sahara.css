@@ -2479,3 +2479,21 @@ input[type="checkbox"].group-feature-switch:checked {
 .grid-header .grid-cell:hover .col-grip {
   opacity: 0.8;
 }
+
+/* PDF import: per-option label inputs in the mapping table */
+.option-label-row {
+  margin-bottom: 6px;
+}
+
+.option-label-row input {
+  padding: 6px 10px;
+}
+
+.option-label-row label {
+  margin: 2px 0 0;
+}
+
+/* Make the hidden attribute win over display rules like label { display: block } */
+[hidden] {
+  display: none !important;
+}

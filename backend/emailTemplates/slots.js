@@ -69,6 +69,12 @@ export const EMAIL_SLOTS = [
     supportsAccount: true,
     extraFields: [{ key: 'eventName', label: 'Eventname' }],
   },
+  {
+    key: 'pdf_import_received',
+    label: 'PDF-Import: Eingangsbestätigung',
+    supportsAccount: false,
+    extraFields: [{ key: 'name', label: 'Name des Einsenders' }],
+  },
 ];
 
 export const EMAIL_SLOT_KEYS = EMAIL_SLOTS.map((s) => s.key);

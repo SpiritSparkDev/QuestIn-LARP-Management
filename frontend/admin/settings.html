@@ -231,6 +231,17 @@
             >
           </div>
           <div class="card form-pad">
+            <h2>Add-on: PDF-Import</h2>
+            <p class="sub">
+              Liest ausgefüllte PDF-Anmeldeformulare ein und speichert sie.
+              Wenn aktiv, erscheint "PDF-Import" in der Seitenleiste.
+            </p>
+            <label
+              ><input type="checkbox" id="pdf-import-toggle" />
+              PDF-Import aktiviert</label
+            >
+          </div>
+          <div class="card form-pad">
             <h2>Anmeldung startet bald</h2>
             <p class="sub">
               Zeigt Besucher*innen der Startseite und der
@@ -411,6 +422,8 @@
 
       async function loadCharacterBrowsingSetting() {
         const settings = await api.get("/app-settings");
+        document.getElementById("pdf-import-toggle").checked =
+          settings.pdfImportEnabled;
         document.getElementById("character-browsing-toggle").checked =
           settings.characterBrowsingEnabled;
       }
@@ -489,6 +502,25 @@
               waitlistAutoPromote: event.target.checked,
             });
             notify("Gespeichert.", "success");
+          } catch (err) {
+            event.target.checked = !event.target.checked;
+            notify(err.message, "error");
+          }
+        });
+
+      document
+        .getElementById("pdf-import-toggle")
+        .addEventListener("change", async (event) => {
+          try {
+            await api.put("/app-settings", {
+              pdfImportEnabled: event.target.checked,
+            });
+            notify(
+              event.target.checked
+                ? "PDF-Import aktiviert. Der Menüpunkt erscheint nach dem Neuladen."
+                : "PDF-Import deaktiviert.",
+              "success",
+            );
           } catch (err) {
             event.target.checked = !event.target.checked;
             notify(err.message, "error");
