@@ -244,6 +244,8 @@
 
     let characters = [];
     let scSchema = [];
+    // Staff may edit staffOnly character fields (set from /account at startup).
+    let canOverrideCheckin = false;
     let editingCharacterId = null;
 
     const scFormSection = document.getElementById("sc-form-section");
@@ -268,7 +270,7 @@
         groups.get(key).push(field);
       }
       const groupKeys = [...groups.keys()];
-      const fieldHtml = (field) => `<div class="form-group">${renderField(field, data[field.key], idPrefix, { readOnly: field.staffOnly === true })}</div>`;
+      const fieldHtml = (field) => `<div class="form-group">${renderField(field, data[field.key], idPrefix, { readOnly: field.staffOnly === true && !canOverrideCheckin })}</div>`;
 
       if (groupKeys.length <= 1) {
         container.innerHTML = `<div class="field-grid">${schema.map(fieldHtml).join("")}</div>`;
@@ -778,6 +780,7 @@
     });
 
     try {
+      canOverrideCheckin = (await api.get("/account")).canOverrideCheckinStatus === true;
       const person = await api.get(`/managed-persons/${managedPersonId}`);
       document.getElementById("managed-person-heading").textContent = `${person.name} verwalten`;
       dataForm.elements.firstName.value = person.firstName ?? "";

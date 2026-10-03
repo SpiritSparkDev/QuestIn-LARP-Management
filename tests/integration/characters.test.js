@@ -368,7 +368,7 @@ test('a staffOnly character field cannot be changed by the owner, but can be cha
   });
 });
 
-test('a staffOnly field cannot be changed by an elevated user editing their OWN character, but can be changed by that same group editing someone else\'s', async () => {
+test('staff (canOverrideCheckinStatus) can change a staffOnly field on their OWN character and on someone else\'s; the owner role alone cannot', async () => {
   await withTestServer(async (port) => {
     await setScSchema([
       { key: 'name', label: 'Name', type: 'text', required: true },
@@ -384,19 +384,15 @@ test('a staffOnly field cannot be changed by an elevated user editing their OWN 
     const ownCharacter = await createRes.json();
     assert.equal(ownCharacter.data.itGeld, 100);
 
-    // Even though adminOwner's group has canOverrideCheckinStatus, they are
-    // the OWNER of this character -- their own edit form (account.html)
-    // renders itGeld disabled just like any other owner, so the field is
-    // excluded from what the client actually sends. The server must still
-    // preserve the existing value here, not treat group permission alone as
-    // license to write it.
+    // Staff may edit staffOnly fields everywhere -- including on their own
+    // character (the account page renders the field enabled for them).
     const selfEditUpdate = await fetch(`http://localhost:${port}/characters/${ownCharacter.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: adminOwner.cookie },
       body: JSON.stringify({ data: { name: 'Bertha', itGeld: 9999 } }),
     });
     assert.equal(selfEditUpdate.status, 200);
-    assert.equal((await selfEditUpdate.json()).data.itGeld, 100);
+    assert.equal((await selfEditUpdate.json()).data.itGeld, 9999);
 
     // A different admin editing someone ELSE's character (the check-in
     // dialog's use case) can still write the staffOnly field.
@@ -416,6 +412,15 @@ test('a staffOnly field cannot be changed by an elevated user editing their OWN 
     });
     assert.equal(staffEditUpdate.status, 200);
     assert.equal((await staffEditUpdate.json()).data.itGeld, 50);
+
+    // The plain owner of that character still can't touch the field.
+    const ownerEdit = await fetch(`http://localhost:${port}/characters/${othersCharacter.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ data: { name: 'Cassian', itGeld: 7777 } }),
+    });
+    assert.equal(ownerEdit.status, 200);
+    assert.equal((await ownerEdit.json()).data.itGeld, 50);
   });
 });
 

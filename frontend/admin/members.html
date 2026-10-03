@@ -68,6 +68,17 @@
           <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
         </dialog>
 
+        <dialog id="character-edit-dialog">
+          <h2 id="character-edit-title">Charakter bearbeiten</h2>
+          <form id="character-edit-form">
+            <input id="character-edit-name" name="__name" type="text" required>
+            <label for="character-edit-name">Name</label>
+            <div id="character-edit-fields"></div>
+            <button type="submit">Speichern</button>
+            <button type="button" id="character-edit-cancel" class="btn-ghost">Abbrechen</button>
+          </form>
+        </dialog>
+
         <dialog id="invite-dialog">
           <h2>Neues Mitglied einladen</h2>
           <form id="invite-form">
@@ -121,7 +132,7 @@
     import { applyBranding } from '/js/branding.js';
     import { hideLoading } from '/js/loading.js';
     applyBranding();
-    import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields } from '/js/formFields.js';
+    import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, renderField, collectFieldValues } from '/js/formFields.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
     import { notify } from '/js/notifications.js';
     initSidebarToggle();
@@ -200,6 +211,8 @@
     });
 
     let myAccountFields = [];
+    // Staff with this permission may edit any member's characters, staffOnly fields included.
+    let canOverrideCheckin = false;
     let editingMemberId = null;
     let currentView = 'active';
     let myUserId = null;
@@ -325,16 +338,74 @@
       applySearchFilter();
     }
 
+    // Staff editing someone else's character, e.g. IT-Geld: the character's
+    // own schema, every field enabled (staffOnly ones too -- the server only
+    // lets staff write those).
+    const characterEditDialog = document.getElementById('character-edit-dialog');
+    const characterEditForm = document.getElementById('character-edit-form');
+    let editingCharacter = null;
+    let editingSchema = [];
+
+    async function openCharacterEdit(characterId, characterClass) {
+      try {
+        const [character, schema] = await Promise.all([
+          api.get(`/characters/${characterId}`),
+          api.get(characterClass === 'nsc' ? '/nsc-schema' : '/sc-schema'),
+        ]);
+        editingCharacter = character;
+        editingSchema = schema;
+        document.getElementById('character-edit-title').textContent = `Charakter bearbeiten: ${character.name}`;
+        document.getElementById('character-edit-name').value = character.name;
+        document.getElementById('character-edit-fields').innerHTML = schema
+          .map((field) => `<div class="form-group">${renderField(field, character.data?.[field.key], 'member-char-')}</div>`)
+          .join('');
+        attachLiveValidation(characterEditForm);
+        characterEditDialog.showModal();
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+    }
+
+    document.getElementById('character-edit-cancel').addEventListener('click', () => characterEditDialog.close());
+
+    characterEditForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        await api.put(`/characters/${editingCharacter.id}`, {
+          name: document.getElementById('character-edit-name').value,
+          data: collectFieldValues(characterEditForm, editingSchema),
+        });
+        characterEditDialog.close();
+        notify('Charakter gespeichert.', 'success');
+      } catch (err) {
+        notify(err.status === 400 && err.body?.details ? err.body.details.join(', ') : err.message, 'error');
+      }
+    });
+
     async function openDetail(memberId) {
       const member = await api.get(`/members/${memberId}`);
       editingMemberId = memberId;
       detailTitle.textContent = `Mitglied bearbeiten: ${member.name}`;
       buildDetailFieldInputs(detailFields, member);
 
-      const charList = (member.characters ?? []).map((c) => `<li>${escapeHtml(c.name)} (${escapeHtml(c.eventName)})</li>`).join('');
-      detailCharacters.innerHTML = member.characters?.length
+      // One entry per character (the server returns one row per registration),
+      // with every event it is registered for.
+      const characters = new Map();
+      for (const c of member.characters ?? []) {
+        if (!characters.has(c.id)) characters.set(c.id, { ...c, events: [] });
+        if (c.eventName) characters.get(c.id).events.push(c.eventName);
+      }
+      const charList = [...characters.values()].map((c) => `<li>
+        ${escapeHtml(c.name)}${c.class === 'nsc' ? ' <span class="tag">NSC</span>' : ''}
+        <span class="sub">${c.events.length ? escapeHtml(c.events.join(', ')) : 'noch keinem Event zugeordnet'}</span>
+        ${canOverrideCheckin ? `<button type="button" class="btn-ghost btn-sm" data-edit-character="${escapeHtml(c.id)}" data-character-class="${escapeHtml(c.class)}">Bearbeiten</button>` : ''}
+      </li>`).join('');
+      detailCharacters.innerHTML = characters.size
         ? `<h3>Charaktere</h3><ul>${charList}</ul>`
         : '';
+      detailCharacters.querySelectorAll('[data-edit-character]').forEach((button) => {
+        button.addEventListener('click', () => openCharacterEdit(button.dataset.editCharacter, button.dataset.characterClass));
+      });
 
       if (myAccountFields.includes('group')) {
         detailGroupWrap.style.display = '';
@@ -518,6 +589,7 @@
       document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
       document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
       myAccountFields = account.accountFields ?? [];
+      canOverrideCheckin = account.canOverrideCheckinStatus === true;
       myUserId = account.id;
       accountSchema = await api.get('/account-schema');
       buildFieldInputs(inviteFields);

@@ -1235,6 +1235,8 @@
     let events = [];
     let characters = [];
     let canEditCharacters = false;
+    // Staff may edit staffOnly character fields (even on their own characters).
+    let canOverrideCheckin = false;
     let currentUserId = null;
     let registrationSchema = [];
     let accountSchema = [];
@@ -1605,7 +1607,7 @@
 
     function renderScSchemaFields(data = {}) {
       characterDynamicFields.innerHTML = scSchema
-        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "sc-char-", { readOnly: field.staffOnly === true })}</div>`)
+        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "sc-char-", { readOnly: field.staffOnly === true && !canOverrideCheckin })}</div>`)
         .join("");
       attachLiveValidation(characterDynamicFields);
     }
@@ -1825,7 +1827,7 @@
 
     function renderNscSchemaFields(data = {}) {
       nscDynamicFields.innerHTML = nscSchema
-        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true })}</div>`)
+        .map((field) => `<div class="form-group">${renderField(field, data[field.key], "nsc-", { readOnly: field.staffOnly === true && !canOverrideCheckin })}</div>`)
         .join("");
       attachLiveValidation(nscDynamicFields);
     }
@@ -2125,6 +2127,7 @@
 
       currentUserId = account.id;
       canEditCharacters = account.canEditCharacters;
+      canOverrideCheckin = account.canOverrideCheckinStatus === true;
       registrationSchema = await api.get("/registration-schema");
       renderOtFields();
       renderDashboardAccountHint(account);

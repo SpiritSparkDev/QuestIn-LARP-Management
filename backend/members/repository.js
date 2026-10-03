@@ -51,17 +51,18 @@ export async function getMember(id) {
   const member = decryptMember(rows[0]);
   // A character no longer carries its own event_id (account-wide, can be
   // registered for many events) -- "its" event(s) only exist via
-  // registrations.character_id, so this lists one row per registration
-  // rather than one row per character.
+  // registrations.character_id, so this lists one row per registration. The
+  // LEFT JOINs keep characters that aren't registered anywhere yet, so staff
+  // can still find (and edit) them here.
   const { rows: characterRows } = await query(
-    `SELECT characters.id, characters.name, registrations.event_id, events.name AS event_name
+    `SELECT characters.id, characters.name, characters.class, registrations.event_id, events.name AS event_name
      FROM characters
-     JOIN registrations ON registrations.character_id = characters.id
-     JOIN events ON events.id = registrations.event_id
-     WHERE characters.user_id = $1 ORDER BY events.event_date DESC`,
+     LEFT JOIN registrations ON registrations.character_id = characters.id
+     LEFT JOIN events ON events.id = registrations.event_id
+     WHERE characters.user_id = $1 ORDER BY events.event_date DESC NULLS LAST, characters.created_at`,
     [id]
   );
-  member.characters = characterRows.map((r) => ({ id: r.id, name: r.name, eventId: r.event_id, eventName: r.event_name }));
+  member.characters = characterRows.map((r) => ({ id: r.id, name: r.name, class: r.class, eventId: r.event_id, eventName: r.event_name }));
   return member;
 }
 
