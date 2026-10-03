@@ -763,10 +763,8 @@
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
         });
-        notify("Angemeldet.", "success");
-        renderOtFields();
-        await loadRegistrations();
-        await loadCharacters();
+        window.location.href = `/registration-confirmation.html?event=${eventId}&person=${encodeURIComponent(managedPersonId)}`;
+        return;
       } catch (err) {
         notify(err.status === 400 && err.body?.details ? err.body.details.join(", ") : err.message, "error");
       }

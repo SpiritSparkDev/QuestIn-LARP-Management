@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anmeldung bestätigt – Pakyrion</title>
+  <link rel="stylesheet" href="/css/fonts.css">
+  <link rel="stylesheet" href="/css/sahara.css">
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+
+<body>
+  <div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+  <div class="app">
+    <div class="main">
+      <div class="content account-page confirm-page">
+        <div class="confirm-hero">
+          <span class="confirm-check material-symbols-outlined" aria-hidden="true">check_circle</span>
+          <h1>Anmeldung eingegangen</h1>
+          <p class="lede" id="confirm-lede"></p>
+        </div>
+
+        <div class="confirm-grid">
+          <section class="card form-pad">
+            <h2>Out-Time</h2>
+            <p class="sub">Angaben zur Person und zur Anmeldung</p>
+            <dl class="confirm-list" id="confirm-ot"></dl>
+          </section>
+          <section class="card form-pad">
+            <h2>In-Time</h2>
+            <p class="sub">Dein Charakter</p>
+            <dl class="confirm-list" id="confirm-it"></dl>
+          </section>
+        </div>
+
+        <div class="action-row confirm-actions">
+          <a href="/account.html#dashboard" class="btn">Zurück zum Dashboard</a>
+          <a href="/account.html#anmelden" class="btn-ghost" id="confirm-secondary">Anmeldung ansehen</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api } from "/js/api.js";
+    import { applyBranding } from "/js/branding.js";
+    import { hideLoading } from "/js/loading.js";
+    applyBranding();
+    import { escapeHtml, STATUS_LABELS } from "/js/formFields.js";
+
+    const params = new URLSearchParams(window.location.search);
+    const eventId = params.get("event");
+    const personId = params.get("person");
+    if (!eventId) window.location.href = "/account.html#dashboard";
+
+    const CON_ROLE_LABELS = { sc: "Spielercharakter (SC)", nsc: "NSC" };
+
+    function displayValue(field, raw) {
+      if (field.type === "boolean") return raw ? "Ja" : "Nein";
+      if (Array.isArray(raw)) return raw.length ? raw.join(", ") : "";
+      return raw === undefined || raw === null ? "" : String(raw);
+    }
+
+    function row(label, value) {
+      const text = value === "" || value === undefined || value === null ? "—" : escapeHtml(value);
+      return `<div class="confirm-row"><dt>${escapeHtml(label)}</dt><dd>${text}</dd></div>`;
+    }
+
+    function fieldRows(schema, source) {
+      return schema
+        .filter((f) => !f.staffOnly)
+        .map((f) => row(f.label ?? f.key, displayValue(f, source?.[f.key])))
+        .join("");
+    }
+
+    try {
+      const base = personId ? `/managed-persons/${encodeURIComponent(personId)}` : "";
+      const [holder, registrations, characters, events, accountSchema, registrationSchema] = await Promise.all([
+        personId ? api.get(base) : api.get("/account"),
+        api.get(`${base}/registrations`),
+        api.get(`${base}/characters`),
+        api.get("/events"),
+        api.get("/account-schema"),
+        api.get("/registration-schema"),
+      ]);
+      const registration = registrations.find((r) => r.eventId === eventId);
+      if (!registration) {
+        window.location.href = "/account.html#dashboard";
+        throw new Error("no registration");
+      }
+      const event = events.find((e) => e.id === eventId);
+      const name = personId ? holder.name : [holder.firstName, holder.lastName].filter(Boolean).join(" ");
+      document.getElementById("confirm-lede").textContent =
+        `${name} ist für ${registration.eventName ?? event?.name ?? "das Event"} angemeldet. Hier die Zusammenfassung.`;
+      if (personId) {
+        const secondary = document.getElementById("confirm-secondary");
+        secondary.href = `/managed-person.html?id=${encodeURIComponent(personId)}`;
+        secondary.textContent = "Zurück zur Person";
+      }
+
+      const flags = registration.flags ?? [];
+      document.getElementById("confirm-ot").innerHTML =
+        row("Teilnehmer", name) +
+        row("Event", registration.eventName ?? event?.name) +
+        row("Datum", registration.eventDate ? String(registration.eventDate).slice(0, 10) : "") +
+        row("Rolle", CON_ROLE_LABELS[registration.conRole] ?? registration.conRole) +
+        row("Status", STATUS_LABELS[registration.status] ?? registration.status) +
+        (registration.priceGroup ? row("Teilnahmegruppe", registration.priceGroup) : "") +
+        (flags.length ? row("Sonderrollen", flags.join(", ")) : "") +
+        fieldRows(accountSchema, holder) +
+        fieldRows(registrationSchema, registration);
+
+      const character = characters.find((c) => c.id === registration.characterId);
+      const itEl = document.getElementById("confirm-it");
+      if (!character) {
+        itEl.innerHTML = '<p class="sub">Ohne Charakter angemeldet.</p>';
+      } else {
+        let schema = [];
+        try {
+          schema = await api.get(character.class === "nsc" ? "/nsc-schema" : "/sc-schema");
+        } catch {
+          // Schema is optional; fall back to just the name.
+        }
+        itEl.innerHTML = row("Name", character.name) + fieldRows(schema, character.data);
+      }
+    } catch (err) {
+      if (err.status === 401) window.location.href = "/login.html";
+      else if (err.status === 404) document.body.innerHTML = '<p class="error">Anmeldung nicht gefunden.</p>';
+    } finally {
+      hideLoading();
+    }
+  </script>
+</body>
+
+</html>

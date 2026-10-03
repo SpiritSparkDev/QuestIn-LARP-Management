@@ -1505,10 +1505,8 @@
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
         });
-        notify("Angemeldet.", "success");
-        renderOtFields();
-        await loadRegistrations();
-        await loadCharacters();
+        window.location.href = `/registration-confirmation.html?event=${eventId}`;
+        return;
       } catch (err) {
         notify(
           err.status === 400 && err.body?.details

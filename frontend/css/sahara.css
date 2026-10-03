@@ -2223,3 +2223,61 @@ input[type="checkbox"].group-feature-switch:checked {
 .mp-empty {
   margin: 0;
 }
+
+/* Registration confirmation page */
+.confirm-hero {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.confirm-check {
+  font-size: 64px;
+  color: var(--primary);
+}
+
+.confirm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.confirm-list {
+  margin: 0;
+}
+
+.confirm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.confirm-row:last-child {
+  border-bottom: 0;
+}
+
+.confirm-row dt {
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+}
+
+.confirm-row dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 500;
+}
+
+.confirm-actions {
+  margin-top: 32px;
+  justify-content: center;
+}
+
+@media (max-width: 800px) {
+  .confirm-grid {
+    grid-template-columns: 1fr;
+  }
+}
