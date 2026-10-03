@@ -52,6 +52,7 @@ function renderNavItem({ href, label, icon }, currentPath) {
 // page that has the sidebar, so it is the one place that sees the account.
 function showTestModeBanner(account) {
   const existing = document.getElementById('testmode-banner');
+  document.body?.classList.toggle('has-testmode-banner', Boolean(account.testMode));
   if (!account.testMode) {
     existing?.remove();
     return;

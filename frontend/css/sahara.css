@@ -3127,11 +3127,25 @@ select.suggested {
   position: sticky;
   top: 0;
   z-index: 60;
+  box-sizing: border-box;
+  height: 32px;
   padding: 6px 12px;
+  line-height: 20px;
   text-align: center;
   font-size: 13px;
   font-weight: 700;
   background: var(--gold-container, #fbe8b0);
   color: var(--on-gold-container, #4a3300);
   border-bottom: 1px solid var(--outline-variant);
+}
+
+/* Keep the fixed sidebar and menu button below the test-mode strip */
+.has-testmode-banner .sidebar {
+  top: 32px;
+  height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
+}
+
+.has-testmode-banner .sidebar-toggle {
+  top: 48px;
 }

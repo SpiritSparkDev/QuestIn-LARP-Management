@@ -33,15 +33,116 @@
         <span class="material-symbols-outlined" aria-hidden="true">menu</span>
       </button>
       <div class="main">
-        <div class="content grid col2">
-          <div class="span">
-            <h1>Einstellungen</h1>
+        <div class="content">
+          <h1>Einstellungen</h1>
+          <p class="sub">
+            Allgemeines, E-Mail-Versand, Zahlungen, Startseite und Add-ons.
+          </p>
+          <div class="tabs" id="settings-tabs">
+            <button type="button" class="tab-btn active" data-tab="settings-tab-allgemein">Allgemein</button>
+            <button type="button" class="tab-btn" data-tab="settings-tab-email">E-Mail</button>
+            <button type="button" class="tab-btn" data-tab="settings-tab-zahlungen">Zahlungen</button>
+            <button type="button" class="tab-btn" data-tab="settings-tab-startseite">Startseite</button>
+            <button type="button" class="tab-btn" data-tab="settings-tab-addons">Add-ons &amp; Test</button>
+          </div>
+          <div class="tab-panel grid col2 settings-panel" id="settings-tab-allgemein">
+          <div class="card form-pad">
+            <h2>Basis-URL</h2>
             <p class="sub">
-              SMTP-Zugangsdaten für den E-Mail-Versand (Registrierung,
-              Passwort-Reset, Einladungen).
+              Wird verwendet, um Links in E-Mails (Bestätigung,
+              Passwort-Reset, Einladungen, Ticket-Zahlung) zu bauen. Leer
+              lassen, um automatisch die Server-Umgebungsvariable
+              <code>APP_BASE_URL</code> zu verwenden.
             </p>
+            <form id="base-url-form">
+              <input
+                id="base-url"
+                name="baseUrl"
+                type="text"
+                placeholder="https://example.com"
+              />
+              <label for="base-url">Basis-URL</label>
+              <p class="sub" id="base-url-effective-note"></p>
+              <button type="submit">Speichern</button>
+            </form>
+          </div>
+
+          <div class="card form-pad">
+            <h2>Einladungen</h2>
+            <p class="sub">
+              Wie lange ein Einladungslink gültig bleibt, bevor er abläuft.
+            </p>
+            <form id="invitation-form">
+              <input
+                id="invitation-ttl-days"
+                name="invitationTtlDays"
+                type="number"
+                min="1"
+              />
+              <label for="invitation-ttl-days">Gültig für (Tage)</label>
+              <button type="submit">Speichern</button>
+            </form>
           </div>
           <div class="card form-pad">
+            <h2>Warteliste</h2>
+            <p class="sub">
+              Wenn ein Platz frei wird (z.B. durch eine Absage), rückt
+              automatisch die am längsten wartende Person nach. Ist der Schalter
+              aus, muss Staff im Check-In-Bereich manuell nachrücken lassen.
+            </p>
+            <label
+              ><input type="checkbox" id="waitlist-auto-promote-toggle" />
+              Automatisch nachrücken lassen</label
+            >
+          </div>
+          <div class="card form-pad">
+            <h2>Charaktere durchsuchen</h2>
+            <p class="sub">
+              Schaltet die öffentliche "Charaktere anderer Spieler
+              durchsuchen"-Seite für alle Nutzer ein oder aus.
+            </p>
+            <label
+              ><input type="checkbox" id="character-browsing-toggle" />
+              Charaktere durchsuchen aktiviert</label
+            >
+          </div>
+          <div class="card form-pad">
+            <h2>Einverständniserklärung</h2>
+            <p class="sub">
+              Wird bei der Event-Anmeldung (Konto-Bereich und öffentliches
+              Ticket-Widget) als Pflicht-Häkchen angezeigt. Leer lassen, um
+              keine Zustimmung einzufordern. Jede Textänderung erhöht die
+              Version automatisch, damit nachvollziehbar bleibt, welcher
+              Fassung ein Teilnehmer zugestimmt hat.
+            </p>
+            <form id="waiver-form">
+              <textarea id="waiver-text" name="waiverText" rows="6"></textarea>
+              <label for="waiver-text">Text der Einverständniserklärung</label>
+              <p class="sub" id="waiver-version-note"></p>
+              <button type="submit">Speichern</button>
+            </form>
+          </div>
+          <div class="card form-pad">
+            <h2>Hotkeys</h2>
+            <p class="sub">
+              Klicke in ein Feld und drücke die gewünschte Taste. Gilt für den
+              Check-In-Scanner.
+            </p>
+            <input id="hotkey-confirm" readonly />
+            <label for="hotkey-confirm">Einchecken (im Pop-up)</label>
+            <input id="hotkey-cancel" readonly />
+            <label for="hotkey-cancel">Abbrechen (im Pop-up)</label>
+            <input id="hotkey-scan" readonly />
+            <label for="hotkey-scan">Scan starten (Push-to-See)</label>
+          </div>
+          </div>
+          <div class="tab-panel grid col2 settings-panel" id="settings-tab-email" hidden>
+          <div class="card form-pad">
+            <h2>SMTP-Zugang</h2>
+            <p class="sub">
+              Zugangsdaten für den E-Mail-Versand (Registrierung,
+              Passwort-Reset, Einladungen).
+            </p>
             <form id="smtp-form">
               <div
                 style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px"
@@ -90,27 +191,6 @@
           </div>
 
           <div class="card form-pad">
-            <h2>Basis-URL</h2>
-            <p class="sub">
-              Wird verwendet, um Links in E-Mails (Bestätigung,
-              Passwort-Reset, Einladungen, Ticket-Zahlung) zu bauen. Leer
-              lassen, um automatisch die Server-Umgebungsvariable
-              <code>APP_BASE_URL</code> zu verwenden.
-            </p>
-            <form id="base-url-form">
-              <input
-                id="base-url"
-                name="baseUrl"
-                type="text"
-                placeholder="https://example.com"
-              />
-              <label for="base-url">Basis-URL</label>
-              <p class="sub" id="base-url-effective-note"></p>
-              <button type="submit">Speichern</button>
-            </form>
-          </div>
-
-          <div class="card form-pad">
             <h2>Test-Mail senden</h2>
             <p class="sub">Prüft die Felder oben, ohne sie zu speichern.</p>
             <input id="test-to" type="email" />
@@ -118,47 +198,8 @@
             <button type="button" id="send-test">Test-Mail senden</button>
           </div>
 
-          <div class="card form-pad">
-            <h2>Hotkeys</h2>
-            <p class="sub">
-              Klicke in ein Feld und drücke die gewünschte Taste. Gilt für den
-              Check-In-Scanner.
-            </p>
-            <input id="hotkey-confirm" readonly />
-            <label for="hotkey-confirm">Einchecken (im Pop-up)</label>
-            <input id="hotkey-cancel" readonly />
-            <label for="hotkey-cancel">Abbrechen (im Pop-up)</label>
-            <input id="hotkey-scan" readonly />
-            <label for="hotkey-scan">Scan starten (Push-to-See)</label>
           </div>
-          <div class="card form-pad">
-            <h2>Einladungen</h2>
-            <p class="sub">
-              Wie lange ein Einladungslink gültig bleibt, bevor er abläuft.
-            </p>
-            <form id="invitation-form">
-              <input
-                id="invitation-ttl-days"
-                name="invitationTtlDays"
-                type="number"
-                min="1"
-              />
-              <label for="invitation-ttl-days">Gültig für (Tage)</label>
-              <button type="submit">Speichern</button>
-            </form>
-          </div>
-          <div class="card form-pad">
-            <h2>Warteliste</h2>
-            <p class="sub">
-              Wenn ein Platz frei wird (z.B. durch eine Absage), rückt
-              automatisch die am längsten wartende Person nach. Ist der Schalter
-              aus, muss Staff im Check-In-Bereich manuell nachrücken lassen.
-            </p>
-            <label
-              ><input type="checkbox" id="waitlist-auto-promote-toggle" />
-              Automatisch nachrücken lassen</label
-            >
-          </div>
+          <div class="tab-panel grid col2 settings-panel" id="settings-tab-zahlungen" hidden>
           <div class="card form-pad">
             <h2>Zahlungen</h2>
             <p class="sub">
@@ -203,73 +244,8 @@
               <button type="submit">Speichern</button>
             </form>
           </div>
-          <div class="card form-pad">
-            <h2>Einverständniserklärung</h2>
-            <p class="sub">
-              Wird bei der Event-Anmeldung (Konto-Bereich und öffentliches
-              Ticket-Widget) als Pflicht-Häkchen angezeigt. Leer lassen, um
-              keine Zustimmung einzufordern. Jede Textänderung erhöht die
-              Version automatisch, damit nachvollziehbar bleibt, welcher
-              Fassung ein Teilnehmer zugestimmt hat.
-            </p>
-            <form id="waiver-form">
-              <textarea id="waiver-text" name="waiverText" rows="6"></textarea>
-              <label for="waiver-text">Text der Einverständniserklärung</label>
-              <p class="sub" id="waiver-version-note"></p>
-              <button type="submit">Speichern</button>
-            </form>
           </div>
-          <div class="card form-pad">
-            <h2>Charaktere durchsuchen</h2>
-            <p class="sub">
-              Schaltet die öffentliche "Charaktere anderer Spieler
-              durchsuchen"-Seite für alle Nutzer ein oder aus.
-            </p>
-            <label
-              ><input type="checkbox" id="character-browsing-toggle" />
-              Charaktere durchsuchen aktiviert</label
-            >
-          </div>
-          <div class="card form-pad" id="test-mode-card">
-            <h2>Test-Modus</h2>
-            <p class="sub">
-              Lädt einen fiktiven Datensatz: 75 Personen (einige in Gruppen,
-              die meisten einzeln) mit Charakteren, Anmeldungen in
-              verschiedenen Status und ein fiktives Event. Alles ist als
-              Testdaten markiert und lässt sich mit einem Klick wieder
-              vollständig entfernen – echte Daten bleiben unberührt. Die
-              Testpersonen können sich nicht einloggen und erhalten keine
-              E-Mails. Ist bereits ein echtes Event aktiv, bleibt dieses
-              aktiv – das Test-Event lässt sich dann unter Events
-              aktivieren.
-            </p>
-            <p id="test-mode-status" class="sub"></p>
-            <button type="button" id="test-mode-load">Testdaten laden</button>
-            <button type="button" id="test-mode-remove" class="btn-danger" hidden>Testdaten entfernen</button>
-          </div>
-          <div class="card form-pad">
-            <h2>Add-on: Tavernenkonto</h2>
-            <p class="sub">
-              Guthabenkonten für die Taverne mit Getränkekarte, Aufladen und
-              Abbuchen. Wenn aktiv, erscheint "Taverne" in der Seitenleiste
-              (für Admins und Gruppen mit dem Menü "Taverne").
-            </p>
-            <label
-              ><input type="checkbox" id="tavern-toggle" />
-              Tavernenkonto aktiviert</label
-            >
-          </div>
-          <div class="card form-pad">
-            <h2>Add-on: PDF-Import</h2>
-            <p class="sub">
-              Liest ausgefüllte PDF-Anmeldeformulare ein und speichert sie.
-              Wenn aktiv, erscheint "PDF-Import" in der Seitenleiste.
-            </p>
-            <label
-              ><input type="checkbox" id="pdf-import-toggle" />
-              PDF-Import aktiviert</label
-            >
-          </div>
+          <div class="tab-panel grid col2 settings-panel" id="settings-tab-startseite" hidden>
           <div class="card form-pad">
             <h2>Anmeldung startet bald</h2>
             <p class="sub">
@@ -309,6 +285,49 @@
               >
             </p>
           </div>
+          </div>
+          <div class="tab-panel grid col2 settings-panel" id="settings-tab-addons" hidden>
+          <div class="card form-pad">
+            <h2>Add-on: Tavernenkonto</h2>
+            <p class="sub">
+              Guthabenkonten für die Taverne mit Getränkekarte, Aufladen und
+              Abbuchen. Wenn aktiv, erscheint "Taverne" in der Seitenleiste
+              (für Admins und Gruppen mit dem Menü "Taverne").
+            </p>
+            <label
+              ><input type="checkbox" id="tavern-toggle" />
+              Tavernenkonto aktiviert</label
+            >
+          </div>
+          <div class="card form-pad">
+            <h2>Add-on: PDF-Import</h2>
+            <p class="sub">
+              Liest ausgefüllte PDF-Anmeldeformulare ein und speichert sie.
+              Wenn aktiv, erscheint "PDF-Import" in der Seitenleiste.
+            </p>
+            <label
+              ><input type="checkbox" id="pdf-import-toggle" />
+              PDF-Import aktiviert</label
+            >
+          </div>
+          <div class="card form-pad" id="test-mode-card">
+            <h2>Test-Modus</h2>
+            <p class="sub">
+              Lädt einen fiktiven Datensatz: 75 Personen (einige in Gruppen,
+              die meisten einzeln) mit Charakteren, Anmeldungen in
+              verschiedenen Status und ein fiktives Event. Alles ist als
+              Testdaten markiert und lässt sich mit einem Klick wieder
+              vollständig entfernen – echte Daten bleiben unberührt. Die
+              Testpersonen können sich nicht einloggen und erhalten keine
+              E-Mails. Ist bereits ein echtes Event aktiv, bleibt dieses
+              aktiv – das Test-Event lässt sich dann unter Events
+              aktivieren.
+            </p>
+            <p id="test-mode-status" class="sub"></p>
+            <button type="button" id="test-mode-load">Testdaten laden</button>
+            <button type="button" id="test-mode-remove" class="btn-danger" hidden>Testdaten entfernen</button>
+          </div>
+          </div>
         </div>
       </div>
     </div>
@@ -325,6 +344,20 @@
       } from "/js/nav.js";
       import { notify } from "/js/notifications.js";
       initSidebarToggle();
+
+      // Settings tabs; the open tab is kept in the URL hash so a reload (or a
+      // link like /admin/settings.html#email) lands on the same tab.
+      const settingsTabButtons = [...document.querySelectorAll("#settings-tabs .tab-btn")];
+      function showSettingsTab(panelId) {
+        const target = settingsTabButtons.some((b) => b.dataset.tab === panelId) ? panelId : settingsTabButtons[0].dataset.tab;
+        settingsTabButtons.forEach((b) => {
+          b.classList.toggle("active", b.dataset.tab === target);
+          document.getElementById(b.dataset.tab).hidden = b.dataset.tab !== target;
+        });
+        history.replaceState(null, "", `#${target.replace("settings-tab-", "")}`);
+      }
+      settingsTabButtons.forEach((b) => b.addEventListener("click", () => showSettingsTab(b.dataset.tab)));
+      showSettingsTab(`settings-tab-${location.hash.slice(1)}`);
 
       const form = document.getElementById("smtp-form");
       const testToInput = document.getElementById("test-to");
