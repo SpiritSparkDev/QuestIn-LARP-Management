@@ -750,8 +750,12 @@ async function loadParticipants(eventId) {
   listBody.innerHTML = '<div class="grid-row"><div class="grid-cell" style="grid-column:1/-1;">Wird geladen …</div></div>';
   const participants = await api.get(`/events/${eventId}/participants`);
   participantsById = new Map(participants.map((p) => [p.userId, p]));
-  currentParticipants = participants;
-  renderParticipants(participants, eventId);
+  // People already checked in (and then out) sink to the bottom so the
+  // still-open arrivals stay at the top. Array.sort is stable, so everyone
+  // keeps the server's name order within their group.
+  const doneRank = { checked_in: 1, checked_out: 2 };
+  currentParticipants = [...participants].sort((a, b) => (doneRank[a.status] ?? 0) - (doneRank[b.status] ?? 0));
+  renderParticipants(currentParticipants, eventId);
 }
 
 function renderParticipants(participants, eventId) {
