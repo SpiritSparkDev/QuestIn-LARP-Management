@@ -37,8 +37,8 @@
     </div>
 
     <div id="addon-body" hidden>
-      <div class="card form-pad">
-        <h2>1. Vorlage &amp; Feldzuordnung</h2>
+      <details class="card form-pad" id="template-card">
+        <summary><h2 style="display:inline;">1. Vorlage &amp; Feldzuordnung</h2> <span class="sub" id="template-summary"></span></summary>
         <p class="sub" id="template-info">Noch keine Vorlage hochgeladen. Lade ein (leeres oder ausgefülltes) Formular-PDF hoch, um dessen Felder zu erkennen.</p>
         <input type="file" id="template-file" accept="application/pdf">
         <label for="template-file">Vorlagen-PDF</label>
@@ -56,7 +56,7 @@
             <button type="button" id="save-mapping">Zuordnung speichern</button>
           </div>
         </div>
-      </div>
+      </details>
 
       <div class="card form-pad" id="upload-card" hidden>
         <h2>2. PDFs einlesen</h2>
@@ -134,6 +134,11 @@ function targetOptions(selected) {
     </optgroup>`).join('');
 }
 
+// Open while there's still setup to do, collapsed once a mapping is saved.
+function setTemplateCardOpen(open) {
+  document.getElementById('template-card').open = open;
+}
+
 function renderMapping() {
   const hasTemplate = config.pdfFields.length > 0;
   document.getElementById('mapping-section').hidden = !hasTemplate;
@@ -142,6 +147,10 @@ function renderMapping() {
     ? `Vorlage: ${config.templateFilename} – ${config.pdfFields.length} Felder erkannt.`
     : 'Noch keine Vorlage hochgeladen. Lade ein (leeres oder ausgefülltes) Formular-PDF hoch, um dessen Felder zu erkennen.';
   document.getElementById('email-enabled').checked = config.emailEnabled;
+  const mappedCount = Object.keys(config.mapping).length;
+  document.getElementById('template-summary').textContent = mappedCount
+    ? `– ${config.templateFilename}, ${mappedCount} von ${config.pdfFields.length} Feldern zugeordnet`
+    : '';
 
   document.querySelector('#mapping-table tbody').innerHTML = config.pdfFields.map((field, i) => {
     const rule = config.mapping[field.name] ?? {};
@@ -213,6 +222,7 @@ document.getElementById('template-file').addEventListener('change', async (event
     config = result.config;
     targets = result.targets;
     renderMapping();
+    setTemplateCardOpen(true);
     const count = applySuggestions(result.suggestions ?? {});
     notify(count ? `Vorlage eingelesen, ${count} Felder automatisch erkannt. Bitte prüfen und speichern.` : 'Vorlage eingelesen. Bitte Felder zuordnen.', 'success');
   } catch (err) {
@@ -229,6 +239,7 @@ document.getElementById('save-mapping').addEventListener('click', async () => {
     });
     config = result.config;
     renderMapping();
+    setTemplateCardOpen(Object.keys(config.mapping).length === 0);
     notify('Gespeichert.', 'success');
   } catch (err) {
     notify(err.message, 'error');
@@ -378,6 +389,7 @@ try {
     config = result.config;
     targets = result.targets;
     renderMapping();
+    setTemplateCardOpen(Object.keys(config.mapping).length === 0);
     events = await api.get('/events');
     const active = events.find((e) => e.is_active);
     document.getElementById('upload-event').innerHTML = '<option value="">Nur speichern, kein Gast-Konto anlegen</option>' + eventOptions(active?.id);
