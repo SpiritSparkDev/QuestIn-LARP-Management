@@ -121,8 +121,8 @@ export async function updateManagedPerson(id, ownerId, fields) {
   }
 }
 
-export async function deleteManagedPerson(id, ownerId) {
-  const { rows: regRows } = await query(
+export async function deleteManagedPerson(id, ownerId, { force = false } = {}) {
+  const { rows: regRows } = force ? { rows: [] } : await query(
     `SELECT 1 FROM registrations r JOIN users u ON u.id = r.user_id
      WHERE r.user_id = $1 AND u.managed_by_user_id = $2
        AND (r.paid_at IS NOT NULL OR r.status IN ('confirmed', 'checked_in', 'checked_out'))`,

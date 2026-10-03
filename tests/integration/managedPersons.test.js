@@ -167,7 +167,7 @@ test('DELETE /managed-persons/:id succeeds with open registrations, 409s once on
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'LoeschTest' }),
     });
-    const { id } = await createRes.json();
+    let { id } = await createRes.json();
 
     const { rows: eventRows } = await query(
       "INSERT INTO events (name, event_date) VALUES ('Managed Delete Test Event', '2026-01-01') RETURNING id"
@@ -181,7 +181,18 @@ test('DELETE /managed-persons/:id succeeds with open registrations, 409s once on
     const blockedRes = await fetch(`http://localhost:${port}/managed-persons/${id}`, { method: 'DELETE', headers: { Cookie: cookie } });
     assert.equal(blockedRes.status, 409);
 
-    await query("UPDATE registrations SET status = 'pending' WHERE user_id = $1", [id]);
+    const forcedRes = await fetch(`http://localhost:${port}/managed-persons/${id}?force=true`, { method: 'DELETE', headers: { Cookie: cookie } });
+    assert.equal(forcedRes.status, 200);
+    const createRes2 = await fetch(`http://localhost:${port}/managed-persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'LoeschTest2' }),
+    });
+    id = (await createRes2.json()).id;
+    await query(
+      "INSERT INTO registrations (user_id, event_id, con_role) VALUES ($1, $2, 'helfer')",
+      [id, eventRows[0].id]
+    );
 
     const okRes = await fetch(`http://localhost:${port}/managed-persons/${id}`, { method: 'DELETE', headers: { Cookie: cookie } });
     assert.equal(okRes.status, 200);

@@ -107,7 +107,7 @@
 
                 <dialog id="managed-person-delete-dialog">
                   <h3>Person löschen</h3>
-                  <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden. Charaktere und offene Event-Anmeldungen der Person werden mitgelöscht.</p>
+                  <p class="lede" id="managed-person-delete-text">Diese Aktion kann nicht rückgängig gemacht werden. Charaktere und offene Event-Anmeldungen der Person werden mitgelöscht.</p>
                   <div class="dialog-actions">
                     <button type="button" id="managed-person-delete-confirm">Löschen</button>
                     <button type="button" id="managed-person-delete-cancel" class="btn-ghost">Abbrechen</button>
@@ -938,7 +938,7 @@
       <div class="action-row">
         <a href="${manageHref}" class="btn-ghost">Charaktere &amp; Anmeldung verwalten</a>
         <button type="button" data-managed-person-edit="${p.id}" class="btn-ghost">Bearbeiten</button>
-        <button type="button" data-managed-person-delete="${p.id}" class="btn-ghost" ${p.canDelete ? "" : "disabled title=\"Diese Person hat bereits bestätigte oder bezahlte Event-Anmeldungen und kann nicht gelöscht werden.\""}>Löschen</button>
+        <button type="button" data-managed-person-delete="${p.id}" class="btn-ghost">Löschen</button>
         ${p.email ? `<button type="button" data-managed-person-convert="${p.id}" class="btn-ghost">In eigenen Account umwandeln</button>` : ""}
       </div>
     </div>`;
@@ -948,7 +948,7 @@
       container.querySelectorAll("[data-managed-person-edit]").forEach((btn) => {
         btn.addEventListener("click", () => openManagedPersonDialog(btn.dataset.managedPersonEdit));
       });
-      container.querySelectorAll("[data-managed-person-delete]:not([disabled])").forEach((btn) => {
+      container.querySelectorAll("[data-managed-person-delete]").forEach((btn) => {
         btn.addEventListener("click", () => openManagedPersonDeleteDialog(btn.dataset.managedPersonDelete));
       });
       container.querySelectorAll("[data-managed-person-convert]").forEach((btn) => {
@@ -1033,8 +1033,16 @@
     const managedPersonDeleteDialog = document.getElementById("managed-person-delete-dialog");
     let deletingManagedPersonId = null;
 
+    const DELETE_TEXT_DEFAULT = "Diese Aktion kann nicht rückgängig gemacht werden. Charaktere und offene Event-Anmeldungen der Person werden mitgelöscht.";
+    const DELETE_TEXT_FORCE = "Diese Person hat bestätigte oder bezahlte Event-Anmeldungen. Wenn du trotzdem löschst, gehen Anmeldungen, Zahlungsdaten und Charaktere unwiderruflich verloren. Wirklich trotzdem löschen?";
+    let deletingForce = false;
+
     function openManagedPersonDeleteDialog(id) {
       deletingManagedPersonId = id;
+      const person = managedPersons.find((p) => p.id === id);
+      deletingForce = person ? !person.canDelete : false;
+      document.getElementById("managed-person-delete-text").textContent = deletingForce ? DELETE_TEXT_FORCE : DELETE_TEXT_DEFAULT;
+      document.getElementById("managed-person-delete-confirm").textContent = deletingForce ? "Trotzdem löschen" : "Löschen";
       managedPersonDeleteDialog.showModal();
     }
 
@@ -1045,7 +1053,7 @@
 
     document.getElementById("managed-person-delete-confirm").addEventListener("click", async () => {
       try {
-        await api.delete(`/managed-persons/${deletingManagedPersonId}`);
+        await api.delete(`/managed-persons/${deletingManagedPersonId}${deletingForce ? "?force=true" : ""}`);
         notify("Gelöscht.", "success");
         managedPersonDeleteDialog.close();
         await loadManagedPersons();

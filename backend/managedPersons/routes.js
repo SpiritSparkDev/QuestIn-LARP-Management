@@ -68,9 +68,10 @@ router.patch('/managed-persons/:id', requireAuth(async ({ req, params, user }) =
   }
 }));
 
-router.delete('/managed-persons/:id', requireAuth(async ({ params, user }) => {
+router.delete('/managed-persons/:id', requireAuth(async ({ req, params, user }) => {
   try {
-    const deleted = await deleteManagedPerson(params.id, user.id);
+    const force = new URL(req.url, 'http://localhost').searchParams.get('force') === 'true';
+    const deleted = await deleteManagedPerson(params.id, user.id, { force });
     if (!deleted) return { status: 404, body: { error: 'managed person not found' } };
     return { status: 200, body: { deleted: true } };
   } catch (err) {
