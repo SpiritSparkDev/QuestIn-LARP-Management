@@ -51,3 +51,12 @@ test('/ serves index.html', async () => {
   assert.equal(result.data.toString('utf8'), 'root');
   await rm(dir, { recursive: true, force: true });
 });
+
+test('/checkin and /taverne are aliases for the admin pages (served from the default frontend dir)', async () => {
+  const checkin = await serveStaticFile('/checkin');
+  assert.ok(checkin);
+  assert.equal(checkin.contentType, 'text/html; charset=utf-8');
+  assert.ok(checkin.data.toString().includes('<h1>Check-In</h1>'));
+  const taverne = await serveStaticFile('/taverne');
+  assert.ok(taverne.data.toString().includes('<h1>Taverne</h1>'));
+});

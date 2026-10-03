@@ -149,3 +149,33 @@ export function initSidebarToggle() {
     sidebar.classList.remove('sidebar--open');
   });
 }
+
+// ---- Stand-alone mode -------------------------------------------------
+// /checkin and /taverne open the same pages as the admin menu entries, but
+// without the sidebar: a slim top bar instead, so a tablet or phone can sit
+// on one task (check-in desk, bar) with the whole screen. Access rules are
+// unchanged -- it is only a different frame around the same page.
+const STANDALONE_TITLES = { '/checkin': 'Check-In', '/taverne': 'Taverne' };
+
+function initStandaloneMode() {
+  const title = STANDALONE_TITLES[window.location.pathname];
+  if (!title) return;
+  document.body.classList.add('standalone');
+  const bar = document.createElement('header');
+  bar.className = 'standalone-bar';
+  bar.innerHTML = `<a href="/account.html#dashboard" class="standalone-home"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span><span>Zur App</span></a>
+    <strong>${escapeHtml(title)}</strong>
+    <a href="#" class="standalone-logout">Logout</a>`;
+  // The page wires logout to the sidebar's (now hidden) link; reuse it.
+  bar.querySelector('.standalone-logout').addEventListener('click', (event) => {
+    event.preventDefault();
+    document.getElementById('logout-link')?.click();
+  });
+  document.body.prepend(bar);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initStandaloneMode);
+} else {
+  initStandaloneMode();
+}

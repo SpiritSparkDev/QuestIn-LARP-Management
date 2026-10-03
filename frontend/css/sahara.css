@@ -3284,3 +3284,60 @@ input[type="checkbox"].switch:checked::after {
 .settings-state.is-saved {
   color: var(--success);
 }
+
+/* ---------- Stand-alone pages (/checkin, /taverne) ---------- */
+.standalone-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px;
+  background: var(--surface-container-lowest);
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.has-testmode-banner .standalone-bar {
+  top: 32px;
+}
+
+.standalone-bar strong {
+  font-family: "EB Garamond", serif;
+  font-size: 20px;
+  color: var(--primary);
+}
+
+.standalone-bar a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-surface-variant);
+  text-decoration: none;
+}
+
+.standalone .sidebar,
+.standalone .sidebar-toggle,
+.standalone .standalone-link {
+  display: none !important;
+}
+
+.standalone .main {
+  margin-left: 0;
+}
+
+.standalone .content {
+  padding: 20px 20px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.standalone-link {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
