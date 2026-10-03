@@ -107,7 +107,7 @@
 
                 <dialog id="managed-person-delete-dialog">
                   <h3>Person löschen</h3>
-                  <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+                  <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden. Charaktere und offene Event-Anmeldungen der Person werden mitgelöscht.</p>
                   <div class="dialog-actions">
                     <button type="button" id="managed-person-delete-confirm">Löschen</button>
                     <button type="button" id="managed-person-delete-cancel" class="btn-ghost">Abbrechen</button>
@@ -938,7 +938,7 @@
       <div class="action-row">
         <a href="${manageHref}" class="btn-ghost">Charaktere &amp; Anmeldung verwalten</a>
         <button type="button" data-managed-person-edit="${p.id}" class="btn-ghost">Bearbeiten</button>
-        <button type="button" data-managed-person-delete="${p.id}" class="btn-ghost" ${p.canDelete ? "" : "disabled title=\"Diese Person hat bereits Event-Anmeldungen und kann nicht gelöscht werden.\""}>Löschen</button>
+        <button type="button" data-managed-person-delete="${p.id}" class="btn-ghost" ${p.canDelete ? "" : "disabled title=\"Diese Person hat bereits bestätigte oder bezahlte Event-Anmeldungen und kann nicht gelöscht werden.\""}>Löschen</button>
         ${p.email ? `<button type="button" data-managed-person-convert="${p.id}" class="btn-ghost">In eigenen Account umwandeln</button>` : ""}
       </div>
     </div>`;

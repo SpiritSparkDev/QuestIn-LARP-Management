@@ -3,9 +3,14 @@ import { displayName } from '../displayName.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 
+// A person can be deleted unless a registration is already binding: paid, or
+// confirmed/checked in. Open registrations (pending, waitlisted, ...) are
+// removed together with the person (ON DELETE CASCADE).
+const BINDING_REGISTRATION = "(registrations.paid_at IS NOT NULL OR registrations.status IN ('confirmed', 'checked_in', 'checked_out'))";
+
 const SELECT_COLUMNS = `
   id, email, first_name, last_name, nickname, account_data_enc,
-  NOT EXISTS (SELECT 1 FROM registrations WHERE registrations.user_id = users.id) AS can_delete
+  NOT EXISTS (SELECT 1 FROM registrations WHERE registrations.user_id = users.id AND ${BINDING_REGISTRATION}) AS can_delete
 `;
 
 function decryptManagedPerson(row) {
@@ -119,11 +124,12 @@ export async function updateManagedPerson(id, ownerId, fields) {
 export async function deleteManagedPerson(id, ownerId) {
   const { rows: regRows } = await query(
     `SELECT 1 FROM registrations r JOIN users u ON u.id = r.user_id
-     WHERE r.user_id = $1 AND u.managed_by_user_id = $2`,
+     WHERE r.user_id = $1 AND u.managed_by_user_id = $2
+       AND (r.paid_at IS NOT NULL OR r.status IN ('confirmed', 'checked_in', 'checked_out'))`,
     [id, ownerId]
   );
   if (regRows.length > 0) {
-    const err = new Error('Diese Person hat bereits Event-Anmeldungen und kann nicht gelöscht werden.');
+    const err = new Error('Diese Person hat bereits bestätigte oder bezahlte Event-Anmeldungen und kann nicht gelöscht werden.');
     err.code = 'HAS_REGISTRATIONS';
     throw err;
   }

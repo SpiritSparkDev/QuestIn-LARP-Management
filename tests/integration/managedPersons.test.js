@@ -157,7 +157,7 @@ test('PATCH /managed-persons/:id rejects an OT field the caller isn\'t permitted
   }
 });
 
-test('DELETE /managed-persons/:id succeeds with no registrations, 409s once one exists', async () => {
+test('DELETE /managed-persons/:id succeeds with open registrations, 409s once one is confirmed', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
@@ -177,10 +177,11 @@ test('DELETE /managed-persons/:id succeeds with no registrations, 409s once one 
       [id, eventRows[0].id]
     );
 
+    await query("UPDATE registrations SET status = 'confirmed' WHERE user_id = $1", [id]);
     const blockedRes = await fetch(`http://localhost:${port}/managed-persons/${id}`, { method: 'DELETE', headers: { Cookie: cookie } });
     assert.equal(blockedRes.status, 409);
 
-    await query('DELETE FROM registrations WHERE user_id = $1', [id]);
+    await query("UPDATE registrations SET status = 'pending' WHERE user_id = $1", [id]);
 
     const okRes = await fetch(`http://localhost:${port}/managed-persons/${id}`, { method: 'DELETE', headers: { Cookie: cookie } });
     assert.equal(okRes.status, 200);
