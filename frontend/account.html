@@ -68,7 +68,15 @@
               <div class="card" id="dashboard-account-hint" style="display:none;"></div>
 
               <div id="dashboard-managed-persons-toggle" style="display:none;">
-                <label><input type="checkbox" id="dashboard-managed-persons-checkbox"> Gruppe oder weitere Charaktere anmelden</label>
+                <label class="group-feature">
+                  <span class="group-feature-icon" aria-hidden="true">⚔</span>
+                  <span class="group-feature-text">
+                    <span class="group-feature-kicker">Für LARP-Gruppen</span>
+                    <span class="group-feature-title">Gruppe oder weitere Charaktere anmelden</span>
+                    <span class="group-feature-desc">Melde Freunde, Familie oder deine ganze Gruppe gemeinsam an und verwalte Daten, Charaktere und Tickets an einem Ort.</span>
+                  </span>
+                  <input type="checkbox" id="dashboard-managed-persons-checkbox" class="group-feature-switch" role="switch">
+                </label>
               </div>
 
               <div class="card form-pad" id="dashboard-managed-persons-section" style="display:none;">
