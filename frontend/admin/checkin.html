@@ -7,7 +7,8 @@
 <link rel="stylesheet" href="/css/fonts.css">
 <link rel="stylesheet" href="/css/sahara.css">
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1/dist/jsQR.js"></script>
+<!-- Served locally (frontend/vendor): the check-in desk may have poor connectivity. -->
+<script src="/vendor/jsQR.js"></script>
 </head>
 <body>
 <div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
@@ -47,7 +48,14 @@
     <button type="button" id="send-payment-reminders" class="btn-ghost">Zahlungserinnerungen senden</button>
     <button type="button" id="scan-start" style="display:none;">Scan starten (20s)</button>
     <p id="scan-status" class="sub"></p>
-    <video id="scan-video" style="max-width:320px;display:none;" playsinline muted></video>
+    <div id="scan-viewport" class="scan-viewport" hidden>
+      <video id="scan-video" playsinline muted></video>
+      <div class="scan-frame" aria-hidden="true"></div>
+      <div class="scan-controls">
+        <button type="button" id="scan-torch" class="btn-secondary" hidden>Licht</button>
+        <button type="button" id="scan-stop" class="btn-secondary">Scan beenden</button>
+      </div>
+    </div>
     <canvas id="scan-canvas" style="display:none;"></canvas>
     <dialog id="scan-dialog">
       <h2>Gescannter Teilnehmer</h2>
@@ -57,7 +65,7 @@
       <p id="scan-characters"></p>
       <p id="scan-warning" class="error" style="display:none;"></p>
       <button type="button" id="scan-confirm">Einchecken</button>
-      <button type="button" id="scan-cancel">Abbrechen</button>
+      <button type="button" id="scan-cancel" class="btn-ghost">Abbrechen</button>
     </dialog>
     <dialog id="edit-dialog">
       <h2 id="edit-dialog-title">Teilnehmer bearbeiten</h2>
@@ -352,11 +360,34 @@ let scanDialogAutoCloseId = null;
 let dialogOpenForEventId = null;
 let scanLookupPending = false;
 
+const scanViewport = document.getElementById('scan-viewport');
+const scanTorchButton = document.getElementById('scan-torch');
+let scanWakeLock = null;
+let scanTorchOn = false;
+
+// Short confirmation cue when a code was read -- the person holding the
+// phone is looking at the person in front of them, not at the screen.
+function signalScanned() {
+  try { navigator.vibrate?.(150); } catch { /* not supported */ }
+  try {
+    const audio = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audio.createOscillator();
+    osc.frequency.value = 880;
+    osc.connect(audio.destination);
+    osc.start();
+    osc.stop(audio.currentTime + 0.12);
+    osc.onended = () => audio.close();
+  } catch { /* audio not available */ }
+}
+
 function stopScanning() {
+  if (scanWakeLock) { scanWakeLock.release().catch(() => {}); scanWakeLock = null; }
+  scanTorchOn = false;
+  scanTorchButton.hidden = true;
+  scanViewport.hidden = true;
   if (scanIntervalId) { clearInterval(scanIntervalId); scanIntervalId = null; }
   if (scanPushTimeoutId) { clearTimeout(scanPushTimeoutId); scanPushTimeoutId = null; }
   if (scanStream) { scanStream.getTracks().forEach((track) => track.stop()); scanStream = null; }
-  scanVideo.style.display = 'none';
   scanVideo.srcObject = null;
   scanLookupPending = false;
 }
@@ -364,15 +395,24 @@ function stopScanning() {
 async function startScanning({ pushMode }) {
   stopScanning();
   scanStatus.textContent = '';
+  if (!navigator.mediaDevices?.getUserMedia) {
+    scanStatus.textContent = 'Kamerazugriff funktioniert nur über eine HTTPS-Verbindung.';
+    return;
+  }
   try {
-    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } });
   } catch {
-    scanStatus.textContent = 'Kamera nicht verfügbar oder Zugriff verweigert.';
+    scanStatus.textContent = 'Kamera nicht verfügbar oder Zugriff verweigert. Bitte den Kamerazugriff für diese Seite erlauben.';
     return;
   }
   scanVideo.srcObject = scanStream;
-  scanVideo.style.display = '';
+  scanViewport.hidden = false;
   await scanVideo.play();
+  scanStatus.textContent = 'QR-Code in den Rahmen halten.';
+  // Keep the screen awake while scanning (not available everywhere).
+  try { scanWakeLock = await navigator.wakeLock?.request('screen'); } catch { scanWakeLock = null; }
+  const track = scanStream.getVideoTracks()[0];
+  scanTorchButton.hidden = !track?.getCapabilities?.().torch;
   const ctx = scanCanvas.getContext('2d', { willReadFrequently: true });
 
   scanIntervalId = setInterval(() => {
@@ -393,7 +433,13 @@ async function startScanning({ pushMode }) {
   }
 }
 
+// The camera keeps seeing the same code while the dialog is open and right
+// after it closes; without a cooldown a cancelled scan would reopen at once.
+let lastScan = { code: null, at: 0 };
+const SAME_CODE_COOLDOWN_MS = 5000;
+
 async function handleScannedCode(rawCode) {
+  if (rawCode === lastScan.code && Date.now() - lastScan.at < SAME_CODE_COOLDOWN_MS) return;
   const parsed = parseScanCode(rawCode);
   const eventId = eventSelect.value;
   if (!parsed || !eventId) {
@@ -407,6 +453,8 @@ async function handleScannedCode(rawCode) {
   scanLookupPending = true;
   try {
     const lookup = await api.get(`/events/${eventId}/scan-lookup?code=${encodeURIComponent(rawCode)}`);
+    signalScanned();
+    lastScan = { code: rawCode, at: Date.now() };
     openScanDialog(eventId, lookup);
   } catch (err) {
     scanStatus.textContent = err.message;
@@ -453,6 +501,7 @@ document.getElementById('scan-confirm').addEventListener('click', async (event) 
 });
 
 document.getElementById('scan-cancel').addEventListener('click', () => {
+  lastScan.at = Date.now();
   clearTimeout(scanDialogAutoCloseId);
   scanDialog.close();
 });
@@ -569,6 +618,23 @@ scanModeButtons.forEach((button) => {
 });
 
 scanStartButton.addEventListener('click', () => startScanning({ pushMode: true }));
+document.getElementById('scan-stop').addEventListener('click', () => {
+  stopScanning();
+  scanStatus.textContent = '';
+  // In "An" mode the scanner would otherwise restart on the next mode change; leave it off.
+  if (scanModeButtons.length && document.querySelector('.toggle-btn.active')?.dataset.mode === 'always') setScanMode('off');
+});
+scanTorchButton.addEventListener('click', async () => {
+  const track = scanStream?.getVideoTracks()[0];
+  if (!track) return;
+  scanTorchOn = !scanTorchOn;
+  try {
+    await track.applyConstraints({ advanced: [{ torch: scanTorchOn }] });
+    scanTorchButton.textContent = scanTorchOn ? 'Licht aus' : 'Licht';
+  } catch {
+    scanTorchOn = false;
+  }
+});
 window.addEventListener('beforeunload', stopScanning);
 
 const savedScanMode = localStorage.getItem('qrScanMode') || 'off';
