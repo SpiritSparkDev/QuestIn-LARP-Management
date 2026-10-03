@@ -600,8 +600,10 @@
       <div class="event-subcards">
         <div class="event-subcard">
           <h3><span class="material-symbols-outlined" aria-hidden="true">schedule</span> Zeit</h3>
-          ${countdown}
-          <p class="event-date"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span> ${escapeHtml(formatEventDate(activeEvent.event_date))}</p>
+          <div class="event-time-row">
+            ${countdown}
+            <p class="event-date event-date-large"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span> ${escapeHtml(formatEventDate(activeEvent.event_date))}</p>
+          </div>
         </div>
         ${locationBlock}
       </div>

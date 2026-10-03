@@ -2351,3 +2351,23 @@ input[type="checkbox"].group-feature-switch:checked {
     grid-template-columns: 1fr;
   }
 }
+
+.event-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 28px;
+}
+
+.event-time-row .event-countdown {
+  margin: 0;
+}
+
+.event-date-large {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.event-date-large .material-symbols-outlined {
+  font-size: 1.8rem;
+}
