@@ -3108,3 +3108,17 @@ select.suggested {
   align-items: center;
   gap: 16px;
 }
+
+/* Test-Modus warning strip */
+.testmode-banner {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  padding: 6px 12px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--gold-container, #fbe8b0);
+  color: var(--on-gold-container, #4a3300);
+  border-bottom: 1px solid var(--outline-variant);
+}

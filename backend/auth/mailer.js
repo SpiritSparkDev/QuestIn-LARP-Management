@@ -9,6 +9,8 @@ import { renderSlotEmail } from '../emailTemplates/send.js';
 // text option, same rule as the manual "send test" flow in
 // backend/emailTemplates/routes.js.
 function deliver(transporter, from, to, { subject, body, isHtml }) {
+  // Test-Modus people live on a reserved, undeliverable domain -- never try to mail them.
+  if (String(to).toLowerCase().endsWith('@test.invalid')) return Promise.resolve({ skipped: true });
   return transporter.sendMail({ to, from, subject, ...(isHtml ? { html: body } : { text: body }) });
 }
 

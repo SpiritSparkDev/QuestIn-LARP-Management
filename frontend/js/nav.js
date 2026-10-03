@@ -47,7 +47,25 @@ function renderNavItem({ href, label, icon }, currentPath) {
   return `<a href="${href}" class="${current}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span></a>`;
 }
 
+// Thin warning strip on every page while the fictional test data is loaded,
+// so nobody mistakes it for real registrations. renderNavLinks runs on every
+// page that has the sidebar, so it is the one place that sees the account.
+function showTestModeBanner(account) {
+  const existing = document.getElementById('testmode-banner');
+  if (!account.testMode) {
+    existing?.remove();
+    return;
+  }
+  if (existing || !document.body) return;
+  const banner = document.createElement('div');
+  banner.id = 'testmode-banner';
+  banner.className = 'testmode-banner';
+  banner.textContent = 'Test-Modus aktiv – alle Personen und das Event sind fiktiv';
+  document.body.prepend(banner);
+}
+
 export function renderNavLinks(account, currentPath) {
+  showTestModeBanner(account);
   // Add-on entries (item.flag) also need the add-on switched on; admins see
   // every enabled add-on without needing its menu key.
   const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]));

@@ -230,6 +230,23 @@
               Charaktere durchsuchen aktiviert</label
             >
           </div>
+          <div class="card form-pad" id="test-mode-card">
+            <h2>Test-Modus</h2>
+            <p class="sub">
+              Lädt einen fiktiven Datensatz: 75 Personen (einige in Gruppen,
+              die meisten einzeln) mit Charakteren, Anmeldungen in
+              verschiedenen Status und ein fiktives Event. Alles ist als
+              Testdaten markiert und lässt sich mit einem Klick wieder
+              vollständig entfernen – echte Daten bleiben unberührt. Die
+              Testpersonen können sich nicht einloggen und erhalten keine
+              E-Mails. Ist bereits ein echtes Event aktiv, bleibt dieses
+              aktiv – das Test-Event lässt sich dann unter Events
+              aktivieren.
+            </p>
+            <p id="test-mode-status" class="sub"></p>
+            <button type="button" id="test-mode-load">Testdaten laden</button>
+            <button type="button" id="test-mode-remove" class="btn-danger" hidden>Testdaten entfernen</button>
+          </div>
           <div class="card form-pad">
             <h2>Add-on: Tavernenkonto</h2>
             <p class="sub">
@@ -522,6 +539,44 @@
           }
         });
 
+      async function refreshTestMode() {
+        const status = await api.get("/test-mode");
+        document.getElementById("test-mode-status").textContent = status.enabled
+          ? `Testdaten sind geladen: ${status.people} Personen, ${status.characters} Charaktere, ${status.events} Event.`
+          : "Es sind keine Testdaten geladen.";
+        document.getElementById("test-mode-load").hidden = status.enabled;
+        document.getElementById("test-mode-remove").hidden = !status.enabled;
+      }
+
+      document
+        .getElementById("test-mode-load")
+        .addEventListener("click", async (event) => {
+          event.target.disabled = true;
+          try {
+            await api.post("/test-mode", {});
+            notify("Testdaten geladen. Die Seite wird neu geladen.", "success");
+            setTimeout(() => window.location.reload(), 800);
+          } catch (err) {
+            event.target.disabled = false;
+            notify(err.message, "error");
+          }
+        });
+
+      document
+        .getElementById("test-mode-remove")
+        .addEventListener("click", async (event) => {
+          if (!confirm("Alle Testdaten (Personen, Charaktere, Anmeldungen, Test-Event) wirklich entfernen? Echte Daten bleiben erhalten.")) return;
+          event.target.disabled = true;
+          try {
+            await api.delete("/test-mode");
+            notify("Testdaten entfernt. Die Seite wird neu geladen.", "success");
+            setTimeout(() => window.location.reload(), 800);
+          } catch (err) {
+            event.target.disabled = false;
+            notify(err.message, "error");
+          }
+        });
+
       document
         .getElementById("tavern-toggle")
         .addEventListener("change", async (event) => {
@@ -664,6 +719,7 @@
         await loadBaseUrlSettings();
         await loadInvitationSettings();
         await loadCharacterBrowsingSetting();
+        await refreshTestMode();
         await loadWaitlistSetting();
         await loadPaymentSettings();
         await loadWaiverSettings();

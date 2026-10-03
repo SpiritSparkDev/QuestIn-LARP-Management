@@ -3,12 +3,13 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
 import { getAccount, updateAccount } from './repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
+import { isTestModeEnabled } from '../testMode/load.js';
 
 router.get('/account', requireAuth(async ({ user }) => {
   const account = await getAccount(user.id);
   // Drives the admin sidebar's "PDF-Import" link (opt-in add-on).
   const { pdfImportEnabled, tavernEnabled } = await getAppSettings();
-  return { status: 200, body: { ...account, pdfImportEnabled, tavernEnabled } };
+  return { status: 200, body: { ...account, pdfImportEnabled, tavernEnabled, testMode: await isTestModeEnabled() } };
 }));
 
 router.patch('/account', requireAuth(async ({ req, user }) => {
