@@ -583,6 +583,7 @@ h1, h2, h3 {
 
 .sidebar-toggle {
   display: none;
+  color: var(--on-surface);
   position: fixed;
   top: 16px;
   left: 16px;
@@ -2502,4 +2503,273 @@ input[type="checkbox"].group-feature-switch:checked {
 select.suggested {
   border-color: var(--primary);
   background: var(--primary-container);
+}
+
+/* The consent/feature card is a <label>; undo the uppercase label styling for its contents */
+.group-feature,
+.group-feature * {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.group-feature .group-feature-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 700px) {
+  .content {
+    padding: 64px 14px 28px;
+  }
+
+  .card {
+    padding: 18px;
+  }
+
+  .form-pad {
+    padding: 16px;
+  }
+
+  h1 {
+    font-size: 26px;
+  }
+
+  /* 16px keeps iOS from zooming into a field on focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+    padding: 12px;
+  }
+
+  input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+  }
+
+  /* Comfortable touch targets */
+  button,
+  .btn,
+  .btn-ghost,
+  .btn-secondary,
+  .btn-danger {
+    min-height: 44px;
+  }
+
+  .btn-sm {
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .sidebar-toggle {
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-nav-item {
+    min-height: 48px;
+  }
+
+  dialog {
+    width: calc(100vw - 24px);
+    max-width: none;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    padding: 18px;
+  }
+
+  .event-admin-toolbar button,
+  .event-form-actions button {
+    flex: 1;
+  }
+
+  .event-form-actions {
+    flex-wrap: wrap;
+  }
+
+  /* Tables -> stacked cards. Cells are labelled from their column header
+     (data-label, set by js/responsiveTables.js). */
+  .table-scroll {
+    overflow-x: visible;
+  }
+
+  .table-scroll table,
+  table {
+    display: block;
+    width: 100%;
+    white-space: normal;
+    overflow-x: visible;
+  }
+
+  table thead {
+    display: none;
+  }
+
+  table tbody {
+    display: block;
+  }
+
+  table tbody tr {
+    display: block;
+    margin-bottom: 12px;
+    padding: 6px 14px;
+    background: var(--surface-container-lowest);
+    border: 1px solid var(--outline-variant);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--outline-variant);
+    text-align: right;
+  }
+
+  table tbody td:last-child {
+    border-bottom: 0;
+  }
+
+  table tbody td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--on-surface-variant);
+    text-align: left;
+  }
+
+  table tbody td:empty {
+    display: none;
+  }
+
+  /* The check-in grid: one card per participant */
+  .grid-table {
+    display: block;
+  }
+
+  .grid-header {
+    display: none;
+  }
+
+  .grid-row:not(.grid-header) {
+    display: block;
+    margin-bottom: 12px;
+    padding: 6px 14px;
+    background: var(--surface-container-lowest);
+    border: 1px solid var(--outline-variant);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  .grid-row:not(.grid-header) .grid-cell,
+  .grid-row:not(.grid-header) .grid-cell.cell-stack {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    text-align: right;
+  }
+
+  .grid-row .grid-cell[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--on-surface-variant);
+    text-align: left;
+  }
+
+  .grid-row .grid-cell:empty {
+    display: none;
+  }
+
+  /* Name leads the card; actions get a full-width row of big buttons */
+  .grid-row:not(.grid-header) .grid-cell:first-child {
+    font-size: 17px;
+    font-weight: 600;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .grid-row .grid-cell:first-child::before {
+    display: none;
+  }
+
+  .grid-row:not(.grid-header) .grid-cell.cell-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 12px;
+  }
+
+  .grid-row .grid-cell.cell-actions::before {
+    display: none;
+  }
+
+  .grid-row .grid-cell.cell-actions button {
+    flex: 1 1 40%;
+  }
+
+  .grid-row:not(.grid-header):hover .grid-cell {
+    background: none;
+  }
+
+  /* The list cards carry their own border; drop the wrapping card's chrome */
+  .card:has(> .table-scroll) {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  /* Cells that hold only buttons/selects (no column label) span the card */
+  table tbody td:not([data-label]) {
+    justify-content: stretch;
+  }
+
+  table tbody td:not([data-label]) button {
+    flex: 1;
+  }
+
+  .grid-row:not(.grid-header) .grid-cell select {
+    width: auto;
+    min-width: 150px;
+  }
+
+  .grid-row:not(.grid-header) .grid-cell input {
+    min-width: 0;
+  }
+
+  /* Two-column page layouts and inline two-column field grids collapse to one column */
+  .col2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grid .span {
+    grid-column: auto;
+  }
+
+  [style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  svg#usage-chart {
+    max-width: 100%;
+    height: auto;
+  }
 }

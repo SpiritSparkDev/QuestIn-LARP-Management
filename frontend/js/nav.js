@@ -1,5 +1,14 @@
 import { escapeHtml } from './formFields.js';
 import { APP_VERSION } from './version.js';
+import { initResponsiveTables } from './responsiveTables.js';
+
+// Every page that renders the sidebar also gets the narrow-screen table
+// labelling -- nav.js is the one module they all share.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initResponsiveTables);
+} else {
+  initResponsiveTables();
+}
 
 // Dashboard/Konto/Anmelden/Charaktere are facets of the same 'konto'
 // permission and the same page (account.html) -- distinguished only by
