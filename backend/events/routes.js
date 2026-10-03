@@ -59,7 +59,7 @@ function validatePricing(pricing) {
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, code, capacity, flags, pricing } = body;
+  const { name, eventDate, code, capacity, flags, pricing, directions, briefing } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
@@ -73,7 +73,7 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
     const pricingError = validatePricing(pricing);
     if (pricingError) return { status: 400, body: { error: pricingError } };
   }
-  const event = await createEvent({ name, eventDate, code, capacity, flags, pricing });
+  const event = await createEvent({ name, eventDate, code, capacity, flags, pricing, directions, briefing });
   return { status: 201, body: event };
 })));
 

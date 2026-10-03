@@ -334,6 +334,41 @@ test('capacity can be set on create, updated, and cleared back to unlimited', as
   });
 });
 
+test('directions and briefing default to null, can be set, and blank text clears them', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
+
+    const createRes = await fetch(`http://localhost:${port}/events`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'Briefing-Con', eventDate: '2027-09-01' }),
+    });
+    const created = await createRes.json();
+    assert.equal(created.directions, null);
+    assert.equal(created.briefing, null);
+
+    const setRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ directions: 'Ab Autobahn links', briefing: 'Der Plot' }),
+    });
+    const set = await setRes.json();
+    assert.equal(set.directions, 'Ab Autobahn links');
+    assert.equal(set.briefing, 'Der Plot');
+
+    const partialRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT', headers, body: JSON.stringify({ name: 'Briefing-Con 2' }),
+    });
+    assert.equal((await partialRes.json()).briefing, 'Der Plot');
+
+    const clearRes = await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT', headers, body: JSON.stringify({ directions: '  ', briefing: '' }),
+    });
+    const cleared = await clearRes.json();
+    assert.equal(cleared.directions, null);
+    assert.equal(cleared.briefing, null);
+  });
+});
+
 test('an event created without capacity defaults to unlimited (null)', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');

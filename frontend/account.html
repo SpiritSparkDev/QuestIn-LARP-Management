@@ -40,9 +40,26 @@
         <div class="tab-panel" id="dashboard-tab">
           <div class="dashboard-layout">
             <div class="dashboard-main">
-              <h1>Übersicht</h1>
+              <div class="dashboard-header">
+                <div>
+                  <h1>Übersicht</h1>
+                  <p class="sub">Dein Event auf einen Blick.</p>
+                </div>
+                <div class="dashboard-header-actions">
+                  <button type="button" id="dashboard-refresh-btn" class="btn-secondary">Aktualisieren</button>
+                  <button type="button" id="dashboard-book-btn">Neues Ticket buchen</button>
+                </div>
+              </div>
 
               <div class="card" id="dashboard-event-card"></div>
+
+              <dialog id="event-info-dialog">
+                <h3 id="event-info-title"></h3>
+                <p id="event-info-body" class="event-info-body"></p>
+                <div class="dialog-actions">
+                  <button type="button" id="event-info-close" class="btn-ghost">Schließen</button>
+                </div>
+              </dialog>
 
               <h2>Meine Charaktere</h2>
               <div id="dashboard-character-list" class="char-grid"></div>
@@ -477,6 +494,41 @@
       .getElementById("dashboard-characters-link")
       .addEventListener("click", () => goToTab("charaktere"));
 
+    function formatEventDate(isoDate) {
+      const [y, m, d] = isoDate.split("-");
+      return `${d}.${m}.${y}`;
+    }
+
+    // Whole days from today (local midnight) to the event date; null once
+    // the event is in the past, so the countdown just disappears.
+    function daysUntil(isoDate) {
+      const [y, m, d] = isoDate.split("-").map(Number);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const days = Math.round((new Date(y, m - 1, d) - today) / 86400000);
+      return days >= 0 ? days : null;
+    }
+
+    const eventInfoDialog = document.getElementById("event-info-dialog");
+    document
+      .getElementById("event-info-close")
+      .addEventListener("click", () => eventInfoDialog.close());
+    document
+      .getElementById("dashboard-book-btn")
+      .addEventListener("click", () => goToTab("anmelden"));
+    document
+      .getElementById("dashboard-refresh-btn")
+      .addEventListener("click", async () => {
+        await Promise.all([loadEvents(), loadCharacters(), loadRegistrations()]);
+        renderDashboardEventCard();
+      });
+
+    function openEventInfo(title, text) {
+      document.getElementById("event-info-title").textContent = title;
+      document.getElementById("event-info-body").textContent = text;
+      eventInfoDialog.showModal();
+    }
+
     function renderDashboardEventCard() {
       const card = document.getElementById("dashboard-event-card");
       const activeEvent = events.find((e) => e.is_active);
@@ -488,20 +540,47 @@
       const registration = currentRegistrations.find(
         (r) => r.eventId === activeEvent.id,
       );
-      if (!registration) {
-        card.innerHTML = `<h2>${escapeHtml(activeEvent.name)}</h2>
-      <p class="sub">${escapeHtml(activeEvent.event_date)}</p>
-      <p>Du bist noch nicht angemeldet.</p>
-      <button type="button" id="dashboard-register-btn">Jetzt anmelden</button>`;
-        document
-          .getElementById("dashboard-register-btn")
-          .addEventListener("click", () => goToTab("anmelden"));
-        return;
-      }
-      const label = STATUS_LABELS[registration.status] ?? registration.status;
-      card.innerHTML = `<h2>${escapeHtml(activeEvent.name)}</h2>
-      <p class="sub">${escapeHtml(activeEvent.event_date)}</p>
-      <span class="status-pill status-${escapeHtml(registration.status)}">${escapeHtml(label)}</span>`;
+      const statusPill = registration
+        ? `<span class="status-pill status-${escapeHtml(registration.status)}">${escapeHtml(STATUS_LABELS[registration.status] ?? registration.status)}</span>`
+        : "";
+      const codeBox = activeEvent.code
+        ? `<span class="event-code">Veranstaltung: ${escapeHtml(activeEvent.code)}</span>`
+        : "";
+      const days = daysUntil(activeEvent.event_date);
+      const countdown =
+        days === null
+          ? ""
+          : `<div class="event-countdown">
+        <div class="event-countdown-num">${days}</div>
+        <div class="event-countdown-label">${days === 1 ? "Tag" : "Tage"} bis zum Event</div>
+      </div>`;
+      const infoButtons = [
+        activeEvent.directions
+          ? '<button type="button" class="btn-secondary" data-info="directions">Anfahrtsbeschreibung</button>'
+          : "",
+        activeEvent.briefing
+          ? '<button type="button" class="btn-secondary" data-info="briefing">Plot &amp; Briefing</button>'
+          : "",
+      ].join("");
+      card.innerHTML = `<div class="event-card-head">
+        <h2>${escapeHtml(activeEvent.name)}</h2>
+        ${statusPill}
+        <span class="badge badge-active">Event aktiv</span>
+        ${codeBox}
+      </div>
+      ${countdown}
+      <p class="event-date"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span> ${escapeHtml(formatEventDate(activeEvent.event_date))}</p>
+      ${registration ? "" : '<p>Du bist noch nicht angemeldet.</p>'}
+      ${infoButtons ? `<div class="event-info-buttons">${infoButtons}</div>` : ""}`;
+      card.querySelectorAll("[data-info]").forEach((button) => {
+        button.addEventListener("click", () => {
+          if (button.dataset.info === "directions") {
+            openEventInfo("Anfahrtsbeschreibung", activeEvent.directions);
+          } else {
+            openEventInfo("Plot & Briefing", activeEvent.briefing);
+          }
+        });
+      });
     }
 
     function renderDashboardCharacters() {

@@ -78,6 +78,10 @@
 
         <input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt">
         <label for="event-capacity">Max. Teilnehmerzahl <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
+        <textarea id="event-directions" name="directions" rows="4"></textarea>
+        <label for="event-directions">Anfahrtsbeschreibung <span style="opacity:0.6;font-size:12px;">optional, erscheint im Dashboard nur wenn ausgefüllt</span></label>
+        <textarea id="event-briefing" name="briefing" rows="6"></textarea>
+        <label for="event-briefing">Plot &amp; Briefing <span style="opacity:0.6;font-size:12px;">optional, erscheint im Dashboard nur wenn ausgefüllt</span></label>
         <input id="event-flags" name="flags" type="text" placeholder="GSC, VP, Ersthelfer">
         <label for="event-flags">Sonderrollen <span style="opacity:0.6;font-size:12px;">optional, Komma-getrennt, z.B. GSC, VP, Ersthelfer</span></label>
 
@@ -345,6 +349,8 @@ function startEdit(eventData) {
   form.elements.code.value = eventData.code ?? '';
   form.elements.capacity.value = eventData.capacity ?? '';
   form.elements.flags.value = (eventData.flags ?? []).join(', ');
+  form.elements.directions.value = eventData.directions ?? '';
+  form.elements.briefing.value = eventData.briefing ?? '';
   priceGroups = [...(eventData.pricing?.groups ?? [])];
   priceTiers = (eventData.pricing?.tiers ?? []).map((t) => ({
     name: t.name,
@@ -380,6 +386,8 @@ form.addEventListener('submit', async (event) => {
     clearCapacity: true,
     flags: form.elements.flags.value.split(',').map((f) => f.trim()).filter(Boolean),
     pricing: collectPricing(),
+    directions: form.elements.directions.value,
+    briefing: form.elements.briefing.value,
   };
   try {
     if (editingEventId) {

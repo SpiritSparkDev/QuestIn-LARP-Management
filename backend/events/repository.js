@@ -2,7 +2,7 @@ import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, pricing, is_active, created_at';
+const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, pricing, directions, briefing, is_active, created_at';
 
 // Trims, drops empty strings, and deduplicates while preserving first-seen
 // order -- the admin-facing comma-separated textfield can easily produce
@@ -47,12 +47,19 @@ function normalizePricing(pricing) {
   return { groups, tiers: normalizedTiers };
 }
 
-export async function createEvent({ name, eventDate, code, capacity, flags, pricing }) {
+// Blank text counts as "not set" so the dashboard's show-only-if-present
+// check can be a plain truthiness test.
+function normalizeText(value) {
+  if (typeof value !== 'string') return null;
+  return value.trim() === '' ? null : value;
+}
+
+export async function createEvent({ name, eventDate, code, capacity, flags, pricing, directions, briefing }) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, code, capacity, flags, pricing)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, directions, briefing)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING ${SELECT_COLUMNS}`,
-    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing))]
+    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), normalizeText(directions), normalizeText(briefing)]
   );
   return rows[0];
 }
@@ -80,7 +87,7 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity, flags, pricing }) {
+export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity, flags, pricing, directions, briefing }) {
   // code/capacity are the fields a caller can legitimately want to CLEAR
   // (empty string / "unbegrenzt") rather than just omit -- COALESCE alone
   // can't tell those apart, since both arrive as a falsy value. $6/$7
@@ -95,7 +102,9 @@ export async function updateEvent(id, { name, eventDate, code, capacity, clearCa
        code = CASE WHEN $6 THEN $4 ELSE code END,
        capacity = CASE WHEN $7 THEN $5 ELSE capacity END,
        flags = COALESCE($8, flags),
-       pricing = COALESCE($9, pricing)
+       pricing = COALESCE($9, pricing),
+       directions = CASE WHEN $10 THEN $11 ELSE directions END,
+       briefing = CASE WHEN $12 THEN $13 ELSE briefing END
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
     [
@@ -103,6 +112,8 @@ export async function updateEvent(id, { name, eventDate, code, capacity, clearCa
       code !== undefined, capacity !== undefined || Boolean(clearCapacity),
       flags !== undefined ? normalizeFlags(flags) : null,
       pricing !== undefined ? JSON.stringify(normalizePricing(pricing)) : null,
+      directions !== undefined, normalizeText(directions),
+      briefing !== undefined, normalizeText(briefing),
     ]
   );
   return rows[0] ?? null;
