@@ -24,6 +24,7 @@ const MENU_LINKS = [
   { key: 'mitglieder', label: 'Mitglieder', href: '/admin/members.html', icon: 'group' },
   { key: 'events', label: 'Events', href: '/admin/events.html', icon: 'calendar_month' },
   { key: 'checkin', label: 'Check-In', href: '/admin/checkin.html', icon: 'qr_code_scanner' },
+  { key: 'taverne', flag: 'tavernEnabled', label: 'Taverne', href: '/admin/tavern.html', icon: 'local_bar' },
 ];
 
 const ADMIN_ONLY_LINKS = [
@@ -47,7 +48,9 @@ function renderNavItem({ href, label, icon }, currentPath) {
 }
 
 export function renderNavLinks(account, currentPath) {
-  const items = MENU_LINKS.filter((item) => account.menus.includes(item.key));
+  // Add-on entries (item.flag) also need the add-on switched on; admins see
+  // every enabled add-on without needing its menu key.
+  const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]));
   let html = items.map((item) => renderNavItem(item, currentPath)).join('');
   
   // A visual divider before the admin-only section -- keeps the role-gated

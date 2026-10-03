@@ -18,6 +18,8 @@ await seedGroups();
 const { query, closePool } = await import('../../backend/db.js');
 
 after(async () => {
+  // Leave app_settings as other test files expect to find it.
+  await query('UPDATE app_settings SET pdf_import_enabled = false');
   await closePool();
 });
 
