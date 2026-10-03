@@ -2064,16 +2064,22 @@ dialog#toast-stack::backdrop {
 }
 
 /* Native checkbox restyled as a switch */
-.group-feature-switch {
+input[type="checkbox"].group-feature-switch {
   flex: none;
   appearance: none;
   -webkit-appearance: none;
   position: relative;
+  display: block;
+  box-sizing: border-box;
   width: 48px;
   height: 28px;
+  min-width: 48px;
   margin: 0;
+  padding: 0;
+  border: 0;
   border-radius: 14px;
   background: var(--outline-variant);
+  box-shadow: none;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -2090,7 +2096,7 @@ dialog#toast-stack::backdrop {
   transition: transform 0.15s;
 }
 
-.group-feature-switch:checked {
+input[type="checkbox"].group-feature-switch:checked {
   background: var(--primary);
 }
 
@@ -2105,5 +2111,33 @@ dialog#toast-stack::backdrop {
   }
   .group-feature-text {
     flex-basis: calc(100% - 76px);
+  }
+}
+
+/* Dashboard: own characters left, groups right */
+.dashboard-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+
+.dashboard-col .char-grid {
+  grid-template-columns: 1fr;
+}
+
+.dashboard-col .group-feature {
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+
+.dashboard-col .group-feature-text {
+  flex-basis: calc(100% - 76px);
+}
+
+@media (max-width: 800px) {
+  .dashboard-split {
+    grid-template-columns: 1fr;
   }
 }
