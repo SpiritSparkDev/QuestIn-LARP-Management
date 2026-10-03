@@ -56,6 +56,10 @@ function rowToImport(row, { withRaw = false } = {}) {
     sourceFilename: row.source_filename,
     emailSentAt: row.email_sent_at,
     emailError: row.email_error,
+    userId: row.user_id,
+    eventId: row.event_id,
+    adoptedAt: row.adopted_at,
+    adoptError: row.adopt_error,
     mapped: decryptJson(row.mapped_data_enc),
     ...(withRaw ? { raw: decryptJson(row.raw_data_enc) } : {}),
   };
@@ -89,5 +93,17 @@ export async function markPdfImportEmail(id, { error = null } = {}) {
   await query(
     'UPDATE pdf_imports SET email_sent_at = CASE WHEN $2::text IS NULL THEN now() ELSE email_sent_at END, email_error = $2 WHERE id = $1',
     [id, error]
+  );
+}
+
+export async function markPdfImportAdopted(id, { userId, eventId, error = null }) {
+  await query(
+    `UPDATE pdf_imports SET
+       user_id = COALESCE($2, user_id),
+       event_id = $3,
+       adopted_at = CASE WHEN $4::text IS NULL THEN now() ELSE NULL END,
+       adopt_error = $4
+     WHERE id = $1`,
+    [id, userId ?? null, eventId, error]
   );
 }

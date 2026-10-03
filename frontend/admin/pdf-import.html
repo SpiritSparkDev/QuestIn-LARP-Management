@@ -61,6 +61,8 @@
         <h2>2. PDFs einlesen</h2>
         <input type="file" id="pdf-files" accept="application/pdf" multiple>
         <label for="pdf-files">Ausgefüllte Anmelde-PDFs</label>
+        <select id="upload-event"></select>
+        <label for="upload-event">Als Gast-Konto anlegen und für dieses Event anmelden <span style="opacity:0.6;font-size:12px;">Gast-Konten können sich nicht einloggen und lassen sich später unter Mitglieder in ein volles Konto umwandeln.</span></label>
         <label id="send-email-wrap" hidden><input type="checkbox" id="send-email"> Eingangsbestätigung an die E-Mail-Adresse im PDF senden</label>
         <div class="event-form-actions">
           <button type="button" id="upload-pdfs">Einlesen</button>
@@ -71,7 +73,7 @@
       <div class="card">
         <div class="table-scroll">
           <table id="import-list">
-            <thead><tr><th>Eingegangen</th><th>Name</th><th>E-Mail</th><th>Datei</th><th>Bestätigung</th><th></th></tr></thead>
+            <thead><tr><th>Eingegangen</th><th>Name</th><th>E-Mail</th><th>Datei</th><th>Gast-Konto</th><th>Bestätigung</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -81,6 +83,11 @@
     <dialog id="import-dialog">
       <h2 id="import-dialog-title">Import</h2>
       <div id="import-dialog-body"></div>
+      <div id="import-adopt-wrap" hidden>
+        <select id="import-adopt-event"></select>
+        <label for="import-adopt-event">Event für das Gast-Konto</label>
+        <button type="button" id="import-adopt">Als Gast-Konto übernehmen</button>
+      </div>
       <button type="button" id="import-send-email" class="btn-ghost">Bestätigung senden</button>
       <button type="button" id="import-delete" class="btn-danger">Löschen</button>
       <button type="button" id="import-close" class="btn-ghost">Schließen</button>
@@ -103,6 +110,7 @@ const TYPE_LABELS = { text: 'Text', checkbox: 'Kontrollkästchen', radio: 'Auswa
 let config = null;
 let targets = [];
 let currentImportId = null;
+let events = [];
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -209,12 +217,14 @@ document.getElementById('upload-pdfs').addEventListener('click', async () => {
   const input = document.getElementById('pdf-files');
   const results = document.getElementById('upload-results');
   const sendEmail = document.getElementById('send-email').checked;
+  const eventId = document.getElementById('upload-event').value || undefined;
   if (input.files.length === 0) { notify('Bitte mindestens ein PDF auswählen.', 'error'); return; }
   results.innerHTML = '';
   for (const file of input.files) {
     try {
-      const { email } = await api.post('/pdf-import/submissions', { filename: file.name, dataBase64: await fileToBase64(file), sendEmail });
-      const note = sendEmail ? (email.sent ? ' – Bestätigung gesendet' : ` – keine Bestätigung (${email.reason ?? 'unbekannt'})`) : '';
+      const { email, adoption } = await api.post('/pdf-import/submissions', { filename: file.name, dataBase64: await fileToBase64(file), sendEmail, eventId });
+      const adoptNote = eventId ? (adoption.adopted ? ' – Gast-Konto angelegt' : ` – Gast-Konto NICHT angelegt (${adoption.reason})`) : '';
+      const note = adoptNote + (sendEmail ? (email.sent ? ' – Bestätigung gesendet' : ` – keine Bestätigung (${email.reason ?? 'unbekannt'})`) : '');
       results.insertAdjacentHTML('beforeend', `<li>✓ ${escapeHtml(file.name)}${escapeHtml(note)}</li>`);
     } catch (err) {
       results.insertAdjacentHTML('beforeend', `<li class="error">✗ ${escapeHtml(file.name)}: ${escapeHtml(err.message)}</li>`);
@@ -224,8 +234,18 @@ document.getElementById('upload-pdfs').addEventListener('click', async () => {
   await loadImports();
 });
 
+function eventOptions(selectedId) {
+  return events.map((e) => `<option value="${escapeHtml(e.id)}" ${e.id === selectedId ? 'selected' : ''}>${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
+}
+
 function formatDate(iso) {
   return new Date(iso).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function guestStatus(record) {
+  if (record.adoptedAt) return `<span class="status-pill status-confirmed">Angelegt</span> ${escapeHtml(events.find((e) => e.id === record.eventId)?.name ?? '')}`;
+  if (record.adoptError) return `<span class="error" title="${escapeHtml(record.adoptError)}">Fehlgeschlagen</span>`;
+  return '–';
 }
 
 function emailStatus(record) {
@@ -244,10 +264,11 @@ async function loadImports() {
       <td>${escapeHtml(name)}</td>
       <td>${escapeHtml(r.mapped.sender?.email ?? '–')}</td>
       <td>${escapeHtml(r.sourceFilename)}</td>
+      <td>${guestStatus(r)}</td>
       <td>${emailStatus(r)}</td>
       <td><button type="button" class="btn-sm btn-ghost" data-open="${escapeHtml(r.id)}">Anzeigen</button></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="6" class="sub">Noch keine PDFs eingelesen.</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="sub">Noch keine PDFs eingelesen.</td></tr>';
   tbody.querySelectorAll('[data-open]').forEach((button) => {
     button.addEventListener('click', () => openImport(button.dataset.open));
   });
@@ -266,8 +287,26 @@ async function openImport(id) {
   document.getElementById('import-dialog-body').innerHTML = `${mappedHtml || '<p class="sub">Keine zugeordneten Werte.</p>'}
     <details><summary>Alle PDF-Rohwerte</summary><dl class="confirm-list">${rawHtml}</dl></details>`;
   document.getElementById('import-send-email').hidden = !record.mapped.sender?.email;
+  if (record.adoptError) {
+    document.getElementById('import-dialog-body').insertAdjacentHTML('afterbegin', `<p class="error">Gast-Konto nicht angelegt: ${escapeHtml(record.adoptError)}</p>`);
+  }
+  document.getElementById('import-adopt-wrap').hidden = Boolean(record.adoptedAt);
+  document.getElementById('import-adopt-event').innerHTML = eventOptions(record.eventId);
   document.getElementById('import-dialog').showModal();
 }
+
+document.getElementById('import-adopt').addEventListener('click', async () => {
+  const eventId = document.getElementById('import-adopt-event').value;
+  if (!eventId) { notify('Bitte ein Event wählen.', 'error'); return; }
+  try {
+    await api.post(`/pdf-import/submissions/${currentImportId}/adopt`, { eventId });
+    notify('Gast-Konto angelegt und angemeldet.', 'success');
+    document.getElementById('import-dialog').close();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+  await loadImports();
+});
 
 document.getElementById('import-close').addEventListener('click', () => document.getElementById('import-dialog').close());
 
@@ -312,6 +351,9 @@ try {
     config = result.config;
     targets = result.targets;
     renderMapping();
+    events = await api.get('/events');
+    const active = events.find((e) => e.is_active);
+    document.getElementById('upload-event').innerHTML = '<option value="">Nur speichern, kein Gast-Konto anlegen</option>' + eventOptions(active?.id);
     await loadImports();
   }
 } catch (err) {

@@ -111,3 +111,59 @@ test('PDF import: disabled add-on 404s, then template -> mapping -> submission -
     assert.equal(del.status, 200);
   });
 });
+
+test('PDF import: an import with an event becomes a registered guest account; a full account\'s e-mail is refused', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
+    const base = `http://localhost:${port}`;
+    await fetch(`${base}/app-settings`, { method: 'PUT', headers, body: JSON.stringify({ pdfImportEnabled: true, waiverText: '' }) });
+
+    const { rows: eventRows } = await query(
+      "INSERT INTO events (name, event_date, is_active) VALUES ('PDF Gast Event', '2027-08-01', true) RETURNING id"
+    );
+    const eventId = eventRows[0].id;
+
+    await fetch(`${base}/pdf-import/template`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ filename: 'vorlage.pdf', dataBase64: await makeFilledPdf({ name: '', email: '' }) }),
+    });
+    await fetch(`${base}/pdf-import/config`, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ mapping: { Name: { target: 'account:lastName' }, Email: { target: 'sender:email' } } }),
+    });
+
+    const guestEmail = `pdf-guest-${crypto.randomUUID()}@example.com`;
+    const res = await fetch(`${base}/pdf-import/submissions`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ filename: 'g.pdf', dataBase64: await makeFilledPdf({ name: 'Gastmann', email: guestEmail }), eventId }),
+    });
+    assert.equal(res.status, 201);
+    const { import: record, adoption } = await res.json();
+    assert.equal(adoption.adopted, true);
+    assert.ok(record.userId);
+
+    const { rows: users } = await query('SELECT is_guest, password_hash FROM users WHERE id = $1', [record.userId]);
+    assert.equal(users[0].is_guest, true);
+    assert.equal(users[0].password_hash, null);
+    const { rows: regs } = await query('SELECT con_role FROM registrations WHERE user_id = $1 AND event_id = $2', [record.userId, eventId]);
+    assert.equal(regs[0].con_role, 'ticket'); // no character in the PDF -> plain guest ticket
+
+    // Same guest, same event again -> reported, not duplicated.
+    const again = await fetch(`${base}/pdf-import/submissions`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ filename: 'g2.pdf', dataBase64: await makeFilledPdf({ name: 'Gastmann', email: guestEmail }), eventId }),
+    });
+    assert.equal((await again.json()).adoption.adopted, false);
+
+    // An e-mail that belongs to a real account is never touched.
+    const { rows: member } = await query("SELECT email FROM users WHERE id = $1", [admin.userId]);
+    const conflict = await fetch(`${base}/pdf-import/submissions`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ filename: 'c.pdf', dataBase64: await makeFilledPdf({ name: 'X', email: member[0].email }), eventId }),
+    });
+    const conflictBody = await conflict.json();
+    assert.equal(conflictBody.adoption.adopted, false);
+    assert.ok(conflictBody.import.adoptError);
+  });
+});

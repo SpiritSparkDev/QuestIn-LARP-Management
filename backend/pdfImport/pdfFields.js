@@ -44,7 +44,7 @@ export async function readPdfFields(buffer) {
 // carry no meaning on their own). Returns { raw, mapped }.
 export function applyMapping(fields, mapping) {
   const raw = {};
-  const mapped = { account: {}, registration: {}, character: {}, sender: {} };
+  const mapped = { account: {}, registration: {}, character: {}, sender: {}, meta: {} };
   for (const field of fields) {
     raw[field.name] = field.value;
     const rule = mapping?.[field.name];

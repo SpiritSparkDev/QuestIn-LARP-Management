@@ -11,8 +11,10 @@ import { getTransporterAndFrom, sendPdfImportReceivedEmail } from '../auth/maile
 import { readPdfFields, applyMapping } from './pdfFields.js';
 import {
   getPdfImportConfig, setPdfTemplate, setPdfImportConfig,
-  createPdfImport, listPdfImports, getPdfImport, deletePdfImport, markPdfImportEmail,
+  createPdfImport, listPdfImports, getPdfImport, deletePdfImport, markPdfImportEmail, markPdfImportAdopted,
 } from './repository.js';
+import { adoptImport } from './adopt.js';
+import { getEvent } from '../events/repository.js';
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const MAX_UPLOAD_BODY_BYTES = 15 * 1024 * 1024;
@@ -31,6 +33,10 @@ async function buildTargets() {
     { value: 'account:nickname', label: 'Rufname', group: 'Person (OT)' },
     ...accountSchema.map((f) => ({ value: `account:${f.key}`, label: label(f), group: 'Person (OT)' })),
     ...registrationSchema.map((f) => ({ value: `registration:${f.key}`, label: label(f), group: 'Anmeldung (OT)' })),
+    { value: 'meta:conRole', label: 'Rolle (Spieler / NSC / Helfer)', group: 'Anmeldung (OT)' },
+    { value: 'meta:priceGroup', label: 'Teilnahmegruppe', group: 'Anmeldung (OT)' },
+    { value: 'meta:flags', label: 'Sonderrollen (Komma-getrennt)', group: 'Anmeldung (OT)' },
+    { value: 'meta:waiver', label: 'Einverständnis akzeptiert', group: 'Anmeldung (OT)' },
     { value: 'character:name', label: 'Charaktername', group: 'Charakter (IT)' },
     ...scSchema.map((f) => ({ value: `character:${f.key}`, label: label(f), group: 'Charakter (IT)' })),
   ];
@@ -62,6 +68,23 @@ function decodePdf(body) {
 
 function senderName(mapped) {
   return [mapped.account?.firstName, mapped.account?.lastName].filter(Boolean).join(' ');
+}
+
+// Tries to turn an import into a registered guest account; the outcome (or
+// the reason it failed) is stored on the import so it shows in the list.
+async function tryAdopt(record, eventId, user) {
+  try {
+    const { userId } = await adoptImport(record.mapped, { eventId, actingUser: user });
+    await markPdfImportAdopted(record.id, { userId, eventId });
+    return { adopted: true };
+  } catch (err) {
+    const known = ['EMAIL_HAS_ACCOUNT', 'INVALID_EMAIL', 'NAME_MISSING', 'EVENT_NOT_FOUND', 'ALREADY_REGISTERED', 'WAIVER_NOT_ACCEPTED', 'INVALID_CHARACTER_DATA', 'INVALID_PRICE_GROUP', 'EVENT_NOT_ACTIVE'];
+    if (!known.includes(err.code)) {
+      logger.error('pdf import: adoption failed', { error: err.message });
+    }
+    await markPdfImportAdopted(record.id, { eventId, error: known.includes(err.code) ? err.message : 'Unerwarteter Fehler beim Anlegen des Gast-Kontos.' });
+    return { adopted: false, reason: err.message };
+  }
 }
 
 async function sendReceipt(record) {
@@ -148,9 +171,14 @@ router.post('/pdf-import/submissions', requireAddon(async ({ req, user }) => {
   const { raw, mapped } = applyMapping(fields, config.mapping);
   const record = await createPdfImport({ createdBy: user.id, sourceFilename: decoded.filename, raw, mapped });
 
+  let adoption = { adopted: false, reason: null };
+  if (typeof body.eventId === 'string' && body.eventId) {
+    if (!(await getEvent(body.eventId))) return { status: 404, body: { error: 'event not found' } };
+    adoption = await tryAdopt(record, body.eventId, user);
+  }
   let email = { sent: false, reason: null };
   if (body.sendEmail === true && config.emailEnabled) email = await sendReceipt(record);
-  return { status: 201, body: { import: await getPdfImport(record.id), email } };
+  return { status: 201, body: { import: await getPdfImport(record.id), email, adoption } };
 }));
 
 router.get('/pdf-import/submissions', requireAddon(async () => {
@@ -161,6 +189,20 @@ router.get('/pdf-import/submissions/:id', requireAddon(async ({ params }) => {
   const record = await getPdfImport(params.id);
   if (!record) return { status: 404, body: { error: 'import not found' } };
   return { status: 200, body: record };
+}));
+
+router.post('/pdf-import/submissions/:id/adopt', requireAddon(async ({ req, params, user }) => {
+  const body = (await readJsonBody(req)) ?? {};
+  const record = await getPdfImport(params.id);
+  if (!record) return { status: 404, body: { error: 'import not found' } };
+  if (record.adoptedAt) return { status: 409, body: { error: 'Dieser Import wurde bereits als Gast-Konto übernommen.' } };
+  if (typeof body.eventId !== 'string' || !(await getEvent(body.eventId))) {
+    return { status: 400, body: { error: 'eventId must be an existing event' } };
+  }
+  const adoption = await tryAdopt(record, body.eventId, user);
+  return adoption.adopted
+    ? { status: 200, body: { import: await getPdfImport(params.id) } }
+    : { status: 400, body: { error: adoption.reason } };
 }));
 
 router.post('/pdf-import/submissions/:id/send-email', requireAddon(async ({ params }) => {
