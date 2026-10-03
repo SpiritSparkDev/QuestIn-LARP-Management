@@ -899,6 +899,8 @@
 
     document.getElementById("dashboard-managed-persons-checkbox").addEventListener("change", updateManagedPersonsDashboardVisibility);
 
+    let managedPersonCharacters = {};
+
     function renderManagedPersonsList() {
       updateManagedPersonsDashboardVisibility();
       const container = document.getElementById("managed-persons-list");
@@ -907,16 +909,40 @@
         return;
       }
       container.innerHTML = managedPersons
-        .map((p) => `<div class="card form-pad" data-managed-person-card="${p.id}">
-      <h3>${escapeHtml(p.name)}</h3>
-      <p class="sub">${escapeHtml(managedPersonStatusLabel(p))}</p>
+        .map((p) => {
+          const chars = managedPersonCharacters[p.id] ?? [];
+          const manageHref = `/managed-person.html?id=${encodeURIComponent(p.id)}`;
+          const initial = escapeHtml((p.name || "?").trim().charAt(0).toUpperCase());
+          const charList = chars.length
+            ? chars
+                .map(
+                  (c) => `<a class="mp-char" href="${manageHref}">
+            <span class="mp-char-name">${escapeHtml(c.name)}</span>
+            <span class="mp-char-status">${c.class === "nsc" ? "NSC-Charakter" : statusLineForCharacter(c)}</span>
+          </a>`,
+                )
+                .join("")
+            : '<p class="sub mp-empty">Noch kein Charakter angelegt.</p>';
+          return `<div class="mp-card" data-managed-person-card="${p.id}">
+      <div class="mp-head">
+        <span class="mp-avatar" aria-hidden="true">${initial}</span>
+        <div>
+          <h3>${escapeHtml(p.name)}</h3>
+          <p class="sub">${escapeHtml(managedPersonStatusLabel(p))}</p>
+        </div>
+      </div>
+      <div class="mp-chars">
+        <span class="mp-chars-label">Charaktere</span>
+        ${charList}
+      </div>
       <div class="action-row">
-        <a href="/managed-person.html?id=${encodeURIComponent(p.id)}" class="btn-ghost">Charaktere &amp; Anmeldung verwalten</a>
+        <a href="${manageHref}" class="btn-ghost">Charaktere &amp; Anmeldung verwalten</a>
         <button type="button" data-managed-person-edit="${p.id}" class="btn-ghost">Bearbeiten</button>
         <button type="button" data-managed-person-delete="${p.id}" class="btn-ghost" ${p.canDelete ? "" : "disabled title=\"Diese Person hat bereits Event-Anmeldungen und kann nicht gelöscht werden.\""}>Löschen</button>
         ${p.email ? `<button type="button" data-managed-person-convert="${p.id}" class="btn-ghost">In eigenen Account umwandeln</button>` : ""}
       </div>
-    </div>`)
+    </div>`;
+        })
         .join("");
 
       container.querySelectorAll("[data-managed-person-edit]").forEach((btn) => {
@@ -932,6 +958,18 @@
 
     async function loadManagedPersons() {
       managedPersons = await api.get("/managed-persons");
+      renderManagedPersonsList();
+      // Characters arrive after the first paint so a slow/failed lookup
+      // never hides the persons themselves.
+      const lists = await Promise.all(
+        managedPersons.map((p) =>
+          api.get(`/managed-persons/${p.id}/characters`).catch(() => []),
+        ),
+      );
+      managedPersonCharacters = {};
+      managedPersons.forEach((p, i) => {
+        managedPersonCharacters[p.id] = lists[i];
+      });
       renderManagedPersonsList();
     }
 
