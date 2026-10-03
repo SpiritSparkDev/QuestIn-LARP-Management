@@ -67,6 +67,21 @@
       <button type="button" id="edit-save">Speichern</button>
       <button type="button" id="edit-cancel" class="btn-ghost">Schließen</button>
     </dialog>
+    <dialog id="role-dialog">
+      <h2 id="role-dialog-title">Rolle ändern</h2>
+      <label for="role-select">Rolle</label>
+      <select id="role-select"></select>
+      <div id="role-character-wrap">
+        <label for="role-character-select" id="role-character-label">Charakter</label>
+        <select id="role-character-select"></select>
+      </div>
+      <div id="role-flags-wrap">
+        <label>Sonderrollen</label>
+        <div id="role-flags" class="checkbox-group"></div>
+      </div>
+      <button type="button" id="role-save">Speichern</button>
+      <button type="button" id="role-cancel" class="btn-ghost">Abbrechen</button>
+    </dialog>
     <details id="column-settings" class="card form-pad">
       <summary>Spalten ein- und ausblenden</summary>
       <div>
@@ -121,7 +136,9 @@ const statTotal = document.getElementById('stat-total');
 const statCheckedIn = document.getElementById('stat-checked-in');
 
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
-const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga' };
+const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga', ticket: 'Gast-Ticket' };
+// Roles offered when changing a registration's role (ticket is only ever self-service).
+const ASSIGNABLE_CON_ROLES = [['sc', 'Teilnehmer (SC)'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga']];
 let currentSearch = '';
 let canOverride = false;
 let canManageMembers = false;
@@ -513,11 +530,10 @@ function renderConRoleCell(p) {
   const label = CON_ROLE_LABELS[p.conRole] ?? p.conRole ?? '–';
   const flagBadges = (p.flags ?? []).map((f) => ` <span class="tag">${escapeHtml(f)}</span>`).join('');
   const badge = flagBadges + (p.nscAvailable ? ' <span class="tag">auch NSC-bereit</span>' : '');
-  if (!canOverride || !p.userId) {
-    return escapeHtml(label) + badge;
-  }
-  const options = ['helfer', 'hilfs_orga', 'orga'].map((r) => `<option value="${r}" ${r === p.conRole ? 'selected' : ''}>${CON_ROLE_LABELS[r]}</option>`).join('');
-  return `<select data-con-role="${escapeHtml(p.userId)}" aria-label="Rolle ändern">${options}</select>${badge}`;
+  const changeButton = canOverride && p.userId
+    ? `<button type="button" class="btn-ghost btn-sm" data-change-role="${escapeHtml(p.userId)}">Rolle ändern</button>`
+    : '';
+  return `<div><strong>${escapeHtml(label)}</strong>${badge}</div>${changeButton}`;
 }
 
 const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', bank_transfer: 'Überweisung' };
@@ -637,8 +653,8 @@ function renderParticipants(participants, eventId) {
   listBody.querySelectorAll('[data-override]').forEach((select) => {
     select.addEventListener('change', () => overrideStatus(eventId, select.dataset.override, select.value, select.dataset.prevStatus));
   });
-  listBody.querySelectorAll('[data-con-role]').forEach((select) => {
-    select.addEventListener('change', () => promoteConRole(eventId, select.dataset.conRole, select.value));
+  listBody.querySelectorAll('[data-change-role]').forEach((button) => {
+    button.addEventListener('click', () => openRoleDialog(button.dataset.changeRole));
   });
   listBody.querySelectorAll('[data-amount-due]').forEach((input) => {
     input.addEventListener('change', () => setAmountDue(eventId, input.dataset.amountDue, input.value));
@@ -701,19 +717,82 @@ async function overrideStatus(eventId, userId, newStatus, previousStatus) {
   }
 }
 
-async function promoteConRole(eventId, userId, conRole) {
-  if (!confirm(`Rolle wirklich zu "${CON_ROLE_LABELS[conRole]}" ändern?`)) {
-    await loadParticipants(eventId);
-    return;
-  }
-  try {
-    await api.put(`/events/${eventId}/registrations/${userId}/con-role`, { conRole });
-    await loadParticipants(eventId);
-  } catch (err) {
-    notify(err.message, 'error');
-    await loadParticipants(eventId);
+const roleDialog = document.getElementById('role-dialog');
+const roleSelect = document.getElementById('role-select');
+const roleCharacterWrap = document.getElementById('role-character-wrap');
+const roleCharacterSelect = document.getElementById('role-character-select');
+const roleFlagsWrap = document.getElementById('role-flags-wrap');
+const roleFlags = document.getElementById('role-flags');
+let changingRoleUserId = null;
+
+// SC needs an SC character, NSC may take an NSC character, every other role
+// takes none -- the same rule the backend enforces (resolveCharacterId).
+function updateRoleCharacterOptions() {
+  const p = participantsById.get(changingRoleUserId);
+  const role = roleSelect.value;
+  const characterClass = role === 'sc' ? 'sc' : role === 'nsc' ? 'nsc' : null;
+  roleCharacterWrap.style.display = characterClass ? '' : 'none';
+  if (!characterClass) return;
+  const candidates = (p?.selectableCharacters ?? []).filter((c) => c.class === characterClass);
+  const currentId = p?.characters?.[0]?.id;
+  const blank = characterClass === 'nsc' ? '<option value="">Ohne Charakter</option>' : '';
+  roleCharacterSelect.innerHTML = blank + candidates
+    .map((c) => `<option value="${escapeHtml(c.id)}" ${c.id === currentId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
+    .join('');
+  if (candidates.length === 0 && characterClass === 'sc') {
+    roleCharacterSelect.innerHTML = '<option value="">Kein SC-Charakter vorhanden</option>';
   }
 }
+
+function openRoleDialog(userId) {
+  const p = participantsById.get(userId);
+  if (!p) return;
+  changingRoleUserId = userId;
+  document.getElementById('role-dialog-title').textContent = `Rolle ändern: ${p.name}`;
+  const options = ASSIGNABLE_CON_ROLES.map(([value, label]) => `<option value="${value}" ${value === p.conRole ? 'selected' : ''}>${escapeHtml(label)}</option>`);
+  if (!ASSIGNABLE_CON_ROLES.some(([value]) => value === p.conRole)) {
+    options.unshift(`<option value="${escapeHtml(p.conRole)}" selected>${escapeHtml(CON_ROLE_LABELS[p.conRole] ?? p.conRole)}</option>`);
+  }
+  roleSelect.innerHTML = options.join('');
+  const eventFlags = events.find((e) => e.id === eventSelect.value)?.flags ?? [];
+  roleFlagsWrap.style.display = eventFlags.length ? '' : 'none';
+  roleFlags.innerHTML = eventFlags
+    .map((f) => `<label><input type="checkbox" data-role-flag="${escapeHtml(f)}" ${(p.flags ?? []).includes(f) ? 'checked' : ''}> ${escapeHtml(f)}</label>`)
+    .join('');
+  updateRoleCharacterOptions();
+  roleDialog.showModal();
+}
+
+roleSelect.addEventListener('change', updateRoleCharacterOptions);
+document.getElementById('role-cancel').addEventListener('click', () => roleDialog.close());
+
+document.getElementById('role-save').addEventListener('click', async () => {
+  const p = participantsById.get(changingRoleUserId);
+  const eventId = eventSelect.value;
+  const conRole = roleSelect.value;
+  const flags = [...roleFlags.querySelectorAll('[data-role-flag]:checked')].map((cb) => cb.dataset.roleFlag);
+  const payload = { conRole, flags };
+  if (conRole === 'sc' || conRole === 'nsc') {
+    payload.characterId = roleCharacterSelect.value || undefined;
+    if (conRole === 'sc' && !payload.characterId) {
+      notify('Für Teilnehmer (SC) wird ein Charakter benötigt.', 'error');
+      return;
+    }
+  }
+  if (conRole === 'sc' && p?.conRole === 'sc') {
+    payload.nscAvailable = p.nscAvailable;
+    payload.nscCharacterId = p.nscCharacterId ?? undefined;
+  }
+  try {
+    await api.put(`/events/${eventId}/registrations/${changingRoleUserId}/con-role`, payload);
+    roleDialog.close();
+    notify('Gespeichert.', 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+  await loadParticipants(eventId);
+});
+
 
 async function setAmountDue(eventId, userId, euroValue) {
   const amountDueCents = euroValue === '' ? null : Math.round(Number(euroValue) * 100);

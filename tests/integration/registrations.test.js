@@ -447,6 +447,30 @@ test('a user can change their own registration\'s con_role to a self-service val
   });
 });
 
+test('GET .../participants lists the characters a staff member could assign when changing a role', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession();
+    const { cookie: modCookie } = await makeUserAndSession('moderator');
+    const eventId = await makeEvent();
+    const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Freie Heldin');
+    const nscCharacterId = await makeCharacter(port, cookie, 'nsc', 'Wache Zwei');
+
+    const registerRes = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'helfer' }),
+    });
+    assert.equal(registerRes.status, 201);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/participants`, { headers: { Cookie: modCookie } });
+    assert.equal(res.status, 200);
+    const participants = await res.json();
+    const mine = participants.find((p) => p.conRole === 'helfer');
+    const ids = mine.selectableCharacters.map((c) => c.id);
+    assert.ok(ids.includes(scCharacterId));
+    assert.ok(ids.includes(nscCharacterId));
+  });
+});
+
 test('PUT .../con-role without flags preserves the registration\'s existing flags (role promotion must not wipe them)', async () => {
   await withTestServer(async (port) => {
     const { userId, cookie } = await makeUserAndSession();

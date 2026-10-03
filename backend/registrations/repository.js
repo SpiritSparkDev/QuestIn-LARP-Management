@@ -471,6 +471,26 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     [eventId]
   );
 
+  // Characters a staff member could assign when changing someone's role:
+  // any NSC character, plus SC characters not already bound to another
+  // registration (the same rule resolveCharacterId enforces on write).
+  const { rows: selectable } = await query(
+    `SELECT c.id, c.user_id, c.name, c.class
+     FROM characters c
+     WHERE c.user_id IN (SELECT user_id FROM registrations WHERE event_id = $1)
+       AND (c.class = 'nsc' OR NOT EXISTS (
+         SELECT 1 FROM registrations r2
+         WHERE r2.character_id = c.id AND NOT (r2.event_id = $1 AND r2.user_id = c.user_id)
+       ))
+     ORDER BY c.created_at`,
+    [eventId]
+  );
+  const selectableByUser = new Map();
+  for (const c of selectable) {
+    if (!selectableByUser.has(c.user_id)) selectableByUser.set(c.user_id, []);
+    selectableByUser.get(c.user_id).push({ id: c.id, name: c.name, class: c.class });
+  }
+
   const charactersByUser = new Map();
   for (const c of characters) {
     if (!charactersByUser.has(c.user_id)) charactersByUser.set(c.user_id, []);
@@ -511,6 +531,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       waiverVersionAccepted: r.waiver_version_accepted,
       waiverAcceptedAt: r.waiver_accepted_at,
       characters: charactersByUser.get(r.user_id) ?? [],
+      selectableCharacters: selectableByUser.get(r.user_id) ?? [],
       otFields,
     };
   });
