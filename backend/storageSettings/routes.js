@@ -8,6 +8,8 @@ import {
   getStorageUsageByBackend,
   listCharacterFilesNotOnBackend,
   updateCharacterFileStorageBackend,
+  storageKeyFor,
+  newStorageKey,
 } from '../characterFiles/repository.js';
 
 const VALID_BACKENDS = ['local', 'ftp', 's3'];
@@ -78,16 +80,17 @@ router.post('/admin/settings/storage/migrate', requireAuth(requireAdminGroup(asy
   for (const file of files) {
     const sourceStorage = cachedStorage(file.storage_backend);
     try {
-      const data = await sourceStorage.download(file.id);
-      await targetStorage.upload(file.id, data);
-      await updateCharacterFileStorageBackend(file.id, targetBackend);
+      const newKey = newStorageKey(file.character_id, file.id);
+      const data = await sourceStorage.download(storageKeyFor(file));
+      await targetStorage.upload(newKey, data);
+      await updateCharacterFileStorageBackend(file.id, targetBackend, newKey);
       migrated += 1;
     } catch (err) {
       failed.push({ id: file.id, error: err.message });
       continue;
     }
     try {
-      await sourceStorage.remove(file.id);
+      await sourceStorage.remove(storageKeyFor(file));
     } catch (err) {
       failed.push({ id: file.id, error: `migriert, aber alte Kopie auf ${file.storage_backend} konnte nicht entfernt werden: ${err.message}` });
     }

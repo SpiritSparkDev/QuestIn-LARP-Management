@@ -13,6 +13,8 @@ import {
   listCharacterFiles,
   getCharacterFilesTotalSize,
   deleteCharacterFile,
+  storageKeyFor,
+  newStorageKey,
 } from './repository.js';
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -82,8 +84,9 @@ router.post('/characters/:id/files', requireAuth(async ({ req, params, user }) =
   const id = crypto.randomUUID();
   const storageSettings = await getStorageSettingsForUse();
   const storage = getStorage(storageSettings.backend, storageSettings);
+  const storageKey = newStorageKey(character.id, id);
   try {
-    await storage.upload(id, buffer);
+    await storage.upload(storageKey, buffer);
   } catch (err) {
     return { status: 502, body: { error: `Datei konnte nicht auf dem Speicher-Backend abgelegt werden: ${err.message}` } };
   }
@@ -98,6 +101,7 @@ router.post('/characters/:id/files', requireAuth(async ({ req, params, user }) =
     sizeBytes: buffer.length,
     isPublic: isPublic === true,
     storageBackend: storageSettings.backend,
+    storageKey,
   });
   return { status: 201, body: file };
 }));
@@ -120,7 +124,7 @@ router.get('/characters/:characterId/files/:fileId', requireAuth(async ({ params
   const storage = getStorage(file.storage_backend, storageSettings);
   let data;
   try {
-    data = await storage.download(file.id);
+    data = await storage.download(storageKeyFor(file));
   } catch (err) {
     if (file.storage_backend !== 'local') {
       return { status: 502, body: { error: `Datei konnte nicht vom Speicher-Backend geladen werden: ${err.message}` } };
@@ -154,7 +158,7 @@ router.delete('/characters/:characterId/files/:fileId', requireAuth(async ({ par
   const storageSettings = await getStorageSettingsForUse();
   const storage = getStorage(file.storage_backend, storageSettings);
   try {
-    await storage.remove(file.id);
+    await storage.remove(storageKeyFor(file));
   } catch (err) {
     if (file.storage_backend !== 'local') {
       return { status: 502, body: { error: `Datei-Zeile gelöscht, aber Entfernen vom Speicher-Backend fehlgeschlagen: ${err.message}` } };

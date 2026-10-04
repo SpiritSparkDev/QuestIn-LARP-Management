@@ -4046,22 +4046,36 @@ th.is-sortable[data-dir="desc"]::after {
   }
 }
 
-/* ---------- Character page: cards left, form middle, files right ---------- */
+/* ---------- Character page: buttons + cards on top, form below, files in a separate right sidebar ---------- */
 
 .char-layout {
   display: grid;
-  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) minmax(240px, 300px);
-  gap: 28px;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 310px);
+  gap: 32px;
   align-items: start;
 }
 
-.char-layout:not(:has(.char-col-files:not([hidden]))) {
-  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr);
+.char-col-main .action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
-.char-col-list .char-grid {
-  grid-template-columns: 1fr;
-  margin-bottom: 0;
+.char-col-main .action-row button {
+  margin: 0;
+}
+
+.char-col-main .char-grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 210px));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.char-card.is-selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--field-ring);
 }
 
 .char-col-main .field-grid {
@@ -4071,41 +4085,32 @@ th.is-sortable[data-dir="desc"]::after {
 .char-col-files {
   position: sticky;
   top: 24px;
-  margin: 0;
+  padding: 22px 20px;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  box-shadow: 0 2px 10px var(--shadow);
 }
 
 .char-col-files h3 {
-  margin-bottom: 10px;
+  margin-bottom: 4px;
 }
 
-@media (max-width: 1200px) {
-  .char-layout,
-  .char-layout:not(:has(.char-col-files:not([hidden]))) {
-    grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
-  }
-
-  .char-col-files {
-    grid-column: 2;
-    position: static;
-  }
+.char-col-files > .sub:empty {
+  display: none;
 }
 
-@media (max-width: 720px) {
-  .char-layout,
-  .char-layout:not(:has(.char-col-files:not([hidden]))) {
+@media (max-width: 900px) {
+  .char-layout {
     grid-template-columns: 1fr;
   }
 
   .char-col-files {
-    grid-column: auto;
-  }
-
-  .char-col-list .char-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    position: static;
   }
 }
 
-/* File gallery (character form side panel + Dateien tab) */
+/* File gallery (character page right sidebar) */
 
 .file-gallery {
   display: grid;

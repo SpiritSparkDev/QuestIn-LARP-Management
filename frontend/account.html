@@ -297,9 +297,6 @@
 
             <div class="tab-panel" id="sc-tab">
               <div class="char-layout">
-                <div class="char-col-list">
-                  <div id="character-list" class="char-grid"></div>
-                </div>
                 <div class="char-col-main">
                   <div class="action-row">
                     <button type="button" id="new-character-btn">Neuen Charakter anlegen</button>
@@ -317,6 +314,8 @@
                       <button type="button" id="copy-character-cancel" class="btn-ghost">Abbrechen</button>
                     </div>
                   </dialog>
+
+                  <div id="character-list" class="char-grid"></div>
 
                   <div id="sc-form-section" class="card" style="display:none;">
                     <p class="eyebrow">Chronik-Register</p>
@@ -343,9 +342,10 @@
                     </form>
                   </div>
                 </div>
-                <aside class="char-col-files card form-pad" id="sc-files-panel" hidden>
+                <aside class="char-col-files" id="sc-files-panel">
                   <h3>Bilder &amp; Dokumente</h3>
-                  <div id="sc-files-body"></div>
+                  <p class="sub" id="sc-files-owner"></p>
+                  <div id="sc-files-body"><p class="sub">Wähle einen Charakter, um Bilder und Dokumente zu verwalten.</p></div>
                 </aside>
               </div>
             </div>
@@ -364,13 +364,12 @@
             <div class="tab-panel" id="nsc-tab" hidden>
               <div id="nsc-section" style="display:none;">
                 <div class="char-layout">
-                  <div class="char-col-list">
-                    <div id="nsc-character-list" class="char-grid"></div>
-                  </div>
                   <div class="char-col-main">
                     <div class="action-row">
                       <button type="button" id="new-nsc-character-btn" class="btn-ghost">Neuen NSC-Charakter anlegen</button>
                     </div>
+                    <div id="nsc-character-list" class="char-grid"></div>
+
                     <div id="nsc-form-section" class="card" style="display:none;">
                       <p class="eyebrow">Chronik-Register</p>
                       <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
@@ -391,20 +390,16 @@
                       </form>
                     </div>
                   </div>
-                  <aside class="char-col-files card form-pad" id="nsc-files-panel" hidden>
+                  <aside class="char-col-files" id="nsc-files-panel">
                     <h3>Bilder &amp; Dokumente</h3>
-                    <div id="nsc-files-body"></div>
+                    <p class="sub" id="nsc-files-owner"></p>
+                    <div id="nsc-files-body"><p class="sub">Wähle einen Charakter, um Bilder und Dokumente zu verwalten.</p></div>
                   </aside>
                 </div>
               </div>
             </div>
           </div>
 
-        <div class="tab-panel" id="dateien-tab" hidden>
-          <h1>Dateien</h1>
-          <p class="sub">Bilder und Dokumente zu deinen Charakteren.</p>
-          <div id="dateien-character-sections"></div>
-        </div>
       </div>
     </div>
   </div>
@@ -497,9 +492,9 @@
     initTabs(document.getElementById("char-class-tabs"));
     initSidebarToggle();
 
-    const TOP_TAB_HASHES = ["dashboard", "konto", "anmelden", "charaktere", "dateien"];
+    const TOP_TAB_HASHES = ["dashboard", "konto", "anmelden", "charaktere"];
 
-    // Dashboard/Konto/Anmelden/Charaktere/Dateien are rendered by the shared,
+    // Dashboard/Konto/Anmelden/Charaktere are rendered by the shared,
     // role-driven renderNavLinks() as ordinary links (all pointing at this
     // same page, distinguished only by hash) -- exactly like every other
     // sidebar item, on every page. This is the one place that reacts to
@@ -508,7 +503,9 @@
     // identically whether you were already on this page or just navigated
     // here from somewhere else.
     function applyHashTab() {
-      const requested = (window.location.hash || "#dashboard").slice(1);
+      let requested = (window.location.hash || "#dashboard").slice(1);
+      // The former "Dateien" page now lives inside each character.
+      if (requested === "dateien") requested = "charaktere";
       const activeHash = TOP_TAB_HASHES.includes(requested)
         ? requested
         : "dashboard";
@@ -1402,24 +1399,6 @@
       populateRegistrationCharacterFields();
       renderCharacterList();
       renderDashboardCharacters();
-      renderDateienTab();
-    }
-
-    function renderDateienTab() {
-      const container = document.getElementById("dateien-character-sections");
-      if (characters.length === 0) {
-        container.innerHTML = '<p class="sub">Du hast noch keine Charaktere angelegt.</p>';
-        return;
-      }
-      container.innerHTML = characters
-        .map(
-          (c) => `<div class="card form-pad">
-      <h2>${escapeHtml(c.name)}${c.class === "nsc" ? ' <span class="tag">NSC</span>' : ""}</h2>
-      <div data-files-for="${c.id}"><p class="sub">Dateien werden geladen …</p></div>
-    </div>`,
-        )
-        .join("");
-      characters.forEach((c) => loadFilesInto(c.id));
     }
 
     let currentRegistrations = [];
@@ -1637,8 +1616,15 @@
     // Right-hand side panel of the character form: upload + gallery for the
     // character being edited. A brand-new character has no id yet, so it
     // only shows a hint until the first save.
+    const FILES_PANEL_HINT =
+      '<p class="sub">Wähle einen Charakter, um Bilder und Dokumente zu verwalten.</p>';
+
     function updateFilesPanel(panel, body, characterId) {
-      panel.hidden = false;
+      const character = characters.find((c) => c.id === characterId);
+      panel.querySelector(".sub[id$='-files-owner']").textContent = character ? character.name : "";
+      document.querySelectorAll(".char-card").forEach((card) => {
+        card.classList.toggle("is-selected", card.dataset.cardFor === characterId);
+      });
       if (!characterId) {
         body.removeAttribute("data-files-for");
         body.innerHTML =
@@ -1649,15 +1635,16 @@
       body.innerHTML = '<p class="sub">Dateien werden geladen …</p>';
       loadFilesInto(characterId);
     }
-    function hideFilesPanel(panel, body) {
-      panel.hidden = true;
+    function resetFilesPanel(panel, body) {
+      panel.querySelector(".sub[id$='-files-owner']").textContent = "";
       body.removeAttribute("data-files-for");
-      body.innerHTML = "";
+      body.innerHTML = FILES_PANEL_HINT;
+      document.querySelectorAll(".char-card.is-selected").forEach((card) => card.classList.remove("is-selected"));
     }
 
     function hideCharacterForm() {
       scFormSection.style.display = "none";
-      hideFilesPanel(scFilesPanel, scFilesBody);
+      resetFilesPanel(scFilesPanel, scFilesBody);
     }
     function showCharacterForm() {
       scFormSection.style.display = "";
@@ -1693,7 +1680,7 @@
     const nscFilesBody = document.getElementById("nsc-files-body");
     function hideNscForm() {
       nscFormSection.style.display = "none";
-      hideFilesPanel(nscFilesPanel, nscFilesBody);
+      resetFilesPanel(nscFilesPanel, nscFilesBody);
     }
     function showNscForm() {
       nscFormSection.style.display = "";
@@ -1869,7 +1856,7 @@
     });
 
     // A character's files can be shown in several places at once (the
-    // edit form's side panel and the Dateien tab) -- fill all of them.
+    // edit form's side panel) -- fill all of them.
     async function loadFilesInto(characterId) {
       const containers = document.querySelectorAll(`[data-files-for="${characterId}"]`);
       if (containers.length === 0) return;
@@ -1953,7 +1940,7 @@
     function renderNscList() {
       nscListBody.innerHTML = nscCharacters
         .map(
-          (c) => `<div class="char-card" data-card-for="${c.id}">
+          (c) => `<div class="char-card${c.id === editingNscCharacterId ? " is-selected" : ""}" data-card-for="${c.id}">
       <button type="button" class="char-card-delete" data-delete="${c.id}" aria-label="Charakter löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
       <div class="char-photo" data-photo-for="${c.id}">
         <div class="char-photo-image" data-photo-image><span class="char-photo-placeholder material-symbols-outlined" aria-hidden="true">person</span></div>
@@ -2049,7 +2036,7 @@
       const scCharacters = characters.filter((c) => c.class !== "nsc");
       document.getElementById("copy-character-btn").style.display = scCharacters.length === 0 ? "none" : "";
       characterListBody.innerHTML = scCharacters
-        .map((c) => `<div class="char-card" data-card-for="${c.id}">
+        .map((c) => `<div class="char-card${c.id === editingCharacterId ? " is-selected" : ""}" data-card-for="${c.id}">
       <button type="button" class="char-card-delete" data-delete="${c.id}" aria-label="Charakter löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
       <div class="char-photo" data-photo-for="${c.id}">
         <div class="char-photo-image" data-photo-image><span class="char-photo-placeholder material-symbols-outlined" aria-hidden="true">person</span></div>

@@ -68,6 +68,37 @@ test('owner can upload, list, download, and delete their own file', async () => 
   });
 });
 
+test('new uploads are stored in the character\'s own folder; legacy flat files stay readable', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession('mitglied');
+    const characterId = await makeCharacter(owner.userId);
+
+    const uploadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ kind: 'image', filename: 'new.png', mimeType: 'image/png', dataBase64: TINY_PNG_BASE64, gdprConsent: true }),
+    });
+    const uploaded = await uploadRes.json();
+    assert.equal(uploaded.storage_key, `${characterId}/${uploaded.id}`);
+
+    // A file from before folders: row without storage_key, bytes at the flat id.
+    const { localStorage } = await import('../../backend/storage/local.js');
+    const legacyId = crypto.randomUUID();
+    const bytes = Buffer.from(TINY_PNG_BASE64, 'base64');
+    await localStorage().upload(legacyId, bytes);
+    await query(
+      `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, is_public, storage_backend)
+       VALUES ($1, $2, $3, 'image', 'old.png', 'image/png', $4, false, 'local')`,
+      [legacyId, characterId, owner.userId, bytes.length]
+    );
+    const legacyRes = await fetch(`http://localhost:${port}/characters/${characterId}/files/${legacyId}`, { headers: { Cookie: owner.cookie } });
+    assert.equal(legacyRes.status, 200);
+    assert.deepEqual(Buffer.from(await legacyRes.arrayBuffer()), bytes);
+
+    const deleteRes = await fetch(`http://localhost:${port}/characters/${characterId}/files/${legacyId}`, { method: 'DELETE', headers: { Cookie: owner.cookie } });
+    assert.equal(deleteRes.status, 200);
+  });
+});
+
 test('a private file is invisible (list) and unreachable (download) to a non-owner, non-elevated stranger', async () => {
   await withTestServer(async (port) => {
     const owner = await makeUserAndSession('mitglied');
