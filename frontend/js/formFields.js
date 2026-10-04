@@ -1,3 +1,5 @@
+import { renderToolbar, sanitizeHtml, htmlToPlainText } from './richText.js';
+
 // Registration/participant status, keyed by the status column's DB value.
 export const STATUS_LABELS = {
   notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet',
@@ -13,9 +15,28 @@ export const STATUS_LABELS = {
 // carries no styling today and looks removable, but it's a deliberate
 // per-field CSS/JS hook the user added for upcoming UI work. Do not delete
 // it as "unused" or collapse it back to a bare label+input.
+// Hover/focus info bubble for a schema field's optional admin-written `hint`.
+// Appended to the label text; tabindex makes it reachable on touch/keyboard.
+export function renderHint(field) {
+  if (typeof field.hint !== 'string' || field.hint.trim() === '') return '';
+  const hint = escapeHtml(field.hint.trim());
+  return ` <span class="field-hint" tabindex="0" role="note" data-hint="${hint}" aria-label="Hinweis: ${hint}"><span class="material-symbols-outlined" aria-hidden="true">info</span></span>`;
+}
+
+// "Dokument" field: WYSIWYG editor (see richText.js) mirrored into a hidden
+// input, which carries whichever attribute the surrounding collector reads
+// (`data-field` for OT fields, `name` for IT fields). `sanitize` is passed
+// in by callers that run in the browser; node unit tests skip it.
+function renderDocumentEditor({ id, attribute, value, readOnly }) {
+  const html = typeof value === 'string' ? value : '';
+  const safeHtml = typeof DOMParser === 'undefined' ? '' : sanitizeHtml(html);
+  const toolbar = readOnly ? '' : renderToolbar();
+  return `<div class="rte${readOnly ? ' rte-readonly' : ''}">${toolbar}<div class="rte-editor" id="${id}-editor" contenteditable="${readOnly ? 'false' : 'true'}" role="textbox" aria-multiline="true">${safeHtml}</div><input id="${id}" ${attribute} type="hidden" value="${escapeHtml(safeHtml)}"></div>`;
+}
+
 export function renderAccountFieldInput(field, value, { sealedBadge = '', idPrefix = '' } = {}) {
   const { key, type } = field;
-  const escapedLabel = escapeHtml(field.label ?? key) + sealedBadge;
+  const escapedLabel = escapeHtml(field.label ?? key) + sealedBadge + renderHint(field);
   const val = escapeHtml(value);
   const id = `${idPrefix}field-${key}`;
   const required = field.required ? 'required' : '';
@@ -41,6 +62,9 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
   }
   if (type === 'date') {
     return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="date" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+  }
+  if (type === 'document') {
+    return `<div class="${key}-container">${renderDocumentEditor({ id, attribute: `data-field="${key}"`, value, readOnly: false })}<label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'textarea') {
     return `<div class="${key}-container"><textarea id="${id}" data-field="${key}" ${required}>${val}</textarea><label for="${id}">${escapedLabel}</label></div>`;
@@ -129,6 +153,7 @@ export function otFieldValuesEqual(field, a, b) {
 // shouldn't be shown at all (empty/absent).
 export function formatFieldValue(field, rawValue) {
   if (rawValue === undefined || rawValue === null || rawValue === '') return undefined;
+  if (field?.type === 'document') return htmlToPlainText(rawValue) || undefined;
   if (Array.isArray(rawValue)) return rawValue.length > 0 ? rawValue.join(', ') : undefined;
   if (typeof rawValue === 'boolean') return rawValue ? 'Ja' : undefined;
   return rawValue;
@@ -196,7 +221,7 @@ export function attachLiveValidation(formEl) {
 
 export function renderField(field, value, idPrefix = '', { readOnly = false } = {}) {
   const val = escapeHtml(value);
-  const label = escapeHtml(field.label ?? field.key) + (field.required ? ' *' : '') + (readOnly ? ' 🔒' : '');
+  const label = escapeHtml(field.label ?? field.key) + (field.required ? ' *' : '') + (readOnly ? ' 🔒' : '') + renderHint(field);
   const key = escapeHtml(field.key);
   const required = field.required ? 'required' : '';
   const disabled = readOnly ? 'disabled' : '';
@@ -223,6 +248,9 @@ export function renderField(field, value, idPrefix = '', { readOnly = false } = 
   }
   if (field.type === 'date') {
     return `<input id="${id}" name="${key}" type="date" value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
+  }
+  if (field.type === 'document') {
+    return `${renderDocumentEditor({ id, attribute: `name="${key}"`, value, readOnly })}<label for="${id}">${label}</label>`;
   }
   if (field.type === 'textarea') {
     return `<textarea id="${id}" name="${key}" ${required} ${disabled}>${val}</textarea><label for="${id}">${label}</label>`;

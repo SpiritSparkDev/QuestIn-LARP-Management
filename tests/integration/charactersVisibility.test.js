@@ -223,6 +223,27 @@ test('disabling characterBrowsingEnabled blocks GET /events/:id/characters/publi
   });
 });
 
+test('document fields are sanitized server-side on create and update', async () => {
+  await withTestServer(async (port) => {
+    await setScSchema([{ key: 'story', label: 'Geschichte', type: 'document' }]);
+    const owner = await makeUserAndSession();
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ name: 'Doc', data: { story: '<p onclick="x()">Hi</p><script>alert(1)</script><a href="javascript:alert(1)">l</a>' } }),
+    });
+    assert.equal(createRes.status, 201);
+    const created = await createRes.json();
+    assert.equal(created.data.story, '<p>Hi</p>l');
+
+    const patchRes = await fetch(`http://localhost:${port}/characters/${created.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ data: { story: '<img src=x onerror=alert(1)><strong>fett</strong>' } }),
+    });
+    assert.equal(patchRes.status, 200);
+    assert.equal((await patchRes.json()).data.story, '<strong>fett</strong>');
+  });
+});
+
 test.after(async () => {
   await setScSchema([]);
   await setAppSettings({ characterBrowsingEnabled: false });

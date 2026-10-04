@@ -1,5 +1,6 @@
 import { query } from '../db.js';
 import { validateCharacterData } from '../events/schemaValidation.js';
+import { sanitizeDocumentFields } from '../richText.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 
@@ -11,7 +12,8 @@ async function schemaForClass(characterClass) {
 
 export async function createCharacter(userId, { characterClass = 'sc', name, data }) {
   const schema = await schemaForClass(characterClass);
-  const errors = validateCharacterData(schema, data ?? {});
+  data = sanitizeDocumentFields(schema, data ?? {});
+  const errors = validateCharacterData(schema, data);
   if (errors.length > 0) {
     const err = new Error('invalid character data');
     err.code = 'INVALID_CHARACTER_DATA';
@@ -107,7 +109,7 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
     // it (a disabled input never reaches FormData), so trust the SERVER's
     // existing value here rather than whatever the client happened to
     // send, regardless of type or emptiness.
-    const effectiveData = isElevated ? data : { ...data };
+    const effectiveData = sanitizeDocumentFields(schema, isElevated ? data : { ...data });
     if (!isElevated) {
       for (const field of schema) {
         if (field.staffOnly) effectiveData[field.key] = character.data?.[field.key];

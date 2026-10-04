@@ -52,6 +52,7 @@ function fillValue(field, seed) {
     case 'multiselect':
       return Array.isArray(field.options) && field.options.length ? [pick(field.options, seed)] : [];
     case 'textarea': return 'Fiktiver Testtext für den Test-Modus.';
+    case 'document': return '<p>Fiktiver Testtext für den <strong>Test-Modus</strong>.</p>';
     default: {
       const known = TEXT_BY_KEY[field.key];
       if (known) return pick(known, seed);

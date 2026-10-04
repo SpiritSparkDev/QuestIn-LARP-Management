@@ -113,6 +113,7 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
     <select class="schema-type">
       <option value="text" ${field.type === 'text' ? 'selected' : ''}>Text</option>
       <option value="textarea" ${field.type === 'textarea' ? 'selected' : ''}>Textarea</option>
+      <option value="document" ${field.type === 'document' ? 'selected' : ''}>Dokument (WYSIWYG-Editor)</option>
       <option value="select" ${field.type === 'select' ? 'selected' : ''}>Auswahl</option>
       <option value="number" ${field.type === 'number' ? 'selected' : ''}>Zahl</option>
       <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>Ja/Nein</option>
@@ -125,8 +126,8 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
       <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
       ${publicCheckboxHtml}
     </div>
-    
     <button type="button" class="remove-row">Entfernen</button>
+    <input type="text" placeholder="Hinweis beim Darüberfahren (optional, max. 500 Zeichen)" maxlength="500" class="schema-hint" value="${escapeHtml(field.hint ?? '')}">
   `;
   row.querySelector('.remove-row').addEventListener('click', () => row.remove());
   row.querySelector('.move-up').addEventListener('click', () => {
@@ -149,6 +150,8 @@ function collectSchema(container, { allowPublic = true, allowGroup = false } = {
       type,
       required: row.querySelector('.schema-required').checked,
     };
+    const hint = row.querySelector('.schema-hint').value.trim();
+    if (hint) field.hint = hint;
     if (allowPublic) {
       field.public = row.querySelector('.schema-public').checked;
       field.staffOnly = row.querySelector('.schema-staff-only').checked;

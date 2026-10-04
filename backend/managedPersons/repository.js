@@ -2,6 +2,7 @@ import { query } from '../db.js';
 import { displayName } from '../displayName.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
+import { sanitizeFieldValue } from '../richText.js';
 
 // A person can be deleted unless a registration is already binding: paid, or
 // confirmed/checked in. Open registrations (pending, waitlisted, ...) are
@@ -58,7 +59,7 @@ export async function createManagedPerson({ ownerId, groupId, email, firstName, 
   const schema = await getAccountFieldSchema();
   const data = {};
   for (const field of schema) {
-    if (otFields[field.key] !== undefined) data[field.key] = otFields[field.key];
+    if (otFields[field.key] !== undefined) data[field.key] = sanitizeFieldValue(field, otFields[field.key]);
   }
   try {
     const { rows } = await query(
@@ -87,7 +88,7 @@ export async function updateManagedPerson(id, ownerId, fields) {
   if (currentRows.length === 0) return null;
   const nextData = decryptFieldBlob(currentRows[0].account_data_enc);
   for (const field of schema) {
-    if (fields[field.key] !== undefined) nextData[field.key] = fields[field.key];
+    if (fields[field.key] !== undefined) nextData[field.key] = sanitizeFieldValue(field, fields[field.key]);
   }
 
   try {
