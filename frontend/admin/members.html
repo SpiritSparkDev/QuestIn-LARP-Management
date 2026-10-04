@@ -56,27 +56,26 @@
           </div>
         </div>
 
-        <dialog id="detail-dialog">
+        <dialog id="detail-dialog" class="member-dialog">
           <h2 id="detail-title">Mitglied bearbeiten</h2>
-          <div id="detail-group-wrap" style="display:none;">
-            <select id="detail-group" name="group"></select>
-            <label for="detail-group">Gruppe</label>
+          <div class="tabs" id="detail-tabs">
+            <button type="button" class="tab-btn active" data-tab="detail-tab-konto">Konto</button>
+            <button type="button" class="tab-btn" data-tab="detail-tab-chars" id="detail-chars-tab-btn">Charaktere</button>
           </div>
-          <div id="detail-fields"></div>
-          <div id="detail-characters"></div>
-          <button type="button" id="detail-save">Speichern</button>
-          <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
-        </dialog>
-
-        <dialog id="character-edit-dialog">
-          <h2 id="character-edit-title">Charakter bearbeiten</h2>
-          <form id="character-edit-form">
-            <input id="character-edit-name" name="__name" type="text" required>
-            <label for="character-edit-name">Name</label>
-            <div id="character-edit-fields"></div>
-            <button type="submit">Speichern</button>
-            <button type="button" id="character-edit-cancel" class="btn-ghost">Abbrechen</button>
-          </form>
+          <div class="tab-panel" id="detail-tab-konto">
+            <div id="detail-group-wrap" style="display:none;">
+              <select id="detail-group" name="group"></select>
+              <label for="detail-group">Gruppe</label>
+            </div>
+            <div id="detail-fields"></div>
+            <button type="button" id="detail-save">Konto speichern</button>
+          </div>
+          <div class="tab-panel" id="detail-tab-chars" hidden>
+            <div id="detail-characters"></div>
+          </div>
+          <div class="dialog-actions">
+            <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
+          </div>
         </dialog>
 
         <dialog id="invite-dialog">
@@ -338,56 +337,26 @@
       applySearchFilter();
     }
 
-    // Staff editing someone else's character, e.g. IT-Geld: the character's
-    // own schema, every field enabled (staffOnly ones too -- the server only
-    // lets staff write those).
-    const characterEditDialog = document.getElementById('character-edit-dialog');
-    const characterEditForm = document.getElementById('character-edit-form');
-    let editingCharacter = null;
-    let editingSchema = [];
-
-    async function openCharacterEdit(characterId, characterClass) {
-      try {
-        const [character, schema] = await Promise.all([
-          api.get(`/characters/${characterId}`),
-          api.get(characterClass === 'nsc' ? '/nsc-schema' : '/sc-schema'),
-        ]);
-        editingCharacter = character;
-        editingSchema = schema;
-        document.getElementById('character-edit-title').textContent = `Charakter bearbeiten: ${character.name}`;
-        document.getElementById('character-edit-name').value = character.name;
-        document.getElementById('character-edit-fields').innerHTML = schema
-          .map((field) => `<div class="form-group">${renderField(field, character.data?.[field.key], 'member-char-')}</div>`)
-          .join('');
-        attachLiveValidation(characterEditForm);
-        characterEditDialog.showModal();
-      } catch (err) {
-        notify(err.message, 'error');
-      }
+    // ---- Charaktere tab -------------------------------------------------
+    // Staff (canOverrideCheckin) edit a member's characters right here: one
+    // collapsible form per character, built from that class's own schema with
+    // every field enabled (staffOnly ones too -- the server only lets staff
+    // write those). Everyone else just sees the list.
+    const detailTabButtons = [...document.querySelectorAll('#detail-tabs .tab-btn')];
+    function showDetailTab(panelId) {
+      detailTabButtons.forEach((b) => {
+        b.classList.toggle('active', b.dataset.tab === panelId);
+        document.getElementById(b.dataset.tab).hidden = b.dataset.tab !== panelId;
+      });
     }
+    detailTabButtons.forEach((b) => b.addEventListener('click', () => showDetailTab(b.dataset.tab)));
 
-    document.getElementById('character-edit-cancel').addEventListener('click', () => characterEditDialog.close());
+    const CHARACTER_SECTIONS = [
+      { characterClass: 'sc', title: 'Spielercharaktere (SC)' },
+      { characterClass: 'nsc', title: 'Nichtspielercharaktere (NSC)' },
+    ];
 
-    characterEditForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      try {
-        await api.put(`/characters/${editingCharacter.id}`, {
-          name: document.getElementById('character-edit-name').value,
-          data: collectFieldValues(characterEditForm, editingSchema),
-        });
-        characterEditDialog.close();
-        notify('Charakter gespeichert.', 'success');
-      } catch (err) {
-        notify(err.status === 400 && err.body?.details ? err.body.details.join(', ') : err.message, 'error');
-      }
-    });
-
-    async function openDetail(memberId) {
-      const member = await api.get(`/members/${memberId}`);
-      editingMemberId = memberId;
-      detailTitle.textContent = `Mitglied bearbeiten: ${member.name}`;
-      buildDetailFieldInputs(detailFields, member);
-
+    async function renderCharactersTab(member) {
       // One entry per character (the server returns one row per registration),
       // with every event it is registered for.
       const characters = new Map();
@@ -395,17 +364,76 @@
         if (!characters.has(c.id)) characters.set(c.id, { ...c, events: [] });
         if (c.eventName) characters.get(c.id).events.push(c.eventName);
       }
-      const charList = [...characters.values()].map((c) => `<li>
-        ${escapeHtml(c.name)}${c.class === 'nsc' ? ' <span class="tag">NSC</span>' : ''}
-        <span class="sub">${c.events.length ? escapeHtml(c.events.join(', ')) : 'noch keinem Event zugeordnet'}</span>
-        ${canOverrideCheckin ? `<button type="button" class="btn-ghost btn-sm" data-edit-character="${escapeHtml(c.id)}" data-character-class="${escapeHtml(c.class)}">Bearbeiten</button>` : ''}
-      </li>`).join('');
-      detailCharacters.innerHTML = characters.size
-        ? `<h3>Charaktere</h3><ul>${charList}</ul>`
-        : '';
-      detailCharacters.querySelectorAll('[data-edit-character]').forEach((button) => {
-        button.addEventListener('click', () => openCharacterEdit(button.dataset.editCharacter, button.dataset.characterClass));
+      const list = [...characters.values()];
+      document.getElementById('detail-chars-tab-btn').textContent = `Charaktere (${list.length})`;
+      if (list.length === 0) {
+        detailCharacters.innerHTML = '<p class="sub">Dieses Mitglied hat noch keine Charaktere.</p>';
+        return;
+      }
+
+      const eventsLine = (c) => (c.events.length ? escapeHtml(c.events.join(', ')) : 'noch keinem Event zugeordnet');
+      if (!canOverrideCheckin) {
+        detailCharacters.innerHTML = `<ul>${list.map((c) => `<li>${escapeHtml(c.name)}${c.class === 'nsc' ? ' <span class="tag">NSC</span>' : ''} <span class="sub">${eventsLine(c)}</span></li>`).join('')}</ul>`;
+        return;
+      }
+
+      detailCharacters.innerHTML = '<p class="sub">Wird geladen …</p>';
+      let schemas;
+      let details;
+      try {
+        [schemas, details] = await Promise.all([
+          Promise.all(CHARACTER_SECTIONS.map(async ({ characterClass }) => [characterClass, await api.get(`/${characterClass}-schema`).catch(() => [])])).then(Object.fromEntries),
+          Promise.all(list.map((c) => api.get(`/characters/${c.id}`))),
+        ]);
+      } catch (err) {
+        detailCharacters.innerHTML = '<p class="error">Die Charaktere konnten nicht geladen werden.</p>';
+        notify(err.message, 'error');
+        return;
+      }
+      const dataById = new Map(details.map((d) => [d.id, d]));
+
+      detailCharacters.innerHTML = CHARACTER_SECTIONS.map(({ characterClass, title }) => {
+        const ofClass = list.filter((c) => (c.class ?? 'sc') === characterClass);
+        if (ofClass.length === 0) return '';
+        return `<h3>${title}</h3>${ofClass.map((c) => `
+          <details class="member-character">
+            <summary><strong>${escapeHtml(c.name)}</strong> <span class="sub">${eventsLine(c)}</span></summary>
+            <form class="member-character-form" data-character-id="${escapeHtml(c.id)}" data-character-class="${characterClass}">
+              <input name="__name" type="text" required value="${escapeHtml(c.name)}">
+              <label>Name</label>
+              ${schemas[characterClass].map((field) => `<div class="form-group">${renderField(field, dataById.get(c.id)?.data?.[field.key], `mc-${c.id}-`)}</div>`).join('')}
+              <div class="settings-actions"><button type="submit">Speichern</button></div>
+            </form>
+          </details>`).join('')}`;
+      }).join('');
+
+      detailCharacters.querySelectorAll('.member-character-form').forEach((form) => {
+        attachLiveValidation(form);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const schema = schemas[form.dataset.characterClass];
+          try {
+            const saved = await api.put(`/characters/${form.dataset.characterId}`, {
+              name: form.elements.__name.value,
+              data: collectFieldValues(form, schema),
+            });
+            form.closest('details').querySelector('summary strong').textContent = saved.name;
+            notify('Charakter gespeichert.', 'success');
+          } catch (err) {
+            notify(err.status === 400 && err.body?.details ? err.body.details.join(', ') : err.message, 'error');
+          }
+        });
       });
+    }
+
+    async function openDetail(memberId) {
+      const member = await api.get(`/members/${memberId}`);
+      editingMemberId = memberId;
+      detailTitle.textContent = `Mitglied bearbeiten: ${member.name}`;
+      buildDetailFieldInputs(detailFields, member);
+
+      showDetailTab('detail-tab-konto');
+      renderCharactersTab(member);
 
       if (myAccountFields.includes('group')) {
         detailGroupWrap.style.display = '';
