@@ -86,6 +86,25 @@ test('GET /members lists managed persons and names the person who manages them',
   }
 });
 
+test('GET /members includes each member\'s event registrations (event and status)', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const member = await makeUserAndSession('mitglied');
+    const { rows: ev } = await query("INSERT INTO events (name, event_date) VALUES ('Filter-Con', '2027-05-05') RETURNING id");
+    await query("INSERT INTO registrations (user_id, event_id, con_role, status) VALUES ($1, $2, 'helfer', 'confirmed')", [member.userId, ev[0].id]);
+
+    const members = await (await fetch(`http://localhost:${port}/members`, { headers: { Cookie: cookie } })).json();
+    const entry = members.find((m) => m.id === member.userId);
+    assert.deepEqual(entry.registrations, [{ eventId: ev[0].id, status: 'confirmed' }]);
+    const other = members.find((m) => m.id !== member.userId && m.status === 'active');
+    assert.ok(Array.isArray(other.registrations));
+  } finally {
+    server.close();
+  }
+});
+
 test('GET /members/:id returns every field regardless of the viewer\'s own permissions, plus the member\'s characters', async () => {
   const server = createServer().listen(0);
   try {

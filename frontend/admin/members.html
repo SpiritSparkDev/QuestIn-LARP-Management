@@ -58,6 +58,23 @@
               <label for="member-filter-kind">Kontoart</label>
             </div>
             <div>
+              <select id="member-filter-event"></select>
+              <label for="member-filter-event">Event</label>
+            </div>
+            <div>
+              <select id="member-filter-registration" disabled>
+                <option value="">Egal</option>
+                <option value="registered">Angemeldet (ohne abgesagt)</option>
+                <option value="none">Nicht angemeldet</option>
+                <option value="pending">Vorgemerkt</option>
+                <option value="confirmed">Angemeldet (bestätigt)</option>
+                <option value="checked_in">Eingecheckt</option>
+                <option value="waitlisted">Warteliste</option>
+                <option value="cancelled">Abgesagt</option>
+              </select>
+              <label for="member-filter-registration">Anmeldung zum Event</label>
+            </div>
+            <div>
               <select id="member-sort"></select>
               <label for="member-sort">Sortieren nach</label>
             </div>
@@ -157,7 +174,7 @@
     import { applyBranding } from '/js/branding.js';
     import { hideLoading } from '/js/loading.js';
     applyBranding();
-    import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, renderField, collectFieldValues } from '/js/formFields.js';
+    import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, renderField, collectFieldValues, STATUS_LABELS } from '/js/formFields.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
     import { notify } from '/js/notifications.js';
     initSidebarToggle();
@@ -189,7 +206,7 @@
     const STATUS_RANK = { active: 0, invited: 1, deactivated: 2 };
     const PREFS_KEY = 'memberListPrefs';
     let viewMembers = [];
-    let prefs = { group: '', kind: '', sort: 'name', dir: 'asc' };
+    let prefs = { group: '', kind: '', event: '', registration: '', sort: 'name', dir: 'asc' };
     try {
       prefs = { ...prefs, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {}) };
     } catch {
@@ -217,7 +234,31 @@
       if (prefs.group && !groups.includes(prefs.group)) prefs.group = '';
       groupFilter.innerHTML = `<option value="">Alle Gruppen</option>${groups.map((g) => `<option value="${escapeHtml(g)}"${g === prefs.group ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('')}`;
       kindFilter.value = prefs.kind;
+      refreshEventFilter();
       sortSelect.value = `${prefs.sort}:${prefs.dir}`;
+    }
+
+    const eventFilter = document.getElementById('member-filter-event');
+    const registrationFilter = document.getElementById('member-filter-registration');
+    let allEvents = [];
+
+    function refreshEventFilter() {
+      if (prefs.event && !allEvents.some((e) => e.id === prefs.event)) prefs.event = '';
+      eventFilter.innerHTML = `<option value="">Alle Events</option>${allEvents.map((e) => `<option value="${escapeHtml(e.id)}"${e.id === prefs.event ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}`;
+      registrationFilter.disabled = !prefs.event;
+      registrationFilter.value = prefs.event ? prefs.registration : '';
+    }
+
+    // "Egal" with an event chosen means no registration filter; the other
+    // choices need the chosen event (the select stays disabled without one).
+    function memberMatchesRegistration(m) {
+      if (!prefs.event || !prefs.registration) return true;
+      const reg = (m.registrations ?? []).find((r) => r.eventId === prefs.event);
+      switch (prefs.registration) {
+        case 'registered': return Boolean(reg) && reg.status !== 'cancelled';
+        case 'none': return !reg;
+        default: return reg?.status === prefs.registration;
+      }
     }
 
     const memberMatchesKind = (m) => {
@@ -246,6 +287,7 @@
       const matching = viewMembers.filter((m) => {
         if (prefs.group && m.group?.name !== prefs.group) return false;
         if (!memberMatchesKind(m)) return false;
+        if (!memberMatchesRegistration(m)) return false;
         if (!term) return true;
         return [m.name, m.nickname, m.email, m.group?.name, m.managedBy?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
       });
@@ -263,7 +305,7 @@
     }
 
     function updateMemberSummary(shown) {
-      const filtersActive = Boolean(prefs.group || prefs.kind || currentSearch.trim());
+      const filtersActive = Boolean(prefs.group || prefs.kind || (prefs.event && prefs.registration) || currentSearch.trim());
       document.getElementById('member-count').textContent = filtersActive
         ? `${shown} von ${viewMembers.length} Mitgliedern`
         : `${viewMembers.length} Mitglieder`;
@@ -282,6 +324,15 @@
     });
     groupFilter.addEventListener('change', () => { prefs.group = groupFilter.value; savePrefs(); renderMembers(); });
     kindFilter.addEventListener('change', () => { prefs.kind = kindFilter.value; savePrefs(); renderMembers(); });
+    eventFilter.addEventListener('change', () => {
+      prefs.event = eventFilter.value;
+      if (!prefs.event) prefs.registration = '';
+      registrationFilter.disabled = !prefs.event;
+      registrationFilter.value = prefs.event ? prefs.registration : '';
+      savePrefs();
+      renderMembers();
+    });
+    registrationFilter.addEventListener('change', () => { prefs.registration = registrationFilter.value; savePrefs(); renderMembers(); });
     sortSelect.addEventListener('change', () => {
       [prefs.sort, prefs.dir] = sortSelect.value.split(':');
       savePrefs();
@@ -297,11 +348,12 @@
       });
     });
     document.getElementById('member-filter-reset').addEventListener('click', () => {
-      prefs = { group: '', kind: '', sort: 'name', dir: 'asc' };
+      prefs = { group: '', kind: '', event: '', registration: '', sort: 'name', dir: 'asc' };
       currentSearch = '';
       searchInput.value = '';
       groupFilter.value = '';
       kindFilter.value = '';
+      refreshEventFilter();
       sortSelect.value = 'name:asc';
       savePrefs();
       renderMembers();
@@ -402,6 +454,8 @@
     async function loadEventOptions(selectEl) {
       const events = await api.get('/events');
       selectEl.innerHTML = renderEventOptions(events, '– keine –');
+      allEvents = events;
+      refreshEventFilter();
     }
 
     async function loadMembers() {

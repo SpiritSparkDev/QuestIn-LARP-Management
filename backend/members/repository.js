@@ -45,7 +45,20 @@ export async function listMembers(includeDeactivated = false) {
   const { rows } = await query(
     `SELECT ${SELECT_COLUMNS} ${FROM_JOIN} ${where} ORDER BY users.last_name, users.first_name`
   );
-  return rows.map(decryptMember);
+  const members = rows.map(decryptMember);
+
+  // Each member's event registrations (event + status only), so the list can
+  // be filtered by registration without a request per member.
+  const { rows: registrationRows } = await query(
+    'SELECT user_id, event_id, status FROM registrations WHERE user_id = ANY($1::uuid[])',
+    [members.map((m) => m.id)]
+  );
+  const byUser = new Map();
+  for (const r of registrationRows) {
+    if (!byUser.has(r.user_id)) byUser.set(r.user_id, []);
+    byUser.get(r.user_id).push({ eventId: r.event_id, status: r.status });
+  }
+  return members.map((m) => ({ ...m, registrations: byUser.get(m.id) ?? [] }));
 }
 
 export async function getMember(id) {
