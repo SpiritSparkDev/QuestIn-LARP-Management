@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { csvCell, toCsv } = await import('../../frontend/js/csv.js');
+const { csvCell, toCsv } = await import('../../backend/csv.js');
 
 test('csvCell quotes separators, quotes and line breaks, and renders arrays and booleans readably', () => {
   assert.equal(csvCell('Müller'), 'Müller');

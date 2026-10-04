@@ -1,6 +1,8 @@
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
+import { buildMembersCsv } from './exportCsv.js';
+import { getEvent } from '../events/repository.js';
 import { readJsonBody } from '../httpBody.js';
 import { listMembers, getMember, updateMember, deactivateMember, reactivateMember, deleteMember } from './repository.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
@@ -18,9 +20,8 @@ export async function filterToAllowedFields(body, allowedFields) {
   return Object.keys(body).filter((key) => accountFieldKeys.includes(key) && !allowedFields.includes(key));
 }
 
-router.get('/members', requireAuth(requireMenu('mitglieder')(async ({ req }) => {
-  const { searchParams } = new URL(req.url, 'http://localhost');
-  const includeDeactivated = searchParams.get('includeDeactivated') === 'true';
+// The member list as the page shows it: accounts plus open invitations.
+async function listMembersAndInvitations(includeDeactivated) {
   const members = await listMembers(includeDeactivated);
   const invitations = await listOpenInvitations();
   const invited = invitations.map((inv) => ({
@@ -30,9 +31,46 @@ router.get('/members', requireAuth(requireMenu('mitglieder')(async ({ req }) => 
     status: 'invited',
     expired: new Date(inv.expiresAt) < new Date(),
   }));
-  return { status: 200, body: [...members, ...invited] };
+  return [...members, ...invited];
+}
+
+router.get('/members', requireAuth(requireMenu('mitglieder')(async ({ req }) => {
+  const { searchParams } = new URL(req.url, 'http://localhost');
+  const includeDeactivated = searchParams.get('includeDeactivated') === 'true';
+  return { status: 200, body: await listMembersAndInvitations(includeDeactivated) };
 })));
 
+// CSV export of (a selection of) the member list. Needs its own group
+// permission on top of the Mitglieder menu; the CSV is built here, not in
+// the browser, so the permission and the per-group field visibility are
+// enforced by the server.
+router.post('/members/export', requireAuth(requireMenu('mitglieder')(async ({ req, user }) => {
+  if (!user.group.canExportMembers) return { status: 403, body: { error: 'Kein Recht für den CSV-Export.' } };
+  const body = (await readJsonBody(req)) ?? {};
+  if (body.ids !== undefined && (!Array.isArray(body.ids) || body.ids.some((id) => typeof id !== 'string'))) {
+    return { status: 400, body: { error: 'ids must be an array of strings' } };
+  }
+  const event = body.eventId ? await getEvent(body.eventId) : null;
+  if (body.eventId && !event) return { status: 404, body: { error: 'event not found' } };
+
+  let members = await listMembersAndInvitations(true);
+  if (body.ids) {
+    // Keep the order of the list as shown on screen.
+    const byId = new Map(members.map((m) => [m.id, m]));
+    members = body.ids.map((id) => byId.get(id)).filter(Boolean);
+  }
+  const csv = buildMembersCsv(members, { accountSchema: await getAccountFieldSchema(), viewer: user, event });
+  return {
+    status: 200,
+    isBinary: true,
+    body: Buffer.from(csv, 'utf8'),
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="mitglieder-${new Date().toISOString().slice(0, 10)}.csv"`,
+      'X-Content-Type-Options': 'nosniff',
+    },
+  };
+})));
 router.get('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ params }) => {
   const member = await getMember(params.id);
   if (!member) return { status: 404, body: { error: 'member not found' } };

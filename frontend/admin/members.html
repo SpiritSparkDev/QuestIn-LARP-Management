@@ -176,7 +176,6 @@
     import { hideLoading } from '/js/loading.js';
     applyBranding();
     import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, renderField, collectFieldValues, STATUS_LABELS } from '/js/formFields.js';
-    import { toCsv, downloadCsv } from '/js/csv.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
     import { notify } from '/js/notifications.js';
     initSidebarToggle();
@@ -321,45 +320,35 @@
     }
 
     // CSV of exactly what the list shows (filters, search and sort applied).
-    // Account fields are only included if the viewer's group may see them --
-    // the same rule the edit dialog uses (myAccountFields).
-    function memberKind(m) {
-      if (m.status === 'invited') return 'Eingeladen';
-      if (m.managedBy) return 'Verwaltete Person';
-      return m.isGuest ? 'Gast' : 'Vollkonto';
-    }
-
-    document.getElementById('member-export').addEventListener('click', () => {
+    // The server builds the file and enforces the export permission and the
+    // group's field visibility; the page only says which members, in which order.
+    const exportButton = document.getElementById('member-export');
+    exportButton.addEventListener('click', async () => {
       const rows = filteredAndSortedMembers();
       if (rows.length === 0) { notify('Keine Mitglieder zum Exportieren.', 'error'); return; }
-      const statusLabel = { active: 'Aktiv', deactivated: 'Deaktiviert', invited: 'Eingeladen' };
-      const columns = [
-        { label: 'Nachname', value: (m) => m.lastName },
-        { label: 'Vorname', value: (m) => m.firstName },
-        { label: 'Rufname', value: (m) => m.nickname },
-        { label: 'Anzeigename', value: (m) => m.name },
-        { label: 'E-Mail', value: (m) => m.email },
-        { label: 'Gruppe', value: (m) => m.group?.name },
-        { label: 'Status', value: (m) => statusLabel[m.status] ?? m.status },
-        { label: 'Kontoart', value: memberKind },
-        { label: 'Verwaltet von', value: (m) => m.managedBy?.name },
-        { label: 'Discord', value: (m) => m.discordUsername },
-      ];
-      const event = allEvents.find((e) => e.id === prefs.event);
-      if (event) {
-        columns.push({
-          label: `Anmeldung: ${event.name}`,
-          value: (m) => {
-            const reg = (m.registrations ?? []).find((r) => r.eventId === event.id);
-            return reg ? (STATUS_LABELS[reg.status] ?? reg.status) : 'Nicht angemeldet';
-          },
+      exportButton.disabled = true;
+      try {
+        const res = await fetch('/members/export', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: rows.map((m) => m.id), eventId: prefs.event || undefined }),
         });
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Export fehlgeschlagen (${res.status})`);
+        const url = URL.createObjectURL(await res.blob());
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `mitglieder-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        notify(`${rows.length} Mitglieder exportiert.`, 'success');
+      } catch (err) {
+        notify(err.message, 'error');
+      } finally {
+        exportButton.disabled = false;
       }
-      for (const field of accountSchema.filter((f) => myAccountFields.includes(f.key))) {
-        columns.push({ label: field.label ?? field.key, value: (m) => m[field.key] });
-      }
-      downloadCsv(`mitglieder-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows, columns));
-      notify(`${rows.length} Mitglieder exportiert.`, 'success');
     });
 
     searchInput.addEventListener('input', () => {
@@ -890,6 +879,7 @@
       myAccountFields = account.accountFields ?? [];
       canOverrideCheckin = account.canOverrideCheckinStatus === true;
       canCreateForOthers = ['admin', 'moderator'].includes(account.group.key);
+      document.getElementById('member-export').hidden = account.canExportMembers !== true;
       myUserId = account.id;
       accountSchema = await api.get('/account-schema');
       buildFieldInputs(inviteFields);

@@ -71,6 +71,10 @@
         </div>
 
         <div class="checkbox-group">
+          <label><input type="checkbox" id="can-export-members"> Darf die Mitgliederliste als CSV exportieren (enthält die Konto-Felder, die diese Gruppe sehen darf)</label>
+        </div>
+
+        <div class="checkbox-group">
           <label><input type="checkbox" id="can-override-checkin-status"> Darf Check-In-Status frei setzen und alle Charakterfelder sehen (Admin/Orga/SL-Funktion)</label>
         </div>
 
@@ -169,6 +173,7 @@ function startEdit(group) {
   setCheckedValues('field-checkboxes', group.account_fields);
   document.getElementById('can-edit-characters').checked = group.can_edit_characters;
   document.getElementById('can-override-checkin-status').checked = group.can_override_checkin_status;
+  document.getElementById('can-export-members').checked = group.can_export_members;
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
   dialog.showModal();
 }
@@ -196,6 +201,7 @@ form.addEventListener('submit', async (event) => {
     accountFields: getCheckedValues('field-checkboxes'),
     canEditCharacters: document.getElementById('can-edit-characters').checked,
     canOverrideCheckinStatus: document.getElementById('can-override-checkin-status').checked,
+    canExportMembers: document.getElementById('can-export-members').checked,
   };
   try {
     if (editingGroupId) {

@@ -15,7 +15,7 @@ export function requireAuth(handler) {
       `SELECT users.id, users.email, users.deactivated_at,
               groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
               groups.visible_menus, groups.account_fields, groups.can_edit_characters,
-              groups.can_override_checkin_status
+              groups.can_override_checkin_status, groups.can_export_members
        FROM users
        JOIN groups ON groups.id = users.group_id
        WHERE users.id = $1`,
@@ -36,6 +36,7 @@ export function requireAuth(handler) {
         accountFields: row.account_fields,
         canEditCharacters: row.can_edit_characters,
         canOverrideCheckinStatus: row.can_override_checkin_status,
+        canExportMembers: row.can_export_members,
       },
     };
 
