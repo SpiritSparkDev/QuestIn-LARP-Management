@@ -2,7 +2,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { buildMembersCsv } from './exportCsv.js';
-import { getEvent } from '../events/repository.js';
+import { getEvent, listEvents } from '../events/repository.js';
 import { readJsonBody } from '../httpBody.js';
 import { listMembers, getMember, updateMember, deactivateMember, reactivateMember, deleteMember } from './repository.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
@@ -59,7 +59,7 @@ router.post('/members/export', requireAuth(requireMenu('mitglieder')(async ({ re
     const byId = new Map(members.map((m) => [m.id, m]));
     members = body.ids.map((id) => byId.get(id)).filter(Boolean);
   }
-  const csv = buildMembersCsv(members, { accountSchema: await getAccountFieldSchema(), viewer: user, event });
+  const csv = buildMembersCsv(members, { accountSchema: await getAccountFieldSchema(), viewer: user, event, events: event ? [] : await listEvents() });
   return {
     status: 200,
     isBinary: true,

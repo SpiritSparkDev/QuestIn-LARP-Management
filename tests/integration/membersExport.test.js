@@ -140,3 +140,22 @@ test('PUT /groups can grant and revoke the export permission', async () => {
     assert.equal((await off.json()).can_export_members, false);
   });
 });
+
+test('without an event filter the export lists every event a member is registered for in one column', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUser('admin');
+    const person = await makeUser('mitglied', { first: 'Viel', last: 'Angemeldet' });
+    const { rows: first } = await query("INSERT INTO events (name, event_date) VALUES ('Frühcon', '2027-03-01') RETURNING id");
+    const { rows: second } = await query("INSERT INTO events (name, event_date) VALUES ('Spätcon', '2027-10-01') RETURNING id");
+    await query("INSERT INTO registrations (user_id, event_id, con_role, status) VALUES ($1, $2, 'helfer', 'waitlisted'), ($1, $3, 'helfer', 'confirmed')", [person.userId, second[0].id, first[0].id]);
+    const none = await makeUser('mitglied');
+
+    const text = await (await exportCsv(port, admin.cookie, { ids: [person.userId, none.userId] })).text();
+    const [header, row, emptyRow] = text.trim().split('\r\n');
+    assert.ok(header.includes(';Anmeldungen'));
+    assert.ok(!header.includes('Anmeldung:'));
+    // Ordered by event date, one "Event: Status" entry each.
+    assert.ok(row.includes('Frühcon: Angemeldet; Spätcon: Warteliste'));
+    assert.ok(!emptyRow.includes('Frühcon'));
+  });
+});
