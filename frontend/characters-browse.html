@@ -138,6 +138,12 @@ try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  const { characterBrowsingEnabled } = await api.get('/app-settings');
+  if (!characterBrowsingEnabled) {
+    document.getElementById('browse-count').textContent = 'Die Charakterübersicht ist zurzeit deaktiviert.';
+    document.querySelector('.browse-toolbar').hidden = true;
+    throw Object.assign(new Error('browsing disabled'), { status: 0 });
+  }
   scSchema = await api.get('/sc-schema');
   events = await api.get('/events');
   eventSelect.innerHTML = renderEventOptions(events);

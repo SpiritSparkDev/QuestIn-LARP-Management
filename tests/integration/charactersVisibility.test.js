@@ -19,6 +19,7 @@ await seedNscProfileSchema();
 
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
+const { setAppSettings } = await import('../../backend/appSettings/repository.js');
 
 async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
@@ -65,8 +66,11 @@ async function makeRegisteredCharacter(port, cookie, eventId, name, data) {
   return id;
 }
 
+// Character browsing is off by default (migration 068); these tests exercise
+// the browse endpoints, so each one starts with it enabled.
 test.beforeEach(async () => {
   await setScSchema(VISIBILITY_SCHEMA);
+  await setAppSettings({ characterBrowsingEnabled: true });
 });
 
 test('owner sees a non-public field; a different non-elevated user does not', async () => {
@@ -216,16 +220,11 @@ test('disabling characterBrowsingEnabled blocks GET /events/:id/characters/publi
     });
     assert.equal(blockedRes.status, 403);
 
-    // Re-enable so this doesn't leak disabled state into later tests.
-    await fetch(`http://localhost:${port}/app-settings`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ characterBrowsingEnabled: true }),
-    });
   });
 });
 
 test.after(async () => {
   await setScSchema([]);
+  await setAppSettings({ characterBrowsingEnabled: false });
   await closePool();
 });
