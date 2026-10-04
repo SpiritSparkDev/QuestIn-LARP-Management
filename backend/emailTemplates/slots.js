@@ -33,6 +33,17 @@ export const EMAIL_SLOTS = [
     ],
   },
   {
+    key: 'character_deleted_orga',
+    label: 'Orga-Hinweis: Charakter mit Anmeldung gelöscht',
+    supportsAccount: false,
+    extraFields: [
+      { key: 'userName', label: 'Name des betroffenen Mitglieds' },
+      { key: 'characterName', label: 'Name des gelöschten Charakters' },
+      { key: 'eventName', label: 'Eventname' },
+      { key: 'consequence', label: 'Folge für die Anmeldung (Text)' },
+    ],
+  },
+  {
     key: 'waitlisted',
     label: 'Auf die Warteliste gesetzt',
     supportsAccount: true,

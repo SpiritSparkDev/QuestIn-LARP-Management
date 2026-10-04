@@ -1,4 +1,8 @@
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
+import { displayName } from '../displayName.js';
+import { logger } from '../logger.js';
+import { sendCharacterDeletedOrgaEmail, getTransporterAndFrom } from '../auth/mailer.js';
+import { resolveOtFieldsChangeRecipients, maybePromoteFromWaitlist } from '../registrations/repository.js';
 import { logAudit } from '../audit/repository.js';
 import { validateCharacterData } from '../events/schemaValidation.js';
 import { sanitizeDocumentFields } from '../richText.js';
@@ -155,33 +159,97 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
   return rows[0] ?? null;
 }
 
-function characterInUseError() {
-  const err = new Error('Charakter ist mit einer Anmeldung verknüpft und kann nicht gelöscht werden.');
+// Registrations that reference the character as their sc character (those
+// are lost with it) or as their optional nsc character (only the link goes).
+export async function listCharacterRegistrations(id) {
+  const { rows } = await query(
+    `SELECT r.user_id, r.event_id, e.name AS event_name, r.status, r.con_role,
+            r.paid_at, r.amount_due_cents, (r.character_id = $1) AS is_sc_link,
+            u.first_name, u.last_name, u.nickname
+     FROM registrations r
+     JOIN events e ON e.id = r.event_id
+     JOIN users u ON u.id = r.user_id
+     WHERE r.character_id = $1 OR r.nsc_character_id = $1
+     ORDER BY e.event_date, e.name`,
+    [id]
+  );
+  return rows.map((r) => ({
+    userId: r.user_id,
+    eventId: r.event_id,
+    eventName: r.event_name,
+    status: r.status,
+    conRole: r.con_role,
+    paid: r.paid_at !== null,
+    amountDueCents: r.amount_due_cents,
+    participationLost: r.is_sc_link,
+    userName: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
+  }));
+}
+
+function characterInUseError(registrations) {
+  const err = new Error('Charakter ist mit einer Event-Anmeldung verknüpft.');
   err.code = 'CHARACTER_IN_USE';
+  err.registrations = registrations;
   return err;
 }
 
-export async function deleteCharacter(id, userId) {
+// Without `force`, a character that is part of a registration is not deleted
+// -- the error carries the affected registrations so the UI can warn first.
+// With `force`, the registrations that need the character (sc link) are
+// removed with it, the optional nsc link is just cleared, and the orga is
+// notified so they can arrange cancellation/refunds.
+export async function deleteCharacter(id, userId, { force = false, actorId = null } = {}) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
-  // registrations.character_id/nsc_character_id have no ON DELETE clause
-  // (plain REFERENCES, so Postgres defaults to blocking the delete) --
-  // ANY referencing row prevents deletion, not just ones in a "locking"
-  // status, so this must match that exactly or the DELETE below fails
-  // with a raw, unhandled foreign-key-violation error instead of the
-  // friendly one. The catch below is a defensive backstop for the same
-  // constraint, in case a future caller reaches this path some other way.
-  const { rows } = await query('SELECT 1 FROM registrations WHERE character_id = $1 OR nsc_character_id = $1', [id]);
-  if (rows.length > 0) {
-    throw characterInUseError();
+  const registrations = await listCharacterRegistrations(id);
+  if (registrations.length > 0 && !force) {
+    throw characterInUseError(registrations);
   }
 
-  try {
-    await query('DELETE FROM characters WHERE id = $1', [id]);
-  } catch (err) {
-    if (err.code === '23503') throw characterInUseError();
-    throw err;
+  const lost = registrations.filter((r) => r.participationLost);
+  await withTransaction(async (client) => {
+    await client.query('DELETE FROM registrations WHERE character_id = $1', [id]);
+    await client.query('UPDATE registrations SET nsc_character_id = NULL WHERE nsc_character_id = $1', [id]);
+    await client.query('DELETE FROM characters WHERE id = $1', [id]);
+  });
+
+  if (registrations.length > 0) {
+    await logAudit({
+      actorId,
+      action: 'character.deleted_with_registrations',
+      subjectUserId: userId,
+      details: { characterId: id, characterName: character.name, registrations: registrations.map((r) => ({ eventId: r.eventId, eventName: r.eventName, status: r.status, paid: r.paid, participationLost: r.participationLost })) },
+    });
+    await notifyCharacterDeleted(character, registrations);
+    for (const eventId of new Set(lost.map((r) => r.eventId))) {
+      await maybePromoteFromWaitlist(eventId);
+    }
   }
   return true;
+}
+
+// Never throws -- the deletion already happened.
+async function notifyCharacterDeleted(character, registrations) {
+  try {
+    const transport = await getTransporterAndFrom();
+    for (const reg of registrations) {
+      const recipients = await resolveOtFieldsChangeRecipients(reg.eventId);
+      for (const to of recipients) {
+        try {
+          await sendCharacterDeletedOrgaEmail(to, {
+            userName: reg.userName,
+            characterName: character.name,
+            eventName: reg.eventName,
+            participationLost: reg.participationLost,
+            paid: reg.paid,
+          }, transport);
+        } catch (err) {
+          logger.error('failed to send character-deleted notification', { error: err.message, to, eventId: reg.eventId });
+        }
+      }
+    }
+  } catch (err) {
+    logger.error('failed to prepare character-deleted notification', { error: err.message, characterId: character.id });
+  }
 }

@@ -97,6 +97,17 @@ export async function sendRegistrationOtFieldsChangedEmail(to, { userName, event
   return deliver(transporter, from, to, rendered);
 }
 
+export async function sendCharacterDeletedOrgaEmail(to, { userName, characterName, eventName, participationLost, paid }, { transporter, from }) {
+  const consequence = participationLost
+    ? `Die Teilnahme von ${userName} an "${eventName}" entfällt dadurch.${paid ? ' Die Anmeldung war bereits bezahlt – bitte Stornierung/Erstattung klären.' : ' Bitte prüfen, ob eine Stornierung nötig ist.'}`
+    : `Der Charakter war bei ${userName} für "${eventName}" nur als NSC-Charakter hinterlegt; die Anmeldung bleibt bestehen.`;
+  const rendered = await renderSlotEmail('character_deleted_orga', () => ({
+    subject: `Charakter gelöscht: ${characterName} (${eventName})`,
+    body: `${userName} hat den Charakter "${characterName}" gelöscht. ${consequence}`,
+  }), { extra: { userName, characterName, eventName, consequence } });
+  return deliver(transporter, from, to, rendered);
+}
+
 export async function sendWaitlistedEmail(to, { eventName, userId }, { transporter, from }) {
   const rendered = await renderSlotEmail('waitlisted', () => ({
     subject: `Warteliste: ${eventName}`,

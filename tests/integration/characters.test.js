@@ -275,6 +275,35 @@ test('DELETE /characters/:id removes an unused character; owner-only; blocked on
   });
 });
 
+test('DELETE /characters/:id?force=true removes a confirmed registration with the character and audits it', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ name: 'ForceMe', data: { fraction: 'Nordmark' } }),
+    });
+    const { id } = await createRes.json();
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId: id }),
+    });
+    await query("UPDATE registrations SET status = 'confirmed', paid_at = now() WHERE character_id = $1", [id]);
+
+    const plain = await fetch(`http://localhost:${port}/characters/${id}`, { method: 'DELETE', headers: { Cookie: owner.cookie } });
+    assert.equal(plain.status, 409);
+    assert.equal((await plain.json()).registrations[0].paid, true);
+
+    const forced = await fetch(`http://localhost:${port}/characters/${id}?force=true`, { method: 'DELETE', headers: { Cookie: owner.cookie } });
+    assert.equal(forced.status, 200);
+
+    const { rows: regs } = await query('SELECT 1 FROM registrations WHERE event_id = $1', [eventId]);
+    assert.equal(regs.length, 0);
+    const { rows: audit } = await query("SELECT details FROM audit_log WHERE action = 'character.deleted_with_registrations'");
+    assert.ok(audit.some((a) => a.details.characterName === 'ForceMe' && a.details.registrations[0].paid === true));
+  });
+});
+
 test('DELETE /characters/:id returns 409 (not a 500) for a pending, non-confirmed registration too', async () => {
   await withTestServer(async (port) => {
     const owner = await makeUserAndSession();
@@ -301,7 +330,9 @@ test('DELETE /characters/:id returns 409 (not a 500) for a pending, non-confirme
     });
     assert.equal(blockedDelete.status, 409);
     const body = await blockedDelete.json();
-    assert.match(body.error, /kann nicht gelöscht werden/);
+    assert.equal(body.code, 'CHARACTER_IN_USE');
+    assert.equal(body.registrations.length, 1);
+    assert.equal(body.registrations[0].participationLost, true);
 
     const getAfter = await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: owner.cookie } });
     assert.equal(getAfter.status, 200);

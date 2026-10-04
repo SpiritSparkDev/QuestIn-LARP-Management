@@ -4229,3 +4229,15 @@ th.is-sortable[data-dir="desc"]::after {
   .guest-widget-row { flex-direction: column; align-items: stretch; }
   .guest-widget-row input, .guest-widget-row textarea { width: 100%; box-sizing: border-box; }
 }
+
+/* Warning box inside confirm dialogs (e.g. deleting a registered character) */
+.notice-warn {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 4px solid #c0392b;
+  background: rgba(192, 57, 43, 0.08);
+  border-radius: 6px;
+  font-size: 14px;
+}
+.notice-warn p { margin: 0 0 6px; }
+.notice-warn ul { margin: 0; padding-left: 18px; }

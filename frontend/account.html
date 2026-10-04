@@ -355,6 +355,7 @@
               <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden. Gib zur Bestätigung den Namen "<strong id="delete-character-name"></strong>" ein.</p>
               <input type="text" id="delete-character-input" autocomplete="off">
               <label for="delete-character-input">Charaktername</label>
+              <div id="delete-character-warning" class="notice notice-warn" hidden></div>
               <div class="dialog-actions">
                 <button type="button" id="delete-character-confirm">Löschen</button>
                 <button type="button" id="delete-character-cancel" class="btn-ghost">Abbrechen</button>
@@ -2103,7 +2104,26 @@
     const deleteCharacterDialog = document.getElementById("delete-character-dialog");
     const deleteCharacterNameEl = document.getElementById("delete-character-name");
     const deleteCharacterInput = document.getElementById("delete-character-input");
+    const deleteCharacterWarning = document.getElementById("delete-character-warning");
+    const deleteCharacterConfirmBtn = document.getElementById("delete-character-confirm");
     let deleteCharacterId = null;
+    let deleteCharacterForce = false;
+
+    function showDeleteCharacterWarning(registrations) {
+      const items = registrations.map((r) => {
+        const paid = r.paid ? " (bereits bezahlt)" : "";
+        const effect = r.participationLost ? "Teilnahme entfällt" : "nur als NSC-Charakter verknüpft, Anmeldung bleibt";
+        return `<li><strong>${escapeHtml(r.eventName)}</strong>: ${effect}${paid}</li>`;
+      }).join("");
+      deleteCharacterWarning.innerHTML = `
+        <p><strong>Achtung:</strong> Dieser Charakter ist für ein Event angemeldet.
+        Wenn du ihn löschst, entfällt damit auch die Teilnahme. Die Orga wird
+        benachrichtigt, damit sie eine eventuelle Stornierung und Erstattung klären kann.</p>
+        <ul>${items}</ul>`;
+      deleteCharacterWarning.hidden = false;
+      deleteCharacterConfirmBtn.textContent = "Trotzdem löschen";
+      deleteCharacterForce = true;
+    }
 
     function openDeleteCharacterDialog(characterId) {
       const character = characters.find((c) => c.id === characterId);
@@ -2111,6 +2131,9 @@
       deleteCharacterId = characterId;
       deleteCharacterNameEl.textContent = character.name;
       deleteCharacterInput.value = "";
+      deleteCharacterWarning.hidden = true;
+      deleteCharacterConfirmBtn.textContent = "Löschen";
+      deleteCharacterForce = false;
       deleteCharacterDialog.showModal();
       deleteCharacterInput.focus();
     }
@@ -2129,15 +2152,18 @@
       }
       const characterId = deleteCharacterId;
       try {
-        await api.delete(`/characters/${characterId}`);
+        await api.delete(`/characters/${characterId}${deleteCharacterForce ? "?force=true" : ""}`);
         if (editingCharacterId === characterId) { resetCharacterForm(); hideCharacterForm(); }
         if (editingNscCharacterId === characterId) { resetNscForm(); hideNscForm(); }
         deleteCharacterDialog.close();
         deleteCharacterId = null;
         await loadCharacters();
       } catch (err) {
-        // Keep the dialog open on failure (e.g. a confirmed/checked-in
-        // registration blocking deletion) so the user can immediately
+        if (err.status === 409 && err.body?.registrations?.length) {
+          showDeleteCharacterWarning(err.body.registrations);
+          return;
+        }
+        // Keep the dialog open on failure so the user can immediately
         // retry or cancel -- the toast (which renders above this open
         // dialog) reports why it failed.
         notify(err.message, "error");

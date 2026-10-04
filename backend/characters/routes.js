@@ -109,7 +109,7 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
   }
 }));
 
-router.delete('/characters/:id', requireAuth(async ({ params, user }) => {
+router.delete('/characters/:id', requireAuth(async ({ req, params, user }) => {
   const character = await getCharacter(params.id);
   if (!character) return { status: 404, body: { error: 'character not found' } };
   const isOwner = character.user_id === user.id || await isManagedBy(character.user_id, user.id);
@@ -118,10 +118,13 @@ router.delete('/characters/:id', requireAuth(async ({ params, user }) => {
     return { status: 403, body: { error: 'forbidden' } };
   }
   try {
-    await deleteCharacter(params.id, character.user_id);
+    const force = new URL(req.url, 'http://localhost').searchParams.get('force') === 'true';
+    await deleteCharacter(params.id, character.user_id, { force, actorId: user.id });
     return { status: 200, body: { deleted: true } };
   } catch (err) {
-    if (err.code === 'CHARACTER_IN_USE') return { status: 409, body: { error: err.message } };
+    if (err.code === 'CHARACTER_IN_USE') {
+      return { status: 409, body: { error: err.message, code: 'CHARACTER_IN_USE', registrations: err.registrations } };
+    }
     throw err;
   }
 }));
