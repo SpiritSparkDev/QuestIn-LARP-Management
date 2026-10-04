@@ -233,3 +233,28 @@ test('the check-in list can be exported with the same permission, is limited lik
     assert.equal(rows[0].details.count, 2);
   });
 });
+
+test('a field marked sensitive in the account schema is left out of the export unless the group may export sensitive fields', async () => {
+  await withTestServer(async (port) => {
+    const { getAccountFieldSchema, setAccountFieldSchema } = await import('../../backend/accountFieldSchema/repository.js');
+    const original = await getAccountFieldSchema();
+    try {
+      await setAccountFieldSchema([...original, { key: 'allergien', label: 'Allergien', type: 'text', required: false, sensitive: true }]);
+      const mk = async (sensitive) => {
+        const key = `export_test_${crypto.randomUUID().slice(0, 8)}`;
+        await query(
+          `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive)
+           VALUES ($1, $1, '["mitglieder"]', '["phone", "allergien"]', false, false, true, $2)`,
+          [key, sensitive]
+        );
+        return makeUser(key);
+      };
+      const target = await makeUser('mitglied');
+      const header = async (u) => (await (await exportCsv(port, u.cookie, { ids: [target.userId] })).text()).split('\r\n')[0];
+      assert.ok(!(await header(await mk(false))).includes('Allergien'));
+      assert.ok((await header(await mk(true))).includes('Allergien'));
+    } finally {
+      await setAccountFieldSchema(original);
+    }
+  });
+});
