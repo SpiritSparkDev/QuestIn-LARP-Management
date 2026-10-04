@@ -4241,3 +4241,26 @@ th.is-sortable[data-dir="desc"]::after {
 }
 .notice-warn p { margin: 0 0 6px; }
 .notice-warn ul { margin: 0; padding-left: 18px; }
+
+/* ---------- Character page on phones ---------- */
+
+@media (max-width: 700px) {
+  .char-col-main .action-row button { flex: 1 1 100%; }
+  .char-col-main .char-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .char-card { padding: 12px; }
+  .char-card h3 { font-size: 16px; overflow-wrap: anywhere; }
+  /* The generic 44px touch-target rule turns these small round buttons into
+     clipped ovals -- keep them circular, still comfortably tappable. */
+  .char-card-delete { z-index: 2; top: 4px; right: 4px; background: var(--surface-container-lowest); }
+  .char-card-delete,
+  .char-photo-upload {
+    min-width: 36px;
+    min-height: 36px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+}
