@@ -346,6 +346,8 @@
     let myAccountFields = [];
     // Staff with this permission may edit any member's characters, staffOnly fields included.
     let canOverrideCheckin = false;
+    // Only admins and moderators may create characters in other people's accounts.
+    let canCreateForOthers = false;
     let editingMemberId = null;
     let currentView = 'active';
     let myUserId = null;
@@ -507,14 +509,12 @@
       }
       const list = [...characters.values()];
       document.getElementById('detail-chars-tab-btn').textContent = `Charaktere (${list.length})`;
-      if (list.length === 0) {
-        detailCharacters.innerHTML = '<p class="sub">Dieses Mitglied hat noch keine Charaktere.</p>';
-        return;
-      }
 
       const eventsLine = (c) => (c.events.length ? escapeHtml(c.events.join(', ')) : 'noch keinem Event zugeordnet');
       if (!canOverrideCheckin) {
-        detailCharacters.innerHTML = `<ul>${list.map((c) => `<li>${escapeHtml(c.name)}${c.class === 'nsc' ? ' <span class="tag">NSC</span>' : ''} <span class="sub">${eventsLine(c)}</span></li>`).join('')}</ul>`;
+        detailCharacters.innerHTML = list.length
+          ? `<ul>${list.map((c) => `<li>${escapeHtml(c.name)}${c.class === 'nsc' ? ' <span class="tag">NSC</span>' : ''} <span class="sub">${eventsLine(c)}</span></li>`).join('')}</ul>`
+          : '<p class="sub">Dieses Mitglied hat noch keine Charaktere.</p>';
         return;
       }
 
@@ -533,36 +533,63 @@
       }
       const dataById = new Map(details.map((d) => [d.id, d]));
 
-      detailCharacters.innerHTML = CHARACTER_SECTIONS.map(({ characterClass, title }) => {
+      // One form per character, used both for existing characters and for the
+      // "new character" form (character === null).
+      const characterForm = (characterClass, character, eventsHtml = '') => `
+        <form class="member-character-form" data-character-id="${character ? escapeHtml(character.id) : ''}" data-character-class="${characterClass}">
+          <input name="__name" type="text" required value="${character ? escapeHtml(character.name) : ''}">
+          <label>Name</label>
+          ${schemas[characterClass].map((field) => `<div class="form-group">${renderField(field, character ? dataById.get(character.id)?.data?.[field.key] : undefined, `mc-${character?.id ?? 'new'}-`)}</div>`).join('')}
+          <div class="settings-actions"><button type="submit">${character ? 'Speichern' : 'Charakter anlegen'}</button>${character ? '' : '<button type="button" class="btn-ghost" data-cancel-new>Abbrechen</button>'}</div>
+        </form>`;
+
+      const createButtons = canCreateForOthers
+        ? `<div class="member-character-actions">${CHARACTER_SECTIONS.map(({ characterClass }) => `<button type="button" class="btn-secondary" data-new-character="${characterClass}">${characterClass === 'sc' ? 'SC anlegen' : 'NSC anlegen'}</button>`).join('')}</div><div id="new-character-wrap"></div>`
+        : '';
+      const emptyNote = list.length === 0 ? '<p class="sub">Dieses Mitglied hat noch keine Charaktere.</p>' : '';
+
+      detailCharacters.innerHTML = createButtons + emptyNote + CHARACTER_SECTIONS.map(({ characterClass, title }) => {
         const ofClass = list.filter((c) => (c.class ?? 'sc') === characterClass);
         if (ofClass.length === 0) return '';
         return `<h3>${title}</h3>${ofClass.map((c) => `
           <details class="member-character">
             <summary><strong>${escapeHtml(c.name)}</strong> <span class="sub">${eventsLine(c)}</span></summary>
-            <form class="member-character-form" data-character-id="${escapeHtml(c.id)}" data-character-class="${characterClass}">
-              <input name="__name" type="text" required value="${escapeHtml(c.name)}">
-              <label>Name</label>
-              ${schemas[characterClass].map((field) => `<div class="form-group">${renderField(field, dataById.get(c.id)?.data?.[field.key], `mc-${c.id}-`)}</div>`).join('')}
-              <div class="settings-actions"><button type="submit">Speichern</button></div>
-            </form>
+            ${characterForm(characterClass, c)}
           </details>`).join('')}`;
       }).join('');
 
-      detailCharacters.querySelectorAll('.member-character-form').forEach((form) => {
+      const wireSave = (form) => {
         attachLiveValidation(form);
         form.addEventListener('submit', async (event) => {
           event.preventDefault();
-          const schema = schemas[form.dataset.characterClass];
+          const characterClass = form.dataset.characterClass;
+          const payload = { name: form.elements.__name.value, data: collectFieldValues(form, schemas[characterClass]) };
           try {
-            const saved = await api.put(`/characters/${form.dataset.characterId}`, {
-              name: form.elements.__name.value,
-              data: collectFieldValues(form, schema),
-            });
-            form.closest('details').querySelector('summary strong').textContent = saved.name;
-            notify('Charakter gespeichert.', 'success');
+            if (form.dataset.characterId) {
+              const saved = await api.put(`/characters/${form.dataset.characterId}`, payload);
+              form.closest('details').querySelector('summary strong').textContent = saved.name;
+              notify('Charakter gespeichert.', 'success');
+            } else {
+              await api.post('/characters', { ...payload, class: characterClass, userId: editingMemberId });
+              notify('Charakter angelegt.', 'success');
+              // Reload so the new character appears in its section, with its own form.
+              await renderCharactersTab(await api.get(`/members/${editingMemberId}`));
+            }
           } catch (err) {
             notify(err.status === 400 && err.body?.details ? err.body.details.join(', ') : err.message, 'error');
           }
+        });
+      };
+      detailCharacters.querySelectorAll('.member-character-form').forEach(wireSave);
+
+      detailCharacters.querySelectorAll('[data-new-character]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const wrap = document.getElementById('new-character-wrap');
+          wrap.innerHTML = `<div class="member-character member-character-new"><h3>Neuer ${button.dataset.newCharacter === 'sc' ? 'Spielercharakter' : 'NSC'}</h3>${characterForm(button.dataset.newCharacter, null)}</div>`;
+          const form = wrap.querySelector('form');
+          wireSave(form);
+          wrap.querySelector('[data-cancel-new]').addEventListener('click', () => { wrap.innerHTML = ''; });
+          form.elements.__name.focus();
         });
       });
     }
@@ -759,6 +786,7 @@
       document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
       myAccountFields = account.accountFields ?? [];
       canOverrideCheckin = account.canOverrideCheckinStatus === true;
+      canCreateForOthers = ['admin', 'moderator'].includes(account.group.key);
       myUserId = account.id;
       accountSchema = await api.get('/account-schema');
       buildFieldInputs(inviteFields);

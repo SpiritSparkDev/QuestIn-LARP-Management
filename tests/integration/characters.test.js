@@ -484,3 +484,33 @@ test.after(async () => {
   await setScSchema([]);
   await closePool();
 });
+
+test('admins and moderators can create a character in another account; plain members cannot', async () => {
+  await withTestServer(async (port) => {
+    await setScSchema([{ key: 'name', label: 'Name', type: 'text', required: true }]);
+    const target = await makeUserAndSession();
+    const post = (cookie, body) => fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body),
+    });
+
+    for (const groupKey of ['admin', 'moderator']) {
+      const staff = await makeUserAndSession(groupKey);
+      const res = await post(staff.cookie, { class: 'sc', name: `Fremdanlage ${groupKey}`, data: { name: 'x' }, userId: target.userId });
+      assert.equal(res.status, 201);
+      assert.equal((await res.json()).user_id, target.userId);
+    }
+
+    // Without userId the character still belongs to the caller, staff or not.
+    const admin = await makeUserAndSession('admin');
+    const own = await (await post(admin.cookie, { class: 'sc', name: 'Eigener', data: { name: 'x' } })).json();
+    assert.equal(own.user_id, admin.userId);
+
+    const member = await makeUserAndSession();
+    assert.equal((await post(member.cookie, { class: 'sc', name: 'Fremd', data: { name: 'x' }, userId: target.userId })).status, 403);
+    // Naming yourself as the target is just the normal case.
+    assert.equal((await post(member.cookie, { class: 'sc', name: 'Selbst', data: { name: 'x' }, userId: member.userId })).status, 201);
+
+    assert.equal((await post(admin.cookie, { class: 'sc', name: 'Niemand', data: { name: 'x' }, userId: '00000000-0000-4000-8000-000000000000' })).status, 404);
+    assert.equal((await post(admin.cookie, { class: 'sc', name: 'Kaputt', data: { name: 'x' }, userId: 'not-a-uuid' })).status, 404);
+  });
+});

@@ -27,6 +27,11 @@ export async function createCharacter(userId, { characterClass = 'sc', name, dat
   return rows[0];
 }
 
+export async function userExists(id) {
+  const { rows } = await query('SELECT 1 FROM users WHERE id = $1', [id]);
+  return rows.length > 0;
+}
+
 export async function getCharacter(id) {
   const { rows } = await query(`SELECT ${SELECT_COLUMNS} FROM characters WHERE id = $1`, [id]);
   return rows[0] ?? null;

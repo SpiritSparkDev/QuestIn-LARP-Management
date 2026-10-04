@@ -2,17 +2,19 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
-import { createCharacter, getCharacter, listCharactersForUser, listCharactersForEvent, updateCharacter, deleteCharacter } from './repository.js';
+import { createCharacter, userExists, getCharacter, listCharactersForUser, listCharactersForEvent, updateCharacter, deleteCharacter } from './repository.js';
 import { filterCharacterFields } from './visibility.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { isManagedBy } from '../managedPersons/repository.js';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 router.post('/characters', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { class: characterClass = 'sc', name, data } = body;
+  const { class: characterClass = 'sc', name, data, userId } = body;
   if (characterClass !== 'sc' && characterClass !== 'nsc') {
     return { status: 400, body: { error: 'class must be "sc" or "nsc"' } };
   }
@@ -20,8 +22,21 @@ router.post('/characters', requireAuth(async ({ req, user }) => {
     return { status: 400, body: { error: 'name is required' } };
   }
 
+  // Admins and moderators may create a character in someone else's account
+  // (userId); for everyone else the character always belongs to the caller.
+  let ownerId = user.id;
+  if (userId !== undefined && userId !== user.id) {
+    if (user.group.key !== 'admin' && user.group.key !== 'moderator') {
+      return { status: 403, body: { error: 'forbidden' } };
+    }
+    if (typeof userId !== 'string' || !UUID_RE.test(userId) || !(await userExists(userId))) {
+      return { status: 404, body: { error: 'user not found' } };
+    }
+    ownerId = userId;
+  }
+
   try {
-    const character = await createCharacter(user.id, { characterClass, name, data });
+    const character = await createCharacter(ownerId, { characterClass, name, data });
     return { status: 201, body: character };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {

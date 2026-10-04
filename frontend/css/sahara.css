@@ -3408,3 +3408,15 @@ th.is-sortable[data-dir="desc"]::after {
   opacity: 1;
   color: var(--primary);
 }
+
+.member-character-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.member-character-new {
+  padding: 4px 14px 14px;
+  border-color: var(--primary);
+}
