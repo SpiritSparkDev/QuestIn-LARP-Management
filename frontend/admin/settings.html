@@ -36,7 +36,7 @@
         <div class="content">
           <h1>Einstellungen</h1>
           <p class="sub">
-            Allgemeines, E-Mail-Versand, Zahlungen, Startseite und Add-ons.
+            Allgemeines, E-Mail-Versand, Zahlungen, Startseite, Branding, Datei-Speicher und Add-ons.
           </p>
           <div class="tabs" id="settings-tabs">
             <button type="button" class="tab-btn active" data-tab="settings-tab-allgemein">Allgemein</button>
@@ -44,6 +44,8 @@
             <button type="button" class="tab-btn" data-tab="settings-tab-email">E-Mail</button>
             <button type="button" class="tab-btn" data-tab="settings-tab-zahlungen">Zahlungen</button>
             <button type="button" class="tab-btn" data-tab="settings-tab-startseite">Startseite</button>
+            <button type="button" class="tab-btn" data-tab="settings-tab-branding">Branding</button>
+            <button type="button" class="tab-btn" data-tab="settings-tab-speicher">Speicher</button>
             <button type="button" class="tab-btn" data-tab="settings-tab-addons">Add-ons &amp; Test</button>
           </div>
           <div class="tab-panel grid col2 settings-panel" id="settings-tab-allgemein">
@@ -311,6 +313,136 @@
             </p>
           </div>
           </div>
+          <div class="tab-panel" id="settings-tab-branding" hidden>
+    <div class="card form-pad">
+      <form id="branding-form">
+        <div class="field-below">
+          <label for="app-title">App-Titel</label>
+          <input id="app-title" name="appTitle" type="text" placeholder="Pakyrion">
+        </div>
+        <div class="field-below">
+          <label for="event-name">Event-Name</label>
+          <input id="event-name" name="eventName" type="text" placeholder="P17/2027">
+        </div>
+        <div class="field-below">
+          <label for="logo-url">Logo-URL</label>
+          <input id="logo-url" name="logoUrl" type="url" placeholder="https://example.com/logo.png">
+        </div>
+        <p class="sub" id="logo-url-note" style="display:none;">Ein hochgeladenes Logo hat Vorrang vor dieser URL.</p>
+        <div class="field-below">
+          <label for="quota-mb">Speicher-Kontingent pro Charakter (MB)</label>
+          <input id="quota-mb" name="quotaMbPerCharacter" type="number" min="1" step="1" placeholder="100">
+        </div>
+        <div class="field-grid">
+          <div class="field-below">
+            <label for="theme-mode">Theme-Modus</label>
+            <select id="theme-mode" name="themeMode">
+              <option value="light">Hell</option>
+              <option value="dark">Dunkel</option>
+            </select>
+          </div>
+          <div class="field-below">
+            <label for="color-scheme">Farbschema</label>
+            <select id="color-scheme" name="colorScheme">
+              <option value="sahara">Sahara (Standard)</option>
+              <option value="ozean">Ozean</option>
+              <option value="wald">Wald</option>
+              <option value="hoehle">Höhle</option>
+              <option value="horror">Horror/Gothic</option>
+              <option value="sahara-intensiv">Sahara intensiv</option>
+              <option value="ozean-intensiv">Ozean intensiv</option>
+              <option value="wald-intensiv">Wald intensiv</option>
+              <option value="hoehle-intensiv">Höhle intensiv</option>
+              <option value="horror-intensiv">Horror/Gothic intensiv</option>
+              <option value="custom">Profi (eigene Farben)</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-below" id="custom-colors-section" style="display:none;">
+          <label>Profi-Farbschema</label>
+          <p class="sub">Eigene Farbe für jede Rolle. Die Felder starten mit den Farben des zuletzt aktiven Schemas.</p>
+          <div class="color-grid" id="custom-color-grid"></div>
+        </div>
+        <div class="save-bar"><button type="submit">Speichern</button></div>
+      </form>
+      <hr class="hr">
+      <h2>Logo hochladen</h2>
+      <img id="logo-preview" alt="Aktuelles Logo" style="max-width:120px;max-height:120px;display:none;">
+      <p id="logo-preview-empty" class="sub">Kein Logo hochgeladen.</p>
+      <input type="file" id="logo-file" accept="image/jpeg,image/png,image/webp">
+      <button type="button" id="logo-upload-btn">Hochladen</button>
+      <button type="button" id="logo-remove-btn" style="display:none;">Logo entfernen</button>
+      <hr class="hr">
+      <h2>Ticket-Hintergrund hochladen</h2>
+      <p class="sub">Erscheint blass als Wasserzeichen auf dem Event-Ticket im Konto-Dashboard.</p>
+      <img id="ticket-bg-preview" alt="Aktueller Ticket-Hintergrund" style="max-width:200px;max-height:120px;display:none;">
+      <p id="ticket-bg-preview-empty" class="sub">Kein Ticket-Hintergrund hochgeladen.</p>
+      <input type="file" id="ticket-bg-file" accept="image/jpeg,image/png,image/webp">
+      <button type="button" id="ticket-bg-upload-btn">Hochladen</button>
+      <button type="button" id="ticket-bg-remove-btn" style="display:none;">Hintergrund entfernen</button>
+      <hr class="hr">
+      <h2>Hintergrundbild hochladen</h2>
+      <p class="sub">Wird instanzweit mit 20% Deckkraft hinter allen Seiten angezeigt.</p>
+      <img id="bg-image-preview" alt="Aktuelles Hintergrundbild" style="max-width:200px;max-height:120px;display:none;">
+      <p id="bg-image-preview-empty" class="sub">Kein Hintergrundbild hochgeladen.</p>
+      <input type="file" id="bg-image-file" accept="image/jpeg,image/png,image/webp">
+      <button type="button" id="bg-image-upload-btn">Hochladen</button>
+      <button type="button" id="bg-image-remove-btn" style="display:none;">Hintergrundbild entfernen</button>
+    </div>
+          </div>
+          <div class="tab-panel" id="settings-tab-speicher" hidden>
+    <div class="card form-pad">
+      <form id="storage-form">
+        <select id="backend-select" name="backend">
+          <option value="local">Lokal</option>
+          <option value="ftp">FTP</option>
+          <option value="s3">S3</option>
+        </select>
+        <label for="backend-select">Backend</label>
+
+        <fieldset id="ftp-fields" hidden>
+          <legend>FTP</legend>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div><input id="ftp-host" name="ftpHost" type="text"><label for="ftp-host">Host</label></div>
+            <div><input id="ftp-port" name="ftpPort" type="number" placeholder="21"><label for="ftp-port">Port</label></div>
+            <div><input id="ftp-username" name="ftpUsername" type="text"><label for="ftp-username">Benutzername</label></div>
+            <div><input id="ftp-password" name="ftpPassword" type="password" placeholder="Leer lassen, um das bestehende Passwort zu behalten"><label for="ftp-password">Passwort</label></div>
+            <div><input id="ftp-basedir" name="ftpBaseDir" type="text" placeholder="/uploads"><label for="ftp-basedir">Basis-Verzeichnis</label></div>
+            <div><label for="ftp-secure"><input id="ftp-secure" name="ftpSecure" type="checkbox" checked> FTPS (verschlüsselt)</label></div>
+          </div>
+        </fieldset>
+
+        <fieldset id="s3-fields" hidden>
+          <legend>S3</legend>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div><input id="s3-bucket" name="s3Bucket" type="text"><label for="s3-bucket">Bucket</label></div>
+            <div><input id="s3-region" name="s3Region" type="text" placeholder="eu-central-1"><label for="s3-region">Region</label></div>
+            <div><input id="s3-endpoint" name="s3Endpoint" type="text" placeholder="https://s3.example.com"><label for="s3-endpoint">Endpoint (optional, für S3-kompatible Dienste)</label></div>
+            <div><input id="s3-access-key" name="s3AccessKeyId" type="text"><label for="s3-access-key">Access Key ID</label></div>
+            <div><input id="s3-secret-key" name="s3SecretAccessKey" type="password" placeholder="Leer lassen, um den bestehenden Schlüssel zu behalten"><label for="s3-secret-key">Secret Access Key</label></div>
+          </div>
+        </fieldset>
+
+        <div class="save-bar">
+          <button type="button" id="test-connection" class="btn-secondary">Verbindung testen</button>
+          <button type="submit">Speichern</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card form-pad">
+      <h2>Speicherverbrauch</h2>
+      <svg id="usage-chart" viewBox="0 0 400 90" width="400" height="90" role="img" aria-label="Speicherverbrauch pro Backend"></svg>
+    </div>
+
+    <div class="card form-pad">
+      <h2>Migration</h2>
+      <p class="sub">Verschiebt alle Dateien, die noch nicht auf dem aktuell aktiven Backend liegen, dorthin.</p>
+      <button type="button" id="migrate-button">Migrieren</button>
+      <span id="migrate-spinner" hidden>Migriere…</span>
+      <p id="migrate-result"></p>
+    </div>
+          </div>
           <div class="tab-panel grid col2 settings-panel" id="settings-tab-addons" hidden>
           <div class="card form-pad">
             <h2>Add-on: Tavernenkonto</h2>
@@ -371,6 +503,8 @@
         initSidebarToggle,
       } from "/js/nav.js";
       import { notify as showToast } from "/js/notifications.js";
+      import { initBranding } from "/js/settingsBranding.js";
+      import { initStorage } from "/js/settingsStorage.js";
 
       // Save feedback shared by every settings form: a form shows "Nicht
       // gespeichert" as soon as a field changes and "Gespeichert" once the
@@ -404,6 +538,8 @@
         if (document.querySelector(".settings-state.is-dirty")) event.preventDefault();
       });
       initSidebarToggle();
+      const brandingTab = initBranding({ notify });
+      const storageTab = initStorage({ notify });
 
       // Settings tabs; the open tab is kept in the URL hash so a reload (or a
       // link like /admin/settings.html#email) lands on the same tab.
@@ -817,6 +953,8 @@
         await loadPaymentSettings();
         await loadWaiverSettings();
         await loadComingSoonSettings();
+        await brandingTab.load();
+        await storageTab.load();
       } catch (err) {
         if (err.status === 401) window.location.href = "/login.html";
         else if (err.status === 403) {

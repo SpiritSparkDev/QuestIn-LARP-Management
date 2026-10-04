@@ -31,8 +31,6 @@ const ADMIN_ONLY_LINKS = [
   { label: 'Charakterschema', href: '/admin/character-schema.html', icon: 'badge' },
   { label: 'E-Mail-Vorlagen', href: '/admin/email-templates.html', icon: 'mail' },
   { label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' },
-  { label: 'Branding', href: '/admin/branding.html', icon: 'palette' },
-  { label: 'Speicher', href: '/admin/storage.html', icon: 'storage' },
   { label: 'Protokoll', href: '/admin/audit.html', icon: 'history' },
 ];
 
