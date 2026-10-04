@@ -19,6 +19,7 @@ function decryptAccount(row) {
     accountFields: row.account_fields,
     canOverrideCheckinStatus: row.can_override_checkin_status,
     canExportMembers: row.can_export_members,
+    canExportSensitive: row.can_export_sensitive,
     emailVerified: row.email_verified,
     discordUsername: row.discord_username,
     ...decryptFieldBlob(row.account_data_enc),
@@ -28,7 +29,7 @@ function decryptAccount(row) {
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys,
   users.account_data_enc,
-  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status, groups.can_export_members,
+  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive,
   discord_accounts.username AS discord_username
 `;
 

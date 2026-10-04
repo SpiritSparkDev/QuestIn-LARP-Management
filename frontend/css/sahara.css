@@ -4181,3 +4181,20 @@ th.is-sortable[data-dir="desc"]::after {
   height: 100%;
   object-fit: cover;
 }
+
+.tavern-payout {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 12px;
+  background: var(--surface-container-low);
+}
+
+.tavern-payout.is-due {
+  border-color: var(--primary);
+  background: var(--primary-container);
+}
+
+.tavern-payout p {
+  margin: 0 0 10px;
+}

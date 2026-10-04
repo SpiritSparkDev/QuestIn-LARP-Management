@@ -1,4 +1,5 @@
 import { query } from '../db.js';
+import { logAudit } from '../audit/repository.js';
 import { validateCharacterData } from '../events/schemaValidation.js';
 import { sanitizeDocumentFields } from '../richText.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
@@ -97,11 +98,12 @@ export async function listCharactersForEvent(eventId) {
 // permissions they happen to hold as a person (e.g. an admin editing their
 // own character). Only a genuinely different elevated staff member (e.g.
 // via the check-in dialog) may write them.
-export async function updateCharacter(id, userId, { name, data }, { isElevated = false } = {}) {
+export async function updateCharacter(id, userId, { name, data }, { isElevated = false, actorId = null } = {}) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
   let newData;
+  let staffFieldChanges = [];
   if (data !== undefined) {
     const schema = await schemaForClass(character.class);
     // A staffOnly field's value can never be changed by the owner
@@ -123,6 +125,13 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
       throw err;
     }
     newData = effectiveData;
+    // Every change to a staffOnly field made by staff is logged (field, old and new value).
+    if (isElevated) {
+      staffFieldChanges = schema
+        .filter((field) => field.staffOnly)
+        .map((field) => ({ field: field.key, label: field.label ?? field.key, from: character.data?.[field.key] ?? null, to: effectiveData[field.key] ?? null }))
+        .filter((change) => JSON.stringify(change.from) !== JSON.stringify(change.to));
+    }
   }
 
   const { rows } = await query(
@@ -133,6 +142,16 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
      RETURNING ${SELECT_COLUMNS}`,
     [id, userId, name ?? null, newData !== undefined ? JSON.stringify(newData) : null]
   );
+  if (rows[0]) {
+    for (const change of staffFieldChanges) {
+      await logAudit({
+        actorId,
+        action: 'character.staff_field_changed',
+        subjectUserId: userId,
+        details: { characterId: id, characterName: rows[0].name, ...change },
+      });
+    }
+  }
   return rows[0] ?? null;
 }
 

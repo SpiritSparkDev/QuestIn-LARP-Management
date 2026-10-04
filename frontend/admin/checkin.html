@@ -108,7 +108,10 @@
       </div>
     </details>
     <div class="card">
-      <div class="toolbar"><input class="search" id="participant-search" placeholder="Suche nach Name oder Charakter …"></div>
+      <div class="toolbar">
+        <input class="search" id="participant-search" placeholder="Suche nach Name oder Charakter …">
+        <button type="button" id="checkin-export" class="btn-secondary btn-sm" hidden>CSV exportieren</button>
+      </div>
       <div class="table-scroll">
       <div class="grid-table" id="participant-list" role="table" aria-label="Teilnehmerliste">
         <div class="grid-row grid-header" id="participant-list-head">
@@ -642,6 +645,34 @@ const savedScanMode = localStorage.getItem('qrScanMode') || 'off';
 scanModeButtons.forEach((button) => button.classList.toggle('active', button.dataset.mode === savedScanMode));
 scanStartButton.style.display = savedScanMode === 'push' ? '' : 'none';
 
+// CSV of the list as shown (search applied, current order). The server builds
+// the file, enforces the export permission and limits the columns.
+document.getElementById('checkin-export').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  const ids = [...listBody.querySelectorAll('.grid-row[data-id]')].filter((row) => row.style.display !== 'none').map((row) => row.dataset.id).filter(Boolean);
+  if (ids.length === 0) { notify('Keine Teilnehmer zum Exportieren.', 'error'); return; }
+  button.disabled = true;
+  try {
+    const res = await fetch(`/events/${encodeURIComponent(eventSelect.value)}/participants/export`, {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Export fehlgeschlagen (${res.status})`);
+    const url = URL.createObjectURL(await res.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `checkin-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify(`${ids.length} Teilnehmer exportiert.`, 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  } finally {
+    button.disabled = false;
+  }
+});
+
 function applySearchFilter() {
   const term = currentSearch.trim().toLowerCase();
   listBody.querySelectorAll('.grid-row').forEach((row) => {
@@ -761,7 +792,7 @@ async function loadParticipants(eventId) {
 
 function renderParticipants(participants, eventId) {
   const columns = visibleColumns();
-  listBody.innerHTML = participants.map((p) => `<div class="grid-row" role="row" data-search="${escapeHtml(`${p.name} ${p.characters.map((c) => c.name).join(' ')}`.toLowerCase())}">
+  listBody.innerHTML = participants.map((p) => `<div class="grid-row" role="row" data-id="${escapeHtml(p.userId ?? p.invitationId ?? '')}" data-search="${escapeHtml(`${p.name} ${p.characters.map((c) => c.name).join(' ')}`.toLowerCase())}">
     ${columns.map((col) => `<div class="grid-cell ${col.cls ?? ''}">${col.render(p)}</div>`).join('')}
   </div>`).join('');
 
@@ -1030,6 +1061,7 @@ try {
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
   canOverride = !!account.canOverrideCheckinStatus;
+  document.getElementById('checkin-export').hidden = account.canExportMembers !== true;
   canManageMembers = (account.menus ?? []).includes('mitglieder');
   myAccountFields = account.accountFields ?? [];
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };

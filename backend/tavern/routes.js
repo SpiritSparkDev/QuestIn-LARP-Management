@@ -6,8 +6,10 @@ import { getEvent } from '../events/repository.js';
 import {
   TOPUP_METHODS, listItems, createItem, updateItem, deleteItem,
   listAccounts, getAccount, createAccount, setLocked, listParticipantsWithoutAccount,
-  listTransactions, topUp, charge, voidTransaction, listBalancesForUser,
+  listTransactions, topUp, charge, payout, voidTransaction, listBalancesForUser, getReport, listTransactionsForExport,
 } from './repository.js';
+import { toCsv } from '../csv.js';
+import { logAudit } from '../audit/repository.js';
 
 const MAX_AMOUNT_CENTS = 1_000_000;
 const MAX_QUANTITY = 99;
@@ -154,6 +156,75 @@ router.post('/tavern/accounts/:id/charge', requireTavern(async ({ req, params, u
     await charge(params.id, { items, customAmountCents: body.customAmountCents ?? 0, note: body.note, createdBy: user.id });
     return { status: 201, body: { account: await getAccount(params.id), transactions: await listTransactions(params.id) } };
   });
+}));
+
+router.post('/tavern/accounts/:id/payout', requireTavern(async ({ req, params, user }) => {
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const account = await getAccount(params.id);
+  if (!account) return { status: 404, body: { error: 'account not found' } };
+  // No amount means "pay out everything that is left".
+  const amountCents = body.amountCents === undefined ? account.balanceCents : body.amountCents;
+  if (!isCents(amountCents)) return { status: 400, body: { error: 'Es gibt kein Guthaben zum Auszahlen.' } };
+  return handleErrors(async () => {
+    await payout(params.id, { amountCents, note: body.note, createdBy: user.id });
+    return { status: 201, body: { account: await getAccount(params.id), transactions: await listTransactions(params.id) } };
+  });
+}));
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// ?eventId&from&to (YYYY-MM-DD, inclusive, default: today in Berlin time)
+function periodFromQuery(searchParams) {
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(new Date());
+  const from = searchParams.get('from') || today;
+  const to = searchParams.get('to') || from;
+  if (!DATE_RE.test(from) || !DATE_RE.test(to) || from > to) return null;
+  return { from, to };
+}
+
+router.get('/tavern/report', requireTavern(async ({ req }) => {
+  const { searchParams } = new URL(req.url, 'http://localhost');
+  const eventId = searchParams.get('eventId');
+  const period = periodFromQuery(searchParams);
+  if (!eventId) return { status: 400, body: { error: 'eventId is required' } };
+  if (!period) return { status: 400, body: { error: 'from/to must be dates (YYYY-MM-DD), from not after to' } };
+  return { status: 200, body: await getReport(eventId, period) };
+}));
+
+const TYPE_LABELS = { topup: 'Aufladung', charge: 'Abbuchung', void: 'Storno', payout: 'Auszahlung' };
+const METHOD_LABELS = { cash: 'Bar', card: 'Karte', paypal: 'PayPal', bank_transfer: 'Überweisung' };
+
+router.get('/tavern/export', requireTavern(async ({ req, user }) => {
+  const { searchParams } = new URL(req.url, 'http://localhost');
+  const eventId = searchParams.get('eventId');
+  const period = periodFromQuery(searchParams);
+  if (!eventId) return { status: 400, body: { error: 'eventId is required' } };
+  if (!period) return { status: 400, body: { error: 'from/to must be dates (YYYY-MM-DD), from not after to' } };
+  const rows = await listTransactionsForExport(eventId, period);
+  const csv = toCsv(rows, [
+    { label: 'Zeitpunkt', value: (r) => new Date(r.created_at).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }) },
+    { label: 'Tavernen-Nr.', value: (r) => r.number },
+    { label: 'Konto', value: (r) => r.person || r.label },
+    { label: 'Art', value: (r) => TYPE_LABELS[r.type] ?? r.type },
+    { label: 'Betrag (€)', value: (r) => (r.amount_cents / 100).toFixed(2).replace('.', ',') },
+    { label: 'Zahlungsart', value: (r) => METHOD_LABELS[r.method] ?? r.method },
+    { label: 'Artikel', value: (r) => (r.items ?? []).map((i) => `${i.quantity}× ${i.name}`).join(', ') },
+    { label: 'Notiz', value: (r) => r.note },
+    { label: 'Storniert', value: (r) => Boolean(r.voided_at) },
+    { label: 'Erfasst von', value: (r) => r.staff_name },
+  ]);
+  await logAudit({ actorId: user.id, action: 'tavern.export', details: { eventId, ...period, count: rows.length } });
+  return {
+    status: 200,
+    isBinary: true,
+    body: Buffer.from(csv, 'utf8'),
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="taverne-${period.from}${period.to === period.from ? '' : `_${period.to}`}.csv"`,
+      'X-Content-Type-Options': 'nosniff',
+    },
+  };
 }));
 
 router.post('/tavern/transactions/:id/void', requireTavern(async ({ params, user }) => {

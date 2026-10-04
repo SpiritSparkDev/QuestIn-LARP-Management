@@ -179,3 +179,75 @@ test('tavern: a participant can look up their own balance', async () => {
     assert.equal(mine[0].number, account.number);
   });
 });
+
+test('tavern: a remaining balance can be paid out, but never more than is left or from a locked account', async () => {
+  await withTestServer(async (port) => {
+    const base = `http://localhost:${port}`;
+    const admin = await makeUserAndSession('admin');
+    await query('UPDATE app_settings SET tavern_enabled = true');
+    const { rows: ev } = await query("INSERT INTO events (name, event_date) VALUES ('Auszahl-Con', '2027-06-02') RETURNING id");
+    const post = (path, body) => fetch(`${base}${path}`, { method: 'POST', headers: json(admin.cookie), body: JSON.stringify(body) });
+    const account = await (await post('/tavern/accounts', { eventId: ev[0].id, label: 'Restgast' })).json();
+
+    assert.equal((await post(`/tavern/accounts/${account.id}/payout`, {})).status, 400); // nothing to pay out
+    await post(`/tavern/accounts/${account.id}/topup`, { amountCents: 2500, method: 'cash' });
+
+    assert.equal((await post(`/tavern/accounts/${account.id}/payout`, { amountCents: 9999 })).status, 409);
+    const partial = await post(`/tavern/accounts/${account.id}/payout`, { amountCents: 1000 });
+    assert.equal(partial.status, 201);
+    assert.equal((await partial.json()).account.balanceCents, 1500);
+
+    await fetch(`${base}/tavern/accounts/${account.id}/lock`, { method: 'PUT', headers: json(admin.cookie), body: JSON.stringify({ locked: true }) });
+    assert.equal((await (await post(`/tavern/accounts/${account.id}/payout`, {})).json()).code, 'ACCOUNT_LOCKED');
+    await fetch(`${base}/tavern/accounts/${account.id}/lock`, { method: 'PUT', headers: json(admin.cookie), body: JSON.stringify({ locked: false }) });
+
+    // No amount = everything that is left.
+    const all = await (await post(`/tavern/accounts/${account.id}/payout`, {})).json();
+    assert.equal(all.account.balanceCents, 0);
+    assert.equal(all.transactions.find((t) => t.type === 'payout').amountCents, -1500);
+  });
+});
+
+test('tavern: the settlement counts takings per item, top-ups per method and payouts, and ignores voided entries', async () => {
+  await withTestServer(async (port) => {
+    const base = `http://localhost:${port}`;
+    const admin = await makeUserAndSession('admin');
+    await query('UPDATE app_settings SET tavern_enabled = true');
+    const { rows: ev } = await query("INSERT INTO events (name, event_date) VALUES ('Abrechnungs-Con', '2027-06-03') RETURNING id");
+    const eventId = ev[0].id;
+    const post = (path, body) => fetch(`${base}${path}`, { method: 'POST', headers: json(admin.cookie), body: JSON.stringify(body) });
+    const beer = await (await post('/tavern/items', { name: 'Abrechnungs-Bier', priceCents: 300 })).json();
+    const food = await (await post('/tavern/items', { name: 'Abrechnungs-Suppe', priceCents: 700 })).json();
+    const account = await (await post('/tavern/accounts', { eventId, label: 'Abrechnungsgast' })).json();
+
+    await post(`/tavern/accounts/${account.id}/topup`, { amountCents: 5000, method: 'cash' });
+    await post(`/tavern/accounts/${account.id}/topup`, { amountCents: 2000, method: 'card' });
+    await post(`/tavern/accounts/${account.id}/charge`, { items: [{ itemId: beer.id, quantity: 2 }, { itemId: food.id, quantity: 1 }] }); // 13,00
+    const mistake = await (await post(`/tavern/accounts/${account.id}/charge`, { items: [{ itemId: beer.id, quantity: 5 }] })).json();
+    const mistakeId = mistake.transactions.find((t) => t.type === 'charge' && t.amountCents === -1500).id;
+    await post(`/tavern/transactions/${mistakeId}/void`, {}); // voided: must not count
+    await post(`/tavern/accounts/${account.id}/payout`, { amountCents: 1000 });
+
+    const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(new Date());
+    const report = await (await fetch(`${base}/tavern/report?eventId=${eventId}&from=${today}&to=${today}`, { headers: json(admin.cookie) })).json();
+    assert.equal(report.chargesCents, 1300);
+    assert.equal(report.chargeCount, 1);
+    assert.equal(report.topupsCents, 7000);
+    assert.equal(report.payoutsCents, 1000);
+    assert.equal(report.voidCount, 1);
+    assert.deepEqual(report.items.map((i) => [i.name, i.quantity, i.revenueCents]), [['Abrechnungs-Suppe', 1, 700], ['Abrechnungs-Bier', 2, 600]]);
+    assert.deepEqual(report.topupsByMethod.map((t) => [t.method, t.amountCents]), [['cash', 5000], ['card', 2000]]);
+    assert.equal(report.openBalanceCents, 7000 - 1300 - 1000);
+
+    assert.equal((await fetch(`${base}/tavern/report?eventId=${eventId}&from=kaputt`, { headers: json(admin.cookie) })).status, 400);
+    const otherDay = await (await fetch(`${base}/tavern/report?eventId=${eventId}&from=2020-01-01&to=2020-01-02`, { headers: json(admin.cookie) })).json();
+    assert.equal(otherDay.chargesCents, 0);
+
+    const csvRes = await fetch(`${base}/tavern/export?eventId=${eventId}&from=${today}&to=${today}`, { headers: json(admin.cookie) });
+    assert.equal(csvRes.status, 200);
+    assert.match(csvRes.headers.get('content-disposition'), /taverne-\d{4}-\d{2}-\d{2}\.csv/);
+    const lines = (await csvRes.text()).trim().split('\r\n');
+    assert.ok(lines[0].startsWith('Zeitpunkt;Tavernen-Nr.;Konto;Art;Betrag (€)'));
+    assert.equal(lines.length, 1 + 6); // header + 2 top-ups, 2 charges, 1 void, 1 payout
+  });
+});

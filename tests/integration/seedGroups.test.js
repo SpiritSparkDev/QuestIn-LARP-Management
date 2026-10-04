@@ -125,6 +125,7 @@ test('every seeded group matches GROUP_DEFAULTS field-for-field', async () => {
     assert.equal(row.can_edit_characters, expected.canEditCharacters);
     assert.equal(row.can_override_checkin_status, expected.canOverrideCheckinStatus);
     assert.equal(row.can_export_members, expected.canExportMembers);
+    assert.equal(row.can_export_sensitive, expected.canExportSensitive);
     assert.equal(row.is_protected, expected.isProtected);
   }
 });

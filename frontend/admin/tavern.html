@@ -37,6 +37,7 @@
       <button type="button" class="tab-btn active" data-tab="pos-tab">Kasse</button>
       <button type="button" class="tab-btn" data-tab="accounts-tab">Konten</button>
       <button type="button" class="tab-btn" data-tab="menu-tab">Getränkekarte</button>
+      <button type="button" class="tab-btn" data-tab="report-tab">Abrechnung</button>
     </div>
 
     <!-- ===== Kasse ===== -->
@@ -103,6 +104,11 @@
         <h3>Verlauf</h3>
         <div id="history"></div>
 
+        <div id="payout-box" class="tavern-payout" hidden>
+          <p id="payout-hint" class="sub"></p>
+          <button type="button" id="payout-submit" class="btn-secondary">Restguthaben auszahlen</button>
+        </div>
+
         <div class="event-form-actions">
           <button type="button" id="lock-toggle" class="btn-ghost"></button>
         </div>
@@ -131,6 +137,23 @@
             <tbody></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== Abrechnung ===== -->
+    <div class="tab-panel" id="report-tab" hidden>
+      <div class="card form-pad">
+        <h2>Abrechnung</h2>
+        <p class="sub">Umsatz, Aufladungen und Auszahlungen für den gewählten Zeitraum. Stornierte Buchungen zählen nicht mit.</p>
+        <div class="tavern-topup">
+          <div><input id="report-from" type="date"><label for="report-from">Von</label></div>
+          <div><input id="report-to" type="date"><label for="report-to">Bis</label></div>
+        </div>
+        <div class="tavern-actions">
+          <button type="button" id="report-load">Anzeigen</button>
+          <a id="report-export" class="btn-secondary" href="#" role="button">Buchungen als CSV</a>
+        </div>
+        <div id="report-result"></div>
       </div>
     </div>
 
@@ -168,11 +191,13 @@ import { notify } from '/js/notifications.js';
 initSidebarToggle();
 
 const METHOD_LABELS = { cash: 'Bar', card: 'Karte', paypal: 'PayPal', bank_transfer: 'Überweisung' };
+const todayIso = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(new Date());
 
 const eventSelect = document.getElementById('event-select');
 let items = [];
 let currentAccount = null;
 let currentTransactions = [];
+let events = [];
 let cart = new Map(); // itemId -> quantity
 
 const euro = (cents) => `${(cents / 100).toFixed(2).replace('.', ',')} €`;
@@ -187,6 +212,7 @@ document.querySelectorAll('#tavern-tabs .tab-btn').forEach((btn) => {
       document.getElementById(b.dataset.tab).hidden = b !== btn;
     });
     if (btn.dataset.tab === 'accounts-tab') loadAccountsTable();
+    if (btn.dataset.tab === 'report-tab') loadReport();
   });
 });
 
@@ -235,6 +261,7 @@ function showAccount({ account, transactions }) {
   renderTiles();
   renderCart();
   renderHistory();
+  renderPayoutBox();
 }
 
 function renderTiles() {
@@ -329,7 +356,34 @@ document.getElementById('topup-submit').addEventListener('click', async () => {
 });
 
 // ---- history / storno / lock ----
+// Offered whenever money is left; once the event is over it is also pointed out.
+function renderPayoutBox() {
+  const box = document.getElementById('payout-box');
+  const balance = currentAccount?.balanceCents ?? 0;
+  box.hidden = balance <= 0;
+  if (balance <= 0) return;
+  const event = events.find((e) => e.id === eventSelect.value);
+  const over = event && event.event_date < todayIso();
+  document.getElementById('payout-hint').textContent = over
+    ? `Das Event ist vorbei – es liegen noch ${euro(balance)} auf diesem Konto. Jetzt auszahlen?`
+    : `Auf dem Konto liegen ${euro(balance)}. Die Auszahlung bucht das gesamte Restguthaben aus.`;
+  document.getElementById('payout-box').classList.toggle('is-due', Boolean(over));
+}
+
+document.getElementById('payout-submit').addEventListener('click', async () => {
+  if (!confirm(`Restguthaben von ${euro(currentAccount.balanceCents)} wirklich auszahlen?`)) return;
+  try {
+    const result = await api.post(`/tavern/accounts/${currentAccount.id}/payout`, {});
+    showAccount(result);
+    notify('Restguthaben ausgezahlt.', 'success');
+    searchAccounts();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
 function describeEntry(t) {
+  if (t.type === 'payout') return 'Auszahlung Restguthaben';
   if (t.type === 'topup') return `Aufladung (${METHOD_LABELS[t.method] ?? t.method ?? '–'})`;
   if (t.type === 'void') return 'Storno';
   return (t.items ?? []).map((i) => `${i.quantity}× ${i.name}`).join(', ') || 'Abbuchung';
@@ -364,6 +418,40 @@ document.getElementById('lock-toggle').addEventListener('click', async () => {
     notify(err.message, 'error');
   }
 });
+
+// ---- Abrechnung tab ----
+const reportFrom = document.getElementById('report-from');
+const reportTo = document.getElementById('report-to');
+
+function reportQuery() {
+  return `eventId=${encodeURIComponent(eventSelect.value)}&from=${reportFrom.value}&to=${reportTo.value || reportFrom.value}`;
+}
+
+async function loadReport() {
+  if (!reportFrom.value) reportFrom.value = reportTo.value = todayIso();
+  document.getElementById('report-export').href = `/tavern/export?${reportQuery()}`;
+  try {
+    const r = await api.get(`/tavern/report?${reportQuery()}`);
+    const rows = (pairs) => pairs.map(([label, value]) => `<div class="confirm-row"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('');
+    document.getElementById('report-result').innerHTML = `
+      <h3>Zusammenfassung</h3>
+      <dl class="confirm-list">${rows([
+        ['Umsatz (Abbuchungen)', `${euro(r.chargesCents)} (${r.chargeCount} Buchungen)`],
+        ['Aufladungen', euro(r.topupsCents)],
+        ['Auszahlungen', euro(r.payoutsCents)],
+        ['Stornos', String(r.voidCount)],
+        ['Offenes Guthaben auf allen Konten', `${euro(r.openBalanceCents)} (${r.accountCount} Konten)`],
+      ])}</dl>
+      <h3>Aufladungen nach Zahlungsart</h3>
+      <dl class="confirm-list">${r.topupsByMethod.length ? rows(r.topupsByMethod.map((t) => [METHOD_LABELS[t.method] ?? t.method, `${euro(t.amountCents)} (${t.count}×)`])) : '<p class="sub">Keine Aufladungen.</p>'}</dl>
+      <h3>Umsatz je Artikel</h3>
+      <dl class="confirm-list">${r.items.length ? rows(r.items.map((i) => [`${i.quantity}× ${i.name}`, euro(i.revenueCents)])) : '<p class="sub">Keine Abbuchungen.</p>'}</dl>`;
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+}
+document.getElementById('report-load').addEventListener('click', loadReport);
+reportFrom.addEventListener('change', () => { if (!reportTo.value || reportTo.value < reportFrom.value) reportTo.value = reportFrom.value; });
 
 // ---- Konten tab ----
 async function loadAccountsTable() {
@@ -466,7 +554,7 @@ try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
-  const events = await api.get('/events');
+  events = await api.get('/events');
   eventSelect.innerHTML = renderEventOptions(events);
   const active = events.find((e) => e.is_active);
   if (active) eventSelect.value = active.id;

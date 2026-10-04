@@ -265,6 +265,18 @@ export async function charge(accountId, { items = [], customAmountCents = 0, not
   });
 }
 
+// Pays a (remaining) balance out in cash/transfer, e.g. after the event. It
+// reduces the balance like a charge, so it can never overdraw the account;
+// a locked account has to be unlocked first.
+export async function payout(accountId, { amountCents, note, createdBy }) {
+  return withTransaction(async (client) => {
+    const account = await lockAccount(client, accountId);
+    if (account.locked) throw tavernError('Dieses Konto ist gesperrt.', 'ACCOUNT_LOCKED');
+    const row = await applyEntry(client, account, { type: 'payout', amountCents: -amountCents, note: note || 'Auszahlung Restguthaben', createdBy });
+    return rowToTransaction(row);
+  });
+}
+
 // Storno: books the exact opposite of an entry and marks the original, so
 // the ledger stays complete. Voiding a top-up is refused if the money has
 // already been spent.
@@ -292,4 +304,83 @@ export async function listBalancesForUser(userId) {
     [userId]
   );
   return rows.map((r) => ({ number: r.number, balanceCents: r.balance_cents, locked: r.locked, eventId: r.event_id, eventName: r.event_name, isActive: r.is_active }));
+}
+
+// ---------- reporting ----------
+
+const REPORT_TZ = 'Europe/Berlin';
+
+// Daily/period settlement for one event: takings per item, top-ups per
+// payment method, payouts. Voided entries are excluded (their reversal is
+// not counted either), so the numbers match what actually happened.
+export async function getReport(eventId, { from, to }) {
+  const range = [eventId, from, to];
+  const inRange = `(t.created_at AT TIME ZONE '${REPORT_TZ}')::date BETWEEN $2::date AND $3::date`;
+  const base = `FROM tavern_transactions t JOIN tavern_accounts a ON a.id = t.account_id
+     WHERE a.event_id = $1 AND ${inRange} AND t.voided_at IS NULL`;
+
+  const { rows: items } = await query(
+    `SELECT i->>'name' AS name, SUM((i->>'quantity')::int)::int AS quantity,
+            SUM((i->>'quantity')::int * (i->>'priceCents')::int)::int AS revenue_cents
+     FROM tavern_transactions t
+     JOIN tavern_accounts a ON a.id = t.account_id
+     CROSS JOIN LATERAL jsonb_array_elements(t.items) i
+     WHERE a.event_id = $1 AND ${inRange} AND t.voided_at IS NULL AND t.type = 'charge'
+     GROUP BY i->>'name' ORDER BY revenue_cents DESC, name`,
+    range
+  );
+  const { rows: totals } = await query(
+    `SELECT
+       COALESCE(SUM(-t.amount_cents) FILTER (WHERE t.type = 'charge'), 0)::int AS charges_cents,
+       COUNT(*) FILTER (WHERE t.type = 'charge')::int AS charge_count,
+       COALESCE(SUM(t.amount_cents) FILTER (WHERE t.type = 'topup'), 0)::int AS topups_cents,
+       COALESCE(SUM(-t.amount_cents) FILTER (WHERE t.type = 'payout'), 0)::int AS payouts_cents
+     ${base}`,
+    range
+  );
+  const { rows: topups } = await query(
+    `SELECT t.method, SUM(t.amount_cents)::int AS amount_cents, COUNT(*)::int AS count
+     ${base} AND t.type = 'topup' GROUP BY t.method ORDER BY amount_cents DESC`,
+    range
+  );
+  const { rows: voids } = await query(
+    `SELECT COUNT(*)::int AS count
+     FROM tavern_transactions t JOIN tavern_accounts a ON a.id = t.account_id
+     WHERE a.event_id = $1 AND t.type = 'void' AND ${inRange}`,
+    range
+  );
+  const { rows: open } = await query(
+    'SELECT COALESCE(SUM(balance_cents), 0)::int AS balance_cents, COUNT(*)::int AS accounts FROM tavern_accounts WHERE event_id = $1',
+    [eventId]
+  );
+  return {
+    from, to,
+    chargesCents: totals[0].charges_cents,
+    chargeCount: totals[0].charge_count,
+    topupsCents: totals[0].topups_cents,
+    payoutsCents: totals[0].payouts_cents,
+    voidCount: voids[0].count,
+    items: items.map((r) => ({ name: r.name, quantity: r.quantity, revenueCents: r.revenue_cents })),
+    topupsByMethod: topups.map((r) => ({ method: r.method, amountCents: r.amount_cents, count: r.count })),
+    // Money still sitting on accounts for this event (not period-specific).
+    openBalanceCents: open[0].balance_cents,
+    accountCount: open[0].accounts,
+  };
+}
+
+// Every ledger entry of an event in the period, oldest first, for the CSV.
+export async function listTransactionsForExport(eventId, { from, to }) {
+  const { rows } = await query(
+    `SELECT t.created_at, t.type, t.amount_cents, t.method, t.note, t.items, t.voided_at,
+            a.number, a.label, concat_ws(' ', u.first_name, u.last_name) AS person,
+            concat_ws(' ', staff.first_name, staff.last_name) AS staff_name
+     FROM tavern_transactions t
+     JOIN tavern_accounts a ON a.id = t.account_id
+     LEFT JOIN users u ON u.id = a.user_id
+     LEFT JOIN users staff ON staff.id = t.created_by
+     WHERE a.event_id = $1 AND (t.created_at AT TIME ZONE '${REPORT_TZ}')::date BETWEEN $2::date AND $3::date
+     ORDER BY t.created_at`,
+    [eventId, from, to]
+  );
+  return rows;
 }

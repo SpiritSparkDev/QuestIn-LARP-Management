@@ -2,6 +2,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { buildMembersCsv } from './exportCsv.js';
+import { logAudit } from '../audit/repository.js';
 import { getEvent, listEvents } from '../events/repository.js';
 import { readJsonBody } from '../httpBody.js';
 import { listMembers, getMember, updateMember, deactivateMember, reactivateMember, deleteMember } from './repository.js';
@@ -60,6 +61,11 @@ router.post('/members/export', requireAuth(requireMenu('mitglieder')(async ({ re
     members = body.ids.map((id) => byId.get(id)).filter(Boolean);
   }
   const csv = buildMembersCsv(members, { accountSchema: await getAccountFieldSchema(), viewer: user, event, events: event ? [] : await listEvents() });
+  await logAudit({
+    actorId: user.id,
+    action: 'members.export',
+    details: { count: members.length, eventId: event?.id ?? null, eventName: event?.name ?? null, includesSensitive: user.group.canExportSensitive === true },
+  });
   return {
     status: 200,
     isBinary: true,

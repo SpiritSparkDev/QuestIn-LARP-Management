@@ -164,3 +164,72 @@ test('without an event filter the export gets one registration column per event 
     assert.equal(emptyCells[columns.indexOf('Anmeldung: Frühcon')], 'Nicht angemeldet');
   });
 });
+
+test('sensitive account fields need the extra permission, and every export is written to the audit log', async () => {
+  await withTestServer(async (port) => {
+    const target = await makeUser('mitglied');
+    const key = `export_test_${crypto.randomUUID().slice(0, 8)}`;
+    const mk = async (sensitive) => {
+      const k = `${key}_${sensitive ? 's' : 'n'}`;
+      await query(
+        `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive)
+         VALUES ($1, $1, '["mitglieder"]', '["phone", "medicalNotes"]', false, false, true, $2)`,
+        [k, sensitive]
+      );
+      return makeUser(k);
+    };
+    const withoutSensitive = await mk(false);
+    const withSensitive = await mk(true);
+
+    const header = async (u) => (await (await exportCsv(port, u.cookie, { ids: [target.userId] })).text()).split('\r\n')[0];
+    const plain = await header(withoutSensitive);
+    assert.ok(plain.includes('Telefon'));
+    assert.ok(!plain.includes('Gesundheitshinweise'));
+    assert.ok((await header(withSensitive)).includes('Gesundheitshinweise'));
+
+    const { rows } = await query("SELECT actor_id, details FROM audit_log WHERE action = 'members.export' AND actor_id = ANY($1) ORDER BY created_at", [[withoutSensitive.userId, withSensitive.userId]]);
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows.map((r) => r.details.includesSensitive), [false, true]);
+    assert.equal(rows[0].details.count, 1);
+
+    // The audit log itself is for admins only.
+    const admin = await makeUser('admin');
+    const list = await fetch(`http://localhost:${port}/audit?action=members.export`, { headers: { Cookie: admin.cookie } });
+    assert.equal(list.status, 200);
+    assert.ok((await list.json()).length >= 2);
+    assert.equal((await fetch(`http://localhost:${port}/audit`, { headers: { Cookie: withSensitive.cookie } })).status, 403);
+  });
+});
+
+test('the check-in list can be exported with the same permission, is limited like the member export, and is logged', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUser('admin');
+    const noExport = await makeUser(await makeGroup({ canExport: false }));
+    const { rows: ev } = await query("INSERT INTO events (name, event_date) VALUES ('Checkin-Export-Con', '2027-04-04') RETURNING id");
+    const a = await makeUser('mitglied', { first: 'Zora', last: 'Zeta' });
+    const b = await makeUser('mitglied', { first: 'Anton', last: 'Alpha' });
+    for (const [u, status] of [[a, 'confirmed'], [b, 'checked_in']]) {
+      await query("INSERT INTO registrations (user_id, event_id, con_role, status) VALUES ($1, $2, 'helfer', $3)", [u.userId, ev[0].id, status]);
+    }
+    const call = (cookie, body) => fetch(`http://localhost:${port}/events/${ev[0].id}/participants/export`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body ?? {}),
+    });
+
+    assert.equal((await call(noExport.cookie)).status, 403);
+    const res = await call(admin.cookie, { ids: [b.userId, a.userId] });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-disposition'), /checkin-\d{4}-\d{2}-\d{2}\.csv/);
+    const lines = (await res.text()).trim().split('\r\n');
+    assert.ok(lines[0].startsWith('Name;Charaktere;Rolle;Sonderrollen;Status'));
+    assert.equal(lines.length, 3);
+    assert.ok(lines[1].startsWith('Anton Alpha;'));
+    assert.ok(lines[1].includes(';Eingecheckt;'));
+    assert.ok(lines[2].startsWith('Zora Zeta;'));
+    assert.equal((await call(admin.cookie, { ids: 'x' })).status, 400);
+    assert.equal((await fetch(`http://localhost:${port}/events/00000000-0000-4000-8000-000000000000/participants/export`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie }, body: '{}' })).status, 404);
+
+    const { rows } = await query("SELECT details FROM audit_log WHERE action = 'checkin.export' AND actor_id = $1", [admin.userId]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].details.count, 2);
+  });
+});

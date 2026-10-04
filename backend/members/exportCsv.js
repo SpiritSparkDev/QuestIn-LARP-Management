@@ -1,5 +1,10 @@
 import { toCsv } from '../csv.js';
 
+// Account fields that need the extra "can_export_sensitive" permission: health
+// data by key, plus any field an admin marks `sensitive: true` in the schema.
+const SENSITIVE_ACCOUNT_FIELD_KEYS = ['medicalNotes'];
+export const isSensitiveField = (field) => field.sensitive === true || SENSITIVE_ACCOUNT_FIELD_KEYS.includes(field.key);
+
 const STATUS_LABELS = { active: 'Aktiv', deactivated: 'Deaktiviert', invited: 'Eingeladen' };
 const REGISTRATION_LABELS = {
   notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet', checked_in: 'Eingecheckt',
@@ -47,7 +52,8 @@ export function buildMembersCsv(members, { accountSchema, viewer, event, events 
       .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
   columns.push(...eventColumns.map(registrationColumn));
   const allowed = new Set(viewer.group.accountFields ?? []);
-  for (const field of accountSchema.filter((f) => allowed.has(f.key))) {
+  const mayExportSensitive = viewer.group.canExportSensitive === true;
+  for (const field of accountSchema.filter((f) => allowed.has(f.key) && (mayExportSensitive || !isSensitiveField(f)))) {
     columns.push({ label: field.label ?? field.key, value: (m) => m[field.key] });
   }
   return toCsv(members, columns);

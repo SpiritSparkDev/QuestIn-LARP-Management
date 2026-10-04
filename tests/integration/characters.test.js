@@ -514,3 +514,33 @@ test('admins and moderators can create a character in another account; plain mem
     assert.equal((await post(admin.cookie, { class: 'sc', name: 'Kaputt', data: { name: 'x' }, userId: 'not-a-uuid' })).status, 404);
   });
 });
+
+test('changes to staffOnly fields made by staff are written to the audit log; owners and unchanged values are not', async () => {
+  await withTestServer(async (port) => {
+    await setScSchema([
+      { key: 'name', label: 'Name', type: 'text', required: true },
+      { key: 'itGeld', label: 'IT-Geld', type: 'number', staffOnly: true },
+    ]);
+    const owner = await makeUserAndSession();
+    const created = await (await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ class: 'sc', name: 'Protokoll', data: { name: 'x', itGeld: 100 } }),
+    })).json();
+    const put = (cookie, itGeld) => fetch(`http://localhost:${port}/characters/${created.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ data: { name: 'x', itGeld } }),
+    });
+    const entries = async () => (await query("SELECT actor_id, subject_user_id, details FROM audit_log WHERE action = 'character.staff_field_changed' AND details->>'characterId' = $1", [created.id])).rows;
+
+    const admin = await makeUserAndSession('admin');
+    await put(admin.cookie, 250);
+    let rows = await entries();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].actor_id, admin.userId);
+    assert.equal(rows[0].subject_user_id, owner.userId);
+    assert.deepEqual([rows[0].details.field, rows[0].details.from, rows[0].details.to], ['itGeld', 100, 250]);
+
+    await put(admin.cookie, 250); // unchanged value: nothing to log
+    await put(owner.cookie, 9999); // owner can't change it (server keeps 250): nothing to log
+    assert.equal((await entries()).length, 1);
+  });
+});

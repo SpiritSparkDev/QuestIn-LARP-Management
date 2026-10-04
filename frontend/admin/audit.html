@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protokoll – Pakyrion Admin</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
+    <h1>Protokoll</h1>
+    <p class="sub">Wer hat wann etwas Sensibles getan: Änderungen an Staff-Feldern von Charakteren (z. B. IT-Geld), CSV-Exporte und Tavernen-Exporte. Neueste zuerst.</p>
+    <div class="card form-pad">
+      <select id="audit-action">
+        <option value="">Alle Einträge</option>
+        <option value="character.staff_field_changed">Staff-Feld geändert</option>
+        <option value="members.export">Export Mitgliederliste</option>
+        <option value="checkin.export">Export Check-In-Liste</option>
+        <option value="tavern.export">Export Tavernenbuchungen</option>
+      </select>
+      <label for="audit-action">Filter</label>
+    </div>
+    <div class="card">
+      <div class="table-scroll">
+        <table id="audit-list">
+          <thead><tr><th>Zeitpunkt</th><th>Wer</th><th>Aktion</th><th>Details</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
+applyBranding();
+import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
+initSidebarToggle();
+
+const ACTION_LABELS = {
+  'character.staff_field_changed': 'Staff-Feld geändert',
+  'members.export': 'Export Mitgliederliste',
+  'checkin.export': 'Export Check-In-Liste',
+  'tavern.export': 'Export Tavernenbuchungen',
+};
+
+function describe(entry) {
+  const d = entry.details ?? {};
+  switch (entry.action) {
+    case 'character.staff_field_changed':
+      return `${d.label ?? d.field} bei „${d.characterName}“${entry.subjectName ? ` (${entry.subjectName})` : ''}: ${JSON.stringify(d.from)} → ${JSON.stringify(d.to)}`;
+    case 'members.export':
+    case 'checkin.export':
+      return `${d.count} Einträge${d.eventName ? ` · ${d.eventName}` : ''}${d.includesSensitive ? ' · inkl. sensibler Felder erlaubt' : ''}`;
+    case 'tavern.export':
+      return `${d.count} Buchungen · ${d.from}${d.to !== d.from ? ` bis ${d.to}` : ''}`;
+    default:
+      return JSON.stringify(d);
+  }
+}
+
+async function load() {
+  const action = document.getElementById('audit-action').value;
+  const entries = await api.get(`/audit${action ? `?action=${encodeURIComponent(action)}` : ''}`);
+  document.querySelector('#audit-list tbody').innerHTML = entries.length ? entries.map((e) => `<tr>
+    <td>${escapeHtml(new Date(e.createdAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</td>
+    <td>${escapeHtml(e.actorName ?? '–')}</td>
+    <td>${escapeHtml(ACTION_LABELS[e.action] ?? e.action)}</td>
+    <td>${escapeHtml(describe(e))}</td>
+  </tr>`).join('') : '<tr><td colspan="4" class="sub">Keine Einträge.</td></tr>';
+}
+document.getElementById('audit-action').addEventListener('change', load);
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  await load();
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else notify(err.status === 403 ? 'Kein Zugriff – nur für Admins.' : err.message, 'error');
+} finally {
+  hideLoading();
+}
+</script>
+</body>
+</html>

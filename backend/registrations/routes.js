@@ -5,6 +5,9 @@ import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
+import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
+import { buildParticipantsCsv } from './exportCsv.js';
+import { logAudit } from '../audit/repository.js';
 import { isManagedBy } from '../managedPersons/repository.js';
 import {
   registerForEvent,
@@ -83,6 +86,43 @@ router.get('/events/:id/participants', requireAuth(requireMenu('checkin')(async 
   const schema = await getScCharacterSchema();
   const participants = await listParticipantsForEvent(params.id, { schema, viewer: user });
   return { status: 200, body: participants };
+})));
+
+// CSV of the check-in list (optionally just the given ids, in that order).
+// Needs the Check-In menu plus the same export permission as the member list;
+// the file is built here so the permission and field visibility are enforced
+// by the server. Every export is written to the audit log.
+router.post('/events/:id/participants/export', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
+  if (!user.group.canExportMembers) return { status: 403, body: { error: 'Kein Recht für den CSV-Export.' } };
+  const body = (await readJsonBody(req)) ?? {};
+  if (body.ids !== undefined && (!Array.isArray(body.ids) || body.ids.some((id) => typeof id !== 'string'))) {
+    return { status: 400, body: { error: 'ids must be an array of strings' } };
+  }
+  const event = await getEvent(params.id);
+  if (!event) return { status: 404, body: { error: 'event not found' } };
+  const schema = await getScCharacterSchema();
+  let participants = await listParticipantsForEvent(params.id, { schema, viewer: user });
+  if (body.ids) {
+    const byId = new Map(participants.map((p) => [p.userId ?? p.invitationId, p]));
+    participants = body.ids.map((id) => byId.get(id)).filter(Boolean);
+  }
+  const otFields = [...await getAccountFieldSchema(), ...await getRegistrationFieldSchema()];
+  const csv = buildParticipantsCsv(participants, { otFields, viewer: user });
+  await logAudit({
+    actorId: user.id,
+    action: 'checkin.export',
+    details: { count: participants.length, eventId: event.id, eventName: event.name, includesSensitive: user.group.canExportSensitive === true },
+  });
+  return {
+    status: 200,
+    isBinary: true,
+    body: Buffer.from(csv, 'utf8'),
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="checkin-${new Date().toISOString().slice(0, 10)}.csv"`,
+      'X-Content-Type-Options': 'nosniff',
+    },
+  };
 })));
 
 router.get('/events/:eventId/scan-lookup', requireAuth(requireMenu('checkin')(async ({ req, params }) => {

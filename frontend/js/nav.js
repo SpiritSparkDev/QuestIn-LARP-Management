@@ -34,6 +34,7 @@ const ADMIN_ONLY_LINKS = [
   { label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' },
   { label: 'Branding', href: '/admin/branding.html', icon: 'palette' },
   { label: 'Speicher', href: '/admin/storage.html', icon: 'storage' },
+  { label: 'Protokoll', href: '/admin/audit.html', icon: 'history' },
 ];
 
 // Opt-in add-ons (switched on under Einstellungen); `flag` is the /account

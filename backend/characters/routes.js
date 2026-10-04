@@ -99,7 +99,7 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
     // Staff (canOverrideCheckinStatus) may write staffOnly fields on any
     // character -- including their own. Plain owners never can: the server
     // keeps the stored value for them (see updateCharacter).
-    const updated = await updateCharacter(params.id, character.user_id, body, { isElevated });
+    const updated = await updateCharacter(params.id, character.user_id, body, { isElevated, actorId: user.id });
     return { status: 200, body: updated };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {
