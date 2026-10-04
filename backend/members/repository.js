@@ -5,7 +5,8 @@ import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.deactivated_at,
-  users.is_guest,
+  users.is_guest, users.managed_by_user_id,
+  owners.first_name AS owner_first_name, owners.last_name AS owner_last_name, owners.nickname AS owner_nickname,
   users.account_data_enc,
   groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
   discord_accounts.username AS discord_username
@@ -13,6 +14,7 @@ const SELECT_COLUMNS = `
 
 const FROM_JOIN = `
   FROM users JOIN groups ON groups.id = users.group_id
+  LEFT JOIN users owners ON owners.id = users.managed_by_user_id
   LEFT JOIN oauth_accounts discord_accounts ON discord_accounts.user_id = users.id AND discord_accounts.provider = 'discord'
 `;
 
@@ -28,6 +30,10 @@ function decryptMember(row) {
     status: row.deactivated_at ? 'deactivated' : 'active',
     deactivatedAt: row.deactivated_at,
     isGuest: row.is_guest,
+    // Set for a managed person (registered by someone else, e.g. a group or a child): who manages them.
+    managedBy: row.managed_by_user_id
+      ? { id: row.managed_by_user_id, name: displayName({ firstName: row.owner_first_name, lastName: row.owner_last_name, nickname: row.owner_nickname }) }
+      : null,
     group: { id: row.group_id, key: row.group_key, name: row.group_name },
     discordUsername: row.discord_username,
     ...decryptFieldBlob(row.account_data_enc),

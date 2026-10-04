@@ -61,6 +61,31 @@ test('GET /members includes both active members and open invitations', async () 
   }
 });
 
+test('GET /members lists managed persons and names the person who manages them', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const owner = await makeUserAndSession('mitglied');
+    const { rows } = await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, is_guest, email_verified, managed_by_user_id) VALUES (NULL, 'Verwaltet', 'Kind', (SELECT id FROM groups WHERE key = 'mitglied'), true, false, $1) RETURNING id",
+      [owner.userId]
+    );
+
+    const members = await (await fetch(`http://localhost:${port}/members`, { headers: { Cookie: cookie } })).json();
+    const managed = members.find((m) => m.id === rows[0].id);
+    assert.ok(managed, 'managed person is part of the list');
+    assert.equal(managed.managedBy.id, owner.userId);
+    assert.equal(managed.managedBy.name, 'Members Test');
+    assert.equal(members.find((m) => m.id === owner.userId).managedBy, null);
+
+    const detail = await (await fetch(`http://localhost:${port}/members/${rows[0].id}`, { headers: { Cookie: cookie } })).json();
+    assert.equal(detail.managedBy.id, owner.userId);
+  } finally {
+    server.close();
+  }
+});
+
 test('GET /members/:id returns every field regardless of the viewer\'s own permissions, plus the member\'s characters', async () => {
   const server = createServer().listen(0);
   try {

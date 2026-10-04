@@ -49,6 +49,7 @@
               <select id="member-filter-kind">
                 <option value="">Alle Konten</option>
                 <option value="full">Vollkonten</option>
+                <option value="managed">Verwaltete Personen</option>
                 <option value="guest">Gäste</option>
                 <option value="invited">Eingeladen</option>
                 <option value="discord">Mit Discord</option>
@@ -222,7 +223,8 @@
     const memberMatchesKind = (m) => {
       switch (prefs.kind) {
         case 'full': return m.status !== 'invited' && !m.isGuest;
-        case 'guest': return Boolean(m.isGuest);
+        case 'managed': return Boolean(m.managedBy);
+        case 'guest': return Boolean(m.isGuest) && !m.managedBy;
         case 'invited': return m.status === 'invited';
         case 'discord': return Boolean(m.discordUsername);
         case 'no-discord': return m.status !== 'invited' && !m.discordUsername;
@@ -245,7 +247,7 @@
         if (prefs.group && m.group?.name !== prefs.group) return false;
         if (!memberMatchesKind(m)) return false;
         if (!term) return true;
-        return [m.name, m.nickname, m.email, m.group?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
+        return [m.name, m.nickname, m.email, m.group?.name, m.managedBy?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
       });
       const direction = prefs.dir === 'desc' ? -1 : 1;
       // Ties fall back to the name so the order is always stable and predictable.
@@ -422,8 +424,11 @@
         const accessLinkBtn = m.status === 'active' && !m.isGuest
           ? `<button type="button" class="btn-sm btn-ghost" data-access-link="${m.id}">Zugriffslink anzeigen</button>`
           : '';
-        const guestBadge = m.isGuest ? ` <span class="badge badge-inactive">Gast</span>` : '';
-        const conversionLinkBtn = m.isGuest
+        const guestBadge = m.managedBy
+          ? ` <span class="badge badge-inactive" title="Wird von ${escapeHtml(m.managedBy.name)} verwaltet">Verwaltet von ${escapeHtml(m.managedBy.name)}</span>`
+          : (m.isGuest ? ` <span class="badge badge-inactive">Gast</span>` : '');
+        // A managed person without an e-mail can't be sent a link; their manager converts them.
+        const conversionLinkBtn = m.isGuest && m.email
           ? `<button type="button" class="btn-sm btn-ghost" data-generate-conversion-link="${m.id}">Konvertierungslink erzeugen</button>`
           : '';
         if (m.status === 'active') {
