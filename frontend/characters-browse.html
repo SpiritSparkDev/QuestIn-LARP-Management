@@ -28,11 +28,17 @@
     <span class="material-symbols-outlined" aria-hidden="true">menu</span>
   </button>
   <div class="main"><div class="content">
-    <h1>Charaktere durchsuchen</h1>
-    <p><a href="/account.html">← Zurück zu meinen Charakteren</a></p>
-    <select id="event-select"></select>
-    <label for="event-select">Event</label>
-    <div id="character-list" class="char-grid"></div>
+    <div class="browse-header">
+      <div>
+        <h1>Charaktere durchsuchen</h1>
+        <p class="sub" id="browse-count">Die öffentlichen Angaben der angemeldeten Charaktere.</p>
+      </div>
+      <a href="/account.html#charaktere" class="btn-secondary">Zu meinen Charakteren</a>
+    </div>
+    <div class="browse-toolbar">
+      <select id="event-select" aria-label="Event"></select>
+    </div>
+    <div id="character-list" class="browse-grid"></div>
   </div></div>
 </div>
 
@@ -52,34 +58,68 @@ const listBody = document.getElementById('character-list');
 let events = [];
 let scSchema = [];
 
-function renderTag(field, value) {
-  if (field.type === 'link' && typeof value === 'string' && /^https?:\/\//.test(value)) {
-    return `<span class="tag">${escapeHtml(field.label || field.key)}: <a href="${escapeHtml(value)}" target="_blank" rel="noopener">${escapeHtml(value)}</a></span>`;
+const isLong = (field, text) => field.type === 'textarea' || text.length > 90;
+
+function renderValue(field, text) {
+  if (field.type === 'link' && /^https?:\/\//.test(text)) {
+    return `<a href="${escapeHtml(text)}" target="_blank" rel="noopener">${escapeHtml(text)}</a>`;
   }
-  return `<span class="tag">${escapeHtml(field.label || field.key)}: ${escapeHtml(value)}</span>`;
+  return escapeHtml(text);
 }
 
-function tagsForCharacter(character, schema) {
-  return schema
-    .map((field) => ({ field, value: formatFieldValue(field, character.data[field.key]) }))
-    .filter(({ value }) => value !== undefined)
-    .map(({ field, value }) => renderTag(field, value))
-    .join('');
+// Short values become a fact grid; the first two are the card's subtitle
+// instead (the schema is admin-defined, so "first two" rather than fixed
+// keys). Long free text is clamped with a toggle.
+function renderCharacter(character) {
+  const entries = scSchema
+    .map((field) => ({ field, text: formatFieldValue(field, character.data[field.key]) }))
+    .filter(({ text }) => text !== undefined)
+    .map(({ field, text }) => ({ field, text: String(text) }));
+  const shortEntries = entries.filter(({ field, text }) => !isLong(field, text));
+  const longEntries = entries.filter(({ field, text }) => isLong(field, text));
+  const subtitleEntries = shortEntries.filter(({ field }) => field.type !== 'boolean' && field.type !== 'link').slice(0, 2);
+  const facts = shortEntries.filter((e) => !subtitleEntries.includes(e));
+  const subtitle = subtitleEntries.map(({ text }) => text).join(', ');
+  return `<article class="browse-card">
+    <div class="browse-card-head">
+      <div class="browse-monogram" aria-hidden="true">${escapeHtml(character.name.trim().charAt(0).toUpperCase())}</div>
+      <div><h3>${escapeHtml(character.name)}</h3>${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}</div>
+    </div>
+    ${facts.length ? `<dl class="browse-facts">${facts.map(({ field, text }) => `<div><dt>${escapeHtml(field.label || field.key)}</dt><dd>${renderValue(field, text)}</dd></div>`).join('')}</dl>` : ''}
+    ${longEntries.map(({ field, text }) => `<div class="browse-long"><h4>${escapeHtml(field.label || field.key)}</h4><p>${escapeHtml(text)}</p></div>`).join('')}
+  </article>`;
+}
+
+function addClampToggles() {
+  listBody.querySelectorAll('.browse-long').forEach((block) => {
+    const p = block.querySelector('p');
+    if (p.scrollHeight <= p.clientHeight + 1) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'browse-more';
+    button.textContent = 'Mehr anzeigen';
+    button.addEventListener('click', () => {
+      const open = block.classList.toggle('is-open');
+      button.textContent = open ? 'Weniger anzeigen' : 'Mehr anzeigen';
+    });
+    block.appendChild(button);
+  });
 }
 
 async function loadCharacters() {
   const eventId = eventSelect.value;
+  const count = document.getElementById('browse-count');
   if (!eventId) { listBody.innerHTML = ''; return; }
   try {
     const characters = await api.get(`/events/${eventId}/characters/public`);
     if (characters.length === 0) {
-      listBody.innerHTML = '<p>Keine Charaktere für dieses Event.</p>';
+      count.textContent = 'Für dieses Event sind noch keine Charaktere angemeldet.';
+      listBody.innerHTML = '';
       return;
     }
-    listBody.innerHTML = characters.map((c) => `<div class="char-card">
-      <h3>${escapeHtml(c.name)}</h3>
-      <div class="char-tags">${tagsForCharacter(c, scSchema)}</div>
-    </div>`).join('');
+    count.textContent = `${characters.length} ${characters.length === 1 ? 'Charakter' : 'Charaktere'} mit öffentlichen Angaben.`;
+    listBody.innerHTML = characters.map(renderCharacter).join('');
+    addClampToggles();
   } catch (err) {
     notify(err.message, 'error');
   }
