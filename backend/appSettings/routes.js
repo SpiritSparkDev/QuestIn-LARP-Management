@@ -10,7 +10,11 @@ import {
 import { sendComingSoonReminders } from '../comingSoon/notify.js';
 
 const ALLOWED_THEME_MODES = ['light', 'dark'];
-const ALLOWED_COLOR_SCHEMES = ['sahara', 'ozean', 'wald', 'hoehle', 'horror', 'custom'];
+const ALLOWED_COLOR_SCHEMES = [
+  'sahara', 'ozean', 'wald', 'hoehle', 'horror',
+  'sahara-intensiv', 'ozean-intensiv', 'wald-intensiv', 'hoehle-intensiv', 'horror-intensiv',
+  'custom',
+];
 
 // The CSS custom properties (frontend/css/sahara.css :root, minus the "--"
 // prefix) an admin can override for colorScheme 'custom'. Kept in sync by

@@ -534,6 +534,14 @@ test('PUT /app-settings saves themeMode and colorScheme, rejecting unknown value
     assert.equal(getBody.themeMode, 'dark');
     assert.equal(getBody.colorScheme, 'ozean');
 
+    const intenseRes = await fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ colorScheme: 'horror-intensiv' }),
+    });
+    assert.equal(intenseRes.status, 200);
+    assert.equal((await intenseRes.json()).colorScheme, 'horror-intensiv');
+
     // Reset so this doesn't leak into later tests/files sharing the same row.
     await fetch(`http://localhost:${port}/app-settings`, {
       method: 'PUT',
