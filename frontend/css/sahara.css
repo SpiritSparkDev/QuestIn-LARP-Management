@@ -4198,3 +4198,29 @@ th.is-sortable[data-dir="desc"]::after {
 .tavern-payout p {
   margin: 0 0 10px;
 }
+
+/* ---------- Event form: price groups, tiers, guest widget ---------- */
+
+.price-group-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.price-group-row input { max-width: 240px; }
+.price-tier-row {
+  display: flex; flex-wrap: wrap; align-items: end; gap: 8px 16px;
+  padding: 10px 0; border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.price-tier-field { min-width: 160px; }
+.price-tier-amount { min-width: 120px; }
+.guest-widget-row { display: flex; gap: 8px; align-items: center; }
+.guest-widget-row-top { align-items: flex-start; }
+
+@media (max-width: 700px) {
+  .price-group-row input { max-width: none; flex: 1; min-width: 0; }
+  .price-tier-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px;
+  }
+  .price-tier-field { min-width: 0; }
+  .price-tier-row > .price-tier-field:nth-child(-n+2) { grid-column: 1 / -1; }
+  .price-tier-row > div:last-child:not(.price-tier-field) { grid-column: 1 / -1; }
+  .price-tier-row > div:last-child button { width: 100%; }
+  .guest-widget-row { flex-direction: column; align-items: stretch; }
+  .guest-widget-row input, .guest-widget-row textarea { width: 100%; box-sizing: border-box; }
+}

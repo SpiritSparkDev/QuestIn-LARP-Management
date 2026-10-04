@@ -89,12 +89,12 @@
           <div id="guest-widget-missing-code" class="sub">Vergib oben eine QR-Code-Kennung, um Link und Einbettungscode zu erhalten.</div>
           <div id="guest-widget-ready" style="display:none;">
             <label for="guest-widget-link" style="margin-top:12px;">Direkter Link</label>
-            <div style="display:flex;gap:8px;align-items:center;">
+            <div class="guest-widget-row">
               <input id="guest-widget-link" type="text" readonly style="flex:1;">
               <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-link">Kopieren</button>
             </div>
             <label for="guest-widget-iframe" style="margin-top:12px;">Einbettungscode (iframe)</label>
-            <div style="display:flex;gap:8px;align-items:flex-start;">
+            <div class="guest-widget-row guest-widget-row-top">
               <textarea id="guest-widget-iframe" readonly rows="2" style="flex:1;font-family:monospace;font-size:13px;"></textarea>
               <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-iframe">Kopieren</button>
             </div>
@@ -156,7 +156,7 @@ function currentPriceGroups() {
 function renderPriceGroups() {
   priceGroupsContainer.innerHTML = priceGroups.length > 0
     ? priceGroups.map((g, i) => `
-      <div data-group-row="${i}" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div data-group-row="${i}" class="price-group-row">
         <input type="text" data-group-name value="${escapeHtml(g)}" placeholder="z.B. Erwachsene" style="max-width:240px;">
         <button type="button" class="btn-sm btn-ghost" data-remove-group="${i}">Entfernen</button>
       </div>
@@ -201,11 +201,11 @@ function syncTierAmountsToGroups() {
 function renderPriceTiers() {
   const groups = currentPriceGroups();
   priceTiersContainer.innerHTML = priceTiers.map((tier, i) => `
-    <div data-tier-row="${i}" style="display:flex;flex-wrap:wrap;align-items:end;gap:8px 16px;">
-      <div style="min-width:160px;"><input type="text" data-tier-name value="${escapeHtml(tier.name)}" placeholder="Name, z.B. Frühbucher"><label>Preisstufe</label></div>
-      <div style="min-width:160px;"><input type="date" data-tier-until value="${escapeHtml(tier.until ?? '')}"><label>Gültig bis <span style="opacity:0.6;font-size:12px;">leer = letzte Stufe</span></label></div>
+    <div data-tier-row="${i}" class="price-tier-row">
+      <div class="price-tier-field"><input type="text" data-tier-name value="${escapeHtml(tier.name)}" placeholder="Name, z.B. Frühbucher"><label>Preisstufe</label></div>
+      <div class="price-tier-field"><input type="date" data-tier-until value="${escapeHtml(tier.until ?? '')}"><label>Gültig bis <span style="opacity:0.6;font-size:12px;">leer = letzte Stufe</span></label></div>
       ${groups.map((g) => `
-        <div style="min-width:120px;"><input type="number" min="0" step="0.01" data-tier-amount="${escapeHtml(g)}" value="${escapeHtml(tier.amounts[g] ?? '')}"><label>${escapeHtml(g)} (€)</label></div>
+        <div class="price-tier-field price-tier-amount"><input type="number" min="0" step="0.01" data-tier-amount="${escapeHtml(g)}" value="${escapeHtml(tier.amounts[g] ?? '')}"><label>${escapeHtml(g)} (€)</label></div>
       `).join('')}
       <div><button type="button" class="btn-sm btn-ghost" data-remove-tier="${i}">Entfernen</button></div>
     </div>
