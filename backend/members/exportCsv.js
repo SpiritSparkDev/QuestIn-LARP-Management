@@ -15,10 +15,10 @@ function memberKind(m) {
 // Builds the member-list CSV. `viewer` decides which account (OT) fields
 // appear: only those the viewer's own group may see (the same rule the edit
 // dialog uses), so the export never contains more than the screen would.
-// Registrations are always part of the file: with `event` (the event chosen
-// in the list's filter) one column holds that event's status; without it a
-// single "Anmeldungen" column lists every event the member is registered for,
-// e.g. "Sommercon 2027: Angemeldet; Wintercon 2027: Warteliste".
+// Registrations are always part of the file, one column per event: with
+// `event` (the event chosen in the list's filter) just that event, otherwise
+// every event at least one exported member is registered for, oldest first.
+// Each cell holds the member's status for that event, or "Nicht angemeldet".
 export function buildMembersCsv(members, { accountSchema, viewer, event, events = [] }) {
   const columns = [
     { label: 'Nachname', value: (m) => m.lastName },
@@ -32,26 +32,20 @@ export function buildMembersCsv(members, { accountSchema, viewer, event, events 
     { label: 'Verwaltet von', value: (m) => m.managedBy?.name },
     { label: 'Discord', value: (m) => m.discordUsername },
   ];
-  if (event) {
-    columns.push({
-      label: `Anmeldung: ${event.name}`,
-      value: (m) => {
-        const reg = (m.registrations ?? []).find((r) => r.eventId === event.id);
-        return reg ? (REGISTRATION_LABELS[reg.status] ?? reg.status) : 'Nicht angemeldet';
-      },
-    });
-  }
-  else {
-    const eventById = new Map(events.map((e) => [e.id, e]));
-    columns.push({
-      label: 'Anmeldungen',
-      value: (m) => (m.registrations ?? [])
-        .map((r) => ({ ...r, event: eventById.get(r.eventId) }))
-        .sort((a, b) => String(a.event?.event_date ?? '').localeCompare(String(b.event?.event_date ?? '')))
-        .map((r) => `${r.event?.name ?? 'Unbekanntes Event'}: ${REGISTRATION_LABELS[r.status] ?? r.status}`)
-        .join('; '),
-    });
-  }
+  const registrationColumn = (ev) => ({
+    label: `Anmeldung: ${ev.name}`,
+    value: (m) => {
+      const reg = (m.registrations ?? []).find((r) => r.eventId === ev.id);
+      return reg ? (REGISTRATION_LABELS[reg.status] ?? reg.status) : 'Nicht angemeldet';
+    },
+  });
+  const registeredEventIds = new Set(members.flatMap((m) => (m.registrations ?? []).map((r) => r.eventId)));
+  const eventColumns = event
+    ? [event]
+    : events
+      .filter((e) => registeredEventIds.has(e.id))
+      .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)));
+  columns.push(...eventColumns.map(registrationColumn));
   const allowed = new Set(viewer.group.accountFields ?? []);
   for (const field of accountSchema.filter((f) => allowed.has(f.key))) {
     columns.push({ label: field.label ?? field.key, value: (m) => m[field.key] });
