@@ -1,19 +1,19 @@
 export const GROUP_DEFAULTS = [
   {
     key: 'admin', name: 'Admin',
-    visibleMenus: ['konto', 'mitglieder', 'events', 'checkin', 'dateien'],
+    visibleMenus: ['konto', 'mitglieder', 'events', 'checkin'],
     accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut', 'group'],
     canEditCharacters: true, canOverrideCheckinStatus: true, canExportMembers: true, canExportSensitive: true, isProtected: true,
   },
   {
     key: 'moderator', name: 'Moderator',
-    visibleMenus: ['konto', 'mitglieder', 'events', 'checkin', 'dateien'],
+    visibleMenus: ['konto', 'mitglieder', 'events', 'checkin'],
     accountFields: ['address', 'birthdate', 'phone', 'emergencyContactLastName', 'emergencyContactFirstName', 'emergencyContactPhone', 'medicalNotes', 'conTage', 'accommodation', 'craftOffer', 'travelMethod', 'dataSharingOptOut', 'photoOptOut'],
     canEditCharacters: true, canOverrideCheckinStatus: true, canExportMembers: true, canExportSensitive: true, isProtected: false,
   },
   {
     key: 'mitglied', name: 'Mitglied',
-    visibleMenus: ['konto', 'dateien'],
+    visibleMenus: ['konto'],
     accountFields: [], canEditCharacters: false, canOverrideCheckinStatus: false, canExportMembers: false, canExportSensitive: false, isProtected: false,
   },
 ];

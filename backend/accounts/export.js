@@ -10,7 +10,7 @@ import { query } from '../db.js';
 import { getAccount } from './repository.js';
 import { listCharactersForUser } from '../characters/repository.js';
 import { listRegistrationsForUser } from '../registrations/repository.js';
-import { listCharacterFiles } from '../characterFiles/repository.js';
+import { listCharacterFiles, storageKeyFor } from '../characterFiles/repository.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
@@ -154,7 +154,7 @@ router.get('/account/export/files', requireAuth(async ({ user }) => {
     for (const file of files) {
       const storage = getStorage(file.storage_backend, storageSettings);
       try {
-        const data = await storage.download(file.id);
+        const data = await storage.download(storageKeyFor(file));
         archive.append(data, { name: `${character.name}/${file.original_filename}` });
       } catch (err) {
         // A single unreachable file (e.g. a since-misconfigured remote

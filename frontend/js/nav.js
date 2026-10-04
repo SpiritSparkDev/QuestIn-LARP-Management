@@ -20,7 +20,6 @@ const MENU_LINKS = [
   { key: 'konto', label: 'Konto', href: '/account.html#konto', icon: 'manage_accounts' },
   { key: 'konto', label: 'Anmelden', href: '/account.html#anmelden', icon: 'event' },
   { key: 'konto', label: 'Charaktere', href: '/account.html#charaktere', icon: 'theater_comedy' },
-  { key: 'dateien', label: 'Dateien', href: '/account.html#dateien', icon: 'folder' },
   { key: 'mitglieder', label: 'Mitglieder', href: '/admin/members.html', icon: 'group' },
   { key: 'events', label: 'Events', href: '/admin/events.html', icon: 'calendar_month' },
   { key: 'checkin', label: 'Check-In', href: '/admin/checkin.html', icon: 'qr_code_scanner' },

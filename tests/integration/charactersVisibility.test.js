@@ -66,7 +66,7 @@ async function makeRegisteredCharacter(port, cookie, eventId, name, data) {
   return id;
 }
 
-// Character browsing is off by default (migration 068); these tests exercise
+// Character browsing is off by default (migration 073); these tests exercise
 // the browse endpoints, so each one starts with it enabled.
 test.beforeEach(async () => {
   await setScSchema(VISIBILITY_SCHEMA);

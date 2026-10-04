@@ -1,13 +1,23 @@
 import { query } from '../db.js';
 
-const SELECT_COLUMNS = 'id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, is_public, storage_backend, created_at';
+const SELECT_COLUMNS = 'id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, is_public, storage_backend, storage_key, created_at';
 
-export async function createCharacterFile({ id, characterId, uploadedBy, kind, originalFilename, mimeType, sizeBytes, isPublic, storageBackend }) {
+// Where a file's bytes live in the storage backend: its own character folder
+// for new uploads, the legacy flat id for files uploaded before folders.
+export function storageKeyFor(file) {
+  return file.storage_key ?? file.id;
+}
+
+export function newStorageKey(characterId, fileId) {
+  return `${characterId}/${fileId}`;
+}
+
+export async function createCharacterFile({ id, characterId, uploadedBy, kind, originalFilename, mimeType, sizeBytes, isPublic, storageBackend, storageKey = null }) {
   const { rows } = await query(
-    `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, is_public, storage_backend)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, is_public, storage_backend, storage_key)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING ${SELECT_COLUMNS}`,
-    [id, characterId, uploadedBy, kind, originalFilename, mimeType, sizeBytes, isPublic, storageBackend]
+    [id, characterId, uploadedBy, kind, originalFilename, mimeType, sizeBytes, isPublic, storageBackend, storageKey]
   );
   return rows[0];
 }
@@ -52,6 +62,6 @@ export async function listCharacterFilesNotOnBackend(backend) {
   return rows;
 }
 
-export async function updateCharacterFileStorageBackend(id, backend) {
-  await query('UPDATE character_files SET storage_backend = $2 WHERE id = $1', [id, backend]);
+export async function updateCharacterFileStorageBackend(id, backend, storageKey) {
+  await query('UPDATE character_files SET storage_backend = $2, storage_key = $3 WHERE id = $1', [id, backend, storageKey]);
 }

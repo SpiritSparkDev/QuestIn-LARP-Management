@@ -24,7 +24,13 @@ function remotePath(baseDir, id) {
 export function ftpStorage(config) {
   return {
     async upload(id, buffer) {
-      await withClient(config, (client) => client.uploadFrom(Readable.from(buffer), remotePath(config.baseDir, id)));
+      await withClient(config, async (client) => {
+        const target = remotePath(config.baseDir, id);
+        // Nested keys ("<characterId>/<fileId>") need their folder first.
+        const folder = target.slice(0, target.lastIndexOf('/'));
+        if (folder) await client.ensureDir(folder);
+        await client.uploadFrom(Readable.from(buffer), target);
+      });
     },
     async download(id) {
       return withClient(config, async (client) => {
