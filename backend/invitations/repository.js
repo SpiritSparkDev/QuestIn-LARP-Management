@@ -3,6 +3,7 @@ import { query } from '../db.js';
 import { displayName } from '../displayName.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
+import { sanitizeFieldValue } from '../richText.js';
 
 const SELECT_COLUMNS = `
   id, token, email, first_name, last_name, nickname, group_id,
@@ -38,7 +39,7 @@ export async function createInvitation({ email, firstName, lastName, nickname, g
   const schema = await getAccountFieldSchema();
   const data = {};
   for (const field of schema) {
-    if (otFields[field.key] !== undefined) data[field.key] = otFields[field.key];
+    if (otFields[field.key] !== undefined) data[field.key] = sanitizeFieldValue(field, otFields[field.key]);
   }
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);

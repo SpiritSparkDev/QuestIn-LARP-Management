@@ -18,6 +18,7 @@ import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getStorageSettingsForUse } from '../storageSettings/repository.js';
 import { getStorage } from '../storage/index.js';
 import { logger } from '../logger.js';
+import { richTextToPlain } from '../richText.js';
 
 function formatCents(cents) {
   return `${(cents / 100).toFixed(2).replace('.', ',')} €`;
@@ -34,7 +35,10 @@ function formatValue(value) {
 // field's admin-defined label instead of its raw key -- mirrors how the
 // frontend already presents these same OT/IT fields to the member.
 function formatSchemaFields(schema, data) {
-  return schema.map((field) => `  ${field.label ?? field.key}: ${formatValue(data[field.key])}`).join('\n');
+  return schema.map((field) => {
+    const value = field.type === 'document' && typeof data[field.key] === 'string' ? richTextToPlain(data[field.key]).trim() : data[field.key];
+    return `  ${field.label ?? field.key}: ${formatValue(value)}`;
+  }).join('\n');
 }
 
 async function buildExportText(userId) {

@@ -207,3 +207,16 @@ test('validateSchemaShape accepts a custom reserved-key list, rejecting only tho
   // Default reserved keys still apply when no second argument is given.
   assert.equal(validateSchemaShape([{ key: 'name', label: 'Name', type: 'text' }]), false);
 });
+
+test('validateSchemaShape accepts a string hint up to 500 chars and rejects others', () => {
+  assert.equal(validateSchemaShape([{ key: 'klasse', type: 'text', hint: 'Zum Beispiel Krieger' }]), true);
+  assert.equal(validateSchemaShape([{ key: 'klasse', type: 'text', hint: 'x'.repeat(501) }]), false);
+  assert.equal(validateSchemaShape([{ key: 'klasse', type: 'text', hint: 42 }]), false);
+});
+
+test('document fields allow up to 20000 chars and a correspondingly higher total', () => {
+  const schema = [{ key: 'story', type: 'document' }];
+  assert.deepEqual(validateCharacterData(schema, { story: `<p>${'a'.repeat(12000)}</p>` }), []);
+  assert.ok(validateCharacterData(schema, { story: 'a'.repeat(20001) }).some((e) => e.includes('story')));
+  assert.ok(validateCharacterData(schema, { story: 5 }).some((e) => e.includes('story')));
+});

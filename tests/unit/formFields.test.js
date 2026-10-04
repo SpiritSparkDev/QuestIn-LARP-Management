@@ -289,3 +289,29 @@ test('otFieldValuesEqual keeps boolean and plain-string comparison behavior', ()
   assert.equal(otFieldValuesEqual(textField, 'Musterstr. 1', 'Musterstr. 1'), true);
   assert.equal(otFieldValuesEqual(textField, 'Musterstr. 1', 'Musterstr. 2'), false);
 });
+
+test('renderField appends an accessible hint bubble to the label when the field has a hint', () => {
+  const html = renderField({ key: 'klasse', label: 'Klasse', type: 'text', hint: 'Z.B. "Krieger"' }, '');
+  assert.match(html, /<span class="field-hint" tabindex="0"[^>]*data-hint="Z\.B\. &quot;Krieger&quot;"/);
+  assert.equal(renderField({ key: 'klasse', label: 'Klasse', type: 'text' }, '').includes('field-hint'), false);
+});
+
+test('renderAccountFieldInput shows the hint after the label and sealed badge', () => {
+  const html = renderAccountFieldInput({ key: 'phone', label: 'Telefon', type: 'text', hint: 'Mit Vorwahl' }, '', { sealedBadge: '<span class="sealed">X</span>' });
+  assert.match(html, /Telefon<span class="sealed">X<\/span> <span class="field-hint"/);
+});
+
+test('document fields render an editor plus a hidden value input carrying the field attribute', () => {
+  const it = renderField({ key: 'story', label: 'Geschichte', type: 'document' }, '<p>x</p>');
+  assert.ok(it.includes('class="rte"'));
+  assert.ok(it.includes('name="story" type="hidden"'));
+  const ot = renderAccountFieldInput({ key: 'story', label: 'Geschichte', type: 'document' }, '');
+  assert.ok(ot.includes('data-field="story" type="hidden"'));
+  assert.ok(ot.includes('class="story-container"'));
+});
+
+test('formatFieldValue shows a document field as plain text', async () => {
+  const { formatFieldValue } = await import('../../frontend/js/formFields.js');
+  assert.equal(formatFieldValue({ type: 'document' }, '<p>Hallo <strong>Welt</strong></p>'), 'Hallo Welt');
+  assert.equal(formatFieldValue({ type: 'document' }, '<p><br></p>'), undefined);
+});

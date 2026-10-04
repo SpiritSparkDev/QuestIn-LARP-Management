@@ -19,6 +19,7 @@ await seedNscProfileSchema();
 
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
+const { setAppSettings } = await import('../../backend/appSettings/repository.js');
 
 async function makeUserAndSession(groupKey = 'mitglied') {
   const { rows } = await query(
@@ -65,8 +66,11 @@ async function makeRegisteredCharacter(port, cookie, eventId, name, data) {
   return id;
 }
 
+// Character browsing is off by default (migration 068); these tests exercise
+// the browse endpoints, so each one starts with it enabled.
 test.beforeEach(async () => {
   await setScSchema(VISIBILITY_SCHEMA);
+  await setAppSettings({ characterBrowsingEnabled: true });
 });
 
 test('owner sees a non-public field; a different non-elevated user does not', async () => {
@@ -216,16 +220,32 @@ test('disabling characterBrowsingEnabled blocks GET /events/:id/characters/publi
     });
     assert.equal(blockedRes.status, 403);
 
-    // Re-enable so this doesn't leak disabled state into later tests.
-    await fetch(`http://localhost:${port}/app-settings`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
-      body: JSON.stringify({ characterBrowsingEnabled: true }),
+  });
+});
+
+test('document fields are sanitized server-side on create and update', async () => {
+  await withTestServer(async (port) => {
+    await setScSchema([{ key: 'story', label: 'Geschichte', type: 'document' }]);
+    const owner = await makeUserAndSession();
+    const createRes = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ name: 'Doc', data: { story: '<p onclick="x()">Hi</p><script>alert(1)</script><a href="javascript:alert(1)">l</a>' } }),
     });
+    assert.equal(createRes.status, 201);
+    const created = await createRes.json();
+    assert.equal(created.data.story, '<p>Hi</p>l');
+
+    const patchRes = await fetch(`http://localhost:${port}/characters/${created.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ data: { story: '<img src=x onerror=alert(1)><strong>fett</strong>' } }),
+    });
+    assert.equal(patchRes.status, 200);
+    assert.equal((await patchRes.json()).data.story, '<strong>fett</strong>');
   });
 });
 
 test.after(async () => {
   await setScSchema([]);
+  await setAppSettings({ characterBrowsingEnabled: false });
   await closePool();
 });

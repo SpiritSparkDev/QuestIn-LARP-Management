@@ -2,6 +2,7 @@ import { query } from '../db.js';
 import { displayName } from '../displayName.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
+import { sanitizeFieldValue } from '../richText.js';
 
 function decryptAccount(row) {
   return {
@@ -47,7 +48,7 @@ export async function updateAccount(userId, fields) {
   if (currentRows.length === 0) return null;
   const nextData = decryptFieldBlob(currentRows[0].account_data_enc);
   for (const field of schema) {
-    if (fields[field.key] !== undefined) nextData[field.key] = fields[field.key];
+    if (fields[field.key] !== undefined) nextData[field.key] = sanitizeFieldValue(field, fields[field.key]);
   }
 
   // Merges into the blob in JS rather than one atomic UPDATE ... COALESCE

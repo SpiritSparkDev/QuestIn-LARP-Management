@@ -42,25 +42,25 @@
       <div id="sc-schema-rows"></div>
       <button type="button" id="sc-add-field">Feld hinzufügen</button>
       <button type="button" id="sc-load-template">Standard-Vorlage laden</button>
-      <button type="button" id="sc-schema-save">Speichern</button>
+      <div class="save-bar"><button type="button" id="sc-schema-save">Speichern</button></div>
     </div>
 
     <div class="tab-panel card form-pad" id="nsc-schema-tab" hidden>
       <div id="nsc-schema-rows"></div>
       <button type="button" id="nsc-add-field">Feld hinzufügen</button>
-      <button type="button" id="nsc-schema-save">Speichern</button>
+      <div class="save-bar"><button type="button" id="nsc-schema-save">Speichern</button></div>
     </div>
 
     <div class="tab-panel card form-pad" id="account-schema-tab" hidden>
       <div id="account-schema-rows"></div>
       <button type="button" id="account-add-field">Feld hinzufügen</button>
-      <button type="button" id="account-schema-save">Speichern</button>
+      <div class="save-bar"><button type="button" id="account-schema-save">Speichern</button></div>
     </div>
 
     <div class="tab-panel card form-pad" id="registration-schema-tab" hidden>
       <div id="registration-schema-rows"></div>
       <button type="button" id="registration-add-field">Feld hinzufügen</button>
-      <button type="button" id="registration-schema-save">Speichern</button>
+      <div class="save-bar"><button type="button" id="registration-schema-save">Speichern</button></div>
     </div>
 
   </div></div>
@@ -113,6 +113,7 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
     <select class="schema-type">
       <option value="text" ${field.type === 'text' ? 'selected' : ''}>Text</option>
       <option value="textarea" ${field.type === 'textarea' ? 'selected' : ''}>Textarea</option>
+      <option value="document" ${field.type === 'document' ? 'selected' : ''}>Dokument (WYSIWYG-Editor)</option>
       <option value="select" ${field.type === 'select' ? 'selected' : ''}>Auswahl</option>
       <option value="number" ${field.type === 'number' ? 'selected' : ''}>Zahl</option>
       <option value="boolean" ${field.type === 'boolean' ? 'selected' : ''}>Ja/Nein</option>
@@ -125,8 +126,8 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
       <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
       ${publicCheckboxHtml}
     </div>
-    
     <button type="button" class="remove-row">Entfernen</button>
+    <input type="text" placeholder="Hinweis beim Darüberfahren (optional, max. 500 Zeichen)" maxlength="500" class="schema-hint" value="${escapeHtml(field.hint ?? '')}">
   `;
   row.querySelector('.remove-row').addEventListener('click', () => row.remove());
   row.querySelector('.move-up').addEventListener('click', () => {
@@ -149,6 +150,8 @@ function collectSchema(container, { allowPublic = true, allowGroup = false } = {
       type,
       required: row.querySelector('.schema-required').checked,
     };
+    const hint = row.querySelector('.schema-hint').value.trim();
+    if (hint) field.hint = hint;
     if (allowPublic) {
       field.public = row.querySelector('.schema-public').checked;
       field.staffOnly = row.querySelector('.schema-staff-only').checked;

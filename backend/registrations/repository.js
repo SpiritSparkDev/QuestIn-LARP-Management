@@ -11,6 +11,7 @@ import { sendRegistrationOtFieldsChangedEmail, sendWaitlistedEmail, sendWaitlist
 import { logger } from '../logger.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { buildPaymentReference } from '../payments/reference.js';
+import { sanitizeFieldValue } from '../richText.js';
 
 // 'ticket' = a self-service guest ticket bought via the external ticket
 // widget (backend/guestRegistrations/routes.js) -- no character, distinct
@@ -228,7 +229,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   const schema = await getRegistrationFieldSchema();
   const data = {};
   for (const field of schema) {
-    if (otFields?.[field.key] !== undefined) data[field.key] = otFields[field.key];
+    if (otFields?.[field.key] !== undefined) data[field.key] = sanitizeFieldValue(field, otFields[field.key]);
   }
 
   try {
@@ -768,7 +769,7 @@ export async function updateRegistrationOtFields(eventId, userId, otFields, flag
   }
   const nextData = decryptFieldBlob(currentRows[0].registration_data_enc);
   for (const field of schema) {
-    if (otFields[field.key] !== undefined) nextData[field.key] = otFields[field.key];
+    if (otFields[field.key] !== undefined) nextData[field.key] = sanitizeFieldValue(field, otFields[field.key]);
   }
 
   // Flags aren't part of the OT-schema blob above (they're event-scoped,
