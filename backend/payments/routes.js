@@ -14,7 +14,40 @@ import {
   getRegistrationByPaymentToken, refundPayment, listUnpaidRegistrationsForEvent, setGuestPaymentToken,
 } from './repository.js';
 
-const CHECKOUT_METHODS = { card: 'stripe_card', paypal: 'stripe_paypal' };
+const CHECKOUT_METHODS = ['card', 'paypal', 'bank_transfer'];
+const CHECKOUT_METHOD_ERROR = 'method must be one of: card, paypal, bank_transfer';
+
+// Stripe bank transfer (customer_balance) is a delayed-notification method
+// that requires an existing Customer on the Checkout Session; a fresh
+// Customer per session also gets a fresh virtual IBAN, so a transfer can
+// only ever match this one payment.
+async function bankTransferSessionParams(userId, eventId, stripe) {
+  const { rows } = await query('SELECT email, first_name, last_name FROM users WHERE id = $1', [userId]);
+  const customer = await stripe.customers.create({
+    email: rows[0]?.email,
+    name: [rows[0]?.first_name, rows[0]?.last_name].filter(Boolean).join(' ') || undefined,
+    metadata: { eventId, userId },
+  });
+  return {
+    customer: customer.id,
+    payment_method_types: ['customer_balance'],
+    payment_method_options: {
+      customer_balance: {
+        funding_type: 'bank_transfer',
+        bank_transfer: { type: 'eu_bank_transfer', eu_bank_transfer: { country: 'DE' } },
+      },
+    },
+  };
+}
+
+// 'checkout.session.completed' only means the customer submitted the form;
+// for delayed methods the money arrives later (checkout.session.async_payment_succeeded).
+function stripeMethodForSession(session) {
+  const types = session.payment_method_types ?? [];
+  if (types.includes('customer_balance')) return 'stripe_bank_transfer';
+  if (types.includes('paypal')) return 'stripe_paypal';
+  return 'stripe_card';
+}
 
 // Shared by the authenticated (session-owned) and guest (payment-token-owned)
 // checkout routes below -- everything except how the caller was authorized
@@ -23,9 +56,12 @@ async function createCheckoutSession({ eventId, userId, method, amountDueCents, 
   const stripe = await getStripeClient();
   if (!stripe) return null;
   const event = await getEvent(eventId);
+  const methodParams = method === 'bank_transfer'
+    ? await bankTransferSessionParams(userId, eventId, stripe)
+    : { payment_method_types: [method] };
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
-    payment_method_types: [method],
+    ...methodParams,
     line_items: [{
       price_data: {
         currency: 'eur',
@@ -47,8 +83,7 @@ router.post('/events/:eventId/registrations/:userId/checkout-session', requireAu
   }
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const stripeMethod = CHECKOUT_METHODS[body.method];
-  if (!stripeMethod) return { status: 400, body: { error: 'method must be one of: card, paypal' } };
+  if (!CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
 
   const { rows } = await query(
     'SELECT amount_due_cents, paid_at FROM registrations WHERE event_id = $1 AND user_id = $2',
@@ -98,8 +133,7 @@ router.get('/public/registrations/:token', async ({ params }) => {
 router.post('/public/registrations/:token/checkout-session', async ({ req, params }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const stripeMethod = CHECKOUT_METHODS[body.method];
-  if (!stripeMethod) return { status: 400, body: { error: 'method must be one of: card, paypal' } };
+  if (!CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
 
   const registration = await getRegistrationByPaymentToken(params.token);
   if (!registration) return { status: 404, body: { error: 'Ungültiger Link.' } };
@@ -138,14 +172,15 @@ router.post('/webhooks/stripe', async ({ req }) => {
     return { status: 400, body: { error: 'invalid signature' } };
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
+  const session = event.data.object;
+  const isPaidNow = event.type === 'checkout.session.completed' && session.payment_status === 'paid';
+  if (isPaidNow || event.type === 'checkout.session.async_payment_succeeded') {
     const [eventId, userId] = (session.client_reference_id || '').split(':');
     if (eventId && userId) {
       try {
         await recordSuccessfulStripePayment({
           eventId, userId,
-          method: session.payment_method_types?.includes('paypal') ? 'stripe_paypal' : 'stripe_card',
+          method: stripeMethodForSession(session),
           amountCents: session.amount_total,
           providerReference: session.id,
           stripePaymentIntentId: session.payment_intent,
@@ -217,6 +252,10 @@ router.post('/events/:eventId/registrations/:userId/refund', requireAuth(require
   const amountCents = body.amountCents ?? payment.amount_cents;
   if (amountCents > payment.amount_cents) {
     return { status: 400, body: { error: 'amountCents darf den bezahlten Betrag nicht übersteigen.' } };
+  }
+
+  if (payment.method === 'stripe_bank_transfer') {
+    return { status: 409, body: { error: 'Stripe-Banküberweisungen bitte im Stripe-Dashboard erstatten (Kundenguthaben/Banküberweisung), das lässt sich hier nicht automatisch abbilden.' } };
   }
 
   let stripeRefundId = null;

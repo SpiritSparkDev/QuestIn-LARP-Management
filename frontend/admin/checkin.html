@@ -665,7 +665,7 @@ function renderConRoleCell(p) {
   return `<div><strong>${escapeHtml(label)}</strong>${badge}</div>${changeButton}`;
 }
 
-const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', bank_transfer: 'Überweisung' };
+const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', stripe_bank_transfer: 'Überweisung (Stripe)', bank_transfer: 'Überweisung' };
 
 function renderAmountDueCell(p) {
   if (!p.userId) return '';

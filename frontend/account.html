@@ -420,6 +420,7 @@
     <div class="dialog-actions">
       <button type="button" id="payment-paypal-btn">Per PayPal</button>
       <button type="button" id="payment-card-btn">Per Kreditkarte</button>
+      <button type="button" id="payment-stripe-bank-btn">Per Banküberweisung (automatisch bestätigt)</button>
       <button type="button" id="payment-bank-btn" class="btn-ghost">Überweisungsinformationen anzeigen</button>
       <button type="button" id="payment-girocode-btn" class="btn-ghost">Girocode anzeigen</button>
     </div>
@@ -771,6 +772,7 @@
 
     document.getElementById("payment-paypal-btn").addEventListener("click", () => startCheckout("paypal"));
     document.getElementById("payment-card-btn").addEventListener("click", () => startCheckout("card"));
+    document.getElementById("payment-stripe-bank-btn").addEventListener("click", () => startCheckout("bank_transfer"));
 
     document.getElementById("payment-bank-btn").addEventListener("click", async () => {
       try {

@@ -232,7 +232,7 @@ test('POST /webhooks/stripe marks the registration paid on a validly-signed chec
 
     const payload = JSON.stringify({
       id: 'evt_test_1', type: 'checkout.session.completed',
-      data: { object: { id: 'cs_test_webhook_1', client_reference_id: `${eventId}:${userId}`, amount_total: 2500, payment_method_types: ['card'] } },
+      data: { object: { id: 'cs_test_webhook_1', client_reference_id: `${eventId}:${userId}`, amount_total: 2500, payment_method_types: ['card'], payment_status: 'paid' } },
     });
     // Stripe's own test helper for generating a locally-valid signature --
     // no network call, matches how Stripe's docs recommend testing webhook
@@ -247,6 +247,42 @@ test('POST /webhooks/stripe marks the registration paid on a validly-signed chec
 
     const { rows } = await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
     assert.ok(rows[0].paid_at);
+  });
+});
+
+async function postSignedStripeEvent(port, webhookSecret, type, object) {
+  const payload = JSON.stringify({ id: `evt_${crypto.randomUUID()}`, type, data: { object } });
+  const signature = Stripe.webhooks.generateTestHeaderString({ payload, secret: webhookSecret });
+  return fetch(`http://localhost:${port}/webhooks/stripe`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'stripe-signature': signature }, body: payload,
+  });
+}
+
+test('a Stripe bank transfer is only booked paid on async_payment_succeeded, not on checkout.session.completed', async () => {
+  await withTestServer(async (port) => {
+    const webhookSecret = 'whsec_test_secret';
+    await configureStripeSettings(port, webhookSecret);
+
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 4000);
+    const session = {
+      id: `cs_test_bt_${crypto.randomUUID()}`, client_reference_id: `${eventId}:${userId}`, amount_total: 4000,
+      payment_method_types: ['customer_balance'], payment_status: 'unpaid',
+    };
+
+    const completedRes = await postSignedStripeEvent(port, webhookSecret, 'checkout.session.completed', session);
+    assert.equal(completedRes.status, 200);
+    const { rows: before } = await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.equal(before[0].paid_at, null);
+
+    const succeededRes = await postSignedStripeEvent(port, webhookSecret, 'checkout.session.async_payment_succeeded', { ...session, payment_status: 'paid' });
+    assert.equal(succeededRes.status, 200);
+    const { rows: after } = await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.ok(after[0].paid_at);
+    const { rows: payments } = await query('SELECT method FROM payments WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.deepEqual(payments.map((p) => p.method), ['stripe_bank_transfer']);
   });
 });
 
