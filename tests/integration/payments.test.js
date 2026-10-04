@@ -17,6 +17,7 @@ const {
   setAmountDue, markPaidManually, markUnpaid, recordSuccessfulStripePayment,
 } = await import('../../backend/payments/repository.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
+const { createAccount: createTavernAccount, getAccount: getTavernAccount, setLocked: setTavernLocked } = await import('../../backend/tavern/repository.js');
 
 async function makeSession(userId) {
   const session = await createSession(userId);
@@ -535,7 +536,80 @@ test('a stranger cannot start a checkout session for someone else\'s managed per
   });
 });
 
+async function setTavernEnabled(enabled) {
+  const { rows } = await query('SELECT 1 FROM app_settings LIMIT 1');
+  if (rows.length === 0) await query('INSERT INTO app_settings DEFAULT VALUES');
+  await query('UPDATE app_settings SET tavern_enabled = $1', [enabled]);
+}
+
+test('a Stripe tavern top-up is booked once, even when the webhook is delivered twice', async () => {
+  await withTestServer(async (port) => {
+    const webhookSecret = 'whsec_test_secret';
+    await configureStripeSettings(port, webhookSecret);
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    const account = await createTavernAccount({ eventId, userId });
+    const session = {
+      id: `cs_test_tavern_${crypto.randomUUID()}`, client_reference_id: `tavern:${account.id}`, amount_total: 2000,
+      payment_method_types: ['card'], payment_status: 'paid',
+    };
+
+    assert.equal((await postSignedStripeEvent(port, webhookSecret, 'checkout.session.completed', session)).status, 200);
+    assert.equal((await postSignedStripeEvent(port, webhookSecret, 'checkout.session.completed', session)).status, 200);
+
+    assert.equal((await getTavernAccount(account.id)).balanceCents, 2000);
+    const { rows } = await query('SELECT type, method, amount_cents FROM tavern_transactions WHERE account_id = $1', [account.id]);
+    assert.deepEqual(rows, [{ type: 'topup', method: 'card', amount_cents: 2000 }]);
+    const { rows: payments } = await query('SELECT 1 FROM payments WHERE event_id = $1', [eventId]);
+    assert.equal(payments.length, 0);
+  });
+});
+
+test('a Stripe bank-transfer tavern top-up is only booked on async_payment_succeeded', async () => {
+  await withTestServer(async (port) => {
+    const webhookSecret = 'whsec_test_secret';
+    await configureStripeSettings(port, webhookSecret);
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    const account = await createTavernAccount({ eventId, userId });
+    const session = {
+      id: `cs_test_tavern_bt_${crypto.randomUUID()}`, client_reference_id: `tavern:${account.id}`, amount_total: 5000,
+      payment_method_types: ['customer_balance'], payment_status: 'unpaid',
+    };
+
+    await postSignedStripeEvent(port, webhookSecret, 'checkout.session.completed', session);
+    assert.equal((await getTavernAccount(account.id)).balanceCents, 0);
+    await postSignedStripeEvent(port, webhookSecret, 'checkout.session.async_payment_succeeded', { ...session, payment_status: 'paid' });
+    assert.equal((await getTavernAccount(account.id)).balanceCents, 5000);
+  });
+});
+
+test('POST /tavern/my-topup-session validates add-on switch, amount, account and lock', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    const cookie = await makeSession(userId);
+    const post = (body) => fetch(`http://localhost:${port}/tavern/my-topup-session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body),
+    });
+
+    await setTavernEnabled(false);
+    assert.equal((await post({ amountCents: 2000, method: 'card' })).status, 404);
+
+    await setTavernEnabled(true);
+    assert.equal((await post({ amountCents: 2000, method: 'bitcoin' })).status, 400);
+    assert.equal((await post({ amountCents: 100, method: 'card' })).status, 400);
+    assert.equal((await post({ amountCents: 30000, method: 'card' })).status, 400);
+    assert.equal((await post({ amountCents: 2000, method: 'card' })).status, 404);
+
+    const account = await createTavernAccount({ eventId, userId });
+    await setTavernLocked(account.id, true);
+    assert.equal((await post({ amountCents: 2000, method: 'card' })).status, 409);
+  });
+});
+
 test.after(async () => {
+  await query('UPDATE app_settings SET tavern_enabled = false');
   // payments.confirmed_by has no ON DELETE action, and a single multi-row
   // DELETE FROM users doesn't guarantee the registrations->payments cascade
   // for one test's participant runs before the confirmed_by check for

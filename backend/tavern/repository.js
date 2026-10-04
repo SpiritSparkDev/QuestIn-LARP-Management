@@ -183,15 +183,15 @@ export async function listTransactions(accountId, limit = 50) {
 // Applies a signed amount to an account and records it, atomically: the
 // account row is locked for the duration, so two tablets charging the same
 // account at once can never both pass the balance check.
-async function applyEntry(client, account, { type, amountCents, method, note, items, reversesId, createdBy }) {
+async function applyEntry(client, account, { type, amountCents, method, note, items, reversesId, createdBy, providerReference }) {
   const newBalance = account.balance_cents + amountCents;
   if (amountCents < 0 && newBalance < 0) {
     throw tavernError('Das Guthaben reicht nicht aus.', 'INSUFFICIENT_FUNDS');
   }
   const { rows } = await client.query(
-    `INSERT INTO tavern_transactions (account_id, type, amount_cents, method, note, items, reverses_id, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-    [account.id, type, amountCents, method ?? null, note || null, items ? JSON.stringify(items) : null, reversesId ?? null, createdBy ?? null]
+    `INSERT INTO tavern_transactions (account_id, type, amount_cents, method, note, items, reverses_id, created_by, provider_reference)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    [account.id, type, amountCents, method ?? null, note || null, items ? JSON.stringify(items) : null, reversesId ?? null, createdBy ?? null, providerReference ?? null]
   );
   await client.query('UPDATE tavern_accounts SET balance_cents = $2 WHERE id = $1', [account.id, newBalance]);
   return rows[0];
@@ -209,6 +209,29 @@ export async function topUp(accountId, { amountCents, method, note, createdBy })
     const row = await applyEntry(client, account, { type: 'topup', amountCents, method, note, createdBy });
     return rowToTransaction(row);
   });
+}
+
+// Books an online (Stripe) top-up. Stripe retries webhooks, so a session id
+// that is already booked is a no-op (returns null). Booked even when the
+// account is locked: the money has already arrived.
+export async function topUpFromStripe(accountId, { amountCents, method, providerReference }) {
+  return withTransaction(async (client) => {
+    const account = await lockAccount(client, accountId);
+    const { rows: existing } = await client.query('SELECT 1 FROM tavern_transactions WHERE provider_reference = $1', [providerReference]);
+    if (existing.length > 0) return null;
+    const row = await applyEntry(client, account, { type: 'topup', amountCents, method, note: 'Online-Aufladung', providerReference });
+    return rowToTransaction(row);
+  });
+}
+
+// The account a person tops up themselves: the one for the active event.
+export async function findActiveAccountForUser(userId) {
+  const { rows } = await query(
+    `SELECT a.id, a.event_id, a.locked FROM tavern_accounts a JOIN events e ON e.id = a.event_id
+     WHERE a.user_id = $1 AND e.is_active ORDER BY e.event_date DESC LIMIT 1`,
+    [userId]
+  );
+  return rows[0] ? { id: rows[0].id, eventId: rows[0].event_id, locked: rows[0].locked } : null;
 }
 
 // Charges the listed items at their CURRENT menu price (prices come from the

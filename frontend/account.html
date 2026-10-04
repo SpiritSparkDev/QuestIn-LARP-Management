@@ -422,6 +422,18 @@
     </form>
   </dialog>
 
+  <dialog id="tavern-topup-dialog">
+    <h3>Tavernenkonto aufladen</h3>
+    <label for="tavern-topup-amount">Betrag in Euro (5 bis 200)</label>
+    <input id="tavern-topup-amount" type="number" min="5" max="200" step="1" value="20">
+    <div class="dialog-actions">
+      <button type="button" data-tavern-method="paypal">Per PayPal</button>
+      <button type="button" data-tavern-method="card">Per Kreditkarte</button>
+      <button type="button" data-tavern-method="bank_transfer">Per Banküberweisung (dauert 1–2 Werktage)</button>
+    </div>
+    <button type="button" id="tavern-topup-close" class="btn-ghost">Schließen</button>
+  </dialog>
+
   <dialog id="payment-dialog">
     <h3>Zahlung</h3>
     <p class="lede">Zu zahlen: <strong id="payment-dialog-amount"></strong></p>
@@ -555,6 +567,23 @@
       eventInfoDialog.showModal();
     }
 
+    const tavernTopupDialog = document.getElementById("tavern-topup-dialog");
+    document.getElementById("tavern-topup-close").addEventListener("click", () => tavernTopupDialog.close());
+    tavernTopupDialog.querySelectorAll("[data-tavern-method]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const amountCents = Math.round(Number(document.getElementById("tavern-topup-amount").value) * 100);
+        try {
+          const { url } = await api.post("/tavern/my-topup-session", { amountCents, method: button.dataset.tavernMethod });
+          window.location.href = url;
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
+    });
+    if (new URLSearchParams(window.location.search).get("tavern") === "success") {
+      notify("Danke! Das Guthaben wird gutgeschrieben, sobald die Zahlung bei uns eingegangen ist.", "success");
+    }
+
     // Self-service balance of the Tavernenkonto add-on: shown only when the
     // add-on is on and the person has an account for the active event.
     async function renderDashboardTavernCard() {
@@ -569,7 +598,9 @@
             <div><div class="tavern-balance ${active.balanceCents <= 0 ? "is-empty" : ""}">${escapeHtml(euro)}</div>
             <p class="sub">Guthaben · Tavernen-Nr. ${active.number}</p></div>
             ${active.locked ? '<span class="status-pill status-cancelled">Gesperrt</span>' : ""}
-          </div>`;
+          </div>
+          ${active.locked ? "" : '<button type="button" id="tavern-topup-btn">Aufladen</button>'}`;
+        document.getElementById("tavern-topup-btn")?.addEventListener("click", () => tavernTopupDialog.showModal());
         card.hidden = false;
       } catch {
         card.hidden = true;

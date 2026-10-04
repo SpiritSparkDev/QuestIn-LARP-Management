@@ -9,6 +9,8 @@ import { baseUrl, getTransporterAndFrom, sendPaymentReminderEmail } from '../aut
 import { getStripeClient } from './stripeClient.js';
 import { getPaymentSettingsForUse } from '../paymentSettings/repository.js';
 import { isManagedBy } from '../managedPersons/repository.js';
+import { getAppSettings } from '../appSettings/repository.js';
+import { topUpFromStripe, findActiveAccountForUser } from '../tavern/repository.js';
 import {
   setAmountDue, setDiscount, markPaidManually, markUnpaid, recordSuccessfulStripePayment,
   getRegistrationByPaymentToken, refundPayment, listUnpaidRegistrationsForEvent, setGuestPaymentToken,
@@ -52,7 +54,10 @@ function stripeMethodForSession(session) {
 // Shared by the authenticated (session-owned) and guest (payment-token-owned)
 // checkout routes below -- everything except how the caller was authorized
 // and where Stripe redirects afterward is identical.
-async function createCheckoutSession({ eventId, userId, method, amountDueCents, successUrl, cancelUrl }) {
+async function createCheckoutSession({
+  eventId, userId, method, amountDueCents, successUrl, cancelUrl,
+  clientReferenceId = `${eventId}:${userId}`, productLabel = 'Teilnahmegebühr',
+}) {
   const stripe = await getStripeClient();
   if (!stripe) return null;
   const event = await getEvent(eventId);
@@ -66,11 +71,11 @@ async function createCheckoutSession({ eventId, userId, method, amountDueCents, 
       price_data: {
         currency: 'eur',
         unit_amount: amountDueCents,
-        product_data: { name: `Teilnahmegebühr – ${event?.name ?? 'Event'}` },
+        product_data: { name: `${productLabel} – ${event?.name ?? 'Event'}` },
       },
       quantity: 1,
     }],
-    client_reference_id: `${eventId}:${userId}`,
+    client_reference_id: clientReferenceId,
     success_url: successUrl,
     cancel_url: cancelUrl,
   });
@@ -156,6 +161,42 @@ router.post('/public/registrations/:token/checkout-session', async ({ req, param
   return { status: 200, body: { url: session.url } };
 });
 
+// Participant tops up their own Tavernenkonto online. The webhook below tells
+// these sessions apart from event-fee payments by the "tavern:<accountId>"
+// client_reference_id.
+const TAVERN_REFERENCE_PREFIX = 'tavern:';
+const TAVERN_LEDGER_METHODS = { stripe_card: 'card', stripe_paypal: 'paypal', stripe_bank_transfer: 'bank_transfer' };
+const TAVERN_TOPUP_MIN_CENTS = 500;
+const TAVERN_TOPUP_MAX_CENTS = 20000;
+
+router.post('/tavern/my-topup-session', requireAuth(async ({ req, user }) => {
+  const settings = await getAppSettings();
+  if (!settings.tavernEnabled) return { status: 404, body: { error: 'Das Tavernenkonto ist nicht aktiviert.' } };
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (!CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
+  if (!Number.isInteger(body.amountCents) || body.amountCents < TAVERN_TOPUP_MIN_CENTS || body.amountCents > TAVERN_TOPUP_MAX_CENTS) {
+    return { status: 400, body: { error: 'Der Betrag muss zwischen 5 und 200 Euro liegen.' } };
+  }
+  const account = await findActiveAccountForUser(user.id);
+  if (!account) return { status: 404, body: { error: 'Du hast für das aktuelle Event noch kein Tavernenkonto.' } };
+  if (account.locked) return { status: 409, body: { error: 'Dein Tavernenkonto ist gesperrt.' } };
+
+  const resolvedBaseUrl = await baseUrl();
+  const session = await createCheckoutSession({
+    eventId: account.eventId,
+    userId: user.id,
+    method: body.method,
+    amountDueCents: body.amountCents,
+    clientReferenceId: `${TAVERN_REFERENCE_PREFIX}${account.id}`,
+    productLabel: 'Tavernenkonto-Aufladung',
+    successUrl: `${resolvedBaseUrl}/account.html?tavern=success#dashboard`,
+    cancelUrl: `${resolvedBaseUrl}/account.html?tavern=cancelled#dashboard`,
+  });
+  if (!session) return { status: 502, body: { error: 'Zahlungen sind aktuell nicht konfiguriert.' } };
+  return { status: 200, body: { url: session.url } };
+}));
+
 router.post('/webhooks/stripe', async ({ req }) => {
   const rawBody = await readRawBody(req);
   if (rawBody === null) return { status: 400, body: { error: 'invalid body' } };
@@ -175,8 +216,19 @@ router.post('/webhooks/stripe', async ({ req }) => {
   const session = event.data.object;
   const isPaidNow = event.type === 'checkout.session.completed' && session.payment_status === 'paid';
   if (isPaidNow || event.type === 'checkout.session.async_payment_succeeded') {
-    const [eventId, userId] = (session.client_reference_id || '').split(':');
-    if (eventId && userId) {
+    const reference = session.client_reference_id || '';
+    const [eventId, userId] = reference.split(':');
+    if (reference.startsWith(TAVERN_REFERENCE_PREFIX)) {
+      try {
+        await topUpFromStripe(reference.slice(TAVERN_REFERENCE_PREFIX.length), {
+          amountCents: session.amount_total,
+          method: TAVERN_LEDGER_METHODS[stripeMethodForSession(session)],
+          providerReference: session.id,
+        });
+      } catch (err) {
+        logger.error('failed to book tavern top-up', { error: err.message, reference, sessionId: session.id });
+      }
+    } else if (eventId && userId) {
       try {
         await recordSuccessfulStripePayment({
           eventId, userId,
