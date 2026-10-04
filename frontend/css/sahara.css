@@ -3367,3 +3367,44 @@ dialog.member-dialog {
   padding: 4px 14px 14px;
   border-top: 1px solid var(--outline-variant);
 }
+
+/* Mitglieder: filter bar and sortable column headers */
+.member-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 4px 16px;
+  align-items: end;
+  margin: 4px 0 16px;
+}
+
+.member-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 18px;
+}
+
+th.is-sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+th.is-sortable::after {
+  content: "↕";
+  margin-left: 6px;
+  opacity: 0.3;
+}
+
+th.is-sortable[data-dir="asc"]::after {
+  content: "▲";
+  opacity: 1;
+  color: var(--primary);
+}
+
+th.is-sortable[data-dir="desc"]::after {
+  content: "▼";
+  opacity: 1;
+  color: var(--primary);
+}
