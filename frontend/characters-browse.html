@@ -37,6 +37,7 @@
     </div>
     <div class="browse-toolbar">
       <select id="event-select" aria-label="Event"></select>
+      <input type="search" id="browse-search" class="search" placeholder="Nach Name suchen …" aria-label="Nach Name suchen">
     </div>
     <div id="character-list" class="browse-grid"></div>
   </div></div>
@@ -54,6 +55,7 @@ initSidebarToggle();
 
 const eventSelect = document.getElementById('event-select');
 const listBody = document.getElementById('character-list');
+const searchInput = document.getElementById('browse-search');
 
 let events = [];
 let scSchema = [];
@@ -106,24 +108,38 @@ function addClampToggles() {
   });
 }
 
+let allCharacters = [];
+
+function renderList() {
+  const count = document.getElementById('browse-count');
+  const term = searchInput.value.trim().toLowerCase();
+  const shown = allCharacters.filter((c) => c.name.toLowerCase().includes(term));
+  if (allCharacters.length === 0) {
+    count.textContent = 'Für dieses Event sind noch keine Charaktere angemeldet.';
+  } else if (shown.length === 0) {
+    count.textContent = `Kein Charakter mit „${searchInput.value.trim()}“ gefunden.`;
+  } else {
+    const noun = shown.length === 1 ? 'Charakter' : 'Charaktere';
+    count.textContent = term
+      ? `${shown.length} von ${allCharacters.length} ${allCharacters.length === 1 ? 'Charakter' : 'Charaktere'} gefunden.`
+      : `${shown.length} ${noun} mit öffentlichen Angaben.`;
+  }
+  listBody.innerHTML = shown.map(renderCharacter).join('');
+  addClampToggles();
+}
+
 async function loadCharacters() {
   const eventId = eventSelect.value;
-  const count = document.getElementById('browse-count');
   if (!eventId) { listBody.innerHTML = ''; return; }
   try {
-    const characters = await api.get(`/events/${eventId}/characters/public`);
-    if (characters.length === 0) {
-      count.textContent = 'Für dieses Event sind noch keine Charaktere angemeldet.';
-      listBody.innerHTML = '';
-      return;
-    }
-    count.textContent = `${characters.length} ${characters.length === 1 ? 'Charakter' : 'Charaktere'} mit öffentlichen Angaben.`;
-    listBody.innerHTML = characters.map(renderCharacter).join('');
-    addClampToggles();
+    allCharacters = await api.get(`/events/${eventId}/characters/public`);
+    renderList();
   } catch (err) {
     notify(err.message, 'error');
   }
 }
+
+searchInput.addEventListener('input', renderList);
 
 eventSelect.addEventListener('change', loadCharacters);
 

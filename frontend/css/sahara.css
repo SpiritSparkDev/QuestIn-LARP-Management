@@ -1973,8 +1973,20 @@ tbody tr:last-child td {
 }
 
 .browse-toolbar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 24px;
-  max-width: 480px;
+}
+
+.browse-toolbar select {
+  flex: 1 1 260px;
+  max-width: 380px;
+}
+
+.browse-toolbar .search {
+  flex: 1 1 220px;
+  max-width: 320px;
 }
 
 .browse-grid {
