@@ -85,11 +85,16 @@ remindForm.addEventListener('submit', async (event) => {
     iframe.style.cssText = 'width:100%; border:0; display:block;';
     messageEl.replaceChildren(iframe);
     iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-      body { font-family: 'Manrope', system-ui, sans-serif; margin: 0; padding: 0; color: #3a302a; text-align: center; }
+      body { font-family: 'Manrope', system-ui, sans-serif; margin: 0; padding: 0; color: #3a302a; text-align: center; overflow: hidden; }
+      img { max-width: 100%; height: auto; }
     </style></head><body>${settings.comingSoonMessage}</body></html>`;
+    iframe.scrolling = 'no';
     iframe.addEventListener('load', () => {
       try {
-        iframe.style.height = `${iframe.contentDocument.documentElement.scrollHeight}px`;
+        const doc = iframe.contentDocument.documentElement;
+        // Re-measure whenever content grows (images load after the iframe's load event).
+        new ResizeObserver(() => { iframe.style.height = `${doc.scrollHeight}px`; }).observe(doc);
+        iframe.style.height = `${doc.scrollHeight}px`;
       } catch {
         iframe.style.height = '120px';
       }
