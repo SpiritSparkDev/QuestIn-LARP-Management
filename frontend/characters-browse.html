@@ -77,8 +77,11 @@ function renderCharacter(character) {
     .map((field) => ({ field, text: formatFieldValue(field, character.data[field.key]) }))
     .filter(({ text }) => text !== undefined)
     .map(({ field, text }) => ({ field, text: String(text) }));
-  const shortEntries = entries.filter(({ field, text }) => !isLong(field, text));
-  const longEntries = entries.filter(({ field, text }) => isLong(field, text));
+  // Fields marked "Als Card darstellen" in the schema get their own card.
+  const cardEntries = entries.filter(({ field }) => field.card);
+  const plainEntries = entries.filter(({ field }) => !field.card);
+  const shortEntries = plainEntries.filter(({ field, text }) => !isLong(field, text));
+  const longEntries = plainEntries.filter(({ field, text }) => isLong(field, text));
   const subtitleEntries = shortEntries.filter(({ field }) => field.type !== 'boolean' && field.type !== 'link').slice(0, 2);
   const facts = shortEntries.filter((e) => !subtitleEntries.includes(e));
   const subtitle = subtitleEntries.map(({ text }) => text).join(', ');
@@ -88,6 +91,7 @@ function renderCharacter(character) {
       <div><h3>${escapeHtml(character.name)}</h3>${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}</div>
     </div>
     ${facts.length ? `<dl class="browse-facts">${facts.map(({ field, text }) => `<div><dt>${escapeHtml(field.label || field.key)}</dt><dd>${renderValue(field, text)}</dd></div>`).join('')}</dl>` : ''}
+    ${cardEntries.length ? `<div class="browse-subcards">${cardEntries.map(({ field, text }) => `<div class="browse-subcard${isLong(field, text) ? ' browse-long' : ''}"><h4>${escapeHtml(field.label || field.key)}</h4><p>${isLong(field, text) ? escapeHtml(text) : renderValue(field, text)}</p></div>`).join('')}</div>` : ''}
     ${longEntries.map(({ field, text }) => `<div class="browse-long"><h4>${escapeHtml(field.label || field.key)}</h4><p>${escapeHtml(text)}</p></div>`).join('')}
   </article>`;
 }

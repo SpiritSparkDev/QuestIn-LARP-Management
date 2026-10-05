@@ -2104,6 +2104,44 @@ tbody tr:last-child td {
   display: block;
 }
 
+.browse-subcards {
+  display: grid;
+  gap: 10px;
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.browse-subcard {
+  padding: 10px 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  background: var(--surface-container-low, transparent);
+}
+
+.browse-subcard.browse-long {
+  padding: 10px 12px;
+  border: 1px solid var(--outline-variant);
+}
+
+.browse-subcard h4 {
+  margin: 0 0 4px;
+  font-family: "Manrope", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-surface-variant);
+}
+
+.browse-subcard p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.browse-subcard.browse-long p {
+  white-space: pre-wrap;
+}
+
 .browse-more {
   margin-top: 6px;
   padding: 0;
