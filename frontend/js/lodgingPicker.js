@@ -12,21 +12,24 @@ function formatCents(cents) {
 export function formatTent(details) {
   if (!details) return '';
   const metres = (cm) => (cm / 100).toFixed(1).replace('.', ',');
-  return `${metres(details.lengthCm)} × ${metres(details.widthCm)} m, ${details.tentType === 'it' ? 'IT' : 'OT'}`;
+  const type = details.tentType === 'it' ? 'IT' : 'OT';
+  return details.lengthCm ? `${metres(details.lengthCm)} × ${metres(details.widthCm)} m, ${type}` : `${type}-Zelt`;
 }
 
 // Size and IT/OT of the tent, shown while a pitch card is selected.
 function pitchDetailsFields(details, visible) {
   const metres = (cm) => (cm ? (cm / 100).toString() : '');
   const type = details?.tentType;
+  const hasSize = Boolean(details?.lengthCm);
   return `<span class="lodging-pitch-details" data-pitch-details ${visible ? '' : 'hidden'}>
-    <span class="lodging-pitch-row">
-      <span><input type="number" data-tent-length min="0.5" max="30" step="0.1" value="${metres(details?.lengthCm)}"><label>Länge (m)</label></span>
-      <span><input type="number" data-tent-width min="0.5" max="30" step="0.1" value="${metres(details?.widthCm)}"><label>Breite (m)</label></span>
-    </span>
     <span class="lodging-pitch-type">
       <label><input type="radio" name="tent-type" value="it" data-tent-type ${type === 'it' ? 'checked' : ''}> IT-Zelt (Spielwelt)</label>
       <label><input type="radio" name="tent-type" value="ot" data-tent-type ${type === 'ot' ? 'checked' : ''}> OT-Zelt (außerhalb der Spielwelt)</label>
+    </span>
+    <label class="lodging-pitch-size-toggle"><input type="checkbox" data-tent-size-toggle ${hasSize ? 'checked' : ''}> Maße des Zeltes angeben</label>
+    <span class="lodging-pitch-row" data-tent-size ${hasSize ? '' : 'hidden'}>
+      <span><input type="number" data-tent-length min="0.5" max="30" step="0.1" value="${metres(details?.lengthCm)}"><label>Länge (m)</label></span>
+      <span><input type="number" data-tent-width min="0.5" max="30" step="0.1" value="${metres(details?.widthCm)}"><label>Breite (m)</label></span>
     </span>
   </span>`;
 }
@@ -34,7 +37,7 @@ function pitchDetailsFields(details, visible) {
 function lodgingCard(lodging, selectedId, disabled, selectedDetails) {
   const pitch = lodging.kind === 'pitch';
   const mine = lodging.id === selectedId;
-  const full = lodging.free === 0 && !mine;
+  const full = !lodging.unlimited && lodging.free === 0 && !mine;
   const occupants = lodging.occupants.length
     ? `<ul class="lodging-occupants">${lodging.occupants.map((o) => `<li>${escapeHtml(o.name)}${o.details ? ` <span class="sub">${escapeHtml(formatTent(o.details))}</span>` : ''}</li>`).join('')}</ul>`
     : '<p class="sub">Noch niemand eingetragen.</p>';
@@ -42,7 +45,7 @@ function lodgingCard(lodging, selectedId, disabled, selectedDetails) {
     <input type="radio" name="lodging" value="${escapeHtml(lodging.id)}" ${mine ? 'checked' : ''} ${full || disabled ? 'disabled' : ''}>
     <span class="lodging-card-head">
       <strong>${escapeHtml(lodging.name)}</strong>
-      <span class="lodging-card-beds">${full ? 'voll' : `${lodging.free} von ${lodging.beds} ${pitch ? 'Zeltplätzen' : 'Betten'} frei`}</span>
+      <span class="lodging-card-beds">${full ? 'voll' : (lodging.unlimited ? 'beliebig viele Plätze' : `${lodging.free} von ${lodging.beds} ${pitch ? 'Zeltplätzen' : 'Betten'} frei`)}</span>
     </span>
     ${lodging.priceCents > 0 ? `<span class="sub">${formatCents(lodging.priceCents)} pro ${pitch ? 'Zeltplatz' : 'Bett'}</span>` : (pitch ? '<span class="sub">kostenlos</span>' : '')}
     ${lodging.description ? `<span class="sub">${escapeHtml(lodging.description)}</span>` : ''}
@@ -80,6 +83,9 @@ export function bindLodgingPicker(container) {
     });
   };
   container.querySelectorAll('input[name="lodging"]').forEach((r) => r.addEventListener('change', update));
+  container.querySelectorAll('[data-tent-size-toggle]').forEach((box) => {
+    box.addEventListener('change', () => { box.closest('[data-pitch-details]').querySelector('[data-tent-size]').hidden = !box.checked; });
+  });
   update();
 }
 
@@ -90,11 +96,13 @@ export function collectLodgingChoice(container) {
   if (!checked || !checked.value) return {};
   const fields = checked.closest('.lodging-card').querySelector('[data-pitch-details]');
   if (!fields) return { lodgingId: checked.value };
+  const type = fields.querySelector('[data-tent-type]:checked')?.value;
+  if (!type) return { lodgingId: checked.value, error: 'Bitte angeben, ob dein Zelt ein IT- oder OT-Zelt ist.' };
+  if (!fields.querySelector('[data-tent-size-toggle]').checked) return { lodgingId: checked.value, lodgingDetails: { tentType: type } };
   const length = Number(fields.querySelector('[data-tent-length]').value.replace(',', '.'));
   const width = Number(fields.querySelector('[data-tent-width]').value.replace(',', '.'));
-  const type = fields.querySelector('[data-tent-type]:checked')?.value;
-  if (!(length >= 0.5) || !(width >= 0.5) || !type) {
-    return { lodgingId: checked.value, error: 'Bitte Länge, Breite und Art (IT oder OT) deines Zelts angeben.' };
+  if (!(length >= 0.5) || !(width >= 0.5)) {
+    return { lodgingId: checked.value, error: 'Bitte Länge und Breite deines Zelts angeben oder das Häkchen bei den Maßen entfernen.' };
   }
   return { lodgingId: checked.value, lodgingDetails: { lengthCm: Math.round(length * 100), widthCm: Math.round(width * 100), tentType: type } };
 }

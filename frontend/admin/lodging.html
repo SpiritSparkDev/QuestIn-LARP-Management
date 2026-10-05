@@ -29,7 +29,7 @@
   </button>
   <div class="main"><div class="content">
     <h1>Unterkünfte</h1>
-    <p class="sub">Schlafplätze eines Events: Hütten, Zimmer, Zelte … mit je so vielen Betten, wie hineinpassen – oder Zeltplätze für das eigene Zelt (kostenlos oder gegen Gebühr; Teilnehmer geben Maße und IT/OT an). Teilnehmer buchen bei der Anmeldung ein Bett und sehen, wer wo schläft – so finden Familien und Gruppen zusammen.</p>
+    <p class="sub">Schlafplätze eines Events: Hütten, Zimmer, Zelte … mit je so vielen Betten, wie hineinpassen – oder Zeltplätze für das eigene Zelt (kostenlos oder gegen Gebühr, mit 0 Plätzen beliebig viele; Teilnehmer geben IT/OT und auf Wunsch die Maße an). Teilnehmer buchen bei der Anmeldung ein Bett und sehen, wer wo schläft – so finden Familien und Gruppen zusammen.</p>
 
     <div class="card form-pad" id="disabled-hint" hidden>
       <h2>Add-on nicht aktiviert</h2>
@@ -84,7 +84,7 @@ function renderRows() {
       <div class="extra-row" data-row="${i}">
         <div><input type="text" data-field="name" value="${escapeHtml(l.name)}" placeholder="z.B. Hütte Eiche, Zimmer 12, Zeltwiese Nord" maxlength="100"><label>Bezeichnung</label></div>
         <div><select data-field="kind"><option value="beds" ${l.kind === 'pitch' ? '' : 'selected'}>Betten (Hütte, Zimmer, Zelt)</option><option value="pitch" ${l.kind === 'pitch' ? 'selected' : ''}>Zeltplätze (eigenes Zelt)</option></select><label>Art</label></div>
-        <div><input type="number" data-field="beds" value="${escapeHtml(l.beds)}" min="1" max="500" step="1"><label>${l.kind === 'pitch' ? 'Zeltplätze' : 'Betten'}</label></div>
+        <div><input type="number" data-field="beds" value="${escapeHtml(l.beds)}" min="${l.kind === 'pitch' ? 0 : 1}" max="500" step="1"><label>${l.kind === 'pitch' ? 'Zeltplätze (0 = unbegrenzt)' : 'Betten'}</label></div>
         <div><input type="number" data-field="price" value="${escapeHtml(l.price)}" min="0" step="0.01" placeholder="0,00"><label>Preis (€) pro ${l.kind === 'pitch' ? 'Zeltplatz' : 'Bett'} – 0 = kostenlos</label></div>
         <div class="lodging-row-actions">
           <button type="button" class="btn-sm btn-ghost" data-move="${i}:-1" aria-label="Nach oben">▲</button>
@@ -123,7 +123,7 @@ function renderOverview(list) {
     ? '<p class="sub">Keine Unterkünfte.</p>'
     : list.map((l) => `
       <div class="lodging-overview-row">
-        <p><strong>${escapeHtml(l.name)}</strong> <span class="sub">${l.taken} von ${l.beds} ${l.kind === 'pitch' ? 'Zeltplätzen' : 'Betten'} belegt</span></p>
+        <p><strong>${escapeHtml(l.name)}</strong> <span class="sub">${l.unlimited ? `${l.taken} Zeltplätze belegt (unbegrenzt)` : `${l.taken} von ${l.beds} ${l.kind === 'pitch' ? 'Zeltplätzen' : 'Betten'} belegt`}</span></p>
         ${l.occupants.length ? `<ul class="lodging-occupants">${l.occupants.map((o) => `<li>${escapeHtml(o.name)}${o.details ? ` <span class="sub">${escapeHtml(formatTent(o.details))}</span>` : ''}</li>`).join('')}</ul>` : '<p class="sub">Niemand eingetragen.</p>'}
       </div>`).join('');
 }

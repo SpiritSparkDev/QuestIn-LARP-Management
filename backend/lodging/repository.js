@@ -32,7 +32,8 @@ export async function listLodgings(eventId, { showNames }) {
       beds: l.beds,
       priceCents: l.price_cents,
       taken: sleeping.length,
-      free: Math.max(l.beds - sleeping.length, 0),
+      unlimited: l.kind === 'pitch' && l.beds === 0,
+      free: l.kind === 'pitch' && l.beds === 0 ? null : Math.max(l.beds - sleeping.length, 0),
       occupants: showNames
         ? sleeping.map((o) => ({ userId: o.user_id, name: displayName({ firstName: o.first_name, lastName: o.last_name, nickname: o.nickname }), details: o.lodging_details ?? null }))
         : [],
@@ -67,7 +68,7 @@ export async function replaceLodgings(eventId, list) {
     for (const [index, l] of list.entries()) {
       const name = l.name.trim();
       if (l.id && knownIds.has(l.id)) {
-        if (l.beds < (occupied.get(l.id) ?? 0)) {
+        if (l.beds !== 0 && l.beds < (occupied.get(l.id) ?? 0)) {
           throw lodgingError('LODGING_OCCUPIED', `„${name}“ hat schon ${occupied.get(l.id)} Belegungen und kann nicht auf ${l.beds} Betten verkleinert werden.`);
         }
         const oldKind = existing.find((e) => e.id === l.id).kind;

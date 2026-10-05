@@ -19,7 +19,8 @@ function validateLodgings(lodgings) {
     if (!name || name.length > 100) return 'each lodging needs a name of 1 to 100 characters';
     if (names.has(name)) return 'lodgings must not contain duplicate names';
     names.add(name);
-    if (!Number.isInteger(lodging.beds) || lodging.beds < 1 || lodging.beds > 500) return `lodging "${name}": beds must be an integer from 1 to 500`;
+    const minPlaces = lodging.kind === 'pitch' ? 0 : 1; // a pitch with 0 places is unlimited
+    if (!Number.isInteger(lodging.beds) || lodging.beds < minPlaces || lodging.beds > 500) return `lodging "${name}": beds must be an integer from ${minPlaces} to 500`;
     if (lodging.priceCents !== undefined && (!Number.isInteger(lodging.priceCents) || lodging.priceCents < 0)) return `lodging "${name}": priceCents must be a non-negative integer`;
     if (lodging.kind !== undefined && !['beds', 'pitch'].includes(lodging.kind)) return `lodging "${name}": kind must be "beds" or "pitch"`;
     if (lodging.description !== undefined && typeof lodging.description !== 'string') return `lodging "${name}": description must be a string`;

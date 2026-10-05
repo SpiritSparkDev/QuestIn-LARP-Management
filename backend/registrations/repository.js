@@ -196,25 +196,28 @@ async function resolveLodging(eventId, enabled, lodgingId, details) {
 }
 
 // A tent pitch is booked for the participant's own tent: size and IT/OT.
+// IT or OT is required; the size is optional, but then both length and width.
 function validateTent(details) {
-  const ok = details && typeof details === 'object'
-    && Number.isInteger(details.lengthCm) && details.lengthCm >= 50 && details.lengthCm <= 3000
-    && Number.isInteger(details.widthCm) && details.widthCm >= 50 && details.widthCm <= 3000
-    && ['it', 'ot'].includes(details.tentType);
-  if (!ok) throw extrasError('INVALID_LODGING_DETAILS', 'Bitte Länge, Breite und Art (IT oder OT) des Zelts angeben.');
-  return { lengthCm: details.lengthCm, widthCm: details.widthCm, tentType: details.tentType };
+  const sizeOk = (cm) => Number.isInteger(cm) && cm >= 50 && cm <= 3000;
+  const hasSize = details && (details.lengthCm != null || details.widthCm != null);
+  const ok = details && typeof details === 'object' && ['it', 'ot'].includes(details.tentType)
+    && (!hasSize || (sizeOk(details.lengthCm) && sizeOk(details.widthCm)));
+  if (!ok) throw extrasError('INVALID_LODGING_DETAILS', 'Bitte die Art (IT oder OT) des Zelts angeben – und, falls angegeben, Länge und Breite.');
+  return { tentType: details.tentType, ...(hasSize ? { lengthCm: details.lengthCm, widthCm: details.widthCm } : {}) };
 }
 
 // "4,0 × 3,0 m, IT" for tables and exports.
 export function tentText(details) {
   if (!details) return '';
   const metres = (cm) => (cm / 100).toFixed(1).replace('.', ',');
-  return `${metres(details.lengthCm)} × ${metres(details.widthCm)} m, ${details.tentType === 'it' ? 'IT' : 'OT'}`;
+  const type = details.tentType === 'it' ? 'IT' : 'OT';
+  return details.lengthCm ? `${metres(details.lengthCm)} × ${metres(details.widthCm)} m, ${type}` : `${type}-Zelt`;
 }
 
 // Same transaction/lock rule as assertExtrasCapacity.
 async function assertLodgingCapacity(client, lodging, excludeUserId = null) {
-  if (!lodging) return;
+  // A pitch lodging with 0 places is unlimited.
+  if (!lodging || (lodging.kind === 'pitch' && lodging.beds === 0)) return;
   const { rows } = await client.query(
     `SELECT count(*)::int AS taken FROM registrations
      WHERE lodging_id = $1 AND status = ANY($2::text[]) AND ($3::uuid IS NULL OR user_id <> $3)`,

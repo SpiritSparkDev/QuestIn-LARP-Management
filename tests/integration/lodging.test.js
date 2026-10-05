@@ -113,10 +113,12 @@ test('lodging add-on: free tent pitches need size and IT/OT, beds ignore tent de
     await fetch(`${base}/app-settings`, { method: 'PUT', headers: json(admin.cookie), body: JSON.stringify({ lodgingEnabled: true }) });
     const saved = await fetch(`${base}/events/${eventId}/lodgings`, {
       method: 'PUT', headers: json(admin.cookie),
-      body: JSON.stringify({ lodgings: [{ name: 'Zeltwiese', kind: 'pitch', beds: 1, priceCents: 0 }, { name: 'Hütte', beds: 2 }] }),
+      body: JSON.stringify({ lodgings: [{ name: 'Zeltwiese', kind: 'pitch', beds: 1, priceCents: 0 }, { name: 'Hütte', beds: 2 }, { name: 'Wiese', kind: 'pitch', beds: 0, priceCents: 500 }] }),
     });
     assert.equal(saved.status, 200);
-    const [pitch, hut] = await saved.json();
+    const [pitch, hut, meadow] = await saved.json();
+    assert.equal(meadow.unlimited, true);
+    assert.equal(meadow.free, null);
     assert.equal(pitch.kind, 'pitch');
     assert.equal(hut.kind, 'beds');
 
@@ -141,10 +143,20 @@ test('lodging add-on: free tent pitches need size and IT/OT, beds ignore tent de
     assert.equal(bed.status, 201);
     assert.equal((await query('SELECT lodging_details FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, emil.userId])).rows[0].lodging_details, null);
 
+    // A pitch with 0 places is unlimited; the size is optional but then needs both sides.
+    const fritz = await makeUserAndSession('mitglied', 'Fritz');
+    const gerd = await makeUserAndSession('mitglied', 'Gerd');
+    assert.equal((await register(fritz.cookie, meadow.id, { tentType: 'ot', lengthCm: 300 })).status, 400);
+    assert.equal((await register(fritz.cookie, meadow.id, { tentType: 'ot' })).status, 201);
+    assert.equal((await register(gerd.cookie, meadow.id, { tentType: 'it', lengthCm: 500, widthCm: 400 })).status, 201);
+    assert.equal((await query('SELECT amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, fritz.userId])).rows[0].amount_due_cents, 500);
+    const meadowView = (await (await fetch(`${base}/events/${eventId}/lodgings`, { headers: json(emil.cookie) })).json())[2];
+    assert.equal(meadowView.taken, 2);
+
     // The kind can't change while someone is in.
     const change = await fetch(`${base}/events/${eventId}/lodgings`, {
       method: 'PUT', headers: json(admin.cookie),
-      body: JSON.stringify({ lodgings: [{ id: pitch.id, name: 'Zeltwiese', kind: 'beds', beds: 1 }, { id: hut.id, name: 'Hütte', beds: 2 }] }),
+      body: JSON.stringify({ lodgings: [{ id: pitch.id, name: 'Zeltwiese', kind: 'beds', beds: 1 }, { id: hut.id, name: 'Hütte', beds: 2 }, { id: meadow.id, name: 'Wiese', kind: 'pitch', beds: 0, priceCents: 500 }] }),
     });
     assert.equal(change.status, 409);
 
