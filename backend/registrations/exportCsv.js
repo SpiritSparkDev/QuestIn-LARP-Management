@@ -22,6 +22,7 @@ export function buildParticipantsCsv(participants, { otFields, viewer }) {
     { label: 'Sonderrollen', value: (p) => (p.flags ?? []).join(', ') },
     { label: 'Status', value: (p) => STATUS_LABELS[p.status] ?? p.status },
     { label: 'Teilnahmegruppe', value: (p) => p.priceGroup },
+    { label: 'Extras', value: (p) => p.extrasText ?? '' },
     { label: 'Betrag (€)', value: (p) => euros(p.amountDueCents) },
     { label: 'Rabatt (€)', value: (p) => euros(p.discountCents || null) },
     { label: 'Bezahlt am', value: (p) => dateTime(p.paidAt) },

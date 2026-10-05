@@ -182,6 +182,7 @@
     import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, renderField, collectFieldValues, STATUS_LABELS } from '/js/formFields.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
     import { notify } from '/js/notifications.js';
+    import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary } from '/js/extrasPicker.js';
     initSidebarToggle();
 
     let accountSchema = [];
@@ -703,7 +704,7 @@
       const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Unbekanntes Event';
       const roleLabel = (key) => REGISTER_ROLES.find(([k]) => k === key)?.[1] ?? key;
       const registeredHtml = registered.length
-        ? `<ul>${registered.map((r) => `<li>${escapeHtml(eventName(r.eventId))} <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span> <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></li>`).join('')}</ul>`
+        ? `<ul>${registered.map((r) => `<li>${escapeHtml(eventName(r.eventId))} <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></li>`).join('')}</ul>`
         : '<p class="sub">Dieses Mitglied ist für kein Event angemeldet.</p>';
       const openEvents = allEvents.filter((e) => !registered.some((r) => r.eventId === e.id));
       detailRegistrations.innerHTML = registeredHtml + '<h3>Für ein Event anmelden</h3>' + (openEvents.length === 0
@@ -715,6 +716,7 @@
             <label for="reg-role">Rolle</label>
             <div id="reg-character-wrap"></div>
             <div id="reg-price-wrap"></div>
+            <div id="reg-extras-wrap"></div>
             <div class="settings-actions"><button type="submit">Anmelden</button></div>
           </form>`);
       const form = document.getElementById('register-member-form');
@@ -737,6 +739,9 @@
              <label for="reg-character">Charakter</label>`
           : '';
         const event = allEvents.find((e) => e.id === form.elements['reg-event'].value);
+        const extrasWrap = document.getElementById('reg-extras-wrap');
+        extrasWrap.innerHTML = renderExtrasPicker(event?.extras ?? []);
+        wireExtrasTotal(extrasWrap, event?.extras ?? []);
         const groups = event?.pricing?.groups ?? [];
         document.getElementById('reg-price-wrap').innerHTML = groups.length
           ? `<select id="reg-price">${groups.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select><label for="reg-price">Preisgruppe</label>`
@@ -753,6 +758,7 @@
           conRole: form.elements['reg-role'].value,
           characterId: form.elements['reg-character']?.value || undefined,
           priceGroup: form.elements['reg-price']?.value || undefined,
+          extras: collectExtras(document.getElementById('reg-extras-wrap')),
         };
         try {
           await api.post(`/events/${eventId}/registrations/${editingMemberId}`, payload);

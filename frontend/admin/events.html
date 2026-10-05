@@ -112,6 +112,11 @@
         <div id="price-tiers"></div>
         <button type="button" id="add-price-tier" class="btn-sm">+ Preisstufe hinzufügen</button>
 
+        <h3 class="event-form-section">Zubuchbare Extras <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
+        <p class="sub">Zusatzangebote gegen Aufpreis, z.B. Hüttenplatz oder Fahrzeugstellplatz. Teilnehmer buchen sie mit Menge bei der Anmeldung; der Preis wird zum Anmeldebetrag addiert. Ein Kontingent begrenzt die Gesamtmenge über alle Anmeldungen.</p>
+        <div id="extras-list"></div>
+        <button type="button" id="add-extra" class="btn-sm">+ Extra hinzufügen</button>
+
         <div class="event-form-actions save-bar">
           <button type="button" id="event-cancel-edit" class="btn-ghost">Abbrechen</button>
           <button type="submit">Speichern</button>
@@ -253,6 +258,57 @@ function collectPricing() {
 renderPriceGroups();
 renderPriceTiers();
 
+// Bookable extras. Amounts are edited in euros (strings) and converted to
+// cents on save; `id` is kept for existing extras because registrations
+// refer to it (new ones get theirs from the server).
+const extrasContainer = document.getElementById('extras-list');
+let extras = [];
+
+function renderExtras() {
+  extrasContainer.innerHTML = extras.length > 0
+    ? extras.map((extra, i) => `
+      <div class="extra-row" data-extra-row="${i}">
+        <div><input type="text" data-extra-field="name" value="${escapeHtml(extra.name)}" placeholder="z.B. Hüttenplatz" maxlength="100"><label>Bezeichnung</label></div>
+        <div><input type="number" data-extra-field="price" value="${escapeHtml(extra.price)}" min="0" step="0.01" placeholder="0,00"><label>Preis (€) pro Stück</label></div>
+        <div><input type="number" data-extra-field="capacity" value="${escapeHtml(extra.capacity)}" min="1" step="1" placeholder="unbegrenzt"><label>Kontingent</label></div>
+        <button type="button" class="btn-sm btn-ghost" data-remove-extra="${i}">Entfernen</button>
+        <div class="extra-row-description"><input type="text" data-extra-field="description" value="${escapeHtml(extra.description)}" placeholder="optional, z.B. Bett im Mehrbettzimmer"><label>Beschreibung</label></div>
+      </div>`).join('')
+    : '<p class="sub">Noch keine Extras angelegt.</p>';
+
+  extrasContainer.querySelectorAll('[data-extra-row]').forEach((row) => {
+    const i = Number(row.dataset.extraRow);
+    row.querySelectorAll('[data-extra-field]').forEach((input) => {
+      input.addEventListener('input', () => { extras[i][input.dataset.extraField] = input.value; });
+    });
+  });
+  extrasContainer.querySelectorAll('[data-remove-extra]').forEach((button) => {
+    button.addEventListener('click', () => {
+      extras.splice(Number(button.dataset.removeExtra), 1);
+      renderExtras();
+    });
+  });
+}
+
+document.getElementById('add-extra').addEventListener('click', () => {
+  extras.push({ id: '', name: '', description: '', price: '', capacity: '' });
+  renderExtras();
+});
+
+function collectExtras() {
+  return extras
+    .filter((e) => e.name.trim())
+    .map((e) => ({
+      ...(e.id ? { id: e.id } : {}),
+      name: e.name.trim(),
+      description: e.description.trim(),
+      priceCents: Math.round(Number(e.price || 0) * 100),
+      capacity: e.capacity ? Number(e.capacity) : null,
+    }));
+}
+
+renderExtras();
+
 const guestWidgetMissingCode = document.getElementById('guest-widget-missing-code');
 const guestWidgetReady = document.getElementById('guest-widget-ready');
 const guestWidgetLink = document.getElementById('guest-widget-link');
@@ -393,8 +449,12 @@ function startEdit(eventData) {
     until: t.until,
     amounts: Object.fromEntries(Object.entries(t.amounts ?? {}).map(([g, cents]) => [g, (cents / 100).toString()])),
   }));
+  extras = (eventData.extras ?? []).map((e) => ({
+    id: e.id, name: e.name, description: e.description ?? '', price: (e.priceCents / 100).toString(), capacity: e.capacity ?? '',
+  }));
   renderPriceGroups();
   renderPriceTiers();
+  renderExtras();
   renderGuestWidgetHelp();
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
   showForm();
@@ -406,8 +466,10 @@ function resetForm() {
   form.reset();
   priceGroups = [];
   priceTiers = [];
+  extras = [];
   renderPriceGroups();
   renderPriceTiers();
+  renderExtras();
   renderGuestWidgetHelp();
   form.querySelector('button[type="submit"]').textContent = 'Speichern';
 }
@@ -423,6 +485,7 @@ form.addEventListener('submit', async (event) => {
     clearCapacity: true,
     flags: form.elements.flags.value.split(',').map((f) => f.trim()).filter(Boolean),
     pricing: collectPricing(),
+    extras: collectExtras(),
     directions: form.elements.directions.value,
     briefing: form.elements.briefing.value,
     address: form.elements.address.value,

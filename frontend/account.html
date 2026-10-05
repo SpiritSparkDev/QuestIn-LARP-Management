@@ -190,6 +190,7 @@
                   <h3>Anmeldungsdaten bearbeiten</h3>
                   <p class="lede">Diese Änderung benachrichtigt die Orga und Admin dieses Events per E-Mail.</p>
                   <div id="edit-flags"></div>
+                  <div id="edit-extras"></div>
                   <div id="edit-ot-fields"></div>
                   <div class="dialog-actions">
                     <button type="button" id="edit-ot-save">Speichern</button>
@@ -244,6 +245,7 @@
                     </div>
 
                     <div id="registration-price-group"></div>
+                    <div id="registration-extras"></div>
                     <div id="registration-flags"></div>
 
                     <h3>3. Weitere Angaben zu dieser Anmeldung</h3>
@@ -270,6 +272,7 @@
               <div class="card" id="active-registration-panel" style="display:none;">
                 <h2 id="active-registration-event-name"></h2>
                 <p class="sub" id="active-registration-as"></p>
+                <p class="sub" id="active-registration-extras" style="display:none;"></p>
                 <p>
                   <span class="status-pill" id="active-registration-status"></span>
                   <span class="tag" id="active-registration-nsc-badge" style="display:none;"></span>
@@ -475,6 +478,7 @@
       otFieldValuesEqual,
     } from "/js/formFields.js";
     import { renderRichText } from "/js/richText.js";
+    import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary, sameExtras, formatCents } from "/js/extrasPicker.js";
     import { buildScanCode } from "/js/qrCode.js";
     import { buildEpcQrPayload } from "/js/epcQr.js";
     import { notify } from "/js/notifications.js";
@@ -1257,6 +1261,17 @@
       return value || undefined;
     }
 
+    // Bookable extras of the selected event (hut, vehicle pitch, ...).
+    const registrationExtrasContainer = document.getElementById("registration-extras");
+
+    function renderRegistrationExtras() {
+      const extras = events.find((e) => e.id === eventSelect.value)?.extras ?? [];
+      registrationExtrasContainer.innerHTML = extras.length > 0
+        ? `<h3>Zubuchbare Extras</h3>${renderExtrasPicker(extras)}`
+        : "";
+      wireExtrasTotal(registrationExtrasContainer, extras);
+    }
+
     let selectedRegistrationRole = "sc";
 
     function isNscRoleSelected() {
@@ -1348,6 +1363,7 @@
       updateEventStatusBadge();
       renderRegistrationFlags();
       renderRegistrationPriceGroup();
+      renderRegistrationExtras();
     });
 
     document
@@ -1389,6 +1405,7 @@
       updateEventSelectVisibility();
       renderRegistrationFlags();
       renderRegistrationPriceGroup();
+      renderRegistrationExtras();
     }
 
     async function loadEvents() {
@@ -1409,6 +1426,7 @@
     let editingEventId = null;
 
     const editFlagsContainer = document.getElementById("edit-flags");
+    const editExtrasContainer = document.getElementById("edit-extras");
 
     function openEditOtDialog(eventId) {
       const registration = currentRegistrations.find((r) => r.eventId === eventId);
@@ -1419,6 +1437,12 @@
       editFlagsContainer.innerHTML = flagsField.options.length > 0
         ? renderAccountFieldInput(flagsField, registration.flags ?? [], { idPrefix: "edit-" })
         : "";
+      const eventExtras = event?.extras ?? [];
+      const extrasLocked = Boolean(registration.paidAt) || registration.status === "cancelled";
+      editExtrasContainer.innerHTML = eventExtras.length > 0
+        ? `<h4>Extras</h4>${renderExtrasPicker(eventExtras, registration.extras ?? {}, { disabled: extrasLocked })}${extrasLocked ? '<p class="sub">Die Anmeldung ist bezahlt oder abgesagt – die Extras lassen sich nicht mehr ändern.</p>' : ""}`
+        : "";
+      wireExtrasTotal(editExtrasContainer, eventExtras);
       editOtFieldsContainer.innerHTML = registrationSchema
         .map((field) => renderAccountFieldInput(field, registration[field.key], { idPrefix: "edit-" }))
         .join("");
@@ -1461,15 +1485,23 @@
         payload.flags = collectedFlags ?? [];
       }
 
-      if (Object.keys(payload).length === 0) {
+      const collectedExtras = collectExtras(editExtrasContainer);
+      const extrasChanged = !sameExtras(registration?.extras ?? {}, collectedExtras);
+
+      if (Object.keys(payload).length === 0 && !extrasChanged) {
         editOtDialog.close();
         return;
       }
       try {
-        await api.put(
-          `/events/${editingEventId}/registrations/${currentUserId}/ot-fields`,
-          payload,
-        );
+        if (extrasChanged) {
+          await api.put(`/events/${editingEventId}/registrations/${currentUserId}/extras`, { extras: collectedExtras });
+        }
+        if (Object.keys(payload).length > 0) {
+          await api.put(
+            `/events/${editingEventId}/registrations/${currentUserId}/ot-fields`,
+            payload,
+          );
+        }
         editOtDialog.close();
         notify("Gespeichert.", "success");
         await loadRegistrations();
@@ -1533,6 +1565,11 @@
         // Zusammenstellung von Informationen für die Card im rechten Bereich
       }
 
+      const extrasEl = document.getElementById("active-registration-extras");
+      const extrasText = extrasSummary(activeEvent.extras ?? [], registration.extras);
+      extrasEl.textContent = extrasText ? `Extras: ${extrasText} (${formatCents(registration.extrasCents ?? 0)})` : "";
+      extrasEl.style.display = extrasText ? "" : "none";
+
       const statusLabel = STATUS_LABELS[registration.status] ?? registration.status;
       const statusEl = document.getElementById("active-registration-status");
       statusEl.textContent = statusLabel;
@@ -1595,6 +1632,7 @@
           characterId,
           flags: collectRegistrationFlags(),
           priceGroup: collectRegistrationPriceGroup(),
+          extras: collectExtras(registrationExtrasContainer),
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
         });

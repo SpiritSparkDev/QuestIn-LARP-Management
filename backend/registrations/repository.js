@@ -182,7 +182,54 @@ function resolvePriceGroup(event, priceGroup) {
 
 export const COUNTED_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out'];
 
-export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false } = {}) {
+const MAX_EXTRA_QUANTITY = 20;
+
+function extrasError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+}
+
+// Validates { extraId: quantity } against the event's extras catalog and
+// totals the price. Zero quantities are dropped, so "has a key" = "is booked".
+function resolveExtras(event, requested) {
+  const extras = {};
+  let extrasCents = 0;
+  if (requested === undefined || requested === null) return { extras, extrasCents };
+  if (typeof requested !== 'object' || Array.isArray(requested)) throw extrasError('INVALID_EXTRAS', 'extras must be an object of quantities');
+  for (const [id, quantity] of Object.entries(requested)) {
+    const extra = (event.extras ?? []).find((e) => e.id === id);
+    if (!extra) throw extrasError('INVALID_EXTRAS', 'Unbekanntes Extra.');
+    if (!Number.isInteger(quantity) || quantity < 0 || quantity > MAX_EXTRA_QUANTITY) {
+      throw extrasError('INVALID_EXTRAS', `Menge für „${extra.name}“ muss eine Zahl von 0 bis ${MAX_EXTRA_QUANTITY} sein.`);
+    }
+    if (quantity === 0) continue;
+    extras[id] = quantity;
+    extrasCents += quantity * extra.priceCents;
+  }
+  return { extras, extrasCents };
+}
+
+// Must run inside a transaction that holds the event row lock, so two people
+// booking the last cabin at once can't both get it. `excludeUserId` leaves the
+// person's own current booking out when they change it.
+async function assertExtrasCapacity(client, event, extras, excludeUserId = null) {
+  for (const extra of event.extras ?? []) {
+    const wanted = extras[extra.id] ?? 0;
+    if (!wanted || extra.capacity == null) continue;
+    const { rows } = await client.query(
+      `SELECT COALESCE(SUM((extras ->> $2::text)::int), 0)::int AS booked
+       FROM registrations WHERE event_id = $1 AND status = ANY($3::text[]) AND ($4::uuid IS NULL OR user_id <> $4)`,
+      [event.id, extra.id, COUNTED_STATUSES, excludeUserId]
+    );
+    const left = Math.max(extra.capacity - rows[0].booked, 0);
+    if (wanted > left) {
+      throw extrasError('EXTRA_SOLD_OUT', left === 0 ? `„${extra.name}“ ist ausgebucht.` : `„${extra.name}“ ist nur noch ${left}× verfügbar.`);
+    }
+  }
+}
+
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, extras: requestedExtras } = {}) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -227,6 +274,8 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId);
   const resolvedFlags = resolveFlags(event.flags, flags);
   const resolvedPrice = resolvePriceGroup(event, priceGroup);
+  const { extras: resolvedExtras, extrasCents } = resolveExtras(event, requestedExtras);
+  const amountDueCents = resolvedPrice.priceListCents != null ? resolvedPrice.priceListCents + extrasCents : (extrasCents > 0 ? extrasCents : null);
 
   const schema = await getRegistrationFieldSchema();
   const data = {};
@@ -246,16 +295,18 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
         );
         if (countRows[0].count >= capacity) status = 'waitlisted';
       }
+      await assertExtrasCapacity(client, event, resolvedExtras);
       const { rows } = await client.query(
-        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14)
-         RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, waiver_version_accepted, waiver_accepted_at`,
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17)
+         RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, waiver_version_accepted, waiver_accepted_at, extras, extras_cents`,
         [
           userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags,
           resolvedPrice.priceGroup, resolvedPrice.priceTier, resolvedPrice.priceListCents,
           encryptFieldBlob(data), status,
           waiverAccepted === true ? appSettings.waiverVersion : null,
           waiverAccepted === true ? new Date() : null,
+          amountDueCents, JSON.stringify(resolvedExtras), extrasCents,
         ]
       );
       return rows[0];
@@ -287,6 +338,39 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
     }
     throw err;
   }
+}
+
+// Changes the extras of an existing registration and moves amount_due by the
+// price difference (so a manual amount/discount the admin set stays intact).
+// Locked once the registration is paid or cancelled; after the event date only
+// staff may still change it.
+export async function updateRegistrationExtras(eventId, userId, requested, { staff = false } = {}) {
+  const event = await getEvent(eventId);
+  if (!event) throw extrasError('EVENT_NOT_FOUND', 'event not found');
+  const resolved = resolveExtras(event, requested);
+  return withTransaction(async (client) => {
+    await client.query('SELECT 1 FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+    const { rows } = await client.query(
+      `SELECT r.status, r.paid_at, r.extras_cents, e.event_date < CURRENT_DATE AS past
+       FROM registrations r JOIN events e ON e.id = r.event_id
+       WHERE r.event_id = $1 AND r.user_id = $2 FOR UPDATE OF r`,
+      [eventId, userId]
+    );
+    if (rows.length === 0) throw extrasError('REGISTRATION_NOT_FOUND', 'registration not found');
+    const current = rows[0];
+    if (current.status === 'cancelled') throw extrasError('EXTRAS_LOCKED', 'Die Anmeldung ist abgesagt.');
+    if (current.paid_at) throw extrasError('EXTRAS_LOCKED', 'Die Anmeldung ist bereits bezahlt – Extras lassen sich nicht mehr ändern.');
+    if (current.past && !staff) throw extrasError('EXTRAS_LOCKED', 'Das Event hat bereits stattgefunden.');
+    await assertExtrasCapacity(client, event, resolved.extras, userId);
+    const { rows: updated } = await client.query(
+      `UPDATE registrations SET extras = $3, extras_cents = $4,
+         amount_due_cents = CASE WHEN amount_due_cents IS NULL AND $4 = 0 THEN NULL ELSE GREATEST(COALESCE(amount_due_cents, 0) + $5, 0) END
+       WHERE event_id = $1 AND user_id = $2
+       RETURNING extras, extras_cents, amount_due_cents`,
+      [eventId, userId, JSON.stringify(resolved.extras), resolved.extrasCents, resolved.extrasCents - current.extras_cents]
+    );
+    return { extras: updated[0].extras, extrasCents: updated[0].extras_cents, amountDueCents: updated[0].amount_due_cents };
+  });
 }
 
 export async function setConRole(eventId, userId, conRole, characterId, nscAvailable, nscCharacterId, flags, requestingUser) {
@@ -446,12 +530,20 @@ export async function maybePromoteFromWaitlist(eventId) {
   })();
 }
 
+// "2× Hütte, 1× Stellplatz" for tables and exports.
+function extrasText(catalog, booked) {
+  return Object.entries(booked ?? {})
+    .map(([id, quantity]) => `${quantity}× ${catalog.find((e) => e.id === id)?.name ?? 'Unbekanntes Extra'}`)
+    .join(', ');
+}
+
 export async function listParticipantsForEvent(eventId, { schema = [], viewer } = {}) {
+  const eventExtras = (await getEvent(eventId))?.extras ?? [];
   const otKeys = (viewer?.group?.accountFields ?? []).filter((key) => key !== 'group');
 
   const { rows: registrations } = await query(
     `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.discount_cents, latest_payment.method AS payment_method,
+            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, latest_payment.method AS payment_method,
             latest_payment.refund_amount_cents, latest_payment.refunded_at,
             r.waiver_version_accepted, r.waiver_accepted_at,
             u.account_data_enc, r.registration_data_enc
@@ -528,6 +620,9 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       priceGroup: r.price_group,
       priceTier: r.price_tier,
       discountCents: r.discount_cents,
+      extras: r.extras,
+      extrasCents: r.extras_cents,
+      extrasText: extrasText(eventExtras, r.extras),
       paymentMethod: r.payment_method,
       refundAmountCents: r.refund_amount_cents,
       refundedAt: r.refunded_at,
@@ -551,6 +646,9 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     priceGroup: null,
     priceTier: null,
     discountCents: 0,
+    extras: {},
+    extrasCents: 0,
+    extrasText: '',
     paymentMethod: null,
     refundAmountCents: null,
     refundedAt: null,
@@ -596,7 +694,7 @@ export async function getScanLookup(eventId, userId) {
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
     `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.waiver_version_accepted, r.waiver_accepted_at,
+            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.waiver_version_accepted, r.waiver_accepted_at, r.extras, r.extras_cents,
             r.registration_data_enc, c.name AS character_name, nc.name AS nsc_character_name
      FROM registrations r
      JOIN events e ON e.id = r.event_id
@@ -624,6 +722,8 @@ export async function listRegistrationsForUser(userId) {
     paidAt: r.paid_at,
     priceGroup: r.price_group,
     priceTier: r.price_tier,
+    extras: r.extras,
+    extrasCents: r.extras_cents,
     waiverVersionAccepted: r.waiver_version_accepted,
     waiverAcceptedAt: r.waiver_accepted_at,
     paymentReference: buildPaymentReference(r.event_id, userId),

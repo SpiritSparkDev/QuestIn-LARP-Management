@@ -83,8 +83,8 @@ export async function getMember(id) {
     [id]
   );
   member.characters = characterRows.map((r) => ({ id: r.id, name: r.name, class: r.class, eventId: r.event_id, eventName: r.event_name }));
-  const { rows: registrationRows } = await query('SELECT event_id, status, con_role FROM registrations WHERE user_id = $1', [id]);
-  member.registrations = registrationRows.map((r) => ({ eventId: r.event_id, status: r.status, conRole: r.con_role }));
+  const { rows: registrationRows } = await query('SELECT event_id, status, con_role, extras FROM registrations WHERE user_id = $1', [id]);
+  member.registrations = registrationRows.map((r) => ({ eventId: r.event_id, status: r.status, conRole: r.con_role, extras: r.extras }));
   return member;
 }
 

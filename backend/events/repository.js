@@ -1,8 +1,9 @@
+import crypto from 'node:crypto';
 import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, pricing, directions, briefing, address, maps_url, osm_url, is_active, created_at';
+const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, created_at';
 
 // Trims, drops empty strings, and deduplicates while preserving first-seen
 // order -- the admin-facing comma-separated textfield can easily produce
@@ -47,6 +48,19 @@ function normalizePricing(pricing) {
   return { groups, tiers: normalizedTiers };
 }
 
+// Keeps an extra's id when it has one (registrations refer to it), otherwise
+// mints one. Shape validation already happened in events/routes.js.
+function normalizeExtras(extras) {
+  if (!Array.isArray(extras)) return [];
+  return extras.map((e) => ({
+    id: typeof e.id === 'string' && e.id ? e.id : crypto.randomUUID(),
+    name: String(e.name).trim(),
+    description: typeof e.description === 'string' ? e.description.trim() : '',
+    priceCents: e.priceCents,
+    capacity: e.capacity ?? null,
+  }));
+}
+
 // Blank text counts as "not set" so the dashboard's show-only-if-present
 // check can be a plain truthiness test.
 function normalizeText(value) {
@@ -54,12 +68,12 @@ function normalizeText(value) {
   return value.trim() === '' ? null : value;
 }
 
-export async function createEvent({ name, eventDate, code, capacity, flags, pricing, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function createEvent({ name, eventDate, code, capacity, flags, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, directions, briefing, address, maps_url, osm_url)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING ${SELECT_COLUMNS}`,
-    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl)]
+    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), JSON.stringify(normalizeExtras(extras)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl)]
   );
   return rows[0];
 }
@@ -87,7 +101,7 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity, flags, pricing, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity, flags, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   // code/capacity are the fields a caller can legitimately want to CLEAR
   // (empty string / "unbegrenzt") rather than just omit -- COALESCE alone
   // can't tell those apart, since both arrive as a falsy value. $6/$7
@@ -107,7 +121,8 @@ export async function updateEvent(id, { name, eventDate, code, capacity, clearCa
        briefing = CASE WHEN $12 THEN $13 ELSE briefing END,
        address = CASE WHEN $14 THEN $15 ELSE address END,
        maps_url = CASE WHEN $16 THEN $17 ELSE maps_url END,
-       osm_url = CASE WHEN $18 THEN $19 ELSE osm_url END
+       osm_url = CASE WHEN $18 THEN $19 ELSE osm_url END,
+       extras = COALESCE($20, extras)
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
     [
@@ -120,6 +135,7 @@ export async function updateEvent(id, { name, eventDate, code, capacity, clearCa
       address !== undefined, normalizeText(address),
       mapsUrl !== undefined, normalizeText(mapsUrl),
       osmUrl !== undefined, normalizeText(osmUrl),
+      extras !== undefined ? JSON.stringify(normalizeExtras(extras)) : null,
     ]
   );
   return rows[0] ?? null;

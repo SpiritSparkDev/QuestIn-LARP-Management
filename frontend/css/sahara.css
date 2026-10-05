@@ -4224,6 +4224,23 @@ th.is-sortable[data-dir="desc"]::after {
 /* ---------- Event form: price groups, tiers, guest widget ---------- */
 
 .price-group-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.extra-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) minmax(120px, 1fr) minmax(120px, 1fr) auto;
+  gap: 8px 12px;
+  align-items: start;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--outline-variant);
+}
+.extra-row-description { grid-column: 1 / -1; }
+.extras-picker-row { margin-bottom: 14px; }
+.extras-picker-row input[type="number"] { max-width: 120px; }
+.extras-picker-row p.sub { margin: 2px 0 0; }
+@media (max-width: 700px) {
+  .extra-row { grid-template-columns: 1fr 1fr; }
+  .extra-row > div:first-child { grid-column: 1 / -1; }
+}
 .price-group-row input { max-width: 240px; }
 .price-tier-row {
   display: flex; flex-wrap: wrap; align-items: end; gap: 8px 16px;

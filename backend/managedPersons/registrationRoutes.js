@@ -28,7 +28,7 @@ router.post('/managed-persons/:id/events/:eventId/register', requireAuth(async (
   try {
     const registration = await registerForEvent(
       person.id, params.eventId, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId,
-      body.flags, body.priceGroup, body.otFields, requestingUser, body.waiverAccepted
+      body.flags, body.priceGroup, body.otFields, requestingUser, body.waiverAccepted, { extras: body.extras }
     );
     return { status: 201, body: registration };
   } catch (err) {
@@ -43,7 +43,8 @@ router.post('/managed-persons/:id/events/:eventId/register', requireAuth(async (
     }
     if (err.code === 'INVALID_NSC_AVAILABILITY') return { status: 400, body: { error: err.message } };
     if (err.code === 'INVALID_FLAG') return { status: 400, body: { error: err.message } };
-    if (err.code === 'INVALID_PRICE_GROUP') return { status: 400, body: { error: err.message } };
+    if (err.code === 'INVALID_PRICE_GROUP' || err.code === 'INVALID_EXTRAS') return { status: 400, body: { error: err.message } };
+    if (err.code === 'EXTRA_SOLD_OUT') return { status: 409, body: { error: err.message } };
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
     if (err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };

@@ -163,6 +163,7 @@
               </div>
 
               <div id="registration-price-group"></div>
+              <div id="registration-extras"></div>
               <div id="registration-flags"></div>
 
               <h3>3. Weitere Angaben</h3>
@@ -202,6 +203,7 @@
       otFieldValuesEqual,
     } from "/js/formFields.js";
     import { renderRichText } from "/js/richText.js";
+    import { renderExtrasPicker, collectExtras, wireExtrasTotal } from "/js/extrasPicker.js";
     import { notify } from "/js/notifications.js";
 
     const managedPersonId = new URLSearchParams(window.location.search).get("id");
@@ -597,6 +599,12 @@
       const value = collectAccountFieldValues(registrationPriceGroupContainer, [priceGroupFieldFor(events.find((e) => e.id === eventSelect.value))]).priceGroup;
       return value || undefined;
     }
+    const registrationExtrasContainer = document.getElementById("registration-extras");
+    function renderRegistrationExtras() {
+      const extras = events.find((e) => e.id === eventSelect.value)?.extras ?? [];
+      registrationExtrasContainer.innerHTML = extras.length > 0 ? `<h3>Zubuchbare Extras</h3>${renderExtrasPicker(extras)}` : "";
+      wireExtrasTotal(registrationExtrasContainer, extras);
+    }
     function isNscRoleSelected() { return selectedRegistrationRole === "nsc"; }
 
     [...document.querySelectorAll("#registration-role-tabs .role-card")].forEach((btn) => {
@@ -639,6 +647,7 @@
     eventSelect.addEventListener("change", () => {
       renderRegistrationFlags();
       renderRegistrationPriceGroup();
+      renderRegistrationExtras();
     });
 
     async function loadEvents() {
@@ -646,6 +655,7 @@
       eventSelect.innerHTML = renderEventOptions(events);
       renderRegistrationFlags();
       renderRegistrationPriceGroup();
+      renderRegistrationExtras();
     }
 
     async function loadRegistrationWaiver() {
@@ -770,6 +780,7 @@
           conRole, characterId,
           flags: collectRegistrationFlags(),
           priceGroup: collectRegistrationPriceGroup(),
+          extras: collectExtras(registrationExtrasContainer),
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
         });

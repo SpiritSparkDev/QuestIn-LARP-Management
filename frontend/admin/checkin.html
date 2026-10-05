@@ -210,6 +210,7 @@ function allColumns() {
     };
   });
   const rest = [
+    { id: 'extras', label: 'Extras', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.extrasText ?? '') },
     { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
     { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-stack', render: renderPaymentStatusCell },
     { id: 'status', label: 'Status', track: '130px', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span>` },

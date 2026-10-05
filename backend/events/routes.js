@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEvent } from './repository.js';
+import { query } from '../db.js';
 import { maybePromoteFromWaitlist } from '../registrations/repository.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -68,10 +69,31 @@ function validatePricing(pricing) {
   return null;
 }
 
+// Same philosophy as validatePricing: the extras editor builds this
+// structure, so a malformed submission is a bug and gets a specific message.
+function validateExtras(extras) {
+  if (!Array.isArray(extras) || extras.length > 50) return 'extras must be an array of at most 50 entries';
+  const names = new Set();
+  for (const extra of extras) {
+    if (typeof extra !== 'object' || extra === null) return 'each extra must be an object';
+    const name = typeof extra.name === 'string' ? extra.name.trim() : '';
+    if (!name || name.length > 100) return 'each extra needs a name of 1 to 100 characters';
+    if (names.has(name)) return 'extras must not contain duplicate names';
+    names.add(name);
+    if (!Number.isInteger(extra.priceCents) || extra.priceCents < 0) return `extra "${name}": priceCents must be a non-negative integer`;
+    if (extra.capacity !== undefined && extra.capacity !== null && (!Number.isInteger(extra.capacity) || extra.capacity < 1)) {
+      return `extra "${name}": capacity must be a positive integer or null`;
+    }
+    if (extra.description !== undefined && typeof extra.description !== 'string') return `extra "${name}": description must be a string`;
+    if (extra.id !== undefined && typeof extra.id !== 'string') return `extra "${name}": id must be a string`;
+  }
+  return null;
+}
+
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, code, capacity, flags, pricing, directions, briefing, address, mapsUrl, osmUrl } = body;
+  const { name, eventDate, code, capacity, flags, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
@@ -85,9 +107,13 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
     const pricingError = validatePricing(pricing);
     if (pricingError) return { status: 400, body: { error: pricingError } };
   }
+  if (extras !== undefined) {
+    const extrasError = validateExtras(extras);
+    if (extrasError) return { status: 400, body: { error: extrasError } };
+  }
   const urlError = validateMapUrls({ mapsUrl, osmUrl });
   if (urlError) return { status: 400, body: { error: urlError } };
-  const event = await createEvent({ name, eventDate, code, capacity, flags, pricing, directions, briefing, address, mapsUrl, osmUrl });
+  const event = await createEvent({ name, eventDate, code, capacity, flags, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
   return { status: 201, body: event };
 })));
 
@@ -115,10 +141,23 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
     const pricingError = validatePricing(body.pricing);
     if (pricingError) return { status: 400, body: { error: pricingError } };
   }
+  if (body.extras !== undefined) {
+    const extrasError = validateExtras(body.extras);
+    if (extrasError) return { status: 400, body: { error: extrasError } };
+  }
   const urlError = validateMapUrls(body);
   if (urlError) return { status: 400, body: { error: urlError } };
   const before = await getEvent(params.id);
   if (!before) return { status: 404, body: { error: 'event not found' } };
+  // An extra that is already booked can't disappear -- registrations refer to it.
+  if (body.extras !== undefined) {
+    const keptIds = new Set(body.extras.map((e) => e.id).filter(Boolean));
+    for (const old of before.extras ?? []) {
+      if (keptIds.has(old.id)) continue;
+      const { rows } = await query('SELECT 1 FROM registrations WHERE event_id = $1 AND extras ? $2 LIMIT 1', [params.id, old.id]);
+      if (rows.length > 0) return { status: 409, body: { error: `„${old.name}“ ist bereits gebucht und kann nicht entfernt werden.` } };
+    }
+  }
   const event = await updateEvent(params.id, body);
 
   const effective = (c) => (c === null ? Infinity : c);
