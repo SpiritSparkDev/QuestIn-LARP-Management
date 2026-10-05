@@ -4261,6 +4261,8 @@ th.is-sortable[data-dir="desc"]::after {
 .lodging-occupants { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
 .lodging-pitch-details { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
 .lodging-pitch-details[hidden] { display: none; }
+.lodging-default-toggle { margin: 0; text-transform: none; letter-spacing: normal; font-weight: 400; font-size: 13px; }
+.lodging-default-toggle input { display: inline-block; vertical-align: middle; width: auto; margin: 0 6px 0 0; }
 .lodging-pitch-row { display: flex; gap: 12px; }
 .lodging-pitch-row[hidden] { display: none; }
 .lodging-pitch-size-toggle { margin: 0; text-transform: none; letter-spacing: normal; font-weight: 400; font-size: 13px; }

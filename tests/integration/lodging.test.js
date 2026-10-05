@@ -113,10 +113,22 @@ test('lodging add-on: free tent pitches need size and IT/OT, beds ignore tent de
     await fetch(`${base}/app-settings`, { method: 'PUT', headers: json(admin.cookie), body: JSON.stringify({ lodgingEnabled: true }) });
     const saved = await fetch(`${base}/events/${eventId}/lodgings`, {
       method: 'PUT', headers: json(admin.cookie),
-      body: JSON.stringify({ lodgings: [{ name: 'Zeltwiese', kind: 'pitch', beds: 1, priceCents: 0 }, { name: 'Hütte', beds: 2 }, { name: 'Wiese', kind: 'pitch', beds: 0, priceCents: 500 }] }),
+      body: JSON.stringify({ lodgings: [{ name: 'Zeltwiese', kind: 'pitch', beds: 1, priceCents: 0, isDefault: true }, { name: 'Hütte', beds: 2 }, { name: 'Wiese', kind: 'pitch', beds: 0, priceCents: 500 }] }),
     });
     assert.equal(saved.status, 200);
     const [pitch, hut, meadow] = await saved.json();
+    assert.deepEqual([pitch.isDefault, hut.isDefault, meadow.isDefault], [true, false, false]);
+    const twoDefaults = await fetch(`${base}/events/${eventId}/lodgings`, {
+      method: 'PUT', headers: json(admin.cookie),
+      body: JSON.stringify({ lodgings: [{ id: pitch.id, name: 'Zeltwiese', kind: 'pitch', beds: 1, isDefault: true }, { id: hut.id, name: 'Hütte', beds: 2, isDefault: true }, { id: meadow.id, name: 'Wiese', kind: 'pitch', beds: 0, priceCents: 500 }] }),
+    });
+    assert.equal(twoDefaults.status, 400);
+    // Moving the default to another lodging works in one save.
+    const moved = await (await fetch(`${base}/events/${eventId}/lodgings`, {
+      method: 'PUT', headers: json(admin.cookie),
+      body: JSON.stringify({ lodgings: [{ id: pitch.id, name: 'Zeltwiese', kind: 'pitch', beds: 1 }, { id: hut.id, name: 'Hütte', beds: 2 }, { id: meadow.id, name: 'Wiese', kind: 'pitch', beds: 0, priceCents: 500, isDefault: true }] }),
+    })).json();
+    assert.deepEqual(moved.map((l) => l.isDefault), [false, false, true]);
     assert.equal(meadow.unlimited, true);
     assert.equal(meadow.free, null);
     assert.equal(pitch.kind, 'pitch');

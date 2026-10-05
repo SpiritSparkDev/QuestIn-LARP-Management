@@ -12,7 +12,7 @@ function lodgingError(code, message) {
 // who sleeps there, so families and groups can find each other.
 export async function listLodgings(eventId, { showNames }) {
   const { rows: lodgings } = await query(
-    'SELECT id, name, description, beds, price_cents, kind FROM event_lodgings WHERE event_id = $1 ORDER BY position, name',
+    'SELECT id, name, description, beds, price_cents, kind, is_default FROM event_lodgings WHERE event_id = $1 ORDER BY position, name',
     [eventId]
   );
   const { rows: occupants } = await query(
@@ -29,6 +29,7 @@ export async function listLodgings(eventId, { showNames }) {
       name: l.name,
       description: l.description,
       kind: l.kind,
+      isDefault: l.is_default,
       beds: l.beds,
       priceCents: l.price_cents,
       taken: sleeping.length,
@@ -65,6 +66,7 @@ export async function replaceLodgings(eventId, list) {
     // Free the names first so renaming/reordering can't trip the unique constraint.
     await client.query('DELETE FROM event_lodgings WHERE event_id = $1 AND NOT (id = ANY($2::uuid[]))', [eventId, [...keepIds].filter((id) => existing.some((e) => e.id === id))]);
     const knownIds = new Set(existing.map((e) => e.id));
+    await client.query('UPDATE event_lodgings SET is_default = false WHERE event_id = $1', [eventId]);
     for (const [index, l] of list.entries()) {
       const name = l.name.trim();
       if (l.id && knownIds.has(l.id)) {
@@ -82,11 +84,11 @@ export async function replaceLodgings(eventId, list) {
       const name = l.name.trim();
       const description = (l.description ?? '').trim();
       if (l.id && knownIds.has(l.id)) {
-        await client.query('UPDATE event_lodgings SET name = $2, description = $3, price_cents = $4, beds = $5, position = $6, kind = $7 WHERE id = $1', [l.id, name, description, l.priceCents ?? 0, l.beds, index, l.kind ?? 'beds']);
+        await client.query('UPDATE event_lodgings SET name = $2, description = $3, price_cents = $4, beds = $5, position = $6, kind = $7, is_default = $8 WHERE id = $1', [l.id, name, description, l.priceCents ?? 0, l.beds, index, l.kind ?? 'beds', l.isDefault === true]);
       } else {
         await client.query(
-          'INSERT INTO event_lodgings (event_id, name, description, beds, price_cents, position, kind) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [eventId, name, description, l.beds, l.priceCents ?? 0, index, l.kind ?? 'beds']
+          'INSERT INTO event_lodgings (event_id, name, description, beds, price_cents, position, kind, is_default) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [eventId, name, description, l.beds, l.priceCents ?? 0, index, l.kind ?? 'beds', l.isDefault === true]
         );
       }
     }

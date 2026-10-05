@@ -91,6 +91,7 @@ function renderRows() {
           <button type="button" class="btn-sm btn-ghost" data-move="${i}:1" aria-label="Nach unten">▼</button>
           <button type="button" class="btn-sm btn-ghost" data-remove="${i}">Entfernen</button>
         </div>
+        <div class="extra-row-description"><label class="lodging-default-toggle"><input type="checkbox" data-field="isDefault" ${l.isDefault ? 'checked' : ''}> Standard-Unterbringung – wird bei der Anmeldung immer angezeigt und vorausgewählt, die anderen erst nach „Unterbringung mieten“</label></div>
         <div class="extra-row-description"><input type="text" data-field="description" value="${escapeHtml(l.description)}" placeholder="optional, z.B. mit Ofen, barrierefrei"><label>Beschreibung</label></div>
       </div>`).join('')
     : '<p class="sub">Für dieses Event sind noch keine Unterkünfte angelegt.</p>';
@@ -98,7 +99,13 @@ function renderRows() {
   rowsContainer.querySelectorAll('[data-row]').forEach((row) => {
     const i = Number(row.dataset.row);
     row.querySelectorAll('[data-field]').forEach((input) => {
-      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
+      input.addEventListener(input.tagName === 'SELECT' || input.type === 'checkbox' ? 'change' : 'input', () => {
+        if (input.dataset.field === 'isDefault') {
+          // Only one default per event.
+          lodgings.forEach((l, index) => { l.isDefault = index === i && input.checked; });
+          renderRows();
+          return;
+        }
         lodgings[i][input.dataset.field] = input.value;
         if (input.dataset.field === 'kind') renderRows();
       });
@@ -123,13 +130,13 @@ function renderOverview(list) {
     ? '<p class="sub">Keine Unterkünfte.</p>'
     : list.map((l) => `
       <div class="lodging-overview-row">
-        <p><strong>${escapeHtml(l.name)}</strong> <span class="sub">${l.unlimited ? `${l.taken} Zeltplätze belegt (unbegrenzt)` : `${l.taken} von ${l.beds} ${l.kind === 'pitch' ? 'Zeltplätzen' : 'Betten'} belegt`}</span></p>
+        <p><strong>${escapeHtml(l.name)}</strong>${l.isDefault ? ' <span class="tag">Standard</span>' : ''} <span class="sub">${l.unlimited ? `${l.taken} Zeltplätze belegt (unbegrenzt)` : `${l.taken} von ${l.beds} ${l.kind === 'pitch' ? 'Zeltplätzen' : 'Betten'} belegt`}</span></p>
         ${l.occupants.length ? `<ul class="lodging-occupants">${l.occupants.map((o) => `<li>${escapeHtml(o.name)}${o.details ? ` <span class="sub">${escapeHtml(formatTent(o.details))}</span>` : ''}</li>`).join('')}</ul>` : '<p class="sub">Niemand eingetragen.</p>'}
       </div>`).join('');
 }
 
 function adopt(list) {
-  lodgings = list.map((l) => ({ id: l.id, kind: l.kind, name: l.name, description: l.description, beds: String(l.beds), price: (l.priceCents / 100).toString() }));
+  lodgings = list.map((l) => ({ id: l.id, kind: l.kind, isDefault: l.isDefault, name: l.name, description: l.description, beds: String(l.beds), price: (l.priceCents / 100).toString() }));
   renderRows();
   renderOverview(list);
 }
@@ -139,7 +146,7 @@ async function loadLodgings() {
 }
 
 document.getElementById('add-lodging').addEventListener('click', () => {
-  lodgings.push({ id: '', kind: 'beds', name: '', description: '', beds: '2', price: '' });
+  lodgings.push({ id: '', kind: 'beds', isDefault: false, name: '', description: '', beds: '2', price: '' });
   renderRows();
 });
 
@@ -149,6 +156,7 @@ document.getElementById('save-lodgings').addEventListener('click', async () => {
     .map((l) => ({
       ...(l.id ? { id: l.id } : {}),
       kind: l.kind || 'beds',
+      isDefault: l.isDefault === true,
       name: l.name.trim(),
       description: l.description.trim(),
       beds: Number(l.beds),

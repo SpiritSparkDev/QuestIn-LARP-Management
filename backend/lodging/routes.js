@@ -12,6 +12,7 @@ const DISABLED = { status: 404, body: { error: 'Unterkünfte sind nicht aktivier
 
 function validateLodgings(lodgings) {
   if (!Array.isArray(lodgings) || lodgings.length > 200) return 'lodgings must be an array of at most 200 entries';
+  if (lodgings.filter((l) => l?.isDefault === true).length > 1) return 'only one lodging can be the default';
   const names = new Set();
   for (const lodging of lodgings) {
     if (typeof lodging !== 'object' || lodging === null) return 'each lodging must be an object';
@@ -23,6 +24,7 @@ function validateLodgings(lodgings) {
     if (!Number.isInteger(lodging.beds) || lodging.beds < minPlaces || lodging.beds > 500) return `lodging "${name}": beds must be an integer from ${minPlaces} to 500`;
     if (lodging.priceCents !== undefined && (!Number.isInteger(lodging.priceCents) || lodging.priceCents < 0)) return `lodging "${name}": priceCents must be a non-negative integer`;
     if (lodging.kind !== undefined && !['beds', 'pitch'].includes(lodging.kind)) return `lodging "${name}": kind must be "beds" or "pitch"`;
+    if (lodging.isDefault !== undefined && typeof lodging.isDefault !== 'boolean') return `lodging "${name}": isDefault must be a boolean`;
     if (lodging.description !== undefined && typeof lodging.description !== 'string') return `lodging "${name}": description must be a string`;
     if (lodging.id !== undefined && typeof lodging.id !== 'string') return `lodging "${name}": id must be a string`;
   }

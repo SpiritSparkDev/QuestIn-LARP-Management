@@ -17,14 +17,14 @@ export function formatTent(details) {
 }
 
 // Size and IT/OT of the tent, shown while a pitch card is selected.
-function pitchDetailsFields(details, visible) {
+function pitchDetailsFields(details, visible, id) {
   const metres = (cm) => (cm ? (cm / 100).toString() : '');
   const type = details?.tentType;
   const hasSize = Boolean(details?.lengthCm);
   return `<span class="lodging-pitch-details" data-pitch-details ${visible ? '' : 'hidden'}>
     <span class="lodging-pitch-type">
-      <label><input type="radio" name="tent-type" value="it" data-tent-type ${type === 'it' ? 'checked' : ''}> IT-Zelt (Spielwelt)</label>
-      <label><input type="radio" name="tent-type" value="ot" data-tent-type ${type === 'ot' ? 'checked' : ''}> OT-Zelt (außerhalb der Spielwelt)</label>
+      <label><input type="radio" name="tent-type-${id}" value="it" data-tent-type ${type === 'it' ? 'checked' : ''}> IT-Zelt (Spielwelt)</label>
+      <label><input type="radio" name="tent-type-${id}" value="ot" data-tent-type ${type === 'ot' ? 'checked' : ''}> OT-Zelt (außerhalb der Spielwelt)</label>
     </span>
     <label class="lodging-pitch-size-toggle"><input type="checkbox" data-tent-size-toggle ${hasSize ? 'checked' : ''}> Maße des Zeltes angeben</label>
     <span class="lodging-pitch-row" data-tent-size ${hasSize ? '' : 'hidden'}>
@@ -42,14 +42,14 @@ function lodgingCard(lodging, selectedId, disabled, selectedDetails) {
     ? `<ul class="lodging-occupants">${lodging.occupants.map((o) => `<li>${escapeHtml(o.name)}${o.details ? ` <span class="sub">${escapeHtml(formatTent(o.details))}</span>` : ''}</li>`).join('')}</ul>`
     : '<p class="sub">Noch niemand eingetragen.</p>';
   return `<label class="lodging-card${mine ? ' is-selected' : ''}${full ? ' is-full' : ''}">
-    <input type="radio" name="lodging" value="${escapeHtml(lodging.id)}" ${mine ? 'checked' : ''} ${full || disabled ? 'disabled' : ''}>
+    <input type="radio" name="lodging" value="${escapeHtml(lodging.id)}" ${lodging.isDefault ? 'data-default' : ''} ${mine ? 'checked' : ''} ${full || disabled ? 'disabled' : ''}>
     <span class="lodging-card-head">
-      <strong>${escapeHtml(lodging.name)}</strong>
+      <strong>${escapeHtml(lodging.name)}${lodging.isDefault ? ' <span class="tag">Standard</span>' : ''}</strong>
       <span class="lodging-card-beds">${full ? 'voll' : (lodging.unlimited ? 'beliebig viele Plätze' : `${lodging.free} von ${lodging.beds} ${pitch ? 'Zeltplätzen' : 'Betten'} frei`)}</span>
     </span>
     ${lodging.priceCents > 0 ? `<span class="sub">${formatCents(lodging.priceCents)} pro ${pitch ? 'Zeltplatz' : 'Bett'}</span>` : (pitch ? '<span class="sub">kostenlos</span>' : '')}
     ${lodging.description ? `<span class="sub">${escapeHtml(lodging.description)}</span>` : ''}
-    ${pitch ? pitchDetailsFields(mine ? selectedDetails : null, mine) : ''}
+    ${pitch ? pitchDetailsFields(mine ? selectedDetails : null, mine, lodging.id) : ''}
     ${occupants}
   </label>`;
 }
@@ -87,6 +87,7 @@ export function bindLodgingPicker(container) {
     box.addEventListener('change', () => { box.closest('[data-pitch-details]').querySelector('[data-tent-size]').hidden = !box.checked; });
   });
   update();
+  return update;
 }
 
 // The chosen lodging with its tent details, or an error text when a pitch
@@ -107,46 +108,49 @@ export function collectLodgingChoice(container) {
   return { lodgingId: checked.value, lodgingDetails: { lengthCm: Math.round(length * 100), widthCm: Math.round(width * 100), tentType: type } };
 }
 
-// The registration step: hidden behind "Unterbringung mieten". Ticking it
-// reveals the lodgings; unticking forgets the choice.
+// The registration step. An optional default lodging (usually the free tent
+// pitch) is always shown and preselected; the others appear after switching on
+// "Unterbringung mieten". Without a default, everything is behind the switch.
 export function renderLodgingSection(lodgings) {
   if (!lodgings || lodgings.length === 0) return '';
+  const standard = lodgings.find((l) => l.isDefault);
+  const others = lodgings.filter((l) => !l.isDefault);
+  const standardFree = standard && (standard.unlimited || standard.free > 0);
+  const intro = standard
+    ? 'Dein Standard-Platz ist vorausgewählt. Mit „Unterbringung mieten“ siehst du weitere Möglichkeiten und wer wo schläft – so finden Familien und Gruppen zusammen.'
+    : 'Wähle ein Bett. Du siehst, wer in welcher Unterkunft schläft – so finden Familien und Gruppen zusammen.';
   return `<div class="card form-pad lodging-section">
     <h3>Unterbringung</h3>
-    <label class="switch-row"><input type="checkbox" class="switch" data-lodging-toggle> Unterbringung mieten</label>
+    ${standard ? `<p class="sub">${intro}</p>${renderLodgingPicker([standard], standardFree ? standard.id : null, { allowNone: false })}` : ''}
+    ${others.length ? `<label class="switch-row"><input type="checkbox" class="switch" data-lodging-toggle> Unterbringung mieten</label>
     <div data-lodging-panel hidden>
-      <p class="sub">Wähle ein Bett. Du siehst, wer in welcher Unterkunft schläft – so finden Familien und Gruppen zusammen.</p>
-      ${renderLodgingPicker(lodgings, null, { allowNone: false })}
-    </div>
+      ${standard ? '' : `<p class="sub">${intro}</p>`}
+      ${renderLodgingPicker(others, null, { allowNone: false })}
+    </div>` : ''}
   </div>`;
 }
 
 export function bindLodgingSection(container) {
+  const update = bindLodgingPicker(container);
   const toggle = container.querySelector('[data-lodging-toggle]');
   const panel = container.querySelector('[data-lodging-panel]');
   if (!toggle) return;
-  bindLodgingPicker(container);
   toggle.addEventListener('change', () => {
     panel.hidden = !toggle.checked;
     if (!toggle.checked) {
+      // Back to the default (if there is one and it has room), otherwise nothing.
       container.querySelectorAll('input[name="lodging"]').forEach((r) => { r.checked = false; });
-      bindLodgingPickerRefresh(container);
+      const standard = container.querySelector('input[name="lodging"][data-default]:not([disabled])');
+      if (standard) standard.checked = true;
+      update();
     }
-  });
-}
-
-function bindLodgingPickerRefresh(container) {
-  container.querySelectorAll('.lodging-card').forEach((card) => {
-    card.classList.remove('is-selected');
-    const details = card.querySelector('[data-pitch-details]');
-    if (details) details.hidden = true;
   });
 }
 
 // { wanted, lodgingId, lodgingDetails, error }: wanted without a chosen lodging means "pick one first".
 export function collectLodgingSection(container) {
   const wanted = Boolean(container.querySelector('[data-lodging-toggle]')?.checked);
-  return { wanted, ...(wanted ? collectLodgingChoice(container) : {}) };
+  return { wanted, ...collectLodgingChoice(container) };
 }
 
 export { formatCents as formatLodgingCents };
