@@ -4259,7 +4259,16 @@ th.is-sortable[data-dir="desc"]::after {
 .lodging-card-beds { font-size: 12px; color: var(--on-surface-variant); white-space: nowrap; }
 .lodging-card p.sub { margin: 0; }
 .lodging-occupants { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
-.lodging-toggle { display: block; margin: 0 0 12px; }
+.lodging-pitch-details { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.lodging-pitch-details[hidden] { display: none; }
+.lodging-pitch-row { display: flex; gap: 12px; }
+.lodging-pitch-row > span { flex: 1; min-width: 0; }
+.lodging-pitch-details input[type="number"] { width: 100%; }
+.lodging-pitch-type { display: flex; flex-direction: column; gap: 4px; }
+.lodging-pitch-type label { margin: 0; text-transform: none; letter-spacing: normal; font-weight: 400; font-size: 13px; }
+.lodging-pitch-type input[type="radio"] { position: static; display: inline-block; vertical-align: middle; width: auto; margin: 0 6px 0 0; }
+.lodging-section { margin: 16px 0; }
+.lodging-section h3 { margin-top: 0; }
 .lodging-row-actions { display: flex; gap: 6px; align-items: center; }
 .lodging-overview-row { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--outline-variant); }
 .lodging-overview-row p { margin: 0 0 4px; }

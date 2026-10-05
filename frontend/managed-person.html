@@ -804,6 +804,10 @@
         notify("Wähle eine Unterkunft oder entferne das Häkchen bei „Unterbringung mieten“.", "error");
         return;
       }
+      if (lodgingChoice.error) {
+        notify(lodgingChoice.error, "error");
+        return;
+      }
 
       try {
         await api.post(`/managed-persons/${managedPersonId}/events/${eventId}/register`, {
@@ -812,6 +816,7 @@
           priceGroup: collectRegistrationPriceGroup(),
           extras: collectExtras(registrationExtrasContainer),
           lodgingId: lodgingChoice.lodgingId,
+          lodgingDetails: lodgingChoice.lodgingDetails,
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
         });

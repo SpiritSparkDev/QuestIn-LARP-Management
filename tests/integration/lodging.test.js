@@ -101,8 +101,60 @@ test('lodging add-on: setup, booking, sold-out, visibility, switching and locks'
   });
 });
 
+test('lodging add-on: free tent pitches need size and IT/OT, beds ignore tent details', async () => {
+  await withTestServer(async (port) => {
+    const base = `http://localhost:${port}`;
+    const json = (cookie) => ({ 'Content-Type': 'application/json', Cookie: cookie });
+    const admin = await makeUserAndSession('admin');
+    const dora = await makeUserAndSession('mitglied', 'Dora');
+    const emil = await makeUserAndSession('mitglied', 'Emil');
+    const { rows } = await query("INSERT INTO events (name, event_date, is_active) VALUES ('Pitch Con', '2099-08-01', true) RETURNING id");
+    const eventId = rows[0].id;
+    await fetch(`${base}/app-settings`, { method: 'PUT', headers: json(admin.cookie), body: JSON.stringify({ lodgingEnabled: true }) });
+    const saved = await fetch(`${base}/events/${eventId}/lodgings`, {
+      method: 'PUT', headers: json(admin.cookie),
+      body: JSON.stringify({ lodgings: [{ name: 'Zeltwiese', kind: 'pitch', beds: 1, priceCents: 0 }, { name: 'Hütte', beds: 2 }] }),
+    });
+    assert.equal(saved.status, 200);
+    const [pitch, hut] = await saved.json();
+    assert.equal(pitch.kind, 'pitch');
+    assert.equal(hut.kind, 'beds');
+
+    const register = (cookie, lodgingId, lodgingDetails) => fetch(`${base}/events/${eventId}/register`, {
+      method: 'POST', headers: json(cookie), body: JSON.stringify({ conRole: 'helfer', lodgingId, lodgingDetails }),
+    });
+    assert.equal((await register(dora.cookie, pitch.id)).status, 400);
+    assert.equal((await register(dora.cookie, pitch.id, { lengthCm: 400, widthCm: 300, tentType: 'xx' })).status, 400);
+    const ok = await register(dora.cookie, pitch.id, { lengthCm: 400, widthCm: 300, tentType: 'it' });
+    assert.equal(ok.status, 201);
+    const stored = (await query('SELECT lodging_details, amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, dora.userId])).rows[0];
+    assert.deepEqual(stored.lodging_details, { lengthCm: 400, widthCm: 300, tentType: 'it' });
+    assert.equal(stored.amount_due_cents, null);
+
+    // The one pitch is taken; the neighbours see whose tent it is.
+    assert.equal((await register(emil.cookie, pitch.id, { lengthCm: 200, widthCm: 200, tentType: 'ot' })).status, 409);
+    const view = await (await fetch(`${base}/events/${eventId}/lodgings`, { headers: json(emil.cookie) })).json();
+    assert.deepEqual(view[0].occupants[0].details, { lengthCm: 400, widthCm: 300, tentType: 'it' });
+
+    // Tent details given for a bed are dropped.
+    const bed = await register(emil.cookie, hut.id, { lengthCm: 200, widthCm: 200, tentType: 'ot' });
+    assert.equal(bed.status, 201);
+    assert.equal((await query('SELECT lodging_details FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, emil.userId])).rows[0].lodging_details, null);
+
+    // The kind can't change while someone is in.
+    const change = await fetch(`${base}/events/${eventId}/lodgings`, {
+      method: 'PUT', headers: json(admin.cookie),
+      body: JSON.stringify({ lodgings: [{ id: pitch.id, name: 'Zeltwiese', kind: 'beds', beds: 1 }, { id: hut.id, name: 'Hütte', beds: 2 }] }),
+    });
+    assert.equal(change.status, 409);
+
+    const participants = await (await fetch(`${base}/events/${eventId}/participants`, { headers: json(admin.cookie) })).json();
+    assert.equal(participants.find((p) => p.userId === dora.userId).lodgingName, 'Zeltwiese (4,0 × 3,0 m, IT)');
+  });
+});
+
 test.after(async () => {
-  await query("DELETE FROM events WHERE name = 'Lodging Con'");
+  await query("DELETE FROM events WHERE name IN ('Lodging Con', 'Pitch Con')");
   await query("DELETE FROM users WHERE email LIKE 'lodging-%'");
   await query('DELETE FROM app_settings');
   await closePool();

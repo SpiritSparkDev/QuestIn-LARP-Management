@@ -21,6 +21,7 @@ function validateLodgings(lodgings) {
     names.add(name);
     if (!Number.isInteger(lodging.beds) || lodging.beds < 1 || lodging.beds > 500) return `lodging "${name}": beds must be an integer from 1 to 500`;
     if (lodging.priceCents !== undefined && (!Number.isInteger(lodging.priceCents) || lodging.priceCents < 0)) return `lodging "${name}": priceCents must be a non-negative integer`;
+    if (lodging.kind !== undefined && !['beds', 'pitch'].includes(lodging.kind)) return `lodging "${name}": kind must be "beds" or "pitch"`;
     if (lodging.description !== undefined && typeof lodging.description !== 'string') return `lodging "${name}": description must be a string`;
     if (lodging.id !== undefined && typeof lodging.id !== 'string') return `lodging "${name}": id must be a string`;
   }
@@ -60,11 +61,11 @@ router.put('/events/:id/registrations/:userId/lodging', requireAuth(async ({ req
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    return { status: 200, body: await updateRegistrationLodging(params.id, params.userId, body.lodgingId ?? null, { staff: isStaff }) };
+    return { status: 200, body: await updateRegistrationLodging(params.id, params.userId, body.lodgingId ?? null, { staff: isStaff, details: body.lodgingDetails }) };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND' || err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'LODGING_DISABLED') return DISABLED;
-    if (err.code === 'INVALID_LODGING') return { status: 400, body: { error: err.message } };
+    if (err.code === 'INVALID_LODGING' || err.code === 'INVALID_LODGING_DETAILS') return { status: 400, body: { error: err.message } };
     if (err.code === 'LODGING_FULL' || err.code === 'LODGING_LOCKED') return { status: 409, body: { error: err.message } };
     throw err;
   }

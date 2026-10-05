@@ -9,26 +9,50 @@ function formatCents(cents) {
   return `${(cents / 100).toFixed(2).replace('.', ',')} €`;
 }
 
-function lodgingCard(lodging, selectedId, disabled) {
+export function formatTent(details) {
+  if (!details) return '';
+  const metres = (cm) => (cm / 100).toFixed(1).replace('.', ',');
+  return `${metres(details.lengthCm)} × ${metres(details.widthCm)} m, ${details.tentType === 'it' ? 'IT' : 'OT'}`;
+}
+
+// Size and IT/OT of the tent, shown while a pitch card is selected.
+function pitchDetailsFields(details, visible) {
+  const metres = (cm) => (cm ? (cm / 100).toString() : '');
+  const type = details?.tentType;
+  return `<span class="lodging-pitch-details" data-pitch-details ${visible ? '' : 'hidden'}>
+    <span class="lodging-pitch-row">
+      <span><input type="number" data-tent-length min="0.5" max="30" step="0.1" value="${metres(details?.lengthCm)}"><label>Länge (m)</label></span>
+      <span><input type="number" data-tent-width min="0.5" max="30" step="0.1" value="${metres(details?.widthCm)}"><label>Breite (m)</label></span>
+    </span>
+    <span class="lodging-pitch-type">
+      <label><input type="radio" name="tent-type" value="it" data-tent-type ${type === 'it' ? 'checked' : ''}> IT-Zelt (Spielwelt)</label>
+      <label><input type="radio" name="tent-type" value="ot" data-tent-type ${type === 'ot' ? 'checked' : ''}> OT-Zelt (außerhalb der Spielwelt)</label>
+    </span>
+  </span>`;
+}
+
+function lodgingCard(lodging, selectedId, disabled, selectedDetails) {
+  const pitch = lodging.kind === 'pitch';
   const mine = lodging.id === selectedId;
   const full = lodging.free === 0 && !mine;
   const occupants = lodging.occupants.length
-    ? `<ul class="lodging-occupants">${lodging.occupants.map((o) => `<li>${escapeHtml(o.name)}</li>`).join('')}</ul>`
+    ? `<ul class="lodging-occupants">${lodging.occupants.map((o) => `<li>${escapeHtml(o.name)}${o.details ? ` <span class="sub">${escapeHtml(formatTent(o.details))}</span>` : ''}</li>`).join('')}</ul>`
     : '<p class="sub">Noch niemand eingetragen.</p>';
   return `<label class="lodging-card${mine ? ' is-selected' : ''}${full ? ' is-full' : ''}">
     <input type="radio" name="lodging" value="${escapeHtml(lodging.id)}" ${mine ? 'checked' : ''} ${full || disabled ? 'disabled' : ''}>
     <span class="lodging-card-head">
       <strong>${escapeHtml(lodging.name)}</strong>
-      <span class="lodging-card-beds">${full ? 'voll' : `${lodging.free} von ${lodging.beds} Betten frei`}</span>
+      <span class="lodging-card-beds">${full ? 'voll' : `${lodging.free} von ${lodging.beds} ${pitch ? 'Zeltplätzen' : 'Betten'} frei`}</span>
     </span>
-    ${lodging.priceCents > 0 ? `<span class="sub">${formatCents(lodging.priceCents)} pro Bett</span>` : ''}
+    ${lodging.priceCents > 0 ? `<span class="sub">${formatCents(lodging.priceCents)} pro ${pitch ? 'Zeltplatz' : 'Bett'}</span>` : (pitch ? '<span class="sub">kostenlos</span>' : '')}
     ${lodging.description ? `<span class="sub">${escapeHtml(lodging.description)}</span>` : ''}
+    ${pitch ? pitchDetailsFields(mine ? selectedDetails : null, mine) : ''}
     ${occupants}
   </label>`;
 }
 
 // '' when the event has no lodgings, so callers can drop it in unconditionally.
-export function renderLodgingPicker(lodgings, selectedId = null, { disabled = false, allowNone = true } = {}) {
+export function renderLodgingPicker(lodgings, selectedId = null, { disabled = false, allowNone = true, selectedDetails = null } = {}) {
   if (!lodgings || lodgings.length === 0) return '';
   return `<div class="lodging-picker">
     ${allowNone ? `<label class="lodging-card${selectedId ? '' : ' is-selected'}">
@@ -36,7 +60,7 @@ export function renderLodgingPicker(lodgings, selectedId = null, { disabled = fa
       <span class="lodging-card-head"><strong>Keine Unterkunft über uns</strong></span>
       <span class="sub">Ich kümmere mich selbst darum.</span>
     </label>` : ''}
-    ${lodgings.map((l) => lodgingCard(l, selectedId, disabled)).join('')}
+    ${lodgings.map((l) => lodgingCard(l, selectedId, disabled, selectedDetails)).join('')}
   </div>`;
 }
 
@@ -45,32 +69,76 @@ export function collectLodging(container) {
   return container.querySelector('input[name="lodging"]:checked')?.value || undefined;
 }
 
+// Shows the tent fields only on the selected pitch card.
+export function bindLodgingPicker(container) {
+  const update = () => {
+    container.querySelectorAll('.lodging-card').forEach((card) => {
+      const selected = card.querySelector('input[name="lodging"]')?.checked;
+      card.classList.toggle('is-selected', Boolean(selected));
+      const details = card.querySelector('[data-pitch-details]');
+      if (details) details.hidden = !selected;
+    });
+  };
+  container.querySelectorAll('input[name="lodging"]').forEach((r) => r.addEventListener('change', update));
+  update();
+}
+
+// The chosen lodging with its tent details, or an error text when a pitch
+// is chosen without a complete tent description.
+export function collectLodgingChoice(container) {
+  const checked = container.querySelector('input[name="lodging"]:checked');
+  if (!checked || !checked.value) return {};
+  const fields = checked.closest('.lodging-card').querySelector('[data-pitch-details]');
+  if (!fields) return { lodgingId: checked.value };
+  const length = Number(fields.querySelector('[data-tent-length]').value.replace(',', '.'));
+  const width = Number(fields.querySelector('[data-tent-width]').value.replace(',', '.'));
+  const type = fields.querySelector('[data-tent-type]:checked')?.value;
+  if (!(length >= 0.5) || !(width >= 0.5) || !type) {
+    return { lodgingId: checked.value, error: 'Bitte Länge, Breite und Art (IT oder OT) deines Zelts angeben.' };
+  }
+  return { lodgingId: checked.value, lodgingDetails: { lengthCm: Math.round(length * 100), widthCm: Math.round(width * 100), tentType: type } };
+}
+
 // The registration step: hidden behind "Unterbringung mieten". Ticking it
 // reveals the lodgings; unticking forgets the choice.
 export function renderLodgingSection(lodgings) {
   if (!lodgings || lodgings.length === 0) return '';
-  return `<h3>Unterbringung</h3>
-    <label class="lodging-toggle"><input type="checkbox" data-lodging-toggle> Unterbringung mieten</label>
+  return `<div class="card form-pad lodging-section">
+    <h3>Unterbringung</h3>
+    <label class="switch-row"><input type="checkbox" class="switch" data-lodging-toggle> Unterbringung mieten</label>
     <div data-lodging-panel hidden>
       <p class="sub">Wähle ein Bett. Du siehst, wer in welcher Unterkunft schläft – so finden Familien und Gruppen zusammen.</p>
       ${renderLodgingPicker(lodgings, null, { allowNone: false })}
-    </div>`;
+    </div>
+  </div>`;
 }
 
 export function bindLodgingSection(container) {
   const toggle = container.querySelector('[data-lodging-toggle]');
   const panel = container.querySelector('[data-lodging-panel]');
   if (!toggle) return;
+  bindLodgingPicker(container);
   toggle.addEventListener('change', () => {
     panel.hidden = !toggle.checked;
-    if (!toggle.checked) container.querySelectorAll('input[name="lodging"]').forEach((r) => { r.checked = false; });
+    if (!toggle.checked) {
+      container.querySelectorAll('input[name="lodging"]').forEach((r) => { r.checked = false; });
+      bindLodgingPickerRefresh(container);
+    }
   });
 }
 
-// { wanted, lodgingId }: wanted without a chosen lodging means "pick one first".
+function bindLodgingPickerRefresh(container) {
+  container.querySelectorAll('.lodging-card').forEach((card) => {
+    card.classList.remove('is-selected');
+    const details = card.querySelector('[data-pitch-details]');
+    if (details) details.hidden = true;
+  });
+}
+
+// { wanted, lodgingId, lodgingDetails, error }: wanted without a chosen lodging means "pick one first".
 export function collectLodgingSection(container) {
   const wanted = Boolean(container.querySelector('[data-lodging-toggle]')?.checked);
-  return { wanted, lodgingId: wanted ? collectLodging(container) : undefined };
+  return { wanted, ...(wanted ? collectLodgingChoice(container) : {}) };
 }
 
 export { formatCents as formatLodgingCents };

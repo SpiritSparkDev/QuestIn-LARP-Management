@@ -529,7 +529,7 @@
     } from "/js/formFields.js";
     import { renderRichText } from "/js/richText.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary, sameExtras, formatCents } from "/js/extrasPicker.js";
-    import { renderLodgingPicker, collectLodging, renderLodgingSection, bindLodgingSection, collectLodgingSection } from "/js/lodgingPicker.js";
+    import { renderLodgingPicker, collectLodgingChoice, bindLodgingPicker, formatTent, renderLodgingSection, bindLodgingSection, collectLodgingSection } from "/js/lodgingPicker.js";
     import { buildScanCode } from "/js/qrCode.js";
     import { buildEpcQrPayload } from "/js/epcQr.js";
     import { notify } from "/js/notifications.js";
@@ -1821,7 +1821,7 @@
           eventLodgings = [];
         }
         if (eventLodgings.length > 0) {
-          lodgingEl.textContent = registration.lodgingName ? `Unterkunft: ${registration.lodgingName}` : "Noch keine Unterkunft gewählt.";
+          lodgingEl.textContent = registration.lodgingName ? `Unterkunft: ${registration.lodgingName}${registration.lodgingDetails ? ` (${formatTent(registration.lodgingDetails)})` : ""}` : "Noch keine Unterkunft gewählt.";
           lodgingEl.style.display = "";
           lodgingBtn.textContent = registration.lodgingId ? "Unterkunft ändern" : "Unterkunft wählen";
           lodgingBtn.style.display = "";
@@ -1866,19 +1866,25 @@
     function openLodgingDialog(eventId, registration, eventLodgings) {
       lodgingDialogEventId = eventId;
       lodgingDialogRegistration = registration;
-      lodgingDialogBody.innerHTML = renderLodgingPicker(eventLodgings, registration.lodgingId ?? null);
+      lodgingDialogBody.innerHTML = renderLodgingPicker(eventLodgings, registration.lodgingId ?? null, { selectedDetails: registration.lodgingDetails ?? null });
+      bindLodgingPicker(lodgingDialogBody);
       lodgingDialog.showModal();
     }
 
     document.getElementById("lodging-dialog-cancel").addEventListener("click", () => lodgingDialog.close());
     document.getElementById("lodging-dialog-save").addEventListener("click", async () => {
-      const chosen = collectLodging(lodgingDialogBody) ?? null;
-      if (chosen === (lodgingDialogRegistration.lodgingId ?? null)) {
+      const choice = collectLodgingChoice(lodgingDialogBody);
+      if (choice.error) {
+        notify(choice.error, "error");
+        return;
+      }
+      const chosen = choice.lodgingId ?? null;
+      if (chosen === (lodgingDialogRegistration.lodgingId ?? null) && !choice.lodgingDetails) {
         lodgingDialog.close();
         return;
       }
       try {
-        await api.put(`/events/${lodgingDialogEventId}/registrations/${currentUserId}/lodging`, { lodgingId: chosen });
+        await api.put(`/events/${lodgingDialogEventId}/registrations/${currentUserId}/lodging`, { lodgingId: chosen, lodgingDetails: choice.lodgingDetails });
         lodgingDialog.close();
         notify("Gespeichert.", "success");
         await loadRegistrations();
@@ -1919,6 +1925,10 @@
         notify("Wähle eine Unterkunft oder entferne das Häkchen bei „Unterbringung mieten“.", "error");
         return;
       }
+      if (lodgingChoice.error) {
+        notify(lodgingChoice.error, "error");
+        return;
+      }
 
       try {
         await api.post(`/events/${eventId}/register`, {
@@ -1928,6 +1938,7 @@
           priceGroup: collectRegistrationPriceGroup(),
           extras: collectExtras(registrationExtrasContainer),
           lodgingId: lodgingChoice.lodgingId,
+          lodgingDetails: lodgingChoice.lodgingDetails,
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
         });

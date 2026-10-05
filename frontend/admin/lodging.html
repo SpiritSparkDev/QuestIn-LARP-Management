@@ -29,7 +29,7 @@
   </button>
   <div class="main"><div class="content">
     <h1>Unterkünfte</h1>
-    <p class="sub">Schlafplätze eines Events: Hütten, Zimmer, Zelte … mit je so vielen Betten, wie hineinpassen. Teilnehmer buchen bei der Anmeldung ein Bett und sehen, wer wo schläft – so finden Familien und Gruppen zusammen.</p>
+    <p class="sub">Schlafplätze eines Events: Hütten, Zimmer, Zelte … mit je so vielen Betten, wie hineinpassen – oder Zeltplätze für das eigene Zelt (kostenlos oder gegen Gebühr; Teilnehmer geben Maße und IT/OT an). Teilnehmer buchen bei der Anmeldung ein Bett und sehen, wer wo schläft – so finden Familien und Gruppen zusammen.</p>
 
     <div class="card form-pad" id="disabled-hint" hidden>
       <h2>Add-on nicht aktiviert</h2>
@@ -67,6 +67,7 @@ applyBranding();
 import { escapeHtml } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 import { notify } from '/js/notifications.js';
+import { formatTent } from '/js/lodgingPicker.js';
 initSidebarToggle();
 
 const eventSelect = document.getElementById('lodging-event');
@@ -81,9 +82,10 @@ function renderRows() {
   rowsContainer.innerHTML = lodgings.length > 0
     ? lodgings.map((l, i) => `
       <div class="extra-row" data-row="${i}">
-        <div><input type="text" data-field="name" value="${escapeHtml(l.name)}" placeholder="z.B. Hütte Eiche, Zimmer 12, Zelt Blau" maxlength="100"><label>Bezeichnung</label></div>
-        <div><input type="number" data-field="beds" value="${escapeHtml(l.beds)}" min="1" max="500" step="1"><label>Betten</label></div>
-        <div><input type="number" data-field="price" value="${escapeHtml(l.price)}" min="0" step="0.01" placeholder="0,00"><label>Preis (€) pro Bett</label></div>
+        <div><input type="text" data-field="name" value="${escapeHtml(l.name)}" placeholder="z.B. Hütte Eiche, Zimmer 12, Zeltwiese Nord" maxlength="100"><label>Bezeichnung</label></div>
+        <div><select data-field="kind"><option value="beds" ${l.kind === 'pitch' ? '' : 'selected'}>Betten (Hütte, Zimmer, Zelt)</option><option value="pitch" ${l.kind === 'pitch' ? 'selected' : ''}>Zeltplätze (eigenes Zelt)</option></select><label>Art</label></div>
+        <div><input type="number" data-field="beds" value="${escapeHtml(l.beds)}" min="1" max="500" step="1"><label>${l.kind === 'pitch' ? 'Zeltplätze' : 'Betten'}</label></div>
+        <div><input type="number" data-field="price" value="${escapeHtml(l.price)}" min="0" step="0.01" placeholder="0,00"><label>Preis (€) pro ${l.kind === 'pitch' ? 'Zeltplatz' : 'Bett'} – 0 = kostenlos</label></div>
         <div class="lodging-row-actions">
           <button type="button" class="btn-sm btn-ghost" data-move="${i}:-1" aria-label="Nach oben">▲</button>
           <button type="button" class="btn-sm btn-ghost" data-move="${i}:1" aria-label="Nach unten">▼</button>
@@ -96,7 +98,10 @@ function renderRows() {
   rowsContainer.querySelectorAll('[data-row]').forEach((row) => {
     const i = Number(row.dataset.row);
     row.querySelectorAll('[data-field]').forEach((input) => {
-      input.addEventListener('input', () => { lodgings[i][input.dataset.field] = input.value; });
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
+        lodgings[i][input.dataset.field] = input.value;
+        if (input.dataset.field === 'kind') renderRows();
+      });
     });
   });
   rowsContainer.querySelectorAll('[data-remove]').forEach((button) => {
@@ -118,13 +123,13 @@ function renderOverview(list) {
     ? '<p class="sub">Keine Unterkünfte.</p>'
     : list.map((l) => `
       <div class="lodging-overview-row">
-        <p><strong>${escapeHtml(l.name)}</strong> <span class="sub">${l.taken} von ${l.beds} Betten belegt</span></p>
-        ${l.occupants.length ? `<ul class="lodging-occupants">${l.occupants.map((o) => `<li>${escapeHtml(o.name)}</li>`).join('')}</ul>` : '<p class="sub">Niemand eingetragen.</p>'}
+        <p><strong>${escapeHtml(l.name)}</strong> <span class="sub">${l.taken} von ${l.beds} ${l.kind === 'pitch' ? 'Zeltplätzen' : 'Betten'} belegt</span></p>
+        ${l.occupants.length ? `<ul class="lodging-occupants">${l.occupants.map((o) => `<li>${escapeHtml(o.name)}${o.details ? ` <span class="sub">${escapeHtml(formatTent(o.details))}</span>` : ''}</li>`).join('')}</ul>` : '<p class="sub">Niemand eingetragen.</p>'}
       </div>`).join('');
 }
 
 function adopt(list) {
-  lodgings = list.map((l) => ({ id: l.id, name: l.name, description: l.description, beds: String(l.beds), price: (l.priceCents / 100).toString() }));
+  lodgings = list.map((l) => ({ id: l.id, kind: l.kind, name: l.name, description: l.description, beds: String(l.beds), price: (l.priceCents / 100).toString() }));
   renderRows();
   renderOverview(list);
 }
@@ -134,7 +139,7 @@ async function loadLodgings() {
 }
 
 document.getElementById('add-lodging').addEventListener('click', () => {
-  lodgings.push({ id: '', name: '', description: '', beds: '2', price: '' });
+  lodgings.push({ id: '', kind: 'beds', name: '', description: '', beds: '2', price: '' });
   renderRows();
 });
 
@@ -143,6 +148,7 @@ document.getElementById('save-lodgings').addEventListener('click', async () => {
     .filter((l) => l.name.trim())
     .map((l) => ({
       ...(l.id ? { id: l.id } : {}),
+      kind: l.kind || 'beds',
       name: l.name.trim(),
       description: l.description.trim(),
       beds: Number(l.beds),

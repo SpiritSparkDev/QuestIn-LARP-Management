@@ -28,7 +28,7 @@ router.post('/managed-persons/:id/events/:eventId/register', requireAuth(async (
   try {
     const registration = await registerForEvent(
       person.id, params.eventId, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId,
-      body.flags, body.priceGroup, body.otFields, requestingUser, body.waiverAccepted, { extras: body.extras, lodgingId: body.lodgingId }
+      body.flags, body.priceGroup, body.otFields, requestingUser, body.waiverAccepted, { extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails }
     );
     return { status: 201, body: registration };
   } catch (err) {
@@ -43,7 +43,7 @@ router.post('/managed-persons/:id/events/:eventId/register', requireAuth(async (
     }
     if (err.code === 'INVALID_NSC_AVAILABILITY') return { status: 400, body: { error: err.message } };
     if (err.code === 'INVALID_FLAG') return { status: 400, body: { error: err.message } };
-    if (err.code === 'INVALID_PRICE_GROUP' || err.code === 'INVALID_EXTRAS' || err.code === 'INVALID_LODGING' || err.code === 'LODGING_DISABLED') return { status: 400, body: { error: err.message } };
+    if (err.code === 'INVALID_PRICE_GROUP' || err.code === 'INVALID_EXTRAS' || err.code === 'INVALID_LODGING' || err.code === 'INVALID_LODGING_DETAILS' || err.code === 'LODGING_DISABLED') return { status: 400, body: { error: err.message } };
     if (err.code === 'EXTRA_SOLD_OUT' || err.code === 'LODGING_FULL') return { status: 409, body: { error: err.message } };
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };

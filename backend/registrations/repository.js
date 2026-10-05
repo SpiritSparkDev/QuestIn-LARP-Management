@@ -184,15 +184,32 @@ export const COUNTED_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_
 
 // One bed in one of the event's lodgings (add-on "Unterkünfte"; the lodgings
 // themselves are managed in backend/lodging).
-async function resolveLodging(eventId, enabled, lodgingId) {
-  if (lodgingId === undefined || lodgingId === null || lodgingId === '') return { lodging: null, lodgingCents: 0 };
+async function resolveLodging(eventId, enabled, lodgingId, details) {
+  if (lodgingId === undefined || lodgingId === null || lodgingId === '') return { lodging: null, lodgingCents: 0, details: null };
   if (!enabled) throw extrasError('LODGING_DISABLED', 'Unterkünfte sind nicht aktiviert.');
   const { rows } = await query(
-    'SELECT id, name, beds, price_cents FROM event_lodgings WHERE id = $1 AND event_id = $2',
+    'SELECT id, name, beds, price_cents, kind FROM event_lodgings WHERE id = $1 AND event_id = $2',
     [/^[0-9a-f-]{36}$/i.test(String(lodgingId)) ? lodgingId : null, eventId]
   );
   if (rows.length === 0) throw extrasError('INVALID_LODGING', 'Unbekannte Unterkunft.');
-  return { lodging: rows[0], lodgingCents: rows[0].price_cents };
+  return { lodging: rows[0], lodgingCents: rows[0].price_cents, details: rows[0].kind === 'pitch' ? validateTent(details) : null };
+}
+
+// A tent pitch is booked for the participant's own tent: size and IT/OT.
+function validateTent(details) {
+  const ok = details && typeof details === 'object'
+    && Number.isInteger(details.lengthCm) && details.lengthCm >= 50 && details.lengthCm <= 3000
+    && Number.isInteger(details.widthCm) && details.widthCm >= 50 && details.widthCm <= 3000
+    && ['it', 'ot'].includes(details.tentType);
+  if (!ok) throw extrasError('INVALID_LODGING_DETAILS', 'Bitte Länge, Breite und Art (IT oder OT) des Zelts angeben.');
+  return { lengthCm: details.lengthCm, widthCm: details.widthCm, tentType: details.tentType };
+}
+
+// "4,0 × 3,0 m, IT" for tables and exports.
+export function tentText(details) {
+  if (!details) return '';
+  const metres = (cm) => (cm / 100).toFixed(1).replace('.', ',');
+  return `${metres(details.lengthCm)} × ${metres(details.widthCm)} m, ${details.tentType === 'it' ? 'IT' : 'OT'}`;
 }
 
 // Same transaction/lock rule as assertExtrasCapacity.
@@ -258,7 +275,7 @@ async function assertExtrasCapacity(client, event, extras, excludeUserId = null)
   }
 }
 
-export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, extras: requestedExtras, lodgingId: requestedLodgingId } = {}) {
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, extras: requestedExtras, lodgingId: requestedLodgingId, lodgingDetails: requestedLodgingDetails } = {}) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -304,7 +321,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   const resolvedFlags = resolveFlags(event.flags, flags);
   const resolvedPrice = resolvePriceGroup(event, priceGroup);
   const { extras: resolvedExtras, extrasCents } = resolveExtras(event, requestedExtras);
-  const requestedLodging = await resolveLodging(eventId, appSettings.lodgingEnabled, requestedLodgingId);
+  const requestedLodging = await resolveLodging(eventId, appSettings.lodgingEnabled, requestedLodgingId, requestedLodgingDetails);
 
   const schema = await getRegistrationFieldSchema();
   const data = {};
@@ -326,12 +343,12 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
       }
       await assertExtrasCapacity(client, event, resolvedExtras);
       // Waitlisted people don't hold a bed (they would take one at promotion).
-      const lodging = status === 'waitlisted' ? { lodging: null, lodgingCents: 0 } : requestedLodging;
+      const lodging = status === 'waitlisted' ? { lodging: null, lodgingCents: 0, details: null } : requestedLodging;
       await assertLodgingCapacity(client, lodging.lodging);
       const amountDueCents = amountDueFor(resolvedPrice.priceListCents, extrasCents + lodging.lodgingCents);
       const { rows } = await client.query(
-        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19)
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20)
          RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, waiver_version_accepted, waiver_accepted_at, extras, extras_cents`,
         [
           userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags,
@@ -339,7 +356,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
           encryptFieldBlob(data), status,
           waiverAccepted === true ? appSettings.waiverVersion : null,
           waiverAccepted === true ? new Date() : null,
-          amountDueCents, JSON.stringify(resolvedExtras), extrasCents, lodging.lodging?.id ?? null, lodging.lodgingCents,
+          amountDueCents, JSON.stringify(resolvedExtras), extrasCents, lodging.lodging?.id ?? null, lodging.lodgingCents, lodging.details ? JSON.stringify(lodging.details) : null,
         ]
       );
       return rows[0];
@@ -409,11 +426,11 @@ export async function updateRegistrationExtras(eventId, userId, requested, { sta
 // Moves a registration into a lodging (or out of it with lodgingId = null).
 // Same locks as the extras; a paid registration may still switch between
 // lodgings of the same price (nothing to pay or refund).
-export async function updateRegistrationLodging(eventId, userId, lodgingId, { staff = false } = {}) {
+export async function updateRegistrationLodging(eventId, userId, lodgingId, { staff = false, details } = {}) {
   const event = await getEvent(eventId);
   if (!event) throw extrasError('EVENT_NOT_FOUND', 'event not found');
   const settings = await getAppSettings();
-  const resolved = await resolveLodging(eventId, settings.lodgingEnabled, lodgingId);
+  const resolved = await resolveLodging(eventId, settings.lodgingEnabled, lodgingId, details);
   return withTransaction(async (client) => {
     await client.query('SELECT 1 FROM events WHERE id = $1 FOR UPDATE', [eventId]);
     const { rows } = await client.query(
@@ -430,13 +447,13 @@ export async function updateRegistrationLodging(eventId, userId, lodgingId, { st
     if (current.past && !staff) throw extrasError('LODGING_LOCKED', 'Das Event hat bereits stattgefunden.');
     await assertLodgingCapacity(client, resolved.lodging, userId);
     const { rows: updated } = await client.query(
-      `UPDATE registrations SET lodging_id = $3, lodging_cents = $4,
+      `UPDATE registrations SET lodging_id = $3, lodging_cents = $4, lodging_details = $6,
          amount_due_cents = CASE WHEN amount_due_cents IS NULL AND $4 = 0 THEN NULL ELSE GREATEST(COALESCE(amount_due_cents, 0) + $5, 0) END
        WHERE event_id = $1 AND user_id = $2
-       RETURNING lodging_id, lodging_cents, amount_due_cents`,
-      [eventId, userId, resolved.lodging?.id ?? null, resolved.lodgingCents, resolved.lodgingCents - current.lodging_cents]
+       RETURNING lodging_id, lodging_cents, lodging_details, amount_due_cents`,
+      [eventId, userId, resolved.lodging?.id ?? null, resolved.lodgingCents, resolved.lodgingCents - current.lodging_cents, resolved.details ? JSON.stringify(resolved.details) : null]
     );
-    return { lodgingId: updated[0].lodging_id, lodgingCents: updated[0].lodging_cents, amountDueCents: updated[0].amount_due_cents };
+    return { lodgingId: updated[0].lodging_id, lodgingCents: updated[0].lodging_cents, lodgingDetails: updated[0].lodging_details, amountDueCents: updated[0].amount_due_cents };
   });
 }
 
@@ -610,7 +627,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
 
   const { rows: registrations } = await query(
     `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, r.lodging_id, lodging.name AS lodging_name, latest_payment.method AS payment_method,
+            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, r.lodging_id, r.lodging_details, lodging.name AS lodging_name, latest_payment.method AS payment_method,
             latest_payment.refund_amount_cents, latest_payment.refunded_at,
             r.waiver_version_accepted, r.waiver_accepted_at,
             u.account_data_enc, r.registration_data_enc
@@ -692,7 +709,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       extrasCents: r.extras_cents,
       extrasText: extrasText(eventExtras, r.extras),
       lodgingId: r.lodging_id,
-      lodgingName: r.lodging_name ?? '',
+      lodgingName: r.lodging_name ? `${r.lodging_name}${r.lodging_details ? ` (${tentText(r.lodging_details)})` : ''}` : '',
       paymentMethod: r.payment_method,
       refundAmountCents: r.refund_amount_cents,
       refundedAt: r.refunded_at,
@@ -766,7 +783,7 @@ export async function getScanLookup(eventId, userId) {
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
     `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.waiver_version_accepted, r.waiver_accepted_at, r.extras, r.extras_cents, r.lodging_id, r.lodging_cents, lodging.name AS lodging_name,
+            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.waiver_version_accepted, r.waiver_accepted_at, r.extras, r.extras_cents, r.lodging_id, r.lodging_cents, r.lodging_details, lodging.name AS lodging_name,
             r.registration_data_enc, c.name AS character_name, nc.name AS nsc_character_name
      FROM registrations r
      JOIN events e ON e.id = r.event_id
@@ -800,6 +817,7 @@ export async function listRegistrationsForUser(userId) {
     lodgingId: r.lodging_id,
     lodgingCents: r.lodging_cents,
     lodgingName: r.lodging_name,
+    lodgingDetails: r.lodging_details,
     waiverVersionAccepted: r.waiver_version_accepted,
     waiverAcceptedAt: r.waiver_accepted_at,
     paymentReference: buildPaymentReference(r.event_id, userId),
