@@ -420,6 +420,37 @@ test('an event created without capacity defaults to unlimited (null)', async () 
   });
 });
 
+test('special roles carry a description, can be reordered, and a rename keeps the registrations', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const member = await makeUserAndSession('mitglied');
+    const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
+    const created = await (await fetch(`http://localhost:${port}/events`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'Flag-Details-Con', eventDate: '2027-09-04', flags: ['GSC', 'VP'], flagDetails: { GSC: ' Gastspieler ', VP: 'Verletzten-Darstellung', Fremd: 'ignored' } }),
+    })).json();
+    assert.deepEqual(created.flag_details, { GSC: 'Gastspieler', VP: 'Verletzten-Darstellung' });
+    assert.equal((await fetch(`http://localhost:${port}/events`, { method: 'POST', headers, body: JSON.stringify({ name: 'Bad', eventDate: '2027-09-04', flagDetails: { GSC: 5 } }) })).status, 400);
+
+    await query('UPDATE events SET is_active = true WHERE id = $1', [created.id]);
+    await query("INSERT INTO registrations (user_id, event_id, con_role, flags) VALUES ($1, $2, 'helfer', ARRAY['VP'])", [member.userId, created.id]);
+
+    // Reorder + rename VP -> Sanitäter: registrations follow, the description moves along.
+    const updated = await (await fetch(`http://localhost:${port}/events/${created.id}`, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ flags: ['Sanitäter', 'GSC'], flagRenames: { VP: 'Sanitäter' } }),
+    })).json();
+    assert.deepEqual(updated.flags, ['Sanitäter', 'GSC']);
+    assert.deepEqual(updated.flag_details, { Sanitäter: 'Verletzten-Darstellung', GSC: 'Gastspieler' });
+    const { rows } = await query('SELECT flags FROM registrations WHERE event_id = $1 AND user_id = $2', [created.id, member.userId]);
+    assert.deepEqual(rows[0].flags, ['Sanitäter']);
+
+    // Removing a role drops its description.
+    const removed = await (await fetch(`http://localhost:${port}/events/${created.id}`, { method: 'PUT', headers, body: JSON.stringify({ flags: ['GSC'] }) })).json();
+    assert.deepEqual(removed.flag_details, { GSC: 'Gastspieler' });
+  });
+});
+
 test('flags can be set on create, updated, and cleared back to empty', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');

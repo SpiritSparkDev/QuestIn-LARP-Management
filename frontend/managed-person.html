@@ -204,6 +204,7 @@
       otFieldValuesEqual,
     } from "/js/formFields.js";
     import { renderRichText } from "/js/richText.js";
+    import { renderFlagCards, collectFlagCards, bindFlagCards } from "/js/flagCards.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal } from "/js/extrasPicker.js";
     import { renderLodgingSection, bindLodgingSection, collectLodgingSection } from "/js/lodgingPicker.js";
     import { notify } from "/js/notifications.js";
@@ -582,11 +583,13 @@
     }
     function renderRegistrationFlags() {
       const event = events.find((e) => e.id === eventSelect.value);
-      const field = flagsFieldFor(event);
-      registrationFlagsContainer.innerHTML = field.options.length > 0 ? renderAccountFieldInput(field, [], { idPrefix: "register-" }) : "";
+      registrationFlagsContainer.innerHTML = event?.flags?.length > 0
+        ? `<h3>Sonderrollen</h3><p class="sub">Optional – wähle, was auf die Person zutrifft.</p>${renderFlagCards(event, [])}`
+        : "";
+      bindFlagCards(registrationFlagsContainer);
     }
     function collectRegistrationFlags() {
-      return collectAccountFieldValues(registrationFlagsContainer, [flagsFieldFor(events.find((e) => e.id === eventSelect.value))]).flags ?? [];
+      return collectFlagCards(registrationFlagsContainer);
     }
     function priceGroupFieldFor(event) {
       const groups = event?.pricing?.groups ?? [];
@@ -758,7 +761,8 @@
       editingEventId = eventId;
       const event = events.find((e) => e.id === eventId);
       const flagsField = flagsFieldFor(event);
-      document.getElementById("edit-flags").innerHTML = flagsField.options.length > 0 ? renderAccountFieldInput(flagsField, registration.flags ?? [], { idPrefix: "edit-" }) : "";
+      document.getElementById("edit-flags").innerHTML = flagsField.options.length > 0 ? `<h4>Sonderrollen</h4>${renderFlagCards(event, registration.flags ?? [])}` : "";
+      bindFlagCards(document.getElementById("edit-flags"));
       document.getElementById("edit-ot-fields").innerHTML = registrationSchema.map((field) => renderAccountFieldInput(field, registration[field.key], { idPrefix: "edit-" })).join("");
       attachLiveValidation(document.getElementById("edit-ot-fields"));
       editOtDialog.showModal();
@@ -773,7 +777,7 @@
         payload[field.key] = collected[field.key];
       }
       const flagsField = flagsFieldFor(events.find((e) => e.id === editingEventId));
-      const collectedFlags = collectAccountFieldValues(document.getElementById("edit-flags"), [flagsField]).flags;
+      const collectedFlags = collectFlagCards(document.getElementById("edit-flags"));
       const representableCurrentFlags = (registration?.flags ?? []).filter((f) => flagsField.options.includes(f));
       if (!otFieldValuesEqual(flagsField, representableCurrentFlags, collectedFlags ?? [])) payload.flags = collectedFlags ?? [];
       if (Object.keys(payload).length === 0) { editOtDialog.close(); return; }

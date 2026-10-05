@@ -90,10 +90,21 @@ function validateExtras(extras) {
   return null;
 }
 
+// flagDetails: { flagName: description }, flagRenames: { oldName: newName }.
+function validateFlagExtras({ flagDetails, flagRenames }) {
+  for (const [key, value] of [['flagDetails', flagDetails], ['flagRenames', flagRenames]]) {
+    if (value === undefined) continue;
+    if (typeof value !== 'object' || value === null || Array.isArray(value) || Object.values(value).some((v) => typeof v !== 'string')) {
+      return `${key} must be an object of strings`;
+    }
+  }
+  return null;
+}
+
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, code, capacity, flags, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
+  const { name, eventDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
@@ -103,6 +114,8 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   if (flags !== undefined && (!Array.isArray(flags) || flags.some((f) => typeof f !== 'string'))) {
     return { status: 400, body: { error: 'flags must be an array of strings' } };
   }
+  const flagExtrasError = validateFlagExtras({ flagDetails });
+  if (flagExtrasError) return { status: 400, body: { error: flagExtrasError } };
   if (pricing !== undefined) {
     const pricingError = validatePricing(pricing);
     if (pricingError) return { status: 400, body: { error: pricingError } };
@@ -113,7 +126,7 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   }
   const urlError = validateMapUrls({ mapsUrl, osmUrl });
   if (urlError) return { status: 400, body: { error: urlError } };
-  const event = await createEvent({ name, eventDate, code, capacity, flags, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
+  const event = await createEvent({ name, eventDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
   return { status: 201, body: event };
 })));
 
@@ -137,6 +150,8 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   if (body.flags !== undefined && (!Array.isArray(body.flags) || body.flags.some((f) => typeof f !== 'string'))) {
     return { status: 400, body: { error: 'flags must be an array of strings' } };
   }
+  const flagExtrasError = validateFlagExtras(body);
+  if (flagExtrasError) return { status: 400, body: { error: flagExtrasError } };
   if (body.pricing !== undefined) {
     const pricingError = validatePricing(body.pricing);
     if (pricingError) return { status: 400, body: { error: pricingError } };

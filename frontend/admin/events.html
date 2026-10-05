@@ -64,8 +64,10 @@
 
         <input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt">
         <label for="event-capacity">Max. Teilnehmerzahl <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
-        <input id="event-flags" name="flags" type="text" placeholder="GSC, VP, Ersthelfer">
-        <label for="event-flags">Sonderrollen <span style="opacity:0.6;font-size:12px;">optional, Komma-getrennt, z.B. GSC, VP, Ersthelfer</span></label>
+        <h3 class="event-form-section">Sonderrollen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
+        <p class="sub">Besondere Rollen eines Events, z. B. GSC, VP oder Ersthelfer. Teilnehmer sehen sie bei der Anmeldung als Karten mit deiner Kurzbeschreibung und können mehrere wählen.</p>
+        <div id="flag-list"></div>
+        <button type="button" id="add-flag" class="btn-sm">+ Sonderrolle hinzufügen</button>
 
         <h3 class="event-form-section">Ort</h3>
         <p class="sub">Erscheint im Dashboard nur, wenn ausgefüllt. Ohne eigene Links werden Google-Maps- und OpenStreetMap-Link automatisch aus der Adresse erzeugt.</p>
@@ -261,6 +263,63 @@ renderPriceTiers();
 // Bookable extras. Amounts are edited in euros (strings) and converted to
 // cents on save; `id` is kept for existing extras because registrations
 // refer to it (new ones get theirs from the server).
+// Special roles: name + short description, reorderable and deletable. A
+// renamed role keeps its registrations (the server renames them along).
+const flagListContainer = document.getElementById('flag-list');
+let flagRows = [];
+
+function renderFlagRows() {
+  flagListContainer.innerHTML = flagRows.length > 0
+    ? flagRows.map((f, i) => `
+      <div class="flag-row" data-flag-row="${i}">
+        <div><input type="text" data-flag-field="name" value="${escapeHtml(f.name)}" placeholder="z.B. Ersthelfer" maxlength="60"><label>Bezeichnung</label></div>
+        <div><textarea data-flag-field="description" rows="2" maxlength="500" placeholder="Kurze Beschreibung für die Teilnehmer">${escapeHtml(f.description)}</textarea><label>Beschreibung</label></div>
+        <div class="flag-row-actions">
+          <button type="button" class="btn-sm btn-ghost" data-flag-move="${i}:-1" aria-label="Nach oben">▲</button>
+          <button type="button" class="btn-sm btn-ghost" data-flag-move="${i}:1" aria-label="Nach unten">▼</button>
+          <button type="button" class="btn-sm btn-ghost" data-flag-remove="${i}">Entfernen</button>
+        </div>
+      </div>`).join('')
+    : '<p class="sub">Noch keine Sonderrollen angelegt.</p>';
+  flagListContainer.querySelectorAll('[data-flag-row]').forEach((row) => {
+    const i = Number(row.dataset.flagRow);
+    row.querySelectorAll('[data-flag-field]').forEach((input) => {
+      input.addEventListener('input', () => { flagRows[i][input.dataset.flagField] = input.value; });
+    });
+  });
+  flagListContainer.querySelectorAll('[data-flag-remove]').forEach((button) => {
+    button.addEventListener('click', () => { flagRows.splice(Number(button.dataset.flagRemove), 1); renderFlagRows(); });
+  });
+  flagListContainer.querySelectorAll('[data-flag-move]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const [index, step] = button.dataset.flagMove.split(':').map(Number);
+      const target = index + step;
+      if (target < 0 || target >= flagRows.length) return;
+      [flagRows[index], flagRows[target]] = [flagRows[target], flagRows[index]];
+      renderFlagRows();
+    });
+  });
+}
+
+document.getElementById('add-flag').addEventListener('click', () => {
+  flagRows.push({ original: '', name: '', description: '' });
+  renderFlagRows();
+});
+
+function collectFlags() {
+  const rows = flagRows.filter((f) => f.name.trim());
+  const flagDetails = {};
+  const flagRenames = {};
+  for (const f of rows) {
+    const name = f.name.trim();
+    if (f.description.trim()) flagDetails[name] = f.description.trim();
+    if (f.original && f.original !== name) flagRenames[f.original] = name;
+  }
+  return { flags: rows.map((f) => f.name.trim()), flagDetails, flagRenames };
+}
+
+renderFlagRows();
+
 const extrasContainer = document.getElementById('extras-list');
 let extras = [];
 
@@ -437,7 +496,8 @@ function startEdit(eventData) {
   form.elements.eventDate.value = eventData.event_date;
   form.elements.code.value = eventData.code ?? '';
   form.elements.capacity.value = eventData.capacity ?? '';
-  form.elements.flags.value = (eventData.flags ?? []).join(', ');
+  flagRows = (eventData.flags ?? []).map((name) => ({ original: name, name, description: (eventData.flag_details ?? {})[name] ?? '' }));
+  renderFlagRows();
   form.elements.directions.value = eventData.directions ?? '';
   form.elements.briefing.value = eventData.briefing ?? '';
   form.elements.address.value = eventData.address ?? '';
@@ -467,6 +527,8 @@ function resetForm() {
   priceGroups = [];
   priceTiers = [];
   extras = [];
+  flagRows = [];
+  renderFlagRows();
   renderPriceGroups();
   renderPriceTiers();
   renderExtras();
@@ -483,7 +545,7 @@ form.addEventListener('submit', async (event) => {
     code: form.elements.code.value || null,
     capacity: capacityValue ? Number(capacityValue) : null,
     clearCapacity: true,
-    flags: form.elements.flags.value.split(',').map((f) => f.trim()).filter(Boolean),
+    ...collectFlags(),
     pricing: collectPricing(),
     extras: collectExtras(),
     directions: form.elements.directions.value,

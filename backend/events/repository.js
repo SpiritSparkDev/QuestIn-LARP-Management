@@ -3,7 +3,7 @@ import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, created_at';
+const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, created_at';
 
 // Trims, drops empty strings, and deduplicates while preserving first-seen
 // order -- the admin-facing comma-separated textfield can easily produce
@@ -19,6 +19,16 @@ function normalizeFlags(flags) {
     if (!trimmed || seen.has(trimmed)) continue;
     seen.add(trimmed);
     result.push(trimmed);
+  }
+  return result;
+}
+
+// Descriptions only for flags that exist, trimmed and capped at 500 characters.
+function normalizeFlagDetails(details, flags) {
+  const result = {};
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return result;
+  for (const name of normalizeFlags(flags)) {
+    if (typeof details[name] === 'string' && details[name].trim()) result[name] = details[name].trim().slice(0, 500);
   }
   return result;
 }
@@ -68,12 +78,12 @@ function normalizeText(value) {
   return value.trim() === '' ? null : value;
 }
 
-export async function createEvent({ name, eventDate, code, capacity, flags, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function createEvent({ name, eventDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url, flag_details)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING ${SELECT_COLUMNS}`,
-    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), JSON.stringify(normalizeExtras(extras)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl)]
+    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), JSON.stringify(normalizeExtras(extras)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl), JSON.stringify(normalizeFlagDetails(flagDetails, flags))]
   );
   return rows[0];
 }
@@ -101,7 +111,7 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity, flags, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity, flags, flagDetails, flagRenames, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   // code/capacity are the fields a caller can legitimately want to CLEAR
   // (empty string / "unbegrenzt") rather than just omit -- COALESCE alone
   // can't tell those apart, since both arrive as a falsy value. $6/$7
@@ -109,6 +119,21 @@ export async function updateEvent(id, { name, eventDate, code, capacity, clearCa
   // was genuinely absent from the call. flags/pricing don't need this: an
   // empty array/object is not falsy in JS, so `!== undefined` alone tells
   // omitted apart from explicitly-cleared.
+  const current = await getEvent(id);
+  if (!current) return null;
+  // A renamed special role keeps its registrations and its description.
+  const renames = Object.entries(flagRenames ?? {}).filter(([from, to]) => typeof to === 'string' && to.trim() && from !== to.trim());
+  for (const [from, to] of renames) {
+    await query('UPDATE registrations SET flags = array_replace(flags, $2, $3) WHERE event_id = $1 AND $2 = ANY(flags)', [id, from, to.trim()]);
+  }
+  let nextDetails = null;
+  if (flagDetails !== undefined || flags !== undefined) {
+    const carried = { ...(current.flag_details ?? {}) };
+    for (const [from, to] of renames) {
+      if (carried[from] !== undefined) { carried[to.trim()] = carried[from]; delete carried[from]; }
+    }
+    nextDetails = JSON.stringify(normalizeFlagDetails(flagDetails ?? carried, flags ?? current.flags));
+  }
   const { rows } = await query(
     `UPDATE events SET
        name = COALESCE($2, name),
@@ -122,7 +147,8 @@ export async function updateEvent(id, { name, eventDate, code, capacity, clearCa
        address = CASE WHEN $14 THEN $15 ELSE address END,
        maps_url = CASE WHEN $16 THEN $17 ELSE maps_url END,
        osm_url = CASE WHEN $18 THEN $19 ELSE osm_url END,
-       extras = COALESCE($20, extras)
+       extras = COALESCE($20, extras),
+       flag_details = COALESCE($21, flag_details)
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
     [
@@ -136,6 +162,7 @@ export async function updateEvent(id, { name, eventDate, code, capacity, clearCa
       mapsUrl !== undefined, normalizeText(mapsUrl),
       osmUrl !== undefined, normalizeText(osmUrl),
       extras !== undefined ? JSON.stringify(normalizeExtras(extras)) : null,
+      nextDetails,
     ]
   );
   return rows[0] ?? null;

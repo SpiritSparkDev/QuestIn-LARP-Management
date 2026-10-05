@@ -529,6 +529,7 @@
     } from "/js/formFields.js";
     import { renderRichText } from "/js/richText.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary, sameExtras, formatCents } from "/js/extrasPicker.js";
+    import { renderFlagCards, collectFlagCards, bindFlagCards } from "/js/flagCards.js";
     import { renderLodgingPicker, collectLodgingChoice, bindLodgingPicker, formatTent, renderLodgingSection, bindLodgingSection, collectLodgingSection } from "/js/lodgingPicker.js";
     import { buildScanCode } from "/js/qrCode.js";
     import { buildEpcQrPayload } from "/js/epcQr.js";
@@ -1443,14 +1444,14 @@
 
     function renderRegistrationFlags() {
       const event = events.find((e) => e.id === eventSelect.value);
-      const field = flagsFieldFor(event);
-      registrationFlagsContainer.innerHTML = field.options.length > 0
-        ? renderAccountFieldInput(field, [], { idPrefix: "register-" })
+      registrationFlagsContainer.innerHTML = event?.flags?.length > 0
+        ? `<h3>Sonderrollen</h3><p class="sub">Optional – wähle, was auf dich zutrifft.</p>${renderFlagCards(event, [])}`
         : "";
+      bindFlagCards(registrationFlagsContainer);
     }
 
     function collectRegistrationFlags() {
-      return collectAccountFieldValues(registrationFlagsContainer, [flagsFieldFor(events.find((e) => e.id === eventSelect.value))]).flags ?? [];
+      return collectFlagCards(registrationFlagsContainer);
     }
 
     // Same synthetic-field trick as flagsFieldFor, for the event's
@@ -1674,8 +1675,9 @@
       const event = events.find((e) => e.id === eventId);
       const flagsField = flagsFieldFor(event);
       editFlagsContainer.innerHTML = flagsField.options.length > 0
-        ? renderAccountFieldInput(flagsField, registration.flags ?? [], { idPrefix: "edit-" })
+        ? `<h4>Sonderrollen</h4>${renderFlagCards(event, registration.flags ?? [])}`
         : "";
+      bindFlagCards(editFlagsContainer);
       const eventExtras = event?.extras ?? [];
       const extrasLocked = Boolean(registration.paidAt) || registration.status === "cancelled";
       editExtrasContainer.innerHTML = eventExtras.length > 0
@@ -1711,7 +1713,7 @@
       }
 
       const flagsField = flagsFieldFor(events.find((e) => e.id === editingEventId));
-      const collectedFlags = collectAccountFieldValues(editFlagsContainer, [flagsField]).flags;
+      const collectedFlags = collectFlagCards(editFlagsContainer);
       // Compare against only the subset of the stored flags that's still
       // representable in the event's current vocabulary -- an orphaned flag
       // (one an admin later removed from the event) has no checkbox to
