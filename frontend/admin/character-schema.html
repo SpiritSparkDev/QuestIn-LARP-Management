@@ -96,7 +96,7 @@ initTabs(document.getElementById('class-tabs'));
 function addSchemaRow(container, field = { key: '', label: '', type: 'text', required: false, public: false, staffOnly: false, options: [], group: '' }, { allowPublic = true, allowGroup = false, allowSensitive = false } = {}) {
   const row = document.createElement('div');
   row.className = allowGroup ? 'schema-row schema-row--grouped' : 'schema-row';
-  const optionsValue = Array.isArray(field.options) ? field.options.join(', ') : '';
+  const optionsValue = Array.isArray(field.options) ? field.options.join(' | ') : '';
   const publicCheckboxHtml = allowPublic
     ? `<label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>
        <label><input type="checkbox" class="schema-staff-only" ${field.staffOnly ? 'checked' : ''}> Nur Staff darf bearbeiten</label>
@@ -129,7 +129,7 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
       <option value="link" ${field.type === 'link' ? 'selected' : ''}>Link</option>
       <option value="date" ${field.type === 'date' ? 'selected' : ''}>Datum</option>
     </select>
-    <input type="text" placeholder="Optionen (kommagetrennt, nur bei Auswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
+    <input type="text" placeholder="Optionen (getrennt mit |, nur bei Auswahl/Mehrfachauswahl)" class="schema-options" value="${escapeHtml(optionsValue)}">
     <div class="schema-checkboxes">
       <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
       ${publicCheckboxHtml}
@@ -176,7 +176,7 @@ function collectSchema(container, { allowPublic = true, allowGroup = false, allo
     }
     if (type === 'select' || type === 'multiselect') {
       field.options = row.querySelector('.schema-options').value
-        .split(',')
+        .split('|')
         .map((opt) => opt.trim())
         .filter((opt) => opt.length > 0);
     }
