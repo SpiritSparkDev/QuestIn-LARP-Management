@@ -53,6 +53,8 @@ test('PDF import: disabled add-on 404s, then template -> mapping -> submission -
     const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
     const base = `http://localhost:${port}`;
 
+    // The config row survives between runs (and test files) -- start without a template.
+    await query("UPDATE pdf_import_config SET template_filename = NULL, pdf_fields = '[]', mapping = '{}'");
     await query('UPDATE app_settings SET pdf_import_enabled = false');
     const off = await fetch(`${base}/pdf-import/config`, { headers });
     assert.equal(off.status, 404);
@@ -111,6 +113,38 @@ test('PDF import: disabled add-on 404s, then template -> mapping -> submission -
 
     const del = await fetch(`${base}/pdf-import/submissions/${record.id}`, { method: 'DELETE', headers });
     assert.equal(del.status, 200);
+  });
+});
+
+test('PDF import: DELETE /pdf-import/config clears template and mapping but keeps imports and the e-mail option', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
+    const base = `http://localhost:${port}`;
+    await query('UPDATE app_settings SET pdf_import_enabled = true');
+    await fetch(`${base}/pdf-import/template`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ filename: 'vorlage.pdf', dataBase64: await makeFilledPdf({ name: '', email: '' }) }),
+    });
+    await fetch(`${base}/pdf-import/config`, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ mapping: { Name: { target: 'account:lastName' } }, emailEnabled: true }),
+    });
+    const uploaded = await fetch(`${base}/pdf-import/submissions`, {
+      method: 'POST', headers, body: JSON.stringify({ filename: 'a.pdf', dataBase64: await makeFilledPdf({ name: 'Busch', email: 'busch@example.com' }) }),
+    });
+    const { import: record } = await uploaded.json();
+
+    const cleared = await fetch(`${base}/pdf-import/config`, { method: 'DELETE', headers });
+    assert.equal(cleared.status, 200);
+    const { config } = await cleared.json();
+    assert.equal(config.templateFilename, null);
+    assert.deepEqual(config.pdfFields, []);
+    assert.deepEqual(config.mapping, {});
+    assert.equal(config.emailEnabled, true);
+
+    const list = await (await fetch(`${base}/pdf-import/submissions`, { headers })).json();
+    assert.ok(list.some((r) => r.id === record.id));
   });
 });
 

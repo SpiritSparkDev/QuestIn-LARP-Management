@@ -10,7 +10,7 @@ import { getScCharacterSchema } from '../scSchema/repository.js';
 import { getTransporterAndFrom, sendPdfImportReceivedEmail } from '../auth/mailer.js';
 import { readPdfFields, applyMapping } from './pdfFields.js';
 import {
-  getPdfImportConfig, setPdfTemplate, setPdfImportConfig,
+  getPdfImportConfig, setPdfTemplate, clearPdfTemplate, setPdfImportConfig,
   createPdfImport, listPdfImports, getPdfImport, deletePdfImport, markPdfImportEmail, markPdfImportAdopted,
 } from './repository.js';
 import { adoptImport } from './adopt.js';
@@ -121,6 +121,10 @@ router.post('/pdf-import/template', requireAddon(async ({ req }) => {
     if (err.code === 'INVALID_PDF') return { status: 400, body: { error: err.message } };
     throw err;
   }
+}));
+
+router.delete('/pdf-import/config', requireAddon(async () => {
+  return { status: 200, body: { config: await clearPdfTemplate() } };
 }));
 
 router.get('/pdf-import/suggestions', requireAddon(async () => {

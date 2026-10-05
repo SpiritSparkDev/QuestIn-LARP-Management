@@ -37,6 +37,16 @@ export async function setPdfTemplate({ filename, pdfFields }) {
   return rowToConfig(rows[0]);
 }
 
+// Back to "no template": the detected fields and the mapping go, the e-mail
+// option and the PDFs already imported stay.
+export async function clearPdfTemplate() {
+  await getPdfImportConfig();
+  const { rows } = await query(
+    "UPDATE pdf_import_config SET template_filename = NULL, pdf_fields = '[]', mapping = '{}' RETURNING *"
+  );
+  return rowToConfig(rows[0]);
+}
+
 export async function setPdfImportConfig({ mapping, emailEnabled }) {
   await getPdfImportConfig();
   const { rows } = await query(

@@ -54,6 +54,7 @@
           <label style="margin-top:16px;"><input type="checkbox" id="email-enabled"> Eingangsbestätigung per E-Mail an den Einsender ermöglichen (benötigt ein Feld, das der „E-Mail des Einsenders“ zugeordnet ist)</label>
           <div class="event-form-actions">
             <button type="button" id="save-mapping">Zuordnung speichern</button>
+            <button type="button" id="clear-template" class="btn-ghost">Vorlage &amp; Zuordnung zurücksetzen</button>
           </div>
         </div>
       </details>
@@ -241,6 +242,18 @@ document.getElementById('save-mapping').addEventListener('click', async () => {
     renderMapping();
     setTemplateCardOpen(Object.keys(config.mapping).length === 0);
     notify('Gespeichert.', 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+document.getElementById('clear-template').addEventListener('click', async () => {
+  if (!confirm('Vorlage und Feldzuordnung wirklich zurücksetzen? Bereits eingelesene PDFs bleiben erhalten.')) return;
+  try {
+    config = (await api.delete('/pdf-import/config')).config;
+    renderMapping();
+    setTemplateCardOpen(true);
+    notify('Vorlage und Zuordnung zurückgesetzt.', 'success');
   } catch (err) {
     notify(err.message, 'error');
   }
