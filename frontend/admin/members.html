@@ -105,6 +105,7 @@
           <div class="tabs" id="detail-tabs">
             <button type="button" class="tab-btn active" data-tab="detail-tab-konto">Konto</button>
             <button type="button" class="tab-btn" data-tab="detail-tab-chars" id="detail-chars-tab-btn">Charaktere</button>
+            <button type="button" class="tab-btn" data-tab="detail-tab-regs" id="detail-regs-tab-btn" hidden>Anmeldungen</button>
           </div>
           <div class="tab-panel" id="detail-tab-konto">
             <div id="detail-group-wrap" style="display:none;">
@@ -116,6 +117,9 @@
           </div>
           <div class="tab-panel" id="detail-tab-chars" hidden>
             <div id="detail-characters"></div>
+          </div>
+          <div class="tab-panel" id="detail-tab-regs" hidden>
+            <div id="detail-registrations"></div>
           </div>
           <div class="dialog-actions">
             <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
@@ -686,6 +690,83 @@
       });
     }
 
+    // ---- Anmeldungen tab ------------------------------------------------
+    // Admins and moderators register a member for an event here (the member's
+    // own self-service flow is unchanged). Only events the member isn't
+    // registered for yet are offered; an SC needs one of their unregistered
+    // SC characters, an NSC may optionally bring one.
+    const REGISTER_ROLES = [['sc', 'Teilnehmer (SC)'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga']];
+    const detailRegistrations = document.getElementById('detail-registrations');
+
+    function renderRegistrationsTab(member) {
+      const registered = member.registrations ?? [];
+      const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Unbekanntes Event';
+      const roleLabel = (key) => REGISTER_ROLES.find(([k]) => k === key)?.[1] ?? key;
+      const registeredHtml = registered.length
+        ? `<ul>${registered.map((r) => `<li>${escapeHtml(eventName(r.eventId))} <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span> <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></li>`).join('')}</ul>`
+        : '<p class="sub">Dieses Mitglied ist für kein Event angemeldet.</p>';
+      const openEvents = allEvents.filter((e) => !registered.some((r) => r.eventId === e.id));
+      detailRegistrations.innerHTML = registeredHtml + '<h3>Für ein Event anmelden</h3>' + (openEvents.length === 0
+        ? '<p class="sub">Es gibt kein weiteres Event, für das dieses Mitglied angemeldet werden kann.</p>'
+        : `<form id="register-member-form">
+            <select id="reg-event" required>${openEvents.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join('')}</select>
+            <label for="reg-event">Event</label>
+            <select id="reg-role">${REGISTER_ROLES.map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}</select>
+            <label for="reg-role">Rolle</label>
+            <div id="reg-character-wrap"></div>
+            <div id="reg-price-wrap"></div>
+            <div class="settings-actions"><button type="submit">Anmelden</button></div>
+          </form>`);
+      const form = document.getElementById('register-member-form');
+      if (!form) return;
+
+      const refreshOptions = () => {
+        const role = form.elements['reg-role'].value;
+        const wanted = role === 'sc' ? 'sc' : role === 'nsc' ? 'nsc' : null;
+        const characters = new Map();
+        for (const c of member.characters ?? []) {
+          if (c.class !== wanted) continue;
+          // An SC can only ever be registered once, so one that already has an event is taken.
+          const entry = characters.get(c.id) ?? { ...c, taken: false };
+          if (wanted === 'sc' && c.eventId) entry.taken = true;
+          characters.set(c.id, entry);
+        }
+        const free = [...characters.values()].filter((c) => !c.taken);
+        document.getElementById('reg-character-wrap').innerHTML = wanted
+          ? `<select id="reg-character" ${role === 'sc' ? 'required' : ''}>${role === 'sc' ? (free.length ? '' : '<option value="">Kein freier SC vorhanden</option>') : '<option value="">– keiner –</option>'}${free.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('')}</select>
+             <label for="reg-character">Charakter</label>`
+          : '';
+        const event = allEvents.find((e) => e.id === form.elements['reg-event'].value);
+        const groups = event?.pricing?.groups ?? [];
+        document.getElementById('reg-price-wrap').innerHTML = groups.length
+          ? `<select id="reg-price">${groups.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select><label for="reg-price">Preisgruppe</label>`
+          : '';
+      };
+      form.elements['reg-event'].addEventListener('change', refreshOptions);
+      form.elements['reg-role'].addEventListener('change', refreshOptions);
+      refreshOptions();
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const eventId = form.elements['reg-event'].value;
+        const payload = {
+          conRole: form.elements['reg-role'].value,
+          characterId: form.elements['reg-character']?.value || undefined,
+          priceGroup: form.elements['reg-price']?.value || undefined,
+        };
+        try {
+          await api.post(`/events/${eventId}/registrations/${editingMemberId}`, payload);
+          notify('Mitglied angemeldet.', 'success');
+          const refreshed = await api.get(`/members/${editingMemberId}`);
+          renderRegistrationsTab(refreshed);
+          renderCharactersTab(refreshed);
+          await loadMembers();
+        } catch (err) {
+          notify(err.message, 'error');
+        }
+      });
+    }
+
     async function openDetail(memberId) {
       const member = await api.get(`/members/${memberId}`);
       editingMemberId = memberId;
@@ -694,6 +775,8 @@
 
       showDetailTab('detail-tab-konto');
       renderCharactersTab(member);
+      document.getElementById('detail-regs-tab-btn').hidden = !canCreateForOthers;
+      if (canCreateForOthers) renderRegistrationsTab(member);
 
       if (myAccountFields.includes('group')) {
         detailGroupWrap.style.display = '';

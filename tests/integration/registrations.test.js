@@ -1431,6 +1431,35 @@ test('registering is rejected without waiverAccepted once a waiver is configured
   });
 });
 
+test('an admin can register another member for an event (even with a waiver configured); other groups cannot', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const member = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const characterId = await makeCharacter(port, member.cookie);
+    const setWaiver = (waiverText) => fetch(`http://localhost:${port}/app-settings`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie }, body: JSON.stringify({ waiverText }),
+    });
+    await setWaiver('Ich nehme auf eigene Gefahr teil.');
+    const post = (cookie, body, userId = member.userId) => fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body),
+    });
+    try {
+      assert.equal((await post(member.cookie, { conRole: 'sc', characterId })).status, 403);
+      assert.equal((await post(admin.cookie, { conRole: 'sc' })).status, 400);
+      assert.equal((await post(admin.cookie, { conRole: 'sc', characterId }, crypto.randomUUID())).status, 404);
+      const res = await post(admin.cookie, { conRole: 'sc', characterId });
+      assert.equal(res.status, 201);
+      assert.equal((await res.json()).waiver_version_accepted, null);
+      assert.equal((await post(admin.cookie, { conRole: 'sc', characterId })).status, 409);
+      const { rows } = await query('SELECT user_id FROM registrations WHERE event_id = $1', [eventId]);
+      assert.deepEqual(rows.map((r) => r.user_id), [member.userId]);
+    } finally {
+      await setWaiver('');
+    }
+  });
+});
+
 test.after(async () => {
   // Users created in a reg_custom_* group must be deleted before the group
   // itself (users.group_id -> groups.id has no ON DELETE CASCADE), otherwise

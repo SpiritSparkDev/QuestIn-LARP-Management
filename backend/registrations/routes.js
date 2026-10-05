@@ -8,6 +8,7 @@ import { getRegistrationFieldSchema } from '../registrationFieldSchema/repositor
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { buildParticipantsCsv } from './exportCsv.js';
 import { logAudit } from '../audit/repository.js';
+import { query } from '../db.js';
 import { isManagedBy } from '../managedPersons/repository.js';
 import {
   registerForEvent,
@@ -60,6 +61,31 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
     if (err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
+    throw err;
+  }
+}));
+
+// An admin/moderator registers another member for an event (same rules as
+// the member's own registration, except the waiver -- only the member can accept
+// it -- and the active-event gate, which staff is exempt from).
+router.post('/events/:id/registrations/:userId', requireAuth(async ({ req, params, user }) => {
+  if (!['admin', 'moderator'].includes(user.group.key)) return { status: 403, body: { error: 'forbidden' } };
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const { rows: userRows } = await query('SELECT 1 FROM users WHERE id = $1', [params.userId]).catch(() => ({ rows: [] }));
+  if (userRows.length === 0) return { status: 404, body: { error: 'member not found' } };
+  try {
+    const registration = await registerForEvent(params.userId, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, false, { bypassWaiver: true });
+    await logAudit({ actorId: user.id, action: 'registration.admin_create', details: { eventId: params.id, userId: params.userId, conRole: body.conRole } });
+    return { status: 201, body: registration };
+  } catch (err) {
+    if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
+    if (err.code === 'ALREADY_REGISTERED' || err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
+    if (['INVALID_CON_ROLE', 'CHARACTER_REQUIRED', 'CHARACTER_NOT_ALLOWED', 'CHARACTER_CLASS_MISMATCH', 'INVALID_NSC_AVAILABILITY', 'INVALID_FLAG', 'INVALID_PRICE_GROUP'].includes(err.code)) {
+      return { status: 400, body: { error: err.message } };
+    }
+    if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
+    if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
     throw err;
   }
 }));

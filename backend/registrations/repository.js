@@ -182,7 +182,7 @@ function resolvePriceGroup(event, priceGroup) {
 
 export const COUNTED_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out'];
 
-export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted) {
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false } = {}) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -194,7 +194,9 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   // yet (empty text, the default) must not have every existing registration
   // flow suddenly start rejecting requests.
   const appSettings = await getAppSettings();
-  if (appSettings.waiverText && waiverAccepted !== true) {
+  // `bypassWaiver`: an admin registering someone else -- that person hasn't
+  // accepted anything, so the waiver fields simply stay empty.
+  if (appSettings.waiverText && waiverAccepted !== true && !bypassWaiver) {
     const err = new Error('Der Einverständniserklärung muss zugestimmt werden.');
     err.code = 'WAIVER_NOT_ACCEPTED';
     throw err;
