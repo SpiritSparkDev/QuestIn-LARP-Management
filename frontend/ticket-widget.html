@@ -29,7 +29,7 @@
         <label for="priceGroup">Teilnahmegruppe</label>
       </div>
       <div id="waiver-wrap" style="display:none;">
-        <p class="sub" id="waiver-text-display" style="white-space:pre-wrap;"></p>
+        <div class="sub" id="waiver-text-display"></div>
         <label><input type="checkbox" id="waiverAccepted" name="waiverAccepted"> Ich habe die Einverständniserklärung gelesen und stimme zu.</label>
       </div>
       <button type="submit">Ticket sichern</button>
@@ -40,6 +40,7 @@
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 import { escapeHtml } from '/js/formFields.js';
+import { renderRichText } from '/js/richText.js';
 applyBranding();
 import { notify } from '/js/notifications.js';
 
@@ -76,7 +77,7 @@ if (!code) {
     }
     const { waiverText } = await api.get('/app-settings');
     if (waiverText) {
-      waiverTextDisplay.textContent = waiverText;
+      waiverTextDisplay.innerHTML = renderRichText(waiverText);
       waiverWrap.style.display = '';
       waiverCheckbox.required = true;
     }

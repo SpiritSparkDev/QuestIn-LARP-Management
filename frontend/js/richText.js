@@ -64,6 +64,14 @@ export function sanitizeHtml(html) {
   return holder.innerHTML;
 }
 
+// Waiver text: admins may type HTML (rendered through the allowlist above);
+// older plain-text waivers keep their line breaks.
+export function renderRichText(text) {
+  const source = String(text ?? '');
+  if (/<[a-z][\s\S]*>/i.test(source)) return sanitizeHtml(source);
+  return source.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+}
+
 const TOOLBAR = [
   { command: 'bold', icon: 'format_bold', label: 'Fett' },
   { command: 'italic', icon: 'format_italic', label: 'Kursiv' },

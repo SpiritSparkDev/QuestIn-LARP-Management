@@ -251,7 +251,7 @@
 
                     <div id="registration-waiver" style="display:none;">
                       <h3>4. Einverständniserklärung</h3>
-                      <p class="sub" id="registration-waiver-text" style="white-space:pre-wrap;"></p>
+                      <div class="sub" id="registration-waiver-text"></div>
                       <label><input type="checkbox" id="registration-waiver-checkbox" required> Ich habe die Einverständniserklärung gelesen und stimme zu.</label>
                     </div>
 
@@ -474,6 +474,7 @@
       nullifyBlankNumberFields,
       otFieldValuesEqual,
     } from "/js/formFields.js";
+    import { renderRichText } from "/js/richText.js";
     import { buildScanCode } from "/js/qrCode.js";
     import { buildEpcQrPayload } from "/js/epcQr.js";
     import { notify } from "/js/notifications.js";
@@ -1206,7 +1207,7 @@
     async function loadRegistrationWaiver() {
       const { waiverText } = await api.get("/app-settings");
       if (waiverText) {
-        registrationWaiverText.textContent = waiverText;
+        registrationWaiverText.innerHTML = renderRichText(waiverText);
         registrationWaiverSection.style.display = "";
         registrationWaiverCheckbox.required = true;
       } else {
