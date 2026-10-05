@@ -205,7 +205,7 @@
     } from "/js/formFields.js";
     import { renderRichText } from "/js/richText.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal } from "/js/extrasPicker.js";
-    import { renderLodgingPicker, collectLodging } from "/js/lodgingPicker.js";
+    import { renderLodgingSection, bindLodgingSection, collectLodgingSection } from "/js/lodgingPicker.js";
     import { notify } from "/js/notifications.js";
 
     const managedPersonId = new URLSearchParams(window.location.search).get("id");
@@ -624,7 +624,8 @@
         lodgings = [];
       }
       if (token !== lodgingRenderToken) return;
-      registrationLodgingContainer.innerHTML = lodgings.length > 0 ? `<h3>Unterbringung</h3>${renderLodgingPicker(lodgings, null)}` : "";
+      registrationLodgingContainer.innerHTML = renderLodgingSection(lodgings);
+      bindLodgingSection(registrationLodgingContainer);
     }
     function isNscRoleSelected() { return selectedRegistrationRole === "nsc"; }
 
@@ -798,13 +799,19 @@
         if (!characterId) { notify("Wähle einen Charakter.", "error"); return; }
         conRole = "sc";
       }
+      const lodgingChoice = collectLodgingSection(registrationLodgingContainer);
+      if (lodgingChoice.wanted && !lodgingChoice.lodgingId) {
+        notify("Wähle eine Unterkunft oder entferne das Häkchen bei „Unterbringung mieten“.", "error");
+        return;
+      }
+
       try {
         await api.post(`/managed-persons/${managedPersonId}/events/${eventId}/register`, {
           conRole, characterId,
           flags: collectRegistrationFlags(),
           priceGroup: collectRegistrationPriceGroup(),
           extras: collectExtras(registrationExtrasContainer),
-          lodgingId: collectLodging(registrationLodgingContainer),
+          lodgingId: lodgingChoice.lodgingId,
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
         });

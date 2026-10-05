@@ -4259,6 +4259,7 @@ th.is-sortable[data-dir="desc"]::after {
 .lodging-card-beds { font-size: 12px; color: var(--on-surface-variant); white-space: nowrap; }
 .lodging-card p.sub { margin: 0; }
 .lodging-occupants { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.lodging-toggle { display: block; margin: 0 0 12px; }
 .lodging-row-actions { display: flex; gap: 6px; align-items: center; }
 .lodging-overview-row { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--outline-variant); }
 .lodging-overview-row p { margin: 0 0 4px; }

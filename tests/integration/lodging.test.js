@@ -68,12 +68,12 @@ test('lodging add-on: setup, booking, sold-out, visibility, switching and locks'
     const due = async (userId) => (await query('SELECT amount_due_cents, lodging_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0];
     assert.deepEqual(await due(alice.userId), { amount_due_cents: 1500, lodging_cents: 1500 });
 
-    // Names are only shown to people who are part of the event.
+    // Beds and names are visible to every logged-in user, registered or not.
     const aliceView = await (await getLodgings(alice.cookie)).json();
     assert.deepEqual(aliceView[0].occupants.map((o) => o.name).sort(), ['Alice Test', 'Bob Test']);
     const carolView = await (await getLodgings(carol.cookie)).json();
     assert.equal(carolView[0].free, 0);
-    assert.deepEqual(carolView[0].occupants, []);
+    assert.deepEqual(carolView[0].occupants.map((o) => o.name).sort(), ['Alice Test', 'Bob Test']);
 
     // Switching frees the bed and moves the price.
     const put = (cookie, userId, lodgingId) => fetch(`${base}/events/${eventId}/registrations/${userId}/lodging`, {

@@ -4,7 +4,6 @@ import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
-import { query } from '../db.js';
 import { isManagedBy } from '../managedPersons/repository.js';
 import { updateRegistrationLodging } from '../registrations/repository.js';
 import { listLodgings, replaceLodgings } from './repository.js';
@@ -28,25 +27,12 @@ function validateLodgings(lodgings) {
   return null;
 }
 
-// Free beds for everyone (needed to choose one while registering); the names
-// of who sleeps where only for people who are part of the event themselves
-// (they have a registration, or manage someone who has) and for staff.
-router.get('/events/:id/lodgings', requireAuth(async ({ params, user }) => {
+// Beds and who sleeps where are visible to every logged-in user -- people
+// choose a hut (and find their family or group) before they register.
+router.get('/events/:id/lodgings', requireAuth(async ({ params }) => {
   if (!(await getAppSettings()).lodgingEnabled) return DISABLED;
   if (!(await getEvent(params.id))) return { status: 404, body: { error: 'event not found' } };
-
-  let showNames = ['admin', 'moderator'].includes(user.group.key) || user.group.visibleMenus.includes('checkin');
-  if (!showNames) {
-    const { rows } = await query(
-      `SELECT 1 FROM registrations r
-       WHERE r.event_id = $1 AND r.status <> 'cancelled'
-         AND (r.user_id = $2 OR EXISTS (SELECT 1 FROM users m WHERE m.id = r.user_id AND m.managed_by_user_id = $2))
-       LIMIT 1`,
-      [params.id, user.id]
-    );
-    showNames = rows.length > 0;
-  }
-  return { status: 200, body: await listLodgings(params.id, { showNames }) };
+  return { status: 200, body: await listLodgings(params.id, { showNames: true }) };
 }));
 
 router.put('/events/:id/lodgings', requireAuth(requireMenu('events')(async ({ req, params }) => {

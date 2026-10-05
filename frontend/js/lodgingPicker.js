@@ -14,7 +14,7 @@ function lodgingCard(lodging, selectedId, disabled) {
   const full = lodging.free === 0 && !mine;
   const occupants = lodging.occupants.length
     ? `<ul class="lodging-occupants">${lodging.occupants.map((o) => `<li>${escapeHtml(o.name)}</li>`).join('')}</ul>`
-    : (lodging.taken > 0 ? '<p class="sub">Die Belegung sehen nur angemeldete Teilnehmer.</p>' : '<p class="sub">Noch niemand eingetragen.</p>');
+    : '<p class="sub">Noch niemand eingetragen.</p>';
   return `<label class="lodging-card${mine ? ' is-selected' : ''}${full ? ' is-full' : ''}">
     <input type="radio" name="lodging" value="${escapeHtml(lodging.id)}" ${mine ? 'checked' : ''} ${full || disabled ? 'disabled' : ''}>
     <span class="lodging-card-head">
@@ -28,14 +28,14 @@ function lodgingCard(lodging, selectedId, disabled) {
 }
 
 // '' when the event has no lodgings, so callers can drop it in unconditionally.
-export function renderLodgingPicker(lodgings, selectedId = null, { disabled = false } = {}) {
+export function renderLodgingPicker(lodgings, selectedId = null, { disabled = false, allowNone = true } = {}) {
   if (!lodgings || lodgings.length === 0) return '';
   return `<div class="lodging-picker">
-    <label class="lodging-card${selectedId ? '' : ' is-selected'}">
+    ${allowNone ? `<label class="lodging-card${selectedId ? '' : ' is-selected'}">
       <input type="radio" name="lodging" value="" ${selectedId ? '' : 'checked'} ${disabled ? 'disabled' : ''}>
       <span class="lodging-card-head"><strong>Keine Unterkunft über uns</strong></span>
       <span class="sub">Ich kümmere mich selbst darum.</span>
-    </label>
+    </label>` : ''}
     ${lodgings.map((l) => lodgingCard(l, selectedId, disabled)).join('')}
   </div>`;
 }
@@ -43,6 +43,34 @@ export function renderLodgingPicker(lodgings, selectedId = null, { disabled = fa
 // The chosen lodging id, or undefined for "none".
 export function collectLodging(container) {
   return container.querySelector('input[name="lodging"]:checked')?.value || undefined;
+}
+
+// The registration step: hidden behind "Unterbringung mieten". Ticking it
+// reveals the lodgings; unticking forgets the choice.
+export function renderLodgingSection(lodgings) {
+  if (!lodgings || lodgings.length === 0) return '';
+  return `<h3>Unterbringung</h3>
+    <label class="lodging-toggle"><input type="checkbox" data-lodging-toggle> Unterbringung mieten</label>
+    <div data-lodging-panel hidden>
+      <p class="sub">Wähle ein Bett. Du siehst, wer in welcher Unterkunft schläft – so finden Familien und Gruppen zusammen.</p>
+      ${renderLodgingPicker(lodgings, null, { allowNone: false })}
+    </div>`;
+}
+
+export function bindLodgingSection(container) {
+  const toggle = container.querySelector('[data-lodging-toggle]');
+  const panel = container.querySelector('[data-lodging-panel]');
+  if (!toggle) return;
+  toggle.addEventListener('change', () => {
+    panel.hidden = !toggle.checked;
+    if (!toggle.checked) container.querySelectorAll('input[name="lodging"]').forEach((r) => { r.checked = false; });
+  });
+}
+
+// { wanted, lodgingId }: wanted without a chosen lodging means "pick one first".
+export function collectLodgingSection(container) {
+  const wanted = Boolean(container.querySelector('[data-lodging-toggle]')?.checked);
+  return { wanted, lodgingId: wanted ? collectLodging(container) : undefined };
 }
 
 export { formatCents as formatLodgingCents };

@@ -529,7 +529,7 @@
     } from "/js/formFields.js";
     import { renderRichText } from "/js/richText.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary, sameExtras, formatCents } from "/js/extrasPicker.js";
-    import { renderLodgingPicker, collectLodging } from "/js/lodgingPicker.js";
+    import { renderLodgingPicker, collectLodging, renderLodgingSection, bindLodgingSection, collectLodgingSection } from "/js/lodgingPicker.js";
     import { buildScanCode } from "/js/qrCode.js";
     import { buildEpcQrPayload } from "/js/epcQr.js";
     import { notify } from "/js/notifications.js";
@@ -1505,9 +1505,8 @@
         lodgings = [];
       }
       if (token !== lodgingRenderToken) return; // a newer event selection won
-      registrationLodgingContainer.innerHTML = lodgings.length > 0
-        ? `<h3>Unterbringung</h3><p class="sub">Du kannst dir ein Bett sichern. Wer in welcher Unterkunft schläft, siehst du, sobald du angemeldet bist – so finden Familien und Gruppen zusammen.</p>${renderLodgingPicker(lodgings, null)}`
-        : "";
+      registrationLodgingContainer.innerHTML = renderLodgingSection(lodgings);
+      bindLodgingSection(registrationLodgingContainer);
     }
 
     let selectedRegistrationRole = "sc";
@@ -1915,6 +1914,12 @@
         conRole = "sc";
       }
 
+      const lodgingChoice = collectLodgingSection(registrationLodgingContainer);
+      if (lodgingChoice.wanted && !lodgingChoice.lodgingId) {
+        notify("Wähle eine Unterkunft oder entferne das Häkchen bei „Unterbringung mieten“.", "error");
+        return;
+      }
+
       try {
         await api.post(`/events/${eventId}/register`, {
           conRole,
@@ -1922,7 +1927,7 @@
           flags: collectRegistrationFlags(),
           priceGroup: collectRegistrationPriceGroup(),
           extras: collectExtras(registrationExtrasContainer),
-          lodgingId: collectLodging(registrationLodgingContainer),
+          lodgingId: lodgingChoice.lodgingId,
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
         });
