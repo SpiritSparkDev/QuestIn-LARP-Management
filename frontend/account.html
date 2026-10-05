@@ -89,6 +89,19 @@
                 <p class="sub">Melde zusätzliche Personen an, die sich nicht selbst einloggen können oder wollen — z.B. Familienmitglieder oder Kinder. Du verwaltest ihre Daten, Charaktere und Anmeldungen stellvertretend.</p>
                 <div id="managed-persons-list"></div>
                 <button type="button" id="new-managed-person-btn" class="btn-ghost">Person hinzufügen</button>
+                <button type="button" id="claim-person-btn" class="btn-ghost">Vorhandene Person in die Gruppe holen</button>
+
+                <dialog id="claim-person-dialog">
+                  <h3>Vorhandene Person in die Gruppe holen</h3>
+                  <p class="lede">Sucht nach Personen ohne eigenen Login, die noch zu keiner Gruppe gehören (z. B. aus einer früheren Ticket-Anmeldung). Gib mindestens 3 Zeichen des Namens ein oder die vollständige E-Mail-Adresse.</p>
+                  <form id="claim-person-form">
+                    <input id="claim-person-term" type="search" minlength="3" required>
+                    <label for="claim-person-term">Name oder E-Mail</label>
+                    <button type="submit">Suchen</button>
+                  </form>
+                  <div id="claim-person-results"></div>
+                  <div class="dialog-actions"><button type="button" id="claim-person-close" class="btn-ghost">Schließen</button></div>
+                </dialog>
 
                 <dialog id="managed-person-dialog">
                   <h3 id="managed-person-dialog-title">Person hinzufügen</h3>
@@ -1071,6 +1084,41 @@
         btn.addEventListener("click", () => convertManagedPerson(btn.dataset.managedPersonConvert));
       });
     }
+
+    const claimDialog = document.getElementById("claim-person-dialog");
+    const claimResults = document.getElementById("claim-person-results");
+
+    document.getElementById("claim-person-btn").addEventListener("click", () => {
+      document.getElementById("claim-person-term").value = "";
+      claimResults.innerHTML = "";
+      claimDialog.showModal();
+    });
+    document.getElementById("claim-person-close").addEventListener("click", () => claimDialog.close());
+
+    document.getElementById("claim-person-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const term = document.getElementById("claim-person-term").value.trim();
+      try {
+        const found = await api.get(`/managed-persons/search?q=${encodeURIComponent(term)}`);
+        claimResults.innerHTML = found.length === 0
+          ? '<p class="sub">Keine passende Person gefunden.</p>'
+          : found.map((p) => `<div class="action-row"><span>${escapeHtml(p.name)}${p.emailHint ? ` <span class="sub">${escapeHtml(p.emailHint)}</span>` : ""}</span> <button type="button" class="btn-ghost" data-claim-person="${escapeHtml(p.id)}">In meine Gruppe holen</button></div>`).join("");
+        claimResults.querySelectorAll("[data-claim-person]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            try {
+              await api.post(`/managed-persons/${btn.dataset.claimPerson}/claim`, {});
+              notify("Person zur Gruppe hinzugefügt.", "success");
+              claimDialog.close();
+              await loadManagedPersons();
+            } catch (err) {
+              notify(err.message, "error");
+            }
+          });
+        });
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
 
     async function loadManagedPersons() {
       managedPersons = await api.get("/managed-persons");

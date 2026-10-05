@@ -140,3 +140,39 @@ export async function deleteManagedPerson(id, ownerId, { force = false } = {}) {
   );
   return rows.length > 0;
 }
+
+// "Hold an existing person into my group": guest accounts (no login -- e.g.
+// from the PDF import or the ticket widget) that nobody manages yet. Full
+// accounts with their own login are never offered. Only name and a masked
+// e-mail are returned, and an e-mail only matches when typed in full.
+function maskEmail(email) {
+  if (!email) return null;
+  const [local, domain] = email.split('@');
+  return `${local.slice(0, 1)}***@${domain}`;
+}
+
+export async function searchClaimablePersons(term, ownerId) {
+  const pattern = `%${term.toLowerCase().replace(/[\\%_]/g, '\\$&')}%`;
+  const { rows } = await query(
+    `SELECT id, email, first_name, last_name, nickname FROM users
+     WHERE is_guest AND managed_by_user_id IS NULL AND deactivated_at IS NULL AND id <> $1
+       AND (lower(first_name || ' ' || last_name) LIKE $2 OR lower(coalesce(nickname, '')) LIKE $2 OR lower(email) = lower($3))
+     ORDER BY last_name, first_name LIMIT 20`,
+    [ownerId, pattern, term]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
+    emailHint: maskEmail(r.email),
+  }));
+}
+
+export async function claimPerson(id, ownerId) {
+  const { rows } = await query(
+    `UPDATE users SET managed_by_user_id = $2
+     WHERE id = $1 AND is_guest AND managed_by_user_id IS NULL AND deactivated_at IS NULL AND id <> $2
+     RETURNING id`,
+    [id, ownerId]
+  );
+  return rows.length > 0 ? getManagedPerson(id, ownerId) : null;
+}

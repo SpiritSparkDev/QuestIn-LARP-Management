@@ -5,11 +5,30 @@ import { isValidEmail } from '../validation.js';
 import { filterToAllowedFields } from '../members/routes.js';
 import {
   listManagedPersons, getManagedPerson, createManagedPerson, updateManagedPerson, deleteManagedPerson,
+  searchClaimablePersons, claimPerson,
 } from './repository.js';
+import { rateLimit } from '../middleware/rateLimit.js';
+import { logAudit } from '../audit/repository.js';
+
+const SEARCH_RATE_LIMIT = { keyPrefix: 'managed-search', maxAttempts: 30, windowMs: 15 * 60 * 1000 };
 
 router.get('/managed-persons', requireAuth(async ({ user }) => {
   const persons = await listManagedPersons(user.id);
   return { status: 200, body: persons };
+}));
+
+// Must be registered before '/managed-persons/:id'.
+router.get('/managed-persons/search', rateLimit(SEARCH_RATE_LIMIT)(requireAuth(async ({ req, user }) => {
+  const term = (new URL(req.url, 'http://localhost').searchParams.get('q') ?? '').trim();
+  if (term.length < 3) return { status: 400, body: { error: 'Bitte mindestens 3 Zeichen eingeben.' } };
+  return { status: 200, body: await searchClaimablePersons(term, user.id) };
+})));
+
+router.post('/managed-persons/:id/claim', requireAuth(async ({ params, user }) => {
+  const person = await claimPerson(params.id, user.id);
+  if (!person) return { status: 404, body: { error: 'Person nicht gefunden oder bereits in einer Gruppe.' } };
+  await logAudit({ actorId: user.id, action: 'managed_person.claim', details: { personId: params.id } });
+  return { status: 200, body: person };
 }));
 
 router.get('/managed-persons/:id', requireAuth(async ({ params, user }) => {
