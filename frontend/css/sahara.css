@@ -2104,6 +2104,15 @@ tbody tr:last-child td {
   display: block;
 }
 
+.field-card {
+  grid-column: 1 / -1;
+  padding: 14px 16px 8px;
+  margin-bottom: 14px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  background: var(--surface-container-low, transparent);
+}
+
 .browse-subcards {
   display: grid;
   gap: 10px;

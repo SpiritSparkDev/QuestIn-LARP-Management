@@ -40,10 +40,12 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
   const val = escapeHtml(value);
   const id = `${idPrefix}field-${key}`;
   const required = field.required ? 'required' : '';
+  // Schema option "Als Card darstellen" (the per-field container class stays).
+  const cls = field.card ? `${key}-container field-card` : `${key}-container`;
 
   if (type === 'boolean') {
     const checked = value ? ' checked' : '';
-    return `<div class="${key}-container"><label for="${id}"><input id="${id}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}</label></div>`;
+    return `<div class="${cls}"><label for="${id}"><input id="${id}" data-field="${key}" type="checkbox"${checked}> ${escapedLabel}</label></div>`;
   }
   if (type === 'multiselect' && Array.isArray(field.options)) {
     const selected = Array.isArray(value) ? value : [];
@@ -52,22 +54,22 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
       const checked = selected.includes(opt) ? ' checked' : '';
       return `<label for="${id}-${i}"><input id="${id}-${i}" data-field="${key}" type="checkbox" value="${escapedOpt}"${checked}> ${escapedOpt}</label>`;
     }).join('');
-    return `<div class="${key}-container"><span>${escapedLabel}</span>${checkboxes}</div>`;
+    return `<div class="${cls}"><span>${escapedLabel}</span>${checkboxes}</div>`;
   }
   if (type === 'number') {
-    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="number" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${cls}"><input id="${id}" data-field="${key}" type="number" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'link') {
-    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="url" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${cls}"><input id="${id}" data-field="${key}" type="url" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'date') {
-    return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="date" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${cls}"><input id="${id}" data-field="${key}" type="date" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'document') {
-    return `<div class="${key}-container">${renderDocumentEditor({ id, attribute: `data-field="${key}"`, value, readOnly: false })}<label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${cls}">${renderDocumentEditor({ id, attribute: `data-field="${key}"`, value, readOnly: false })}<label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'textarea') {
-    return `<div class="${key}-container"><textarea id="${id}" data-field="${key}" ${required}>${val}</textarea><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${cls}"><textarea id="${id}" data-field="${key}" ${required}>${val}</textarea><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'select' && Array.isArray(field.options)) {
     const options = field.options.map((opt) => {
@@ -75,9 +77,9 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
       const selected = opt === value ? ' selected' : '';
       return `<option value="${escapedOpt}"${selected}>${escapedOpt}</option>`;
     }).join('');
-    return `<div class="${key}-container"><select id="${id}" data-field="${key}" ${required}><option value=""></option>${options}</select><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${cls}"><select id="${id}" data-field="${key}" ${required}><option value=""></option>${options}</select><label for="${id}">${escapedLabel}</label></div>`;
   }
-  return `<div class="${key}-container"><input id="${id}" data-field="${key}" type="text" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+  return `<div class="${cls}"><input id="${id}" data-field="${key}" type="text" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
 }
 
 // Reads a schema-driven OT-field container's current values back into a
