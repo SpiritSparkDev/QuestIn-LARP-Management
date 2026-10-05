@@ -102,12 +102,13 @@ export async function listCharactersForEvent(eventId) {
 // permissions they happen to hold as a person (e.g. an admin editing their
 // own character). Only a genuinely different elevated staff member (e.g.
 // via the check-in dialog) may write them.
-export async function updateCharacter(id, userId, { name, data }, { isElevated = false, actorId = null } = {}) {
+export async function updateCharacter(id, userId, { name, data }, { isElevated = false, actorId = null, groupFieldsOnly = false } = {}) {
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
   let newData;
   let staffFieldChanges = [];
+  let groupFieldChanges = [];
   if (data !== undefined) {
     const schema = await schemaForClass(character.class);
     // A staffOnly field's value can never be changed by the owner
@@ -115,7 +116,16 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
     // it (a disabled input never reaches FormData), so trust the SERVER's
     // existing value here rather than whatever the client happened to
     // send, regardless of type or emptiness.
-    const effectiveData = sanitizeDocumentFields(schema, isElevated ? data : { ...data });
+    // A group manager above the owner only writes the fields marked
+    // "Gruppenverwaltung" in the schema; everything else keeps its stored value.
+    let source = data;
+    if (groupFieldsOnly) {
+      source = { ...character.data };
+      for (const field of schema) {
+        if (field.groupManaged && data && field.key in data) source[field.key] = data[field.key];
+      }
+    }
+    const effectiveData = sanitizeDocumentFields(schema, isElevated ? source : { ...source });
     if (!isElevated) {
       for (const field of schema) {
         if (field.staffOnly) effectiveData[field.key] = character.data?.[field.key];
@@ -129,6 +139,12 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
       throw err;
     }
     newData = effectiveData;
+    if (groupFieldsOnly) {
+      groupFieldChanges = schema
+        .filter((field) => field.groupManaged)
+        .map((field) => ({ field: field.key, label: field.label ?? field.key, from: character.data?.[field.key] ?? null, to: effectiveData[field.key] ?? null }))
+        .filter((change) => JSON.stringify(change.from) !== JSON.stringify(change.to));
+    }
     // Every change to a staffOnly field made by staff is logged (field, old and new value).
     if (isElevated) {
       staffFieldChanges = schema
@@ -144,9 +160,17 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
        data = COALESCE($4, data)
      WHERE id = $1 AND user_id = $2
      RETURNING ${SELECT_COLUMNS}`,
-    [id, userId, name ?? null, newData !== undefined ? JSON.stringify(newData) : null]
+    [id, userId, groupFieldsOnly ? null : (name ?? null), newData !== undefined ? JSON.stringify(newData) : null]
   );
   if (rows[0]) {
+    for (const change of groupFieldChanges) {
+      await logAudit({
+        actorId,
+        action: 'character.group_field_changed',
+        subjectUserId: userId,
+        details: { characterId: id, characterName: rows[0].name, ...change },
+      });
+    }
     for (const change of staffFieldChanges) {
       await logAudit({
         actorId,

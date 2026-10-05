@@ -4262,6 +4262,11 @@ th.is-sortable[data-dir="desc"]::after {
 .lodging-row-actions { display: flex; gap: 6px; align-items: center; }
 .lodging-overview-row { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--outline-variant); }
 .lodging-overview-row p { margin: 0 0 4px; }
+.group-tree-block { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--outline-variant); }
+.group-tree-list { margin: 4px 0 12px; padding-left: 20px; }
+.group-tree-list .group-tree-list { margin: 4px 0 4px; }
+.group-tree-form { margin: 16px 0; }
+.group-char-form { margin-bottom: 20px; }
 .extras-picker-row { margin-bottom: 14px; }
 .extras-picker-row input[type="number"] { max-width: 120px; }
 .extras-picker-row p.sub { margin: 2px 0 0; }

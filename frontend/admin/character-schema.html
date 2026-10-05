@@ -99,7 +99,8 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
   const optionsValue = Array.isArray(field.options) ? field.options.join(', ') : '';
   const publicCheckboxHtml = allowPublic
     ? `<label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>
-       <label><input type="checkbox" class="schema-staff-only" ${field.staffOnly ? 'checked' : ''}> Nur Staff darf bearbeiten</label>`
+       <label><input type="checkbox" class="schema-staff-only" ${field.staffOnly ? 'checked' : ''}> Nur Staff darf bearbeiten</label>
+       <label title="Der übergeordnete Gruppenverwalter darf dieses Feld bei Charakteren seiner Untergruppen bearbeiten"><input type="checkbox" class="schema-group-managed" ${field.groupManaged ? 'checked' : ''}> Gruppenverwaltung</label>`
     : '';
   // OT fields only: a "sensitive" field (e.g. health notes) is left out of the
   // CSV exports unless the exporting group has the extra sensitive-export
@@ -163,6 +164,8 @@ function collectSchema(container, { allowPublic = true, allowGroup = false, allo
     if (allowPublic) {
       field.public = row.querySelector('.schema-public').checked;
       field.staffOnly = row.querySelector('.schema-staff-only').checked;
+      // Only stored when set, so existing schemas stay unchanged.
+      if (row.querySelector('.schema-group-managed').checked) field.groupManaged = true;
     }
     if (allowGroup) {
       field.group = row.querySelector('.schema-group').value.trim();

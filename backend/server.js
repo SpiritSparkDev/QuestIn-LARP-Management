@@ -17,6 +17,7 @@ import './characters/routes.js';
 import './characterFiles/routes.js';
 import './registrations/routes.js';
 import './lodging/routes.js';
+import './groupTree/routes.js';
 import './groups/routes.js';
 import './members/routes.js';
 import './managedPersons/routes.js';

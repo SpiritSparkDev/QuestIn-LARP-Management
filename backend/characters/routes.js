@@ -7,6 +7,7 @@ import { filterCharacterFields } from './visibility.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
+import { isGroupAncestorOf } from '../groupTree/repository.js';
 import { isManagedBy } from '../managedPersons/repository.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -90,7 +91,8 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
   if (!character) return { status: 404, body: { error: 'character not found' } };
   const isOwner = character.user_id === user.id || await isManagedBy(character.user_id, user.id);
   const isElevated = user.group.canOverrideCheckinStatus;
-  if (!isOwner && !isElevated) {
+  const isGroupAncestor = !isOwner && !isElevated && await isGroupAncestorOf(user.id, character.user_id);
+  if (!isOwner && !isElevated && !isGroupAncestor) {
     return { status: 403, body: { error: 'forbidden' } };
   }
   const body = await readJsonBody(req);
@@ -99,7 +101,7 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
     // Staff (canOverrideCheckinStatus) may write staffOnly fields on any
     // character -- including their own. Plain owners never can: the server
     // keeps the stored value for them (see updateCharacter).
-    const updated = await updateCharacter(params.id, character.user_id, body, { isElevated, actorId: user.id });
+    const updated = await updateCharacter(params.id, character.user_id, body, { isElevated, actorId: user.id, groupFieldsOnly: isGroupAncestor });
     return { status: 200, body: updated };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {

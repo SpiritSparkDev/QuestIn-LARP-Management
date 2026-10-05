@@ -91,6 +91,30 @@
                 <button type="button" id="new-managed-person-btn" class="btn-ghost">Person hinzufügen</button>
                 <button type="button" id="claim-person-btn" class="btn-ghost">Vorhandene Person in die Gruppe holen</button>
 
+                <div id="group-tree-block" class="group-tree-block">
+                  <h3>Gruppenstruktur</h3>
+                  <p class="sub">Andere Gruppenverwalter können in deine Gruppe aufgenommen werden (und du in ihre). So entstehen verschachtelte Gruppen. Der übergeordnete Verwalter sieht die Untergruppen und bearbeitet bei deren Charakteren die Felder, die als „Gruppenverwaltung“ freigegeben sind.</p>
+                  <div id="group-tree-view"></div>
+                  <form id="group-invite-form" class="group-tree-form">
+                    <input id="group-invite-email" type="email" required>
+                    <label for="group-invite-email">Gruppenverwalter per E-Mail einladen (vollständige Adresse)</label>
+                    <button type="submit" class="btn-ghost">Einladung senden</button>
+                  </form>
+                  <form id="group-redeem-form" class="group-tree-form">
+                    <input id="group-redeem-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off">
+                    <label for="group-redeem-code">Beitrittscode eines anderen Verwalters einlösen – er wird direkt aufgenommen</label>
+                    <button type="submit" class="btn-ghost">Code einlösen</button>
+                  </form>
+                  <p><button type="button" id="group-code-create" class="btn-ghost">Beitrittscode für den übergeordneten Verwalter erzeugen</button></p>
+                  <p class="sub" id="group-code-result"></p>
+                </div>
+
+                <dialog id="group-fields-dialog">
+                  <h3 id="group-fields-title">Gruppen-Felder</h3>
+                  <div id="group-fields-body"></div>
+                  <div class="dialog-actions"><button type="button" id="group-fields-close" class="btn-ghost">Schließen</button></div>
+                </dialog>
+
                 <dialog id="claim-person-dialog">
                   <h3>Vorhandene Person in die Gruppe holen</h3>
                   <p class="lede">Sucht nach Personen ohne eigenen Login, die noch zu keiner Gruppe gehören (z. B. aus einer früheren Ticket-Anmeldung). Gib mindestens 3 Zeichen des Namens ein oder die vollständige E-Mail-Adresse.</p>
@@ -1020,7 +1044,7 @@
     // unconditionally so nobody has to re-check a box every visit to see
     // who they've already set up.
     function updateManagedPersonsDashboardVisibility() {
-      const hasAny = managedPersons.length > 0;
+      const hasAny = managedPersons.length > 0 || groupTreeIsActive();
       document.getElementById("dashboard-managed-persons-toggle").style.display = hasAny ? "none" : "";
       document.getElementById("dashboard-managed-persons-section").style.display =
         hasAny || document.getElementById("dashboard-managed-persons-checkbox").checked ? "" : "none";
@@ -1110,11 +1134,138 @@
               notify("Person zur Gruppe hinzugefügt.", "success");
               claimDialog.close();
               await loadManagedPersons();
+      await loadGroupTree();
             } catch (err) {
               notify(err.message, "error");
             }
           });
         });
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    // ---- Gruppenstruktur (nested groups) ---------------------------------
+    let groupTree = null;
+
+    function groupTreeIsActive() {
+      return Boolean(groupTree && (groupTree.parent || groupTree.node.children.length || groupTree.incoming.length || groupTree.outgoing.length));
+    }
+
+    function renderGroupNode(node, isRoot) {
+      const persons = node.persons.map((p) => `<li>${escapeHtml(p.name)}${isRoot ? "" : ` <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(p.id)}" data-group-person-name="${escapeHtml(p.name)}">Gruppen-Felder</button>`}</li>`).join("");
+      const children = node.children.map((child) => `<li><strong>${escapeHtml(child.name)}</strong> <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(child.id)}" data-group-person-name="${escapeHtml(child.name)}">Gruppen-Felder</button>${isRoot ? ` <button type="button" class="btn-ghost btn-sm" data-group-remove="${escapeHtml(child.id)}">Entfernen</button>` : ""}${renderGroupNode(child, false)}</li>`).join("");
+      return persons || children ? `<ul class="group-tree-list">${persons}${children}</ul>` : "";
+    }
+
+    function renderGroupTree() {
+      const view = document.getElementById("group-tree-view");
+      if (!groupTree) {
+        view.innerHTML = "";
+        return;
+      }
+      const parts = [];
+      if (groupTree.incoming.length) {
+        parts.push(`<div class="note-box"><p>${groupTree.incoming.map((i) => `${escapeHtml(i.parentName)} lädt dich ein, Teil der Gruppe zu werden. <button type="button" class="btn-ghost btn-sm" data-group-accept="${escapeHtml(i.id)}">Annehmen</button> <button type="button" class="btn-ghost btn-sm" data-group-decline="${escapeHtml(i.id)}">Ablehnen</button>`).join("<br>")}</p></div>`);
+      }
+      if (groupTree.parent) {
+        parts.push(`<p>Du gehörst zur Gruppe von <strong>${escapeHtml(groupTree.parent.name)}</strong>. <button type="button" class="btn-ghost btn-sm" id="group-leave">Gruppe verlassen</button></p>`);
+      }
+      const own = renderGroupNode(groupTree.node, true);
+      parts.push(own ? `<p class="sub">Deine Gruppe</p>${own}` : '<p class="sub">Noch keine Untergruppen.</p>');
+      if (groupTree.outgoing.length) {
+        parts.push(`<p class="sub">Offene Einladungen: ${groupTree.outgoing.map((o) => `${escapeHtml(o.name)} <button type="button" class="btn-ghost btn-sm" data-group-cancel="${escapeHtml(o.id)}">Zurückziehen</button>`).join(", ")}</p>`);
+      }
+      view.innerHTML = parts.join("");
+
+      const act = async (fn) => {
+        try {
+          await fn();
+          await loadGroupTree();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      };
+      view.querySelectorAll("[data-group-accept]").forEach((b) => b.addEventListener("click", () => act(() => api.post(`/group-tree/invitations/${b.dataset.groupAccept}/accept`, {}))));
+      view.querySelectorAll("[data-group-decline]").forEach((b) => b.addEventListener("click", () => act(() => api.post(`/group-tree/invitations/${b.dataset.groupDecline}/decline`, {}))));
+      view.querySelectorAll("[data-group-cancel]").forEach((b) => b.addEventListener("click", () => act(() => api.delete(`/group-tree/invitations/${b.dataset.groupCancel}`))));
+      view.querySelectorAll("[data-group-remove]").forEach((b) => b.addEventListener("click", () => {
+        if (confirm("Diese Untergruppe wirklich aus deiner Gruppe entfernen?")) act(() => api.delete(`/group-tree/children/${b.dataset.groupRemove}`));
+      }));
+      view.querySelector("#group-leave")?.addEventListener("click", () => {
+        if (confirm("Gruppe wirklich verlassen?")) act(() => api.post("/group-tree/leave", {}));
+      });
+      view.querySelectorAll("[data-group-person]").forEach((b) => b.addEventListener("click", () => openGroupFieldsDialog(b.dataset.groupPerson, b.dataset.groupPersonName)));
+    }
+
+    async function loadGroupTree() {
+      try {
+        groupTree = await api.get("/group-tree");
+      } catch {
+        groupTree = null;
+      }
+      renderGroupTree();
+      updateManagedPersonsDashboardVisibility();
+    }
+
+    async function openGroupFieldsDialog(personId, personName) {
+      const body = document.getElementById("group-fields-body");
+      document.getElementById("group-fields-title").textContent = `Gruppen-Felder: ${personName}`;
+      body.innerHTML = '<p class="sub">Wird geladen …</p>';
+      document.getElementById("group-fields-dialog").showModal();
+      try {
+        const characters = await api.get(`/group-tree/persons/${personId}/characters`);
+        body.innerHTML = characters.length === 0
+          ? '<p class="sub">Keine Charaktere mit freigegebenen Gruppen-Feldern.</p>'
+          : characters.map((c) => `<form class="group-char-form" data-character-id="${escapeHtml(c.id)}"><h4>${escapeHtml(c.name)}${c.class === "nsc" ? " (NSC)" : ""}</h4>${c.fields.map((f) => `<div class="form-group">${renderField(f, c.data[f.key], `gf-${c.id}-`)}</div>`).join("")}<button type="submit">Speichern</button></form>`).join("");
+        body.querySelectorAll(".group-char-form").forEach((form) => {
+          const character = characters.find((c) => c.id === form.dataset.characterId);
+          attachLiveValidation(form);
+          form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            try {
+              await api.put(`/characters/${character.id}`, { data: collectFieldValues(form, character.fields) });
+              notify("Gespeichert.", "success");
+            } catch (err) {
+              notify(err.status === 400 && err.body?.details ? err.body.details.join(", ") : err.message, "error");
+            }
+          });
+        });
+      } catch (err) {
+        body.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    document.getElementById("group-fields-close").addEventListener("click", () => document.getElementById("group-fields-dialog").close());
+
+    document.getElementById("group-invite-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await api.post("/group-tree/invitations", { email: document.getElementById("group-invite-email").value.trim() });
+        document.getElementById("group-invite-email").value = "";
+        notify("Einladung verschickt, sofern ein passendes Konto existiert. Die Person bestätigt sie in ihrem Konto.", "success");
+        await loadGroupTree();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    document.getElementById("group-redeem-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await api.post("/group-tree/join-code/redeem", { code: document.getElementById("group-redeem-code").value });
+        document.getElementById("group-redeem-code").value = "";
+        notify("Gruppenverwalter aufgenommen.", "success");
+        await loadGroupTree();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    document.getElementById("group-code-create").addEventListener("click", async () => {
+      try {
+        const { code, expiresAt } = await api.post("/group-tree/join-code", {});
+        document.getElementById("group-code-result").textContent = `Dein Code: ${code} – sieben Tage gültig (bis ${new Date(expiresAt).toLocaleDateString("de-DE")}). Schicke ihn dem Verwalter, in dessen Gruppe du aufgenommen werden willst; er löst ihn bei sich ein, und du bist sofort Teil seiner Gruppe.`;
       } catch (err) {
         notify(err.message, "error");
       }
