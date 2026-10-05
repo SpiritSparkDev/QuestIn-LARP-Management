@@ -95,7 +95,7 @@ initTabs(document.getElementById('class-tabs'));
 // fields, so those tabs must render neither the checkbox nor a `public` key.
 function addSchemaRow(container, field = { key: '', label: '', type: 'text', required: false, public: false, staffOnly: false, options: [], group: '' }, { allowPublic = true, allowGroup = false, allowSensitive = false } = {}) {
   const row = document.createElement('div');
-  row.className = 'schema-row';
+  row.className = allowGroup ? 'schema-row schema-row--grouped' : 'schema-row';
   const optionsValue = Array.isArray(field.options) ? field.options.join(', ') : '';
   const publicCheckboxHtml = allowPublic
     ? `<label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>
