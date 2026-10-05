@@ -154,6 +154,7 @@ const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', 
 const ASSIGNABLE_CON_ROLES = [['sc', 'Teilnehmer (SC)'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga']];
 let currentSearch = '';
 let canOverride = false;
+let lodgingEnabled = false;
 let canManageMembers = false;
 let events = [];
 let myAccountFields = [];
@@ -210,6 +211,7 @@ function allColumns() {
     };
   });
   const rest = [
+    ...(lodgingEnabled ? [{ id: 'lodging', label: 'Unterkunft', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.lodgingName ?? '') }] : []),
     { id: 'extras', label: 'Extras', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.extrasText ?? '') },
     { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
     { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-stack', render: renderPaymentStatusCell },
@@ -1062,6 +1064,7 @@ try {
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
   canOverride = !!account.canOverrideCheckinStatus;
+  lodgingEnabled = account.lodgingEnabled === true;
   document.getElementById('checkin-export').hidden = account.canExportMembers !== true;
   canManageMembers = (account.menus ?? []).includes('mitglieder');
   myAccountFields = account.accountFields ?? [];

@@ -46,7 +46,7 @@ export async function setDiscount(eventId, userId, discountCents) {
   const { rows } = await query(
     `UPDATE registrations SET
        discount_cents = $3,
-       amount_due_cents = CASE WHEN price_list_cents IS NOT NULL THEN GREATEST(price_list_cents + extras_cents - $3, 0) ELSE amount_due_cents END
+       amount_due_cents = CASE WHEN price_list_cents IS NOT NULL THEN GREATEST(price_list_cents + extras_cents + lodging_cents - $3, 0) ELSE amount_due_cents END
      WHERE event_id = $1 AND user_id = $2
      RETURNING user_id, event_id, amount_due_cents, paid_at, discount_cents`,
     [eventId, userId, discountCents]

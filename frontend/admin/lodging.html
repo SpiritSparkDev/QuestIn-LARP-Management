@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unterkünfte – Pakyrion Admin</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
+    <h1>Unterkünfte</h1>
+    <p class="sub">Schlafplätze eines Events: Hütten, Zimmer, Zelte … mit je so vielen Betten, wie hineinpassen. Teilnehmer buchen bei der Anmeldung ein Bett und sehen, wer wo schläft – so finden Familien und Gruppen zusammen.</p>
+
+    <div class="card form-pad" id="disabled-hint" hidden>
+      <h2>Add-on nicht aktiviert</h2>
+      <p class="sub">Die Unterkünfte sind ausgeschaltet. Du kannst sie unter <a href="/admin/settings.html">Einstellungen</a> aktivieren.</p>
+    </div>
+
+    <div id="addon-body" hidden>
+      <div class="card form-pad">
+        <select id="lodging-event"></select>
+        <label for="lodging-event">Event</label>
+      </div>
+
+      <div class="card form-pad">
+        <h2>Unterkünfte des Events</h2>
+        <div id="lodging-rows"></div>
+        <button type="button" id="add-lodging" class="btn-sm">+ Unterkunft hinzufügen</button>
+        <div class="event-form-actions">
+          <button type="button" id="save-lodgings">Speichern</button>
+        </div>
+      </div>
+
+      <div class="card form-pad">
+        <h2>Belegung</h2>
+        <div id="lodging-overview"></div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
+applyBranding();
+import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
+initSidebarToggle();
+
+const eventSelect = document.getElementById('lodging-event');
+const rowsContainer = document.getElementById('lodging-rows');
+const overview = document.getElementById('lodging-overview');
+
+// Prices are edited in euros (strings) and sent as cents; `id` is kept for
+// existing lodgings because registrations refer to it.
+let lodgings = [];
+
+function renderRows() {
+  rowsContainer.innerHTML = lodgings.length > 0
+    ? lodgings.map((l, i) => `
+      <div class="extra-row" data-row="${i}">
+        <div><input type="text" data-field="name" value="${escapeHtml(l.name)}" placeholder="z.B. Hütte Eiche, Zimmer 12, Zelt Blau" maxlength="100"><label>Bezeichnung</label></div>
+        <div><input type="number" data-field="beds" value="${escapeHtml(l.beds)}" min="1" max="500" step="1"><label>Betten</label></div>
+        <div><input type="number" data-field="price" value="${escapeHtml(l.price)}" min="0" step="0.01" placeholder="0,00"><label>Preis (€) pro Bett</label></div>
+        <div class="lodging-row-actions">
+          <button type="button" class="btn-sm btn-ghost" data-move="${i}:-1" aria-label="Nach oben">▲</button>
+          <button type="button" class="btn-sm btn-ghost" data-move="${i}:1" aria-label="Nach unten">▼</button>
+          <button type="button" class="btn-sm btn-ghost" data-remove="${i}">Entfernen</button>
+        </div>
+        <div class="extra-row-description"><input type="text" data-field="description" value="${escapeHtml(l.description)}" placeholder="optional, z.B. mit Ofen, barrierefrei"><label>Beschreibung</label></div>
+      </div>`).join('')
+    : '<p class="sub">Für dieses Event sind noch keine Unterkünfte angelegt.</p>';
+
+  rowsContainer.querySelectorAll('[data-row]').forEach((row) => {
+    const i = Number(row.dataset.row);
+    row.querySelectorAll('[data-field]').forEach((input) => {
+      input.addEventListener('input', () => { lodgings[i][input.dataset.field] = input.value; });
+    });
+  });
+  rowsContainer.querySelectorAll('[data-remove]').forEach((button) => {
+    button.addEventListener('click', () => { lodgings.splice(Number(button.dataset.remove), 1); renderRows(); });
+  });
+  rowsContainer.querySelectorAll('[data-move]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const [index, step] = button.dataset.move.split(':').map(Number);
+      const target = index + step;
+      if (target < 0 || target >= lodgings.length) return;
+      [lodgings[index], lodgings[target]] = [lodgings[target], lodgings[index]];
+      renderRows();
+    });
+  });
+}
+
+function renderOverview(list) {
+  overview.innerHTML = list.length === 0
+    ? '<p class="sub">Keine Unterkünfte.</p>'
+    : list.map((l) => `
+      <div class="lodging-overview-row">
+        <p><strong>${escapeHtml(l.name)}</strong> <span class="sub">${l.taken} von ${l.beds} Betten belegt</span></p>
+        ${l.occupants.length ? `<ul class="lodging-occupants">${l.occupants.map((o) => `<li>${escapeHtml(o.name)}</li>`).join('')}</ul>` : '<p class="sub">Niemand eingetragen.</p>'}
+      </div>`).join('');
+}
+
+function adopt(list) {
+  lodgings = list.map((l) => ({ id: l.id, name: l.name, description: l.description, beds: String(l.beds), price: (l.priceCents / 100).toString() }));
+  renderRows();
+  renderOverview(list);
+}
+
+async function loadLodgings() {
+  adopt(await api.get(`/events/${eventSelect.value}/lodgings`));
+}
+
+document.getElementById('add-lodging').addEventListener('click', () => {
+  lodgings.push({ id: '', name: '', description: '', beds: '2', price: '' });
+  renderRows();
+});
+
+document.getElementById('save-lodgings').addEventListener('click', async () => {
+  const payload = lodgings
+    .filter((l) => l.name.trim())
+    .map((l) => ({
+      ...(l.id ? { id: l.id } : {}),
+      name: l.name.trim(),
+      description: l.description.trim(),
+      beds: Number(l.beds),
+      priceCents: Math.round(Number(l.price || 0) * 100),
+    }));
+  try {
+    adopt(await api.put(`/events/${eventSelect.value}/lodgings`, { lodgings: payload }));
+    notify('Gespeichert.', 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+eventSelect.addEventListener('change', () => loadLodgings().catch((err) => notify(err.message, 'error')));
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  if (!account.lodgingEnabled) {
+    document.getElementById('disabled-hint').hidden = false;
+  } else {
+    document.getElementById('addon-body').hidden = false;
+    const events = await api.get('/events');
+    eventSelect.innerHTML = events.map((e) => `<option value="${escapeHtml(e.id)}"${e.is_active ? ' selected' : ''}>${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
+    if (events.length > 0) await loadLodgings();
+    else overview.innerHTML = '<p class="sub">Lege zuerst ein Event an.</p>';
+  }
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else if (err.status === 403) notify('Kein Zugriff – nur für Admins.', 'error');
+  else notify(err.message, 'error');
+} finally {
+  hideLoading();
+}
+</script>
+</body>
+</html>

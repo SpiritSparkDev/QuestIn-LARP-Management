@@ -186,6 +186,16 @@
                 <table id="registration-list">
                 </table>
 
+                <dialog id="lodging-dialog">
+                  <h3>Unterkunft</h3>
+                  <p class="lede">Wähle ein Bett – so siehst du, wer mit dir in einer Unterkunft schläft.</p>
+                  <div id="lodging-dialog-body"></div>
+                  <div class="dialog-actions">
+                    <button type="button" id="lodging-dialog-save">Speichern</button>
+                    <button type="button" id="lodging-dialog-cancel" class="btn-ghost">Abbrechen</button>
+                  </div>
+                </dialog>
+
                 <dialog id="edit-ot-dialog">
                   <h3>Anmeldungsdaten bearbeiten</h3>
                   <p class="lede">Diese Änderung benachrichtigt die Orga und Admin dieses Events per E-Mail.</p>
@@ -246,6 +256,7 @@
 
                     <div id="registration-price-group"></div>
                     <div id="registration-extras"></div>
+                    <div id="registration-lodging"></div>
                     <div id="registration-flags"></div>
 
                     <h3>3. Weitere Angaben zu dieser Anmeldung</h3>
@@ -273,11 +284,13 @@
                 <h2 id="active-registration-event-name"></h2>
                 <p class="sub" id="active-registration-as"></p>
                 <p class="sub" id="active-registration-extras" style="display:none;"></p>
+                <p class="sub" id="active-registration-lodging" style="display:none;"></p>
                 <p>
                   <span class="status-pill" id="active-registration-status"></span>
                   <span class="tag" id="active-registration-nsc-badge" style="display:none;"></span>
                 </p>
                 <button type="button" id="active-registration-edit-btn">Bearbeiten</button>
+                <button type="button" id="active-registration-lodging-btn" class="btn-secondary" style="display:none;">Unterkunft wählen</button>
                 <button type="button" id="active-registration-unregister-btn" class="btn-secondary" style="display:none;">Abmelden</button>
               </div>
 
@@ -479,6 +492,7 @@
     } from "/js/formFields.js";
     import { renderRichText } from "/js/richText.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary, sameExtras, formatCents } from "/js/extrasPicker.js";
+    import { renderLodgingPicker, collectLodging } from "/js/lodgingPicker.js";
     import { buildScanCode } from "/js/qrCode.js";
     import { buildEpcQrPayload } from "/js/epcQr.js";
     import { notify } from "/js/notifications.js";
@@ -1272,6 +1286,31 @@
       wireExtrasTotal(registrationExtrasContainer, extras);
     }
 
+    // Step "Unterbringung" of the add-on "Unterkünfte": the event's lodgings as
+    // cards with free beds and who sleeps where.
+    let lodgingEnabled = false;
+    const registrationLodgingContainer = document.getElementById("registration-lodging");
+    let lodgingRenderToken = 0;
+
+    async function renderRegistrationLodging() {
+      const token = ++lodgingRenderToken;
+      const eventId = eventSelect.value;
+      if (!lodgingEnabled || !eventId) {
+        registrationLodgingContainer.innerHTML = "";
+        return;
+      }
+      let lodgings = [];
+      try {
+        lodgings = await api.get(`/events/${eventId}/lodgings`);
+      } catch {
+        lodgings = [];
+      }
+      if (token !== lodgingRenderToken) return; // a newer event selection won
+      registrationLodgingContainer.innerHTML = lodgings.length > 0
+        ? `<h3>Unterbringung</h3><p class="sub">Du kannst dir ein Bett sichern. Wer in welcher Unterkunft schläft, siehst du, sobald du angemeldet bist – so finden Familien und Gruppen zusammen.</p>${renderLodgingPicker(lodgings, null)}`
+        : "";
+    }
+
     let selectedRegistrationRole = "sc";
 
     function isNscRoleSelected() {
@@ -1364,6 +1403,7 @@
       renderRegistrationFlags();
       renderRegistrationPriceGroup();
       renderRegistrationExtras();
+      renderRegistrationLodging();
     });
 
     document
@@ -1406,6 +1446,7 @@
       renderRegistrationFlags();
       renderRegistrationPriceGroup();
       renderRegistrationExtras();
+      renderRegistrationLodging();
     }
 
     async function loadEvents() {
@@ -1570,6 +1611,26 @@
       extrasEl.textContent = extrasText ? `Extras: ${extrasText} (${formatCents(registration.extrasCents ?? 0)})` : "";
       extrasEl.style.display = extrasText ? "" : "none";
 
+      const lodgingEl = document.getElementById("active-registration-lodging");
+      const lodgingBtn = document.getElementById("active-registration-lodging-btn");
+      lodgingEl.style.display = "none";
+      lodgingBtn.style.display = "none";
+      if (lodgingEnabled && registration.status !== "cancelled" && registration.status !== "waitlisted") {
+        let eventLodgings = [];
+        try {
+          eventLodgings = await api.get(`/events/${activeEvent.id}/lodgings`);
+        } catch {
+          eventLodgings = [];
+        }
+        if (eventLodgings.length > 0) {
+          lodgingEl.textContent = registration.lodgingName ? `Unterkunft: ${registration.lodgingName}` : "Noch keine Unterkunft gewählt.";
+          lodgingEl.style.display = "";
+          lodgingBtn.textContent = registration.lodgingId ? "Unterkunft ändern" : "Unterkunft wählen";
+          lodgingBtn.style.display = "";
+          lodgingBtn.onclick = () => openLodgingDialog(activeEvent.id, registration, eventLodgings);
+        }
+      }
+
       const statusLabel = STATUS_LABELS[registration.status] ?? registration.status;
       const statusEl = document.getElementById("active-registration-status");
       statusEl.textContent = statusLabel;
@@ -1598,6 +1659,35 @@
       panel.style.display = "";
       empty.style.display = "none";
     }
+
+    const lodgingDialog = document.getElementById("lodging-dialog");
+    const lodgingDialogBody = document.getElementById("lodging-dialog-body");
+    let lodgingDialogEventId = null;
+    let lodgingDialogRegistration = null;
+
+    function openLodgingDialog(eventId, registration, eventLodgings) {
+      lodgingDialogEventId = eventId;
+      lodgingDialogRegistration = registration;
+      lodgingDialogBody.innerHTML = renderLodgingPicker(eventLodgings, registration.lodgingId ?? null);
+      lodgingDialog.showModal();
+    }
+
+    document.getElementById("lodging-dialog-cancel").addEventListener("click", () => lodgingDialog.close());
+    document.getElementById("lodging-dialog-save").addEventListener("click", async () => {
+      const chosen = collectLodging(lodgingDialogBody) ?? null;
+      if (chosen === (lodgingDialogRegistration.lodgingId ?? null)) {
+        lodgingDialog.close();
+        return;
+      }
+      try {
+        await api.put(`/events/${lodgingDialogEventId}/registrations/${currentUserId}/lodging`, { lodgingId: chosen });
+        lodgingDialog.close();
+        notify("Gespeichert.", "success");
+        await loadRegistrations();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
 
     async function unregister(eventId) {
       if (!confirm("Wirklich von diesem Event abmelden?")) return;
@@ -1633,6 +1723,7 @@
           flags: collectRegistrationFlags(),
           priceGroup: collectRegistrationPriceGroup(),
           extras: collectExtras(registrationExtrasContainer),
+          lodgingId: collectLodging(registrationLodgingContainer),
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
         });
@@ -2301,6 +2392,8 @@
       });
 
       currentUserId = account.id;
+      lodgingEnabled = account.lodgingEnabled === true;
+      renderRegistrationLodging();
       canEditCharacters = account.canEditCharacters;
       canOverrideCheckin = account.canOverrideCheckinStatus === true;
       registrationSchema = await api.get("/registration-schema");
