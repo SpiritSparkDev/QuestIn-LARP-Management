@@ -41,12 +41,11 @@ export async function isManagedBy(targetUserId, ownerId) {
 }
 
 // Event registration (sign up, extras, lodging, payment) is open to the
-// person's manager AND to group managers above them in the group tree. Only
-// managed persons count -- people with their own login register themselves.
+// person's manager AND to group managers above them in the group tree --
+// including the managers of the subgroups themselves, who agreed to that when
+// they accepted the invitation.
 export async function canRegisterFor(targetUserId, actorId) {
-  if (await isManagedBy(targetUserId, actorId)) return true;
-  const { rows } = await query('SELECT 1 FROM users WHERE id = $1 AND managed_by_user_id IS NOT NULL', [targetUserId]);
-  return rows.length > 0 && isGroupAncestorOf(actorId, targetUserId);
+  return (await isManagedBy(targetUserId, actorId)) || isGroupAncestorOf(actorId, targetUserId);
 }
 
 // Like getManagedPerson, but for a group manager above the owner only the

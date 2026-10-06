@@ -105,6 +105,9 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       const seen = await (await call(a.cookie, 'GET', `/managed-persons/${person.userId}`)).json();
       assert.equal(seen.email, null);
       assert.equal((await call(d.cookie, 'GET', `/managed-persons/${person.userId}/registrations`)).status, 404);
+      // ...and the subgroup's manager themselves.
+      assert.equal((await call(a.cookie, 'GET', `/managed-persons/${b.userId}/registrations`)).status, 200);
+      assert.equal((await call(d.cookie, 'GET', `/managed-persons/${b.userId}/registrations`)).status, 404);
       // Leaving ends the access.
       assert.equal((await call(b.cookie, 'POST', '/group-tree/leave', {})).status, 200);
       assert.equal((await call(a.cookie, 'PUT', `/characters/${characterId}`, { data: { wunsch: 'zu spät' } })).status, 403);

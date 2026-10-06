@@ -1289,7 +1289,7 @@
 
     function renderGroupNode(node, isRoot) {
       const persons = isRoot ? "" : node.persons.map((p) => `<li>${escapeHtml(p.name)}${isRoot ? "" : ` <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(p.id)}" data-group-person-name="${escapeHtml(p.name)}">Gruppen-Felder</button> <a class="btn-ghost btn-sm" href="/managed-person.html?id=${encodeURIComponent(p.id)}">Anmeldungen</a>`}</li>`).join("");
-      const children = node.children.map((child) => `<li><strong>${escapeHtml(child.name)}</strong> <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(child.id)}" data-group-person-name="${escapeHtml(child.name)}">Gruppen-Felder</button>${isRoot ? ` <button type="button" class="btn-ghost btn-sm" data-group-remove="${escapeHtml(child.id)}">Entfernen</button>` : ""}${renderGroupNode(child, false)}</li>`).join("");
+      const children = node.children.map((child) => `<li><strong>${escapeHtml(child.name)}</strong> <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(child.id)}" data-group-person-name="${escapeHtml(child.name)}">Gruppen-Felder</button> <a class="btn-ghost btn-sm" href="/managed-person.html?id=${encodeURIComponent(child.id)}">Anmeldungen</a>${isRoot ? ` <button type="button" class="btn-ghost btn-sm" data-group-remove="${escapeHtml(child.id)}">Entfernen</button>` : ""}${renderGroupNode(child, false)}</li>`).join("");
       return persons || children ? `<ul class="group-tree-list">${persons}${children}</ul>` : "";
     }
 
@@ -1297,7 +1297,7 @@
     function renderGroupInvitations() {
       const banner = document.getElementById("group-invitations-banner");
       const incoming = groupTree?.incoming ?? [];
-      banner.innerHTML = incoming.map((i) => `<div class="note-box"><p><strong>${escapeHtml(i.parentName)}</strong> lädt dich ein, Teil ihrer Gruppe zu werden. Als übergeordneter Verwalter sieht sie dann deine Gruppe und bearbeitet die für die Gruppenverwaltung freigegebenen Felder.</p><div class="action-row"><button type="button" class="btn-sm" data-invite-accept="${escapeHtml(i.id)}">Annehmen</button><button type="button" class="btn-ghost btn-sm" data-invite-decline="${escapeHtml(i.id)}">Ablehnen</button></div></div>`).join("");
+      banner.innerHTML = incoming.map((i) => `<div class="note-box"><p><strong>${escapeHtml(i.parentName)}</strong> lädt dich ein, Teil ihrer Gruppe zu werden. Als übergeordneter Verwalter sieht sie dann deine Gruppe, bearbeitet die für die Gruppenverwaltung freigegebenen Felder und kann dich und deine Personen für Events anmelden.</p><div class="action-row"><button type="button" class="btn-sm" data-invite-accept="${escapeHtml(i.id)}">Annehmen</button><button type="button" class="btn-ghost btn-sm" data-invite-decline="${escapeHtml(i.id)}">Ablehnen</button></div></div>`).join("");
       const answer = (id, verb) => async () => {
         try {
           await api.post(`/group-tree/invitations/${id}/${verb}`, {});
@@ -1405,7 +1405,10 @@
 
     function collectGroupPersons(node, out = []) {
       node.persons.forEach((p) => out.push({ id: p.id, name: p.name }));
-      node.children.forEach((child) => collectGroupPersons(child, out));
+      node.children.forEach((child) => {
+        out.push({ id: child.id, name: child.name });
+        collectGroupPersons(child, out);
+      });
       return out;
     }
 
