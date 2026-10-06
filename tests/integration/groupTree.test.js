@@ -87,6 +87,9 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
         await query('UPDATE users SET group_data = $2 WHERE id = $1', [b.userId, JSON.stringify({ lager: 'Nordwiese' })]);
         // The manager above sees the values of the subgroup.
         assert.deepEqual((await (await call(a.cookie, 'GET', '/group-tree')).json()).node.children[0].groupData, { lager: 'Nordwiese' });
+        // Members see what their group manager entered.
+        await query('UPDATE users SET group_data = $2 WHERE id = $1', [a.userId, JSON.stringify({ lager: 'Südwiese' })]);
+        assert.deepEqual((await (await call(b.cookie, 'GET', '/group-tree')).json()).parent.groupData, { lager: 'Südwiese' });
       } finally {
         await query('DELETE FROM group_field_schema');
         if (oldGroupSchema.length) await query('INSERT INTO group_field_schema (schema) VALUES ($1)', [JSON.stringify(oldGroupSchema[0].schema)]);

@@ -1374,7 +1374,7 @@
       const invited = groupTree ? walk(groupTree.node, null) : [];
       container.innerHTML = ownCardsHtml || invited.length
         ? `<div class="group-card-grid">${ownCardsHtml}${invited.join("")}</div>`
-        : '<p class="sub">Noch niemand in deiner Gruppe. Lege im Tab „Leute einladen“ Personen an oder lade andere Verwalter ein.</p>';
+        : navAccount?.groupMemberOnly ? "" : '<p class="sub">Noch niemand in deiner Gruppe. Lege im Tab „Leute einladen“ Personen an oder lade andere Verwalter ein.</p>';
       container.querySelectorAll("[data-managed-person-edit]").forEach((btn) => {
         btn.addEventListener("click", () => openManagedPersonDialog(btn.dataset.managedPersonEdit));
       });
@@ -1439,7 +1439,7 @@
       }
       const parts = [];
       if (groupTree.parent) {
-        parts.push(`<p>Du gehörst zur Gruppe von <strong>${escapeHtml(groupTree.parent.name)}</strong>. <button type="button" class="btn-ghost btn-sm" id="group-leave">Gruppe verlassen</button></p>`);
+        parts.push(`<p>Du gehörst zur Gruppe von <strong>${escapeHtml(groupTree.parent.name)}</strong>. <button type="button" class="btn-ghost btn-sm" id="group-leave">Gruppe verlassen</button>${renderGroupValues(groupTree.parent.groupData)}</p>`);
       }
       view.innerHTML = parts.join("");
       document.getElementById("group-outgoing-view").innerHTML = groupTree.outgoing.length

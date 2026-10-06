@@ -223,11 +223,11 @@ async function buildNode(userId, depth) {
 // My group: who I belong to (if anyone), my own persons and the groups below me.
 export async function getGroupTree(userId) {
   const { rows } = await query(
-    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.group_name FROM users u JOIN users p ON p.id = u.group_parent_id WHERE u.id = $1`,
+    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.group_name, p.group_data FROM users u JOIN users p ON p.id = u.group_parent_id WHERE u.id = $1`,
     [userId]
   );
   return {
-    parent: rows[0] ? { id: rows[0].id, name: labelOf(rows[0]) } : null,
+    parent: rows[0] ? { id: rows[0].id, name: labelOf(rows[0]), groupData: rows[0].group_data ?? {} } : null,
     groupName: (await query('SELECT group_name FROM users WHERE id = $1', [userId])).rows[0]?.group_name ?? '',
     groupData: (await query('SELECT group_data FROM users WHERE id = $1', [userId])).rows[0]?.group_data ?? {},
     node: await buildNode(userId, 0),
