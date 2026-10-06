@@ -71,7 +71,7 @@ export async function createManagedPerson({ ownerId, groupId, email, firstName, 
     return getManagedPerson(rows[0].id, ownerId);
   } catch (err) {
     if (err.code === '23505') {
-      const dup = new Error('Diese E-Mail-Adresse wird bereits verwendet.');
+      const dup = new Error('Zu dieser E-Mail-Adresse gibt es schon einen Account. Lade die Person stattdessen unter „Gruppenstruktur“ per E-Mail ein oder löse ihren Beitrittscode ein.');
       dup.code = 'EMAIL_TAKEN';
       throw dup;
     }
@@ -114,7 +114,7 @@ export async function updateManagedPerson(id, ownerId, fields) {
     return getManagedPerson(id, ownerId);
   } catch (err) {
     if (err.code === '23505') {
-      const dup = new Error('Diese E-Mail-Adresse wird bereits verwendet.');
+      const dup = new Error('Zu dieser E-Mail-Adresse gibt es schon einen Account. Lade die Person stattdessen unter „Gruppenstruktur“ per E-Mail ein oder löse ihren Beitrittscode ein.');
       dup.code = 'EMAIL_TAKEN';
       throw dup;
     }
