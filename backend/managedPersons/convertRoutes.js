@@ -10,28 +10,27 @@ import { logger } from '../logger.js';
 router.post('/managed-persons/:id/convert', requireAuth(async ({ params, user, requestId }) => {
   const person = await getManagedPerson(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
-  if (!person.email) {
-    return { status: 400, body: { error: 'E-Mail-Adresse erforderlich, um einen Account zu erstellen.' } };
-  }
-
   const { rows: groupRows } = await query('SELECT group_id FROM users WHERE id = $1', [person.id]);
 
   const { invitationTtlDays } = await getAppSettings();
   const invitation = await createInvitation({
     userId: person.id,
-    email: person.email,
-    firstName: person.firstName,
-    lastName: person.lastName,
+    email: person.email || null,
+    firstName: person.firstName ?? '',
+    lastName: person.lastName ?? '',
     nickname: person.nickname,
     groupId: groupRows[0].group_id,
     invitedBy: user.id,
     ttlDays: invitationTtlDays,
   });
 
-  try {
-    await sendInvitationEmail(invitation.email, invitation.token, { account: invitation });
-  } catch (err) {
-    logger.error('failed to send managed-person conversion email', { requestId, error: err.message, managedPersonId: person.id });
+  // Without an e-mail address there is nobody to mail: the link is handed to the manager instead.
+  if (invitation.email) {
+    try {
+      await sendInvitationEmail(invitation.email, invitation.token, { account: invitation });
+    } catch (err) {
+      logger.error('failed to send managed-person conversion email', { requestId, error: err.message, managedPersonId: person.id });
+    }
   }
 
   const link = `${await baseUrl()}/set-password.html?token=${invitation.token}`;

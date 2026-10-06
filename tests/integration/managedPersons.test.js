@@ -435,7 +435,7 @@ test('POST /managed-persons/:id/convert sends an invitation, and redeeming it fu
   }
 });
 
-test('POST /managed-persons/:id/convert without an email on file returns 400', async () => {
+test('POST /managed-persons/:id/convert without an email on file still returns a link (the e-mail is entered on redeeming)', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
@@ -448,7 +448,8 @@ test('POST /managed-persons/:id/convert without an email on file returns 400', a
     const { id: managedId } = await personRes.json();
 
     const res = await fetch(`http://localhost:${port}/managed-persons/${managedId}/convert`, { method: 'POST', headers: { Cookie: cookie } });
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 201);
+    assert.ok((await res.json()).link);
   } finally {
     server.close();
   }
@@ -494,10 +495,44 @@ test('PUT /events/:eventId/registrations/:userId/ot-fields lets an owner edit th
   }
 });
 
+test('a managed person needs only a nickname or a character name, and its invitation link works without an e-mail', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('mitglied');
+    const post = (path, body, c = cookie) => fetch(`http://localhost:${port}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: c }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+    assert.equal((await post('/managed-persons', { email: '' })).status, 400);
+    assert.equal((await post('/managed-persons', { firstName: 'OnlyFirst' })).status, 400);
+
+    const created = await post('/managed-persons', { characterName: 'ManagedTestChar' });
+    assert.equal(created.status, 201);
+    const person = await created.json();
+    assert.equal(person.nickname, 'ManagedTestChar');
+    const { rows: chars } = await query('SELECT name, class FROM characters WHERE user_id = $1', [person.id]);
+    assert.deepEqual(chars, [{ name: 'ManagedTestChar', class: 'sc' }]);
+
+    const link = (await (await post(`/managed-persons/${person.id}/convert`)).json()).link;
+    const token = new URL(link).searchParams.get('token');
+    const info = await (await fetch(`http://localhost:${port}/auth/invite/info?token=${token}`)).json();
+    assert.equal(info.needsEmail, true);
+
+    const redeem = (body) => post('/auth/invite/redeem', { token, password: 'correct horse battery staple', ...body }, '');
+    assert.equal((await redeem({})).status, 400);
+    assert.equal((await redeem({ email: `managed-owner-${crypto.randomUUID()}@example.com` })).status, 200);
+    const { rows } = await query('SELECT is_guest, managed_by_user_id, email FROM users WHERE id = $1', [person.id]);
+    assert.equal(rows[0].is_guest, false);
+    assert.equal(rows[0].managed_by_user_id, null);
+    assert.ok(rows[0].email.startsWith('managed-owner-'));
+  } finally {
+    server.close();
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM registrations WHERE event_id IN (SELECT id FROM events WHERE name LIKE 'Managed Delete Test%' OR name LIKE 'Managed Convert Test%')");
   await query("DELETE FROM events WHERE name LIKE 'Managed Delete Test%' OR name LIKE 'Managed Convert Test%'");
-  await query("DELETE FROM invitations WHERE email LIKE 'managed-convert-%'");
-  await query("DELETE FROM users WHERE email LIKE 'managed-owner-%' OR first_name = 'ManagedTestPerson'");
+  await query("DELETE FROM invitations WHERE email LIKE 'managed-convert-%' OR user_id IN (SELECT id FROM users WHERE nickname = 'ManagedTestChar' OR first_name = 'ManagedTestPerson') OR invited_by IN (SELECT id FROM users WHERE email LIKE 'managed-owner-%')");
+  await query("DELETE FROM users WHERE email LIKE 'managed-owner-%' OR first_name = 'ManagedTestPerson' OR nickname = 'ManagedTestChar'");
   await closePool();
 });

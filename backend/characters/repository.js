@@ -15,10 +15,11 @@ async function schemaForClass(characterClass) {
   return characterClass === 'nsc' ? getNscProfileSchema() : getScCharacterSchema();
 }
 
-export async function createCharacter(userId, { characterClass = 'sc', name, data }) {
+// `stub`: a placeholder character (name only) that is filled in later, so required fields aren't enforced yet.
+export async function createCharacter(userId, { characterClass = 'sc', name, data, stub = false }) {
   const schema = await schemaForClass(characterClass);
   data = sanitizeDocumentFields(schema, data ?? {});
-  const errors = validateCharacterData(schema, data);
+  const errors = stub ? [] : validateCharacterData(schema, data);
   if (errors.length > 0) {
     const err = new Error('invalid character data');
     err.code = 'INVALID_CHARACTER_DATA';

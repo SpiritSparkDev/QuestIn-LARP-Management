@@ -234,10 +234,12 @@
 
                 <dialog id="managed-person-dialog">
                   <h3 id="managed-person-dialog-title">Person hinzufügen</h3>
+                  <p class="lede" id="managed-person-hint">Es reicht ein Rufname <em>oder</em> ein Charaktername. Alles Weitere kannst du später ergänzen.</p>
                   <form id="managed-person-form">
                     <div class="field-grid">
-                      <div><input id="managed-person-firstName" name="firstName" type="text" required><label for="managed-person-firstName">Vorname *</label></div>
-                      <div><input id="managed-person-lastName" name="lastName" type="text" required><label for="managed-person-lastName">Nachname *</label></div>
+                      <div><input id="managed-person-firstName" name="firstName" type="text"><label for="managed-person-firstName">Vorname</label></div>
+                      <div><input id="managed-person-lastName" name="lastName" type="text"><label for="managed-person-lastName">Nachname</label></div>
+                      <div id="managed-person-character-row"><input id="managed-person-characterName" name="characterName" type="text"><label for="managed-person-characterName">Charaktername (legt einen Spielercharakter an)</label></div>
                       <div><input id="managed-person-nickname" name="nickname" type="text"><label for="managed-person-nickname">Rufname</label></div>
                       <div><input id="managed-person-email" name="email" type="email"><label for="managed-person-email">E-Mail (optional, für spätere Umwandlung in einen eigenen Account)</label></div>
                     </div>
@@ -1224,7 +1226,7 @@
         <a href="${manageHref}" class="btn-ghost">Charaktere &amp; Anmeldung verwalten</a>
         <button type="button" data-managed-person-edit="${p.id}" class="btn-ghost">Bearbeiten</button>
         <button type="button" data-managed-person-delete="${p.id}" class="btn-ghost">Löschen</button>
-        ${p.email ? `<button type="button" data-managed-person-convert="${p.id}" class="btn-ghost">In eigenen Account umwandeln</button>` : ""}
+        <button type="button" data-managed-person-convert="${p.id}" class="btn-ghost">Einladungslink erzeugen</button>
       </div>
     </div>`;
         })
@@ -1593,6 +1595,9 @@
       editingManagedPersonId = person ? person.id : null;
       document.getElementById("managed-person-dialog-title").textContent =
         person ? `Person bearbeiten: ${person.name}` : "Person hinzufügen";
+      document.getElementById("managed-person-character-row").style.display = person ? "none" : "";
+      document.getElementById("managed-person-hint").style.display = person ? "none" : "";
+      managedPersonForm.elements.characterName.value = "";
       managedPersonForm.elements.firstName.value = person?.firstName ?? "";
       managedPersonForm.elements.lastName.value = person?.lastName ?? "";
       managedPersonForm.elements.nickname.value = person?.nickname ?? "";
@@ -1610,6 +1615,11 @@
         ...Object.fromEntries(new FormData(managedPersonForm)),
         ...nullifyBlankNumberFields(managedPersonSchema, collectAccountFieldValues(managedPersonOtFieldsContainer, managedPersonSchema)),
       };
+      if (editingManagedPersonId) delete data.characterName;
+      else if (!data.nickname?.trim() && !(data.firstName?.trim() && data.lastName?.trim()) && !data.characterName?.trim()) {
+        notify("Gib einen Rufnamen, Vor- und Nachnamen oder einen Charakternamen an.", "error");
+        return;
+      }
       try {
         if (editingManagedPersonId) {
           await api.patch(`/managed-persons/${editingManagedPersonId}`, data);
@@ -1658,10 +1668,11 @@
     });
 
     async function convertManagedPerson(id) {
-      if (!confirm("Diese Person erhält eine E-Mail mit einem Link, um ein eigenes Passwort zu setzen. Danach hast du keinen Zugriff mehr auf ihre Daten. Fortfahren?")) return;
+      if (!confirm("Erzeugt einen Link, mit dem die Person ein eigenes Konto anlegt (E-Mail und Passwort). Hat sie eine E-Mail-Adresse hinterlegt, bekommt sie den Link zusätzlich per Mail. Nach dem Einlösen hast du keinen Zugriff mehr auf ihre Daten. Fortfahren?")) return;
       try {
-        await api.post(`/managed-persons/${id}/convert`, {});
-        notify("Einladung verschickt.", "success");
+        const { link } = await api.post(`/managed-persons/${id}/convert`, {});
+        try { await navigator.clipboard.writeText(link); } catch { /* clipboard may be blocked; the prompt below still shows the link */ }
+        window.prompt("Einladungslink (bereits kopiert) – gib ihn der Person weiter:", link);
         await loadManagedPersons();
       } catch (err) {
         notify(err.message, "error");

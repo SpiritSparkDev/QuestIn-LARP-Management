@@ -5,8 +5,18 @@ import { createSession } from './sessions.js';
 import { serializeSessionCookie } from './cookies.js';
 import { readJsonBody } from '../httpBody.js';
 import { getInvitationByToken, markRedeemed } from '../invitations/repository.js';
-import { isValidPassword } from '../validation.js';
+import { isValidPassword, isValidEmail } from '../validation.js';
 import { generateAccessToken } from './accessTokens.js';
+
+// Lets the set-password page know whether the person still has to enter an e-mail address.
+router.get('/auth/invite/info', async ({ req }) => {
+  const token = new URL(req.url, 'http://localhost').searchParams.get('token') ?? '';
+  const invitation = await getInvitationByToken(token);
+  if (!invitation || invitation.redeemedAt || invitation.cancelledAt || new Date(invitation.expiresAt) < new Date()) {
+    return { status: 400, body: { error: 'Ungültiger oder abgelaufener Link.' } };
+  }
+  return { status: 200, body: { needsEmail: !invitation.email, name: invitation.name } };
+});
 
 router.post('/auth/invite/redeem', async ({ req }) => {
   const body = await readJsonBody(req);
@@ -24,6 +34,11 @@ router.post('/auth/invite/redeem', async ({ req }) => {
     return { status: 400, body: { error: 'Ungültiger oder abgelaufener Link.' } };
   }
 
+  const email = (invitation.email || body.email || '').trim().toLowerCase();
+  if (!isValidEmail(email)) {
+    return { status: 400, body: { error: 'Bitte gib eine gültige E-Mail-Adresse an.' } };
+  }
+
   const passwordHash = await hashPassword(password);
   const accessToken = generateAccessToken();
 
@@ -38,9 +53,10 @@ router.post('/auth/invite/redeem', async ({ req }) => {
         // markRedeemed's own race guard: it also refuses to touch a row
         // that was somehow already converted or is no longer a guest.
         const { rowCount } = await client.query(
-          `UPDATE users SET password_hash = $2, is_guest = false, email_verified = true, access_token = $3, managed_by_user_id = NULL
+          `UPDATE users SET password_hash = $2, is_guest = false, email_verified = true, access_token = $3, managed_by_user_id = NULL,
+             email = COALESCE(email, $4)
            WHERE id = $1 AND is_guest = true AND password_hash IS NULL`,
-          [invitation.userId, passwordHash, accessToken]
+          [invitation.userId, passwordHash, accessToken, email]
         );
         if (rowCount === 0) {
           const err = new Error('invitation already redeemed');
@@ -68,6 +84,9 @@ router.post('/auth/invite/redeem', async ({ req }) => {
   } catch (err) {
     if (err.code === 'ALREADY_REDEEMED') {
       return { status: 400, body: { error: 'Ungültiger oder abgelaufener Link.' } };
+    }
+    if (err.code === '23505') {
+      return { status: 409, body: { error: 'Diese E-Mail-Adresse wird bereits verwendet.' } };
     }
     throw err;
   }

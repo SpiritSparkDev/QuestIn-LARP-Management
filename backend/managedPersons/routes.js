@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
 import { isValidEmail } from '../validation.js';
 import { filterToAllowedFields } from '../members/routes.js';
+import { createCharacter } from '../characters/repository.js';
 import {
   listManagedPersons, getManagedPersonForRegistration, createManagedPerson, updateManagedPerson, deleteManagedPerson,
   searchClaimablePersons, claimPerson,
@@ -40,9 +41,11 @@ router.get('/managed-persons/:id', requireAuth(async ({ params, user }) => {
 router.post('/managed-persons', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { email, firstName, lastName, nickname, ...otFields } = body;
-  if (!firstName || !lastName) {
-    return { status: 400, body: { error: 'firstName and lastName are required' } };
+  const { email, firstName = '', lastName = '', nickname, characterName, ...otFields } = body;
+  // A person needs just one handle: a nickname, a full name or a character name.
+  const charName = typeof characterName === 'string' ? characterName.trim() : '';
+  if (!nickname && !(firstName && lastName) && !charName) {
+    return { status: 400, body: { error: 'Gib einen Rufnamen, Vor- und Nachnamen oder einen Charakternamen an.' } };
   }
   if (email && !isValidEmail(email)) {
     return { status: 400, body: { error: 'invalid email format' } };
@@ -55,8 +58,10 @@ router.post('/managed-persons', requireAuth(async ({ req, user }) => {
 
   try {
     const person = await createManagedPerson({
-      ownerId: user.id, groupId: user.group.id, email: email?.toLowerCase(), firstName, lastName, nickname, ...otFields,
+      ownerId: user.id, groupId: user.group.id, email: email?.toLowerCase(), firstName, lastName,
+      nickname: nickname || (firstName && lastName ? undefined : charName), ...otFields,
     });
+    if (charName) await createCharacter(person.id, { characterClass: 'sc', name: charName, stub: true });
     return { status: 201, body: person };
   } catch (err) {
     if (err.code === 'EMAIL_TAKEN') return { status: 409, body: { error: err.message } };
