@@ -1987,6 +1987,75 @@
     const FILES_PANEL_HINT =
       '<p class="sub">Wähle einen Charakter, um Bilder und Dokumente zu verwalten.</p>';
 
+    // Files picked while a new character isn't saved yet. They stay in the
+    // browser (nothing is uploaded) and are uploaded right after the first
+    // save; cancelling the form simply drops them.
+    const stagedFiles = { "sc-files-body": [], "nsc-files-body": [] };
+
+    function renderStagedFiles(body) {
+      const staged = stagedFiles[body.id] ?? [];
+      body.innerHTML = `<form class="file-upload-form" data-stage-form>
+      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+      <label><input type="checkbox" required> Ich habe den Hinweis gelesen</label>
+      <label><input type="checkbox"> Öffentlich sichtbar</label>
+      <button type="submit">Hinzufügen</button>
+    </form>
+    <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an dieser Datei besitzt und einverstanden bist, dass sie im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>
+    <p class="sub">Die Dateien werden hochgeladen, sobald du den Charakter speicherst. Brichst du ab, werden sie verworfen.</p>
+    ${staged.map((entry, index) => `<div class="file-item">
+      <span>${escapeHtml(entry.file.name)}</span>
+      <span class="tag">${entry.isPublic ? "Öffentlich" : "Privat"}</span>
+      <button type="button" data-unstage="${index}" class="btn-ghost">Entfernen</button>
+    </div>`).join("")}`;
+
+      const form = body.querySelector("[data-stage-form]");
+      const fileInput = form.querySelector('input[type="file"]');
+      const [consent, isPublic] = form.querySelectorAll('input[type="checkbox"]');
+      const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      consent.addEventListener("change", () => { submit.disabled = !consent.checked; });
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const file = fileInput.files[0];
+        if (!file) return;
+        if (!kindForMimeType(file.type)) {
+          notify("Nicht unterstützter Dateityp.", "error");
+          return;
+        }
+        stagedFiles[body.id].push({ file, isPublic: isPublic.checked });
+        renderStagedFiles(body);
+      });
+      body.querySelectorAll("[data-unstage]").forEach((button) => {
+        button.addEventListener("click", () => {
+          stagedFiles[body.id].splice(Number(button.dataset.unstage), 1);
+          renderStagedFiles(body);
+        });
+      });
+    }
+
+    // Uploads what was staged for a just-created character; returns how many failed.
+    async function uploadStagedFiles(characterId, bodyId) {
+      const staged = stagedFiles[bodyId] ?? [];
+      let failed = 0;
+      for (const entry of staged) {
+        try {
+          await api.post(`/characters/${characterId}/files`, {
+            kind: kindForMimeType(entry.file.type),
+            filename: entry.file.name,
+            mimeType: entry.file.type,
+            dataBase64: await readFileAsBase64(entry.file),
+            isPublic: entry.isPublic,
+            gdprConsent: true,
+          });
+        } catch (err) {
+          failed += 1;
+          notify(`„${entry.file.name}“ konnte nicht hochgeladen werden: ${err.message}`, "error");
+        }
+      }
+      stagedFiles[bodyId] = [];
+      return failed;
+    }
+
     function updateFilesPanel(panel, body, characterId) {
       const character = characters.find((c) => c.id === characterId);
       panel.querySelector(".sub[id$='-files-owner']").textContent = character ? character.name : "";
@@ -1995,8 +2064,7 @@
       });
       if (!characterId) {
         body.removeAttribute("data-files-for");
-        body.innerHTML =
-          '<p class="sub">Bilder und Dokumente kannst du hochladen, sobald der Charakter zum ersten Mal gespeichert ist.</p>';
+        renderStagedFiles(body);
         return;
       }
       body.dataset.filesFor = characterId;
@@ -2006,6 +2074,7 @@
     function resetFilesPanel(panel, body) {
       panel.querySelector(".sub[id$='-files-owner']").textContent = "";
       body.removeAttribute("data-files-for");
+      stagedFiles[body.id] = [];
       body.innerHTML = FILES_PANEL_HINT;
       document.querySelectorAll(".char-card.is-selected").forEach((card) => card.classList.remove("is-selected"));
     }
@@ -2351,6 +2420,7 @@
 
     function resetNscForm() {
       editingNscCharacterId = null;
+      stagedFiles["nsc-files-body"] = [];
       nscFormTitle.textContent = "Neuen NSC-Charakter anlegen";
       nscForm.reset();
       renderNscSchemaFields();
@@ -2377,6 +2447,7 @@
           await api.put(`/characters/${editingNscCharacterId}`, { name, data });
         } else {
           createdId = (await api.post("/characters", { class: "nsc", name, data })).id;
+          await uploadStagedFiles(createdId, "nsc-files-body");
         }
         notify("Gespeichert.", "success");
         resetNscForm();
@@ -2451,6 +2522,7 @@
 
     function resetCharacterForm() {
       editingCharacterId = null;
+      stagedFiles["sc-files-body"] = [];
       characterFormTitle.textContent = "Neuen Charakter anlegen";
       characterForm.reset();
       renderScSchemaFields();
@@ -2578,6 +2650,7 @@
           await api.put(`/characters/${editingCharacterId}`, { name, data });
         } else {
           createdId = (await api.post("/characters", { class: "sc", name, data })).id;
+          await uploadStagedFiles(createdId, "sc-files-body");
         }
         notify("Gespeichert.", "success");
         resetCharacterForm();
