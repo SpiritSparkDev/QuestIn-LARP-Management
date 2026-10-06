@@ -11,6 +11,13 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Map links end up as <a href> on the dashboard, so only http(s) is allowed
 // (blocks javascript: URLs). Blank/absent means "not set".
+function validateEndDate({ eventDate, endDate }) {
+  if (endDate === undefined || endDate === null || endDate === '') return null;
+  if (!DATE_RE.test(endDate)) return 'endDate must be a YYYY-MM-DD date';
+  if (eventDate && endDate < eventDate) return 'endDate must not be before eventDate';
+  return null;
+}
+
 function validateMapUrls({ mapsUrl, osmUrl }) {
   for (const [field, value] of [['mapsUrl', mapsUrl], ['osmUrl', osmUrl]]) {
     if (value === undefined || value === null || String(value).trim() === '') continue;
@@ -105,7 +112,7 @@ function validateFlagExtras({ flagDetails, flagRenames }) {
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
+  const { name, eventDate, endDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
@@ -125,9 +132,11 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
     const extrasError = validateExtras(extras);
     if (extrasError) return { status: 400, body: { error: extrasError } };
   }
+  const endDateError = validateEndDate(body);
+  if (endDateError) return { status: 400, body: { error: endDateError } };
   const urlError = validateMapUrls({ mapsUrl, osmUrl });
   if (urlError) return { status: 400, body: { error: urlError } };
-  const event = await createEvent({ name, eventDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
+  const event = await createEvent({ name, eventDate, endDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
   return { status: 201, body: event };
 })));
 
@@ -161,6 +170,9 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
     const extrasError = validateExtras(body.extras);
     if (extrasError) return { status: 400, body: { error: extrasError } };
   }
+  const before0 = body.endDate && !body.eventDate ? await getEvent(params.id) : null;
+  const endDateError = validateEndDate({ ...body, eventDate: body.eventDate ?? before0?.event_date });
+  if (endDateError) return { status: 400, body: { error: endDateError } };
   const urlError = validateMapUrls(body);
   if (urlError) return { status: 400, body: { error: urlError } };
   const privacyError = body.privacyDeletion === undefined ? null : validatePrivacyDeletion(body.privacyDeletion);

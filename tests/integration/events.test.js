@@ -522,3 +522,18 @@ test('creating an event with a non-array flags value is rejected', async () => {
 test.after(async () => {
   await closePool();
 });
+
+test('event end date: stored, cleared, and rejected when before the start', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const call = (method, path, body) => fetch(`http://localhost:${port}${path}`, {
+      method, headers: { 'Content-Type': 'application/json', Cookie: admin.cookie }, body: JSON.stringify(body),
+    });
+    const created = await (await call('POST', '/events', { name: 'Mehrtägig', eventDate: '2027-08-01', endDate: '2027-08-04' })).json();
+    assert.equal(created.end_date, '2027-08-04');
+    assert.equal((await call('PUT', `/events/${created.id}`, { endDate: '2027-07-31' })).status, 400);
+    const cleared = await (await call('PUT', `/events/${created.id}`, { endDate: null })).json();
+    assert.equal(cleared.end_date, null);
+    assert.equal((await call('POST', '/events', { name: 'Falsch', eventDate: '2027-08-05', endDate: '2027-08-01' })).status, 400);
+  });
+});

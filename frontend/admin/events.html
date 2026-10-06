@@ -66,7 +66,9 @@
         <input id="event-name" name="name" type="text" required>
         <label for="event-name">Name</label>
         <input id="event-date" name="eventDate" type="date" required>
-        <label for="event-date">Datum</label>
+        <label for="event-date">Startdatum</label>
+        <input id="event-end-date" name="endDate" type="date">
+        <label for="event-end-date">Enddatum <span style="opacity:0.6;font-size:12px;">optional</span></label>
         <input id="event-code" name="code" type="text" placeholder="P17/2027">
         <label for="event-code">QR-Code-Kennung <span style="opacity:0.6;font-size:12px;">optional, z.B. P17/2027</span></label>
 
@@ -552,7 +554,7 @@ async function loadEvents() {
   const events = await api.get('/events');
   listBody.innerHTML = events.map((e) => `<tr>
     <td>${escapeHtml(e.name)}</td>
-    <td>${escapeHtml(e.event_date)}</td>
+    <td>${escapeHtml(e.event_date)}${e.end_date ? ` – ${escapeHtml(e.end_date)}` : ""}</td>
     <td>${e.is_active ? '<span class="badge badge-active">Aktiv – Anmeldung offen</span>' : '<span class="badge badge-inactive">Inaktiv</span>'}${e.ended_at ? ' <span class="badge badge-inactive">Beendet</span>' : ''}</td>
     <td>${e.is_active ? '' : `<button type="button" class="btn-sm" data-activate="${e.id}">Aktivieren</button>`}</td>
     <td>${e.ended_at
@@ -624,6 +626,7 @@ function startEdit(eventData) {
   formTitle.textContent = `Event bearbeiten: ${eventData.name}`;
   form.elements.name.value = eventData.name;
   form.elements.eventDate.value = eventData.event_date;
+  form.elements.endDate.value = eventData.end_date ?? "";
   form.elements.code.value = eventData.code ?? '';
   form.elements.capacity.value = eventData.capacity ?? '';
   flagRows = (eventData.flags ?? []).map((name) => ({ original: name, name, description: (eventData.flag_details ?? {})[name] ?? '' }));
@@ -678,6 +681,7 @@ form.addEventListener('submit', async (event) => {
   const payload = {
     name: form.elements.name.value,
     eventDate: form.elements.eventDate.value,
+    endDate: form.elements.endDate.value || null,
     code: form.elements.code.value || null,
     capacity: capacityValue ? Number(capacityValue) : null,
     clearCapacity: true,
