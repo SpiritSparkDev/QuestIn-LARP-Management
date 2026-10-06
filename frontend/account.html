@@ -51,6 +51,8 @@
                 </div>
               </div>
 
+              <div class="card" id="dashboard-account-hint" style="display:none;"></div>
+
               <div class="card" id="dashboard-event-card"></div>
 
               <div class="card tavern-dash" id="dashboard-tavern-card" hidden></div>
@@ -99,7 +101,6 @@
               </div>
               </div>
 
-              <div class="card" id="dashboard-account-hint" style="display:none;"></div>
             </div>
 
             <div class="ticket-panel" id="ticket-panel" style="display:none;">
@@ -898,7 +899,12 @@
       const missing = accountSchema
         .filter((f) => !account[f.key])
         .map((f) => f.label ?? f.key);
-      if (missing.length === 0) {
+      const incomplete = missing.length > 0;
+      if (incomplete !== accountIncomplete) {
+        accountIncomplete = incomplete;
+        renderNav();
+      }
+      if (!incomplete) {
         hint.style.display = "none";
         return;
       }
@@ -1177,11 +1183,13 @@
     // unconditionally so nobody has to re-check a box every visit to see
     // who they've already set up.
     let navAccount = null;
+    let accountIncomplete = false;
     function renderNav() {
       if (!navAccount) return;
       document.getElementById("nav-links").innerHTML = renderNavLinks(
         navAccount,
         window.location.pathname + window.location.hash,
+        { accountIncomplete },
       );
       applyHashTab();
     }

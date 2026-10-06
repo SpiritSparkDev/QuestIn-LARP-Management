@@ -43,9 +43,10 @@ const ADDON_LINKS = [
   { flag: 'lodgingEnabled', label: 'Unterkünfte', href: '/admin/lodging.html', icon: 'bed' },
 ];
 
-function renderNavItem({ href, label, icon }, currentPath) {
+function renderNavItem({ href, label, icon, dot }, currentPath) {
   const current = href === currentPath ? 'sidebar-nav-item current' : 'sidebar-nav-item';
-  return `<a href="${href}" class="${current}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span></a>`;
+  const dotHtml = dot ? '<span class="nav-dot" role="img" aria-label="Angaben unvollständig" title="Angaben unvollständig"></span>' : '';
+  return `<a href="${href}" class="${current}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span>${dotHtml}</a>`;
 }
 
 // Thin warning strip on every page while the fictional test data is loaded,
@@ -126,12 +127,12 @@ document.addEventListener('click', (event) => {
   }, 0);
 });
 
-export function renderNavLinks(account, currentPath) {
+export function renderNavLinks(account, currentPath, { accountIncomplete = false } = {}) {
   showTestModeBanner(account);
   // Add-on entries (item.flag) also need the add-on switched on; admins see
   // every enabled add-on without needing its menu key.
   const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]) && (!item.groupMenu || groupMenuEnabled()));
-  let html = items.map((item) => renderNavItem(item, currentPath)).join('');
+  let html = items.map((item) => renderNavItem(item.label === 'Konto' ? { ...item, dot: accountIncomplete } : item, currentPath)).join('');
   
   // Admin-only entries and enabled add-ons live in a collapsible
   // "Administration" section so the sidebar stays short. It is forced open

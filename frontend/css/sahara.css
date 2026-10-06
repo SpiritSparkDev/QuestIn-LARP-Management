@@ -940,6 +940,16 @@ h1, h2, h3 {
   font-size: 20px;
 }
 
+/* Red dot: something in this section still needs the person's attention */
+.nav-dot {
+  margin-left: auto;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--error);
+}
+
 .sidebar-nav-divider {
   border: none;
   height: 1px;
