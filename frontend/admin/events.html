@@ -109,11 +109,17 @@
               <input id="guest-widget-link" type="text" readonly style="flex:1;">
               <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-link">Kopieren</button>
             </div>
-            <label for="guest-widget-iframe" style="margin-top:12px;">Einbettungscode (iframe)</label>
+            <label for="guest-widget-script" style="margin-top:12px;">Ticket-Formular einbetten (Script)</label>
             <div class="guest-widget-row guest-widget-row-top">
-              <textarea id="guest-widget-iframe" readonly rows="2" style="flex:1;font-family:monospace;font-size:13px;"></textarea>
-              <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-iframe">Kopieren</button>
+              <textarea id="guest-widget-script" readonly rows="2" style="flex:1;font-family:monospace;font-size:13px;"></textarea>
+              <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-script">Kopieren</button>
             </div>
+            <label for="guest-widget-countdown" style="margin-top:12px;">Countdown mit Button einbetten (Script)</label>
+            <div class="guest-widget-row guest-widget-row-top">
+              <textarea id="guest-widget-countdown" readonly rows="3" style="flex:1;font-family:monospace;font-size:13px;"></textarea>
+              <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-countdown">Kopieren</button>
+            </div>
+            <p class="sub" style="margin-top:8px;">Das Formular übernimmt Schrift und Textfarbe eurer Seite; die Buttonfarbe lässt sich per CSS-Variable <code>--pk-accent</code> am umgebenden Element ändern. Der Countdown zählt bis zum Eventdatum – mit <code>data-until="2027-09-01T10:00"</code> bis zu einem eigenen Zeitpunkt (z.&nbsp;B. Vorverkaufsstart).</p>
           </div>
         </div>
 
@@ -477,7 +483,8 @@ renderExtras();
 const guestWidgetMissingCode = document.getElementById('guest-widget-missing-code');
 const guestWidgetReady = document.getElementById('guest-widget-ready');
 const guestWidgetLink = document.getElementById('guest-widget-link');
-const guestWidgetIframe = document.getElementById('guest-widget-iframe');
+const guestWidgetScript = document.getElementById('guest-widget-script');
+const guestWidgetCountdown = document.getElementById('guest-widget-countdown');
 
 function renderGuestWidgetHelp() {
   const code = form.elements.code.value.trim();
@@ -488,7 +495,11 @@ function renderGuestWidgetHelp() {
   }
   const url = `${window.location.origin}/ticket-widget.html?event=${encodeURIComponent(code)}`;
   guestWidgetLink.value = url;
-  guestWidgetIframe.value = `<iframe src="${url}" style="width:100%;max-width:480px;min-height:640px;border:0;"></iframe>`;
+  const scriptSrc = `${window.location.origin}/widget.js`;
+  const attrEvent = code.replace(/"/g, '&quot;');
+  guestWidgetScript.value = `<script src="${scriptSrc}" data-event="${attrEvent}" defer><\/script>`;
+  guestWidgetCountdown.value = `<script src="${scriptSrc}" data-widget="countdown" data-event="${attrEvent}"
+  data-button="Ticket sichern" defer><\/script>`;
   guestWidgetMissingCode.style.display = 'none';
   guestWidgetReady.style.display = '';
 }

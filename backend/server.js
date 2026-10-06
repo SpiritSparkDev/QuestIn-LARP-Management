@@ -56,6 +56,18 @@ async function handleRequest(req, res) {
   const { pathname } = new URL(req.url, 'http://localhost');
   res.setHeader('X-Request-Id', requestId);
 
+  // The embeddable ticket widget (frontend/widget.js) calls /public/* from
+  // other websites. Those endpoints are unauthenticated and never read
+  // cookies, so any origin may use them.
+  if (pathname.startsWith('/public/')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400' });
+      res.end();
+      return;
+    }
+  }
+
   const match = router.match(req.method, pathname);
   if (!match) {
     if (req.method === 'GET') {

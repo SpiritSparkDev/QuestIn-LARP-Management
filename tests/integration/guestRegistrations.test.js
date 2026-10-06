@@ -49,6 +49,31 @@ test('GET /public/events/:code returns a price teaser for an active event', asyn
   });
 });
 
+test('public event endpoints are open to other origins (embeddable widget) and ship a sanitized waiver', async () => {
+  await withTestServer(async (port) => {
+    const code = `CORS-${crypto.randomUUID().slice(0, 8)}`;
+    await makeEvent({ code });
+    const waiver = 'Hallo <script>x()</script><b>Welt</b>\nZeile 2';
+    const { rowCount: inserted } = await query(
+      'INSERT INTO app_settings (waiver_text) SELECT $1 WHERE NOT EXISTS (SELECT 1 FROM app_settings)', [waiver],
+    );
+    if (!inserted) await query('UPDATE app_settings SET waiver_text = $1', [waiver]);
+
+    const get = await fetch(`http://localhost:${port}/public/events/${code}`, { headers: { Origin: 'https://example.org' } });
+    assert.equal(get.headers.get('access-control-allow-origin'), '*');
+    assert.equal((await get.json()).waiverHtml, 'Hallo <b>Welt</b><br>Zeile 2');
+
+    const preflight = await fetch(`http://localhost:${port}/public/events/x/guest-registration`, { method: 'OPTIONS', headers: { Origin: 'https://example.org' } });
+    assert.equal(preflight.status, 204);
+    assert.match(preflight.headers.get('access-control-allow-methods'), /POST/);
+
+    const other = await fetch(`http://localhost:${port}/account`);
+    assert.equal(other.headers.get('access-control-allow-origin'), null);
+    if (inserted) await query('DELETE FROM app_settings');
+    else await query("UPDATE app_settings SET waiver_text = ''");
+  });
+});
+
 test('GET /public/events/:code returns 404 for an unknown code', async () => {
   await withTestServer(async (port) => {
     const res = await fetch(`http://localhost:${port}/public/events/does-not-exist`);

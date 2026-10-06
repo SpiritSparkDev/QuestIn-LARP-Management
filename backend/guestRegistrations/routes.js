@@ -16,6 +16,7 @@ import { setGuestPaymentToken } from '../payments/repository.js';
 import { sendGuestTicketEmail } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 import { getAppSettings } from '../appSettings/repository.js';
+import { sanitizeRichText } from '../richText.js';
 
 const GUEST_REGISTER_RATE_LIMIT = { keyPrefix: 'guest-register', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 const PAYMENT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -23,7 +24,8 @@ const GUEST_GROUP_KEY = 'mitglied';
 const COMING_SOON_ERROR = { status: 409, body: { error: 'Die Anmeldung ist noch gesperrt und startet bald.' } };
 
 router.get('/public/events/:code', async ({ params }) => {
-  if ((await getAppSettings()).comingSoonEnabled) return COMING_SOON_ERROR;
+  const { comingSoonEnabled, waiverText } = await getAppSettings();
+  if (comingSoonEnabled) return COMING_SOON_ERROR;
   // The router matches raw, still-percent-encoded path segments (see
   // Router.match in backend/router.js), so a code containing "/" -- the
   // exact format the admin UI suggests, e.g. "P17/2027" -- arrives here as
@@ -43,7 +45,11 @@ router.get('/public/events/:code', async ({ params }) => {
 
   return {
     status: 200,
-    body: { id: event.id, name: event.name, eventDate: event.event_date, priceGroups: groups, prices },
+    body: {
+      id: event.id, name: event.name, eventDate: event.event_date, priceGroups: groups, prices,
+      // Ready-to-insert HTML for the embeddable widget (plain-text waivers keep their line breaks).
+      waiverHtml: waiverText ? sanitizeRichText(waiverText).replace(/\n/g, '<br>') : null,
+    },
   };
 });
 
