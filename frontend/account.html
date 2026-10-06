@@ -228,7 +228,7 @@
                   </div>
                 </dialog>
 
-                <dialog id="managed-person-dialog">
+                <dialog id="managed-person-dialog" class="member-dialog">
                   <h3 id="managed-person-dialog-title">Person hinzufügen</h3>
                   <div id="managed-person-create" class="field-grid">
                     <form class="card form-pad" data-managed-create="person">
@@ -246,7 +246,10 @@
                       <button type="submit">Charakter anlegen</button>
                     </form>
                   </div>
-                  <p class="lede" id="managed-person-create-hint">Alles Weitere kannst du später ergänzen.</p>
+                  <div id="managed-person-create-hint">
+                    <p class="lede">Alles Weitere kannst du später ergänzen.</p>
+                    <div class="dialog-actions"><button type="button" id="managed-person-create-cancel" class="btn-ghost">Abbrechen</button></div>
+                  </div>
                   <form id="managed-person-form">
                     <div class="field-grid">
                       <div><input id="managed-person-firstName" name="firstName" type="text"><label for="managed-person-firstName">Vorname</label></div>
@@ -1636,9 +1639,10 @@
       editingManagedPersonId = person ? person.id : null;
       document.getElementById("managed-person-dialog-title").textContent =
         person ? `Person bearbeiten: ${person.name}` : "Person hinzufügen";
-      document.getElementById("managed-person-character-row").style.display = person ? "none" : "";
-      document.getElementById("managed-person-hint").style.display = person ? "none" : "";
-      managedPersonForm.elements.characterName.value = "";
+      document.getElementById("managed-person-create").style.display = person ? "none" : "";
+      document.getElementById("managed-person-create-hint").style.display = person ? "none" : "";
+      managedPersonForm.style.display = person ? "" : "none";
+      document.querySelectorAll("[data-managed-create]").forEach((f) => f.reset());
       managedPersonForm.elements.firstName.value = person?.firstName ?? "";
       managedPersonForm.elements.lastName.value = person?.lastName ?? "";
       managedPersonForm.elements.nickname.value = person?.nickname ?? "";
@@ -1649,6 +1653,7 @@
 
     document.getElementById("new-managed-person-btn").addEventListener("click", () => openManagedPersonDialog(null));
     document.getElementById("managed-person-dialog-cancel").addEventListener("click", () => managedPersonDialog.close());
+    document.getElementById("managed-person-create-cancel").addEventListener("click", () => managedPersonDialog.close());
 
     managedPersonForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1656,17 +1661,8 @@
         ...Object.fromEntries(new FormData(managedPersonForm)),
         ...nullifyBlankNumberFields(managedPersonSchema, collectAccountFieldValues(managedPersonOtFieldsContainer, managedPersonSchema)),
       };
-      if (editingManagedPersonId) delete data.characterName;
-      else if (!data.nickname?.trim() && !(data.firstName?.trim() && data.lastName?.trim()) && !data.characterName?.trim()) {
-        notify("Gib einen Rufnamen, Vor- und Nachnamen oder einen Charakternamen an.", "error");
-        return;
-      }
       try {
-        if (editingManagedPersonId) {
-          await api.patch(`/managed-persons/${editingManagedPersonId}`, data);
-        } else {
-          await api.post("/managed-persons", data);
-        }
+        await api.patch(`/managed-persons/${editingManagedPersonId}`, data);
         notify("Gespeichert.", "success");
         managedPersonDialog.close();
         await loadManagedPersons();
@@ -1674,6 +1670,24 @@
       } catch (err) {
         notify(err.message, "error");
       }
+    });
+
+    document.querySelectorAll("[data-managed-create]").forEach((form) => {
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const { name, email } = Object.fromEntries(new FormData(form));
+        const body = form.dataset.managedCreate === "character" ? { characterName: name.trim() } : { nickname: name.trim() };
+        if (email.trim()) body.email = email.trim();
+        try {
+          await api.post("/managed-persons", body);
+          notify("Gespeichert.", "success");
+          managedPersonDialog.close();
+          await loadManagedPersons();
+          renderDashboardTavernCard();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
     });
 
     const managedPersonDeleteDialog = document.getElementById("managed-person-delete-dialog");
