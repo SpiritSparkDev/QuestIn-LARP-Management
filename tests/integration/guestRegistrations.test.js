@@ -74,6 +74,23 @@ test('public event endpoints are open to other origins (embeddable widget) and s
   });
 });
 
+test('GET /public/events lists only active events that have a code', async () => {
+  await withTestServer(async (port) => {
+    const open = `LIST-${crypto.randomUUID().slice(0, 8)}`;
+    const closed = `LIST-${crypto.randomUUID().slice(0, 8)}`;
+    await makeEvent({ code: open });
+    await makeEvent({ code: closed, isActive: false });
+    await makeEvent({ code: null });
+
+    const res = await fetch(`http://localhost:${port}/public/events`);
+    assert.equal(res.status, 200);
+    const codes = (await res.json()).map((e) => e.code);
+    assert.ok(codes.includes(open));
+    assert.ok(!codes.includes(closed));
+    assert.ok(!codes.includes(null));
+  });
+});
+
 test('GET /public/events/:code returns 404 for an unknown code', async () => {
   await withTestServer(async (port) => {
     const res = await fetch(`http://localhost:${port}/public/events/does-not-exist`);

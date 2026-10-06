@@ -12,31 +12,45 @@
 <div class="shell">
   <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
   <p class="brand-sub">QuestIn LARP Management</p>
-  <div class="folio folio--narrow">
-    <p class="eyebrow text-center">Willkommen zurück</p>
+  <div class="folio folio--wide">
+    <p class="eyebrow text-center">Willkommen</p>
     <h1 class="text-center">Anmelden</h1>
-    <form id="login-form">
-      <input id="email" name="email" type="email" required>
-      <label for="email">E-Mail</label>
-      <input id="password" name="password" type="password" required>
-      <label for="password">Passwort</label>
-      <button type="submit">Anmelden</button>
-    </form>
-    <p><a href="#" id="forgot-link">Passwort vergessen?</a></p>
-    <div class="divider-word" id="oauth-divider">oder anmelden mit</div>
-    <div class="oauth-row" id="oauth-row">
-      <a href="/auth/oauth/google/start" data-provider="google">Google</a>
-      <a href="/auth/oauth/facebook/start" data-provider="facebook">Facebook</a>
-      <a href="/auth/oauth/discord/start" data-provider="discord">Discord</a>
+    <div class="login-split">
+      <section class="login-pane">
+        <h2>Mit Konto</h2>
+        <form id="login-form">
+          <input id="email" name="email" type="email" required>
+          <label for="email">E-Mail</label>
+          <input id="password" name="password" type="password" required>
+          <label for="password">Passwort</label>
+          <button type="submit">Anmelden</button>
+        </form>
+        <p><a href="#" id="forgot-link">Passwort vergessen?</a></p>
+        <div class="divider-word" id="oauth-divider">oder anmelden mit</div>
+        <div class="oauth-row" id="oauth-row">
+          <a href="/auth/oauth/google/start" data-provider="google">Google</a>
+          <a href="/auth/oauth/facebook/start" data-provider="facebook">Facebook</a>
+          <a href="/auth/oauth/discord/start" data-provider="discord">Discord</a>
+        </div>
+      </section>
+      <section class="login-pane" id="guest-pane" hidden>
+        <h2>Ohne Konto</h2>
+        <p class="sub">Du willst nur ein Ticket? Sichere es dir als Gast – ohne Account und Passwort.</p>
+        <div id="guest-events"></div>
+      </section>
     </div>
-    <p class="text-center" style="margin-top:28px;"><a href="/register.html" class="btn-ghost">Noch kein Konto? Registrieren</a></p>
+    <a href="/register.html" class="create-card create-card--hero">
+      <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">person_add</span></span>
+      <span class="create-card-title">Konto erstellen</span>
+      <span class="create-card-text">Verwalte Charaktere, melde dich zu Events an und bearbeite deine Daten jederzeit selbst.</span>
+    </a>
   </div>
-</div>
 <script type="module">
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 applyBranding();
 import { notify } from '/js/notifications.js';
+import { escapeHtml } from '/js/formFields.js';
 
 const form = document.getElementById('login-form');
 
@@ -57,6 +71,18 @@ const form = document.getElementById('login-form');
   } catch {
     // Network hiccup fetching availability — leave every button visible;
     // worst case a misconfigured provider shows its existing 503 error on click.
+  }
+})();
+
+(async () => {
+  try {
+    const events = await api.get('/public/events');
+    if (events.length === 0) return;
+    document.getElementById('guest-events').innerHTML = events.map((e) =>
+      `<a class="guest-event" href="/ticket-widget.html?event=${encodeURIComponent(e.code)}"><span><strong>${escapeHtml(e.name)}</strong><span class="sub">${escapeHtml(e.eventDate)}</span></span><span class="guest-event-go">Ticket sichern</span></a>`).join('');
+    document.getElementById('guest-pane').hidden = false;
+  } catch {
+    // Gast-Tickets sind optional: ohne Liste bleibt nur der normale Login sichtbar.
   }
 })();
 

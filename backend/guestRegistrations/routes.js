@@ -11,7 +11,7 @@ import { readJsonBody } from '../httpBody.js';
 import { isValidEmail } from '../validation.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { registerForEvent } from '../registrations/repository.js';
-import { getEvent, getEventByCode, resolvePriceForGroup } from '../events/repository.js';
+import { getEvent, getEventByCode, listEvents, resolvePriceForGroup } from '../events/repository.js';
 import { setGuestPaymentToken } from '../payments/repository.js';
 import { sendGuestTicketEmail } from '../auth/mailer.js';
 import { logger } from '../logger.js';
@@ -22,6 +22,13 @@ const GUEST_REGISTER_RATE_LIMIT = { keyPrefix: 'guest-register', maxAttempts: 10
 const PAYMENT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const GUEST_GROUP_KEY = 'mitglied';
 const COMING_SOON_ERROR = { status: 409, body: { error: 'Die Anmeldung ist noch gesperrt und startet bald.' } };
+
+// Open events a guest can book (login page: "Ohne Konto").
+router.get('/public/events', async () => {
+  if ((await getAppSettings()).comingSoonEnabled) return COMING_SOON_ERROR;
+  const events = (await listEvents()).filter((e) => e.is_active && e.code);
+  return { status: 200, body: events.map((e) => ({ code: e.code, name: e.name, eventDate: e.event_date })) };
+});
 
 router.get('/public/events/:code', async ({ params }) => {
   const { comingSoonEnabled, waiverText } = await getAppSettings();

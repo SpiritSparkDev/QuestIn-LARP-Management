@@ -1688,7 +1688,8 @@ button:hover {
 }
 
 /* "Create" card: a clickable card to start a new character / NSC character. */
-button.create-card {
+button.create-card,
+a.create-card {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1705,14 +1706,16 @@ button.create-card {
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-style 0.12s ease;
 }
 
-button.create-card:hover {
+button.create-card:hover,
+a.create-card:hover {
   background: var(--surface-container-low);
   border-style: solid;
   transform: translateY(-2px);
   box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
-button.create-card:focus-visible {
+button.create-card:focus-visible,
+a.create-card:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
@@ -1747,10 +1750,51 @@ button.create-card:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   button.create-card,
-  button.create-card:hover {
+  button.create-card:hover,
+  a.create-card,
+  a.create-card:hover {
     transition: none;
     transform: none;
   }
+}
+
+a.create-card { text-decoration: none; }
+
+/* Login page: login | guest side by side, big "create account" card below */
+.login-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  margin-top: 24px;
+}
+.login-split:has(#guest-pane[hidden]) { grid-template-columns: minmax(0, 460px); justify-content: center; }
+.login-pane h2 { margin-top: 0; }
+.guest-event {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 14px 16px;
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  text-decoration: none;
+}
+.guest-event:hover { border-color: var(--primary); }
+.guest-event .sub { display: block; }
+.guest-event-go { color: var(--primary-text, var(--primary)); font-weight: 600; white-space: nowrap; }
+a.create-card--hero {
+  max-width: none;
+  margin-top: 32px;
+  padding: 26px 24px;
+  background: var(--primary-container);
+  border-style: solid;
+  border-width: 2px;
+}
+@media (max-width: 700px) {
+  .login-split, .login-split:has(#guest-pane[hidden]) { grid-template-columns: 1fr; gap: 28px; }
 }
 
 .create-card-wrap { margin: 10px 0; }
