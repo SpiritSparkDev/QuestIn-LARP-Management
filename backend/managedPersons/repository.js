@@ -156,7 +156,8 @@ export async function searchClaimablePersons(term, ownerId) {
   const { rows } = await query(
     `SELECT id, email, first_name, last_name, nickname FROM users
      WHERE is_guest AND managed_by_user_id IS NULL AND deactivated_at IS NULL AND id <> $1
-       AND (lower(first_name || ' ' || last_name) LIKE $2 OR lower(coalesce(nickname, '')) LIKE $2 OR lower(email) = lower($3))
+       AND (lower(first_name || ' ' || last_name) LIKE $2 OR lower(coalesce(nickname, '')) LIKE $2 OR lower(email) = lower($3)
+         OR EXISTS (SELECT 1 FROM characters c WHERE c.user_id = users.id AND lower(c.name) LIKE $2))
      ORDER BY last_name, first_name LIMIT 20`,
     [ownerId, pattern, term]
   );
