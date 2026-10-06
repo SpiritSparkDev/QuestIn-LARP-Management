@@ -12,12 +12,23 @@ const clean = (text) => String(text ?? '').replace(/[^\x20-\x7E -ÿ€„“”
 // ([{ title, fields: [{ label, type, options }] }]). Field names are the
 // labels, so uploading it back as the import template auto-maps via
 // suggestMapping. Returns the PDF bytes.
-export async function buildBlankForm(title, sections) {
-  const doc = await PDFDocument.create();
+// With basePdf (a fillable PDF), its pages and fields are kept and only the
+// app fields it doesn't have yet (matched by normalized name) are appended
+// on new pages.
+export async function buildBlankForm(title, sections, basePdf) {
+  const doc = basePdf ? await PDFDocument.load(basePdf, { ignoreEncryption: true }) : await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const form = doc.getForm();
-  const taken = new Set();
+  const norm = (t) => String(t).toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]/g, '');
+  const taken = new Set(form.getFields().map((f) => f.getName()));
+  const existing = new Set([...taken].map(norm));
+  // Loose: the base calls it "Contage" where the schema says "Con-Tage des Spielers".
+  const matches = (a, b) => a === b || (Math.min(a.length, b.length) >= 4 && (a.includes(b) || b.includes(a)));
+  if (basePdf) {
+    sections = sections.map((s) => ({ ...s, fields: s.fields.filter((f) => ![...existing].some((e) => matches(e, norm(f.label)))) }));
+    if (sections.every((s) => s.fields.length === 0)) return doc.save();
+  }
   let page = doc.addPage(PAGE);
   let y = PAGE[1] - MARGIN;
 
@@ -33,7 +44,7 @@ export async function buildBlankForm(title, sections) {
     return name;
   };
 
-  page.drawText(clean(title), { x: MARGIN, y: y - 18, size: 20, font: bold });
+  page.drawText(clean(basePdf ? 'Weitere Angaben' : title), { x: MARGIN, y: y - 18, size: 20, font: bold });
   y -= 44;
 
   for (const { title: heading, fields } of sections) {

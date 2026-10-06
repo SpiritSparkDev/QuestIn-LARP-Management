@@ -124,12 +124,14 @@ router.post('/pdf-import/template', requireAddon(async ({ req }) => {
   }
 }));
 
-router.get('/pdf-import/blank-form', requireAddon(async () => {
+// GET: from scratch. POST { dataBase64 }: extends that fillable PDF with the
+// app fields it lacks.
+async function blankFormHandler(basePdf) {
   const [accountSchema, registrationSchema, scSchema] = await Promise.all([
     getAccountFieldSchema(), getRegistrationFieldSchema(), getScCharacterSchema(),
   ]);
   const text = (label) => ({ label, type: 'text' });
-  const pdf = await buildBlankForm('Anmeldung', [
+  const sections = [
     { title: 'Konto', fields: [text('Vorname'), text('Nachname'), text('Rufname'), text('E-Mail')] },
     { title: 'Anmeldung', fields: [
       { label: 'Rolle', type: 'select', options: ['Spieler', 'NSC', 'Helfer'] },
@@ -142,13 +144,28 @@ router.get('/pdf-import/blank-form', requireAddon(async () => {
   ].map((section) => ({
     ...section,
     fields: section.fields.map((f) => ({ ...f, label: f.label ?? f.key })),
-  })));
+  }));
+  const pdf = await buildBlankForm('Anmeldung', sections, basePdf);
   return {
     status: 200,
     isBinary: true,
     body: Buffer.from(pdf),
     headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="anmeldung.pdf"' },
   };
+}
+
+router.get('/pdf-import/blank-form', requireAddon(() => blankFormHandler()));
+
+router.post('/pdf-import/blank-form', requireAddon(async ({ req }) => {
+  const body = await readJsonBody(req, MAX_UPLOAD_BODY_BYTES);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const decoded = decodePdf(body);
+  if (decoded.error) return decoded.error;
+  try {
+    return await blankFormHandler(decoded.buffer);
+  } catch {
+    return { status: 400, body: { error: 'Die Datei ist kein lesbares PDF.' } };
+  }
 }));
 
 router.delete('/pdf-import/config', requireAddon(async () => {
