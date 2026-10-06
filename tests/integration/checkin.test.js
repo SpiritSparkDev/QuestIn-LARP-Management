@@ -128,6 +128,13 @@ test('checkin_helper sees the participant list with characters and no encrypted 
     });
     assert.equal(doubleCheckinRes.status, 409);
 
+    // Check-Out only works once an admin ended the event.
+    const tooEarlyRes = await fetch(`http://localhost:${port}/events/${eventId}/checkout`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
+      body: JSON.stringify({ userId: attendee.userId }),
+    });
+    assert.equal(tooEarlyRes.status, 409);
+    await query('UPDATE events SET ended_at = now() WHERE id = $1', [eventId]);
     const checkoutRes = await fetch(`http://localhost:${port}/events/${eventId}/checkout`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: helper.cookie },
       body: JSON.stringify({ userId: attendee.userId }),
@@ -407,6 +414,19 @@ test('two concurrent overrides on the same registration with the same previousSt
     const [resA, resB] = await Promise.all([doOverride('checked_in'), doOverride('checked_out')]);
     const statuses = [resA.status, resB.status].sort();
     assert.deepEqual(statuses, [200, 409]);
+  });
+});
+
+test('POST /events/:id/end and /reopen toggle ended_at (events menu only)', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const member = await makeUserAndSession('mitglied');
+    const eventId = await makeEvent();
+    const post = (cookie, path) => fetch(`http://localhost:${port}/events/${eventId}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: '{}' });
+    assert.equal((await post(member.cookie, 'end')).status, 403);
+    const ended = await (await post(admin.cookie, 'end')).json();
+    assert.ok(ended.ended_at);
+    assert.equal((await (await post(admin.cookie, 'reopen')).json()).ended_at, null);
   });
 });
 

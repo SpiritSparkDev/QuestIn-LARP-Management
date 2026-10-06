@@ -2,7 +2,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEvent } from './repository.js';
+import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEvent, setEventEnded } from './repository.js';
 import { query } from '../db.js';
 import { maybePromoteFromWaitlist } from '../registrations/repository.js';
 
@@ -184,6 +184,18 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
 
 router.post('/events/:id/activate', requireAuth(requireMenu('events')(async ({ params }) => {
   const event = await activateEvent(params.id);
+  if (!event) return { status: 404, body: { error: 'event not found' } };
+  return { status: 200, body: event };
+})));
+
+router.post('/events/:id/end', requireAuth(requireMenu('events')(async ({ params }) => {
+  const event = await setEventEnded(params.id, true);
+  if (!event) return { status: 404, body: { error: 'event not found' } };
+  return { status: 200, body: event };
+})));
+
+router.post('/events/:id/reopen', requireAuth(requireMenu('events')(async ({ params }) => {
+  const event = await setEventEnded(params.id, false);
   if (!event) return { status: 404, body: { error: 'event not found' } };
   return { status: 200, body: event };
 })));

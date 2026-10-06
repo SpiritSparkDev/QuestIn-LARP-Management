@@ -34,6 +34,7 @@
     <p class="sub">Teilnehmerliste für das ausgewählte Event.</p>
     <p class="standalone-link"><a href="/checkin">Als eigene Vollbild-Seite öffnen (/checkin)</a></p>
     <select id="event-select" aria-label="Event"></select>
+    <button type="button" id="end-event-btn" class="btn-secondary btn-sm" hidden></button>
     <div class="stat-row">
       <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Gesamt</div></div>
       <div class="stat"><div class="stat-num forest" id="stat-checked-in">0</div><div class="stat-label">Eingecheckt</div></div>
@@ -149,6 +150,7 @@ let canOverride = false;
 let lodgingEnabled = false;
 let canManageMembers = false;
 let events = [];
+const eventEnded = () => Boolean(events.find((e) => e.id === eventSelect.value)?.ended_at);
 let myAccountFields = [];
 let currentSchema = [];
 let accountSchema = [];
@@ -208,7 +210,7 @@ function allColumns() {
     { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
     { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-stack', render: renderPaymentStatusCell },
     { id: 'status', label: 'Status', track: '130px', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span>` },
-    { id: 'actions', label: 'Aktionen', locked: true, track: 'minmax(210px, 1.3fr)', cls: 'cell-actions', render: (p) => renderCheckinCell(p) + renderCheckoutCell(p) },
+    { id: 'actions', label: 'Aktionen', locked: true, track: eventEnded() ? 'minmax(210px, 1.3fr)' : 'minmax(110px, 0.7fr)', cls: 'cell-actions', render: (p) => renderCheckinCell(p) + renderCheckoutCell(p) },
     ...(canOverride ? [{ id: 'override', label: 'Override', track: '150px', render: renderOverrideCell }] : []),
   ];
   return [...base, ...it, ...ot, ...rest];
@@ -338,7 +340,32 @@ document.getElementById('reset-column-order').addEventListener('click', () => {
   renderParticipants(currentParticipants, eventSelect.value);
 });
 
+// Admins with the Events menu end the event here; only then Check-Out appears.
+let canEndEvents = false;
+const endEventButton = document.getElementById('end-event-btn');
+
+function updateEndEventButton() {
+  endEventButton.hidden = !canEndEvents || !eventSelect.value;
+  endEventButton.textContent = eventEnded() ? 'Event wieder öffnen' : 'Event beenden (Check-Out freigeben)';
+}
+
+endEventButton.addEventListener('click', async () => {
+  const ended = eventEnded();
+  if (!ended && !confirm('Das Event beenden? Danach ist Check-Out möglich.')) return;
+  try {
+    const updated = await api.post(`/events/${eventSelect.value}/${ended ? 'reopen' : 'end'}`, {});
+    events = events.map((e) => (e.id === updated.id ? { ...e, ...updated } : e));
+    notify(ended ? 'Event wieder geöffnet.' : 'Event beendet – Check-Out ist jetzt möglich.', 'success');
+    updateEndEventButton();
+    renderTableHead();
+    renderParticipants(currentParticipants, eventSelect.value);
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
 function onEventChanged() {
+  updateEndEventButton();
   selectedColumns = loadSelectedColumns(eventSelect.value);
   selectedColumns.it = selectedColumns.it.filter((key) => currentSchema.some((f) => f.key === key));
   renderColumnCheckboxes();
@@ -644,7 +671,9 @@ function renderCheckinCell(p) {
 }
 
 function renderCheckoutCell(p) {
-  if (p.status === 'notified') return '';
+  // Check-Out is only offered once an admin ended the event -- until then the
+  // button (and its space) stays away.
+  if (p.status === 'notified' || !eventEnded()) return '';
   return `<button type="button" class="btn-ghost btn-sm" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>`;
 }
 
@@ -913,6 +942,7 @@ try {
   lodgingEnabled = account.lodgingEnabled === true;
   document.getElementById('checkin-export').hidden = account.canExportMembers !== true;
   canManageMembers = (account.menus ?? []).includes('mitglieder');
+  canEndEvents = (account.menus ?? []).includes('events');
   myAccountFields = account.accountFields ?? [];
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
   currentSchema = await api.get('/sc-schema');

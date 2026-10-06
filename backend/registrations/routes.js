@@ -187,6 +187,9 @@ router.post('/events/:id/checkout', requireAuth(requireMenu('checkin')(async ({ 
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (!body.userId) return { status: 400, body: { error: 'userId is required' } };
+  const event = await getEvent(params.id);
+  if (!event) return { status: 404, body: { error: 'event not found' } };
+  if (!event.ended_at) return { status: 409, body: { error: 'Check-Out ist erst möglich, wenn das Event beendet wurde.' } };
   try {
     const registration = await checkOut(params.id, body.userId);
     return { status: 200, body: registration };

@@ -3,7 +3,7 @@ import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, created_at';
+const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, created_at';
 
 // Trims, drops empty strings, and deduplicates while preserving first-seen
 // order -- the admin-facing comma-separated textfield can easily produce
@@ -182,6 +182,15 @@ export function resolvePriceForGroup(pricing, groupName, atDate = new Date()) {
   const amountCents = tier.amounts?.[groupName];
   if (!Number.isInteger(amountCents)) return null;
   return { tierName: tier.name, amountCents };
+}
+
+// "Event beenden": from now on Check-Out is possible; null reopens it.
+export async function setEventEnded(id, ended) {
+  const { rows } = await query(
+    `UPDATE events SET ended_at = ${ended ? 'COALESCE(ended_at, now())' : 'NULL'} WHERE id = $1 RETURNING ${SELECT_COLUMNS}`,
+    [id]
+  );
+  return rows[0] ?? null;
 }
 
 // At most one event is ever active: this unconditionally sets every row's

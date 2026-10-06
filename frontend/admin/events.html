@@ -36,7 +36,7 @@
     <div class="card">
       <div class="table-scroll">
       <table id="event-list">
-        <thead><tr><th>Name</th><th>Datum</th><th>Status</th><th></th><th></th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Datum</th><th>Status</th><th></th><th></th><th></th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       </div>
@@ -448,8 +448,11 @@ async function loadEvents() {
   listBody.innerHTML = events.map((e) => `<tr>
     <td>${escapeHtml(e.name)}</td>
     <td>${escapeHtml(e.event_date)}</td>
-    <td>${e.is_active ? '<span class="badge badge-active">Aktiv – Anmeldung offen</span>' : '<span class="badge badge-inactive">Inaktiv</span>'}</td>
+    <td>${e.is_active ? '<span class="badge badge-active">Aktiv – Anmeldung offen</span>' : '<span class="badge badge-inactive">Inaktiv</span>'}${e.ended_at ? ' <span class="badge badge-inactive">Beendet</span>' : ''}</td>
     <td>${e.is_active ? '' : `<button type="button" class="btn-sm" data-activate="${e.id}">Aktivieren</button>`}</td>
+    <td>${e.ended_at
+      ? `<button type="button" class="btn-sm btn-ghost" data-reopen="${e.id}">Wieder öffnen</button>`
+      : `<button type="button" class="btn-sm btn-ghost" data-end="${e.id}" title="Danach ist Check-Out möglich">Event beenden</button>`}</td>
     <td><button type="button" class="btn-sm btn-ghost" data-edit="${e.id}">Bearbeiten</button></td>
     <td><button type="button" class="btn-sm btn-ghost" data-delete="${e.id}">Löschen</button></td>
   </tr>`).join('');
@@ -472,6 +475,23 @@ async function loadEvents() {
       }
     });
   });
+
+  const toggleEnded = (attribute, path, message, confirmText) => {
+    listBody.querySelectorAll(`[${attribute}]`).forEach((button) => {
+      button.addEventListener('click', async () => {
+        if (confirmText && !confirm(confirmText)) return;
+        try {
+          await api.post(`/events/${button.getAttribute(attribute)}/${path}`, {});
+          notify(message, 'success');
+          await loadEvents();
+        } catch (err) {
+          notify(err.message, 'error');
+        }
+      });
+    });
+  };
+  toggleEnded('data-end', 'end', 'Event beendet – Check-Out ist jetzt möglich.', 'Das Event beenden? Danach ist Check-Out möglich.');
+  toggleEnded('data-reopen', 'reopen', 'Event wieder geöffnet.');
 
   listBody.querySelectorAll('[data-delete]').forEach((button) => {
     button.addEventListener('click', async () => {
