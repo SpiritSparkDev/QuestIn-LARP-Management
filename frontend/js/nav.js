@@ -40,6 +40,7 @@ const ADMIN_ONLY_LINKS = [
 // property that says whether the add-on is enabled.
 const ADDON_LINKS = [
   { flag: 'pdfImportEnabled', label: 'PDF-Import', href: '/admin/pdf-import.html', icon: 'picture_as_pdf' },
+  { flag: 'pdfExportEnabled', label: 'PDF-Erzeugung', href: '/admin/pdf-export.html', icon: 'description' },
   { flag: 'lodgingEnabled', label: 'Unterkünfte', href: '/admin/lodging.html', icon: 'bed' },
 ];
 

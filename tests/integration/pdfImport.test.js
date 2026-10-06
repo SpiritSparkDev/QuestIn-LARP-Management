@@ -19,7 +19,7 @@ const { query, closePool } = await import('../../backend/db.js');
 
 after(async () => {
   // Leave app_settings as other test files expect to find it.
-  await query('UPDATE app_settings SET pdf_import_enabled = false');
+  await query('UPDATE app_settings SET pdf_import_enabled = false, pdf_export_enabled = false');
   await closePool();
 });
 
@@ -201,5 +201,27 @@ test('PDF import: an import with an event becomes a registered guest account; a 
     const conflictBody = await conflict.json();
     assert.equal(conflictBody.adoption.adopted, false);
     assert.ok(conflictBody.import.adoptError);
+  });
+});
+
+test('PDF export: separate add-on 404s while off, then returns a fillable PDF; a base PDF keeps its fields', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
+    const base = `http://localhost:${port}`;
+    await query('UPDATE app_settings SET pdf_export_enabled = false');
+    assert.equal((await fetch(`${base}/pdf-export/blank-form`, { headers })).status, 404);
+
+    await fetch(`${base}/app-settings`, { method: 'PUT', headers, body: JSON.stringify({ pdfExportEnabled: true }) });
+    const res = await fetch(`${base}/pdf-export/blank-form`, { headers });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/pdf');
+    const names = (await PDFDocument.load(await res.arrayBuffer())).getForm().getFields().map((f) => f.getName());
+    assert.ok(names.includes('Vorname') && names.includes('E-Mail'));
+
+    const withBase = await fetch(`${base}/pdf-export/blank-form`, { method: 'POST', headers, body: JSON.stringify({ filename: 'b.pdf', dataBase64: await makeFilledPdf({ name: 'X', email: 'x@example.com' }) }) });
+    assert.equal(withBase.status, 200);
+    const merged = (await PDFDocument.load(await withBase.arrayBuffer())).getForm().getFields().map((f) => f.getName());
+    assert.ok(merged.includes('Name') && merged.includes('Vorname'));
   });
 });

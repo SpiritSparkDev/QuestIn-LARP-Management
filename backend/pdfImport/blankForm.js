@@ -24,7 +24,9 @@ export async function buildBlankForm(title, sections, basePdf) {
   const taken = new Set(form.getFields().map((f) => f.getName()));
   const existing = new Set([...taken].map(norm));
   // Loose: the base calls it "Contage" where the schema says "Con-Tage des Spielers".
-  const matches = (a, b) => a === b || (Math.min(a.length, b.length) >= 4 && (a.includes(b) || b.includes(a)));
+  // A bare "Name" in the base means the surname.
+  const matches = (a, b) => a === b || (a === 'name' && b === 'nachname')
+    || (Math.min(a.length, b.length) >= 5 && (a.includes(b) || b.includes(a)));
   if (basePdf) {
     sections = sections.map((s) => ({ ...s, fields: s.fields.filter((f) => ![...existing].some((e) => matches(e, norm(f.label)))) }));
     if (sections.every((s) => s.fields.length === 0)) return doc.save();

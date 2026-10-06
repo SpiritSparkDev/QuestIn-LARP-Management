@@ -42,7 +42,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const {
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
-    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity,
+    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity,
   } = body;
   if (waiverText !== undefined && typeof waiverText !== 'string') {
     return { status: 400, body: { error: 'waiverText must be a string' } };
@@ -85,6 +85,9 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   if (pdfImportEnabled !== undefined && typeof pdfImportEnabled !== 'boolean') {
     return { status: 400, body: { error: 'pdfImportEnabled must be a boolean' } };
   }
+  if (pdfExportEnabled !== undefined && typeof pdfExportEnabled !== 'boolean') {
+    return { status: 400, body: { error: 'pdfExportEnabled must be a boolean' } };
+  }
   if (comingSoonEnabled !== undefined && typeof comingSoonEnabled !== 'boolean') {
     return { status: 400, body: { error: 'comingSoonEnabled must be a boolean' } };
   }
@@ -123,7 +126,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   const saved = await setAppSettings({
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText,
     baseUrl: baseUrl === undefined ? undefined : baseUrl.replace(/\/+$/, ''),
-    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity,
+    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity,
   });
 
   // Fire-and-forget: sendComingSoonReminders never throws (own try/catch per

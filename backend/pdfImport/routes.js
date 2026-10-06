@@ -54,6 +54,15 @@ function requireAddon(handler) {
   }));
 }
 
+// Separate opt-in add-on (PDF-Erzeugung), independent of the import.
+function requireExportAddon(handler) {
+  return requireAuth(requireAdminGroup(async (ctx) => {
+    const settings = await getAppSettings();
+    if (!settings.pdfExportEnabled) return { status: 404, body: { error: 'PDF-Erzeugung ist nicht aktiviert.' } };
+    return handler(ctx);
+  }));
+}
+
 function decodePdf(body) {
   const { filename, dataBase64 } = body;
   if (typeof filename !== 'string' || !filename) return { error: { status: 400, body: { error: 'filename is required' } } };
@@ -154,9 +163,9 @@ async function blankFormHandler(basePdf) {
   };
 }
 
-router.get('/pdf-import/blank-form', requireAddon(() => blankFormHandler()));
+router.get('/pdf-export/blank-form', requireExportAddon(() => blankFormHandler()));
 
-router.post('/pdf-import/blank-form', requireAddon(async ({ req }) => {
+router.post('/pdf-export/blank-form', requireExportAddon(async ({ req }) => {
   const body = await readJsonBody(req, MAX_UPLOAD_BODY_BYTES);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const decoded = decodePdf(body);

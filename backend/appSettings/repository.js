@@ -3,8 +3,8 @@ import { query } from '../db.js';
 export const DEFAULT_BASE_URL = 'http://localhost:3000';
 
 export async function getAppSettings() {
-  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, waitlist_auto_promote, waiver_text, waiver_version, base_url, coming_soon_enabled, coming_soon_message, coming_soon_until, theme_mode, color_scheme, custom_colors, pdf_import_enabled, tavern_enabled, lodging_enabled, background_preset, background_opacity, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background, background_image_data IS NOT NULL AS has_uploaded_background_image FROM app_settings LIMIT 1');
-  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: process.env.APP_BASE_URL || DEFAULT_BASE_URL, comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, tavernEnabled: false, lodgingEnabled: false, backgroundPreset: 'grunge', backgroundOpacity: 20, hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false };
+  const { rows } = await query('SELECT logo_url, app_title, event_name, quota_mb_per_character, invitation_ttl_days, character_browsing_enabled, waitlist_auto_promote, waiver_text, waiver_version, base_url, coming_soon_enabled, coming_soon_message, coming_soon_until, theme_mode, color_scheme, custom_colors, pdf_import_enabled, pdf_export_enabled, tavern_enabled, lodging_enabled, background_preset, background_opacity, logo_data IS NOT NULL AS has_uploaded_logo, ticket_bg_data IS NOT NULL AS has_uploaded_ticket_background, background_image_data IS NOT NULL AS has_uploaded_background_image FROM app_settings LIMIT 1');
+  if (rows.length === 0) return { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: process.env.APP_BASE_URL || DEFAULT_BASE_URL, comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, pdfExportEnabled: false, tavernEnabled: false, lodgingEnabled: false, backgroundPreset: 'grunge', backgroundOpacity: 20, hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false };
   return {
     logoUrl: rows[0].logo_url,
     appTitle: rows[0].app_title,
@@ -24,6 +24,7 @@ export async function getAppSettings() {
     colorScheme: rows[0].color_scheme,
     customColors: rows[0].custom_colors,
     pdfImportEnabled: rows[0].pdf_import_enabled,
+    pdfExportEnabled: rows[0].pdf_export_enabled,
     tavernEnabled: rows[0].tavern_enabled,
     lodgingEnabled: rows[0].lodging_enabled,
     backgroundPreset: rows[0].background_preset,
@@ -36,7 +37,7 @@ export async function getAppSettings() {
 
 export async function setAppSettings({
   logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
-  waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity,
+  waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity,
 }) {
   const id = await ensureSettingsRow();
   // Auto-bumps waiver_version whenever the text actually changes, so a
@@ -86,7 +87,8 @@ export async function setAppSettings({
        tavern_enabled = COALESCE($22, tavern_enabled),
        lodging_enabled = COALESCE($23, lodging_enabled),
        background_preset = COALESCE($24, background_preset),
-       background_opacity = COALESCE($25, background_opacity)
+       background_opacity = COALESCE($25, background_opacity),
+       pdf_export_enabled = COALESCE($26, pdf_export_enabled)
      WHERE id = $1`,
     [
       id, logoUrl ?? null, appTitle ?? null, eventName ?? null, quotaMbPerCharacter ?? null,
@@ -94,7 +96,7 @@ export async function setAppSettings({
       waiverText ?? null, waiverVersionBump, baseUrlProvided, baseUrlValue,
       comingSoonEnabled ?? null, comingSoonMessage ?? null, comingSoonUntilProvided, comingSoonUntilValue,
       themeMode ?? null, colorScheme ?? null, customColorsProvided, customColorsValue,
-      pdfImportEnabled ?? null, tavernEnabled ?? null, lodgingEnabled ?? null, backgroundPreset ?? null, backgroundOpacity ?? null,
+      pdfImportEnabled ?? null, tavernEnabled ?? null, lodgingEnabled ?? null, backgroundPreset ?? null, backgroundOpacity ?? null, pdfExportEnabled ?? null,
     ]
   );
   return getAppSettings();
