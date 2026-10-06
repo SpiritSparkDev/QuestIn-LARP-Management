@@ -142,15 +142,11 @@
                   <button type="button" class="tab-btn" data-tab="group-invite-tab">Leute einladen</button>
                 </div>
                 <div class="tab-panel card form-pad" id="group-members-tab">
-                  <h2>Leute anmelden</h2>
-                  <p class="sub">Melde einzelne Personen über ihre Karte an – oder alle auf einmal für ein Event.</p>
+                  <h2>Mitglieder &amp; Anmeldung</h2>
+                  <p class="sub">Alle in deiner Gruppe: von dir angelegte Personen und eingeladene Verwalter mit ihren Personen. Melde sie über ihre Karte an – oder alle auf einmal.</p>
                   <p><button type="button" id="group-bulk-btn">Ganze Gruppe anmelden</button></p>
                   <div id="managed-persons-list"></div>
-                  <div id="group-tree-block" class="group-tree-block">
-                    <h3>Gruppenstruktur</h3>
-                    <p class="sub">Verwalter, die in deiner Gruppe sind (oder bei denen du bist). Der übergeordnete Verwalter sieht die Untergruppen und bearbeitet bei deren Charakteren die Felder, die als „Gruppenverwaltung“ freigegeben sind.</p>
-                    <div id="group-tree-view"></div>
-                  </div>
+                  <div id="group-tree-block"><div id="group-tree-view"></div></div>
                 </div>
                 <div class="tab-panel card form-pad" id="group-settings-tab" hidden>
                   <h2>Gruppeneinstellungen</h2>
@@ -234,12 +230,27 @@
 
                 <dialog id="managed-person-dialog">
                   <h3 id="managed-person-dialog-title">Person hinzufügen</h3>
-                  <p class="lede" id="managed-person-hint">Es reicht ein Rufname <em>oder</em> ein Charaktername. Alles Weitere kannst du später ergänzen.</p>
+                  <div id="managed-person-create" class="field-grid">
+                    <form class="card form-pad" data-managed-create="person">
+                      <h4>Person anlegen</h4>
+                      <p class="sub">Für Mitspielende, Kinder oder Gäste ohne eigenen Account.</p>
+                      <div><input id="create-person-name" name="name" type="text" required><label for="create-person-name">Name</label></div>
+                      <div><input id="create-person-email" name="email" type="email"><label for="create-person-email">E-Mail (optional)</label></div>
+                      <button type="submit">Person anlegen</button>
+                    </form>
+                    <form class="card form-pad" data-managed-create="character">
+                      <h4>Charakter anlegen</h4>
+                      <p class="sub">Legt einen Spielercharakter samt Person dahinter an.</p>
+                      <div><input id="create-character-name" name="name" type="text" required><label for="create-character-name">Name</label></div>
+                      <div><input id="create-character-email" name="email" type="email"><label for="create-character-email">E-Mail (optional)</label></div>
+                      <button type="submit">Charakter anlegen</button>
+                    </form>
+                  </div>
+                  <p class="lede" id="managed-person-create-hint">Alles Weitere kannst du später ergänzen.</p>
                   <form id="managed-person-form">
                     <div class="field-grid">
                       <div><input id="managed-person-firstName" name="firstName" type="text"><label for="managed-person-firstName">Vorname</label></div>
                       <div><input id="managed-person-lastName" name="lastName" type="text"><label for="managed-person-lastName">Nachname</label></div>
-                      <div id="managed-person-character-row"><input id="managed-person-characterName" name="characterName" type="text"><label for="managed-person-characterName">Charaktername (legt einen Spielercharakter an)</label></div>
                       <div><input id="managed-person-nickname" name="nickname" type="text"><label for="managed-person-nickname">Rufname</label></div>
                       <div><input id="managed-person-email" name="email" type="email"><label for="managed-person-email">E-Mail (optional, für spätere Umwandlung in einen eigenen Account)</label></div>
                     </div>
@@ -1187,15 +1198,11 @@
     document.getElementById("dashboard-group-link").addEventListener("click", () => goToTab("gruppe"));
 
     let managedPersonCharacters = {};
+    let ownCardsHtml = "";
 
     function renderManagedPersonsList() {
       updateManagedPersonsDashboardVisibility();
-      const container = document.getElementById("managed-persons-list");
-      if (managedPersons.length === 0) {
-        container.innerHTML = '<p class="sub">Noch keine verwalteten Personen angelegt.</p>';
-        return;
-      }
-      container.innerHTML = managedPersons
+      ownCardsHtml = managedPersons
         .map((p) => {
           const chars = managedPersonCharacters[p.id] ?? [];
           const manageHref = `/managed-person.html?id=${encodeURIComponent(p.id)}`;
@@ -1217,6 +1224,7 @@
           <h3>${escapeHtml(p.name)}</h3>
           <p class="sub">${escapeHtml(managedPersonStatusLabel(p))}</p>
         </div>
+        <span class="mp-origin" title="Von dir angelegt – du verwaltest diese Person"><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>Angelegt</span>
       </div>
       <div class="mp-chars">
         <span class="mp-chars-label">Charaktere</span>
@@ -1232,15 +1240,7 @@
         })
         .join("");
 
-      container.querySelectorAll("[data-managed-person-edit]").forEach((btn) => {
-        btn.addEventListener("click", () => openManagedPersonDialog(btn.dataset.managedPersonEdit));
-      });
-      container.querySelectorAll("[data-managed-person-delete]").forEach((btn) => {
-        btn.addEventListener("click", () => openManagedPersonDeleteDialog(btn.dataset.managedPersonDelete));
-      });
-      container.querySelectorAll("[data-managed-person-convert]").forEach((btn) => {
-        btn.addEventListener("click", () => convertManagedPerson(btn.dataset.managedPersonConvert));
-      });
+      renderGroupMembers();
     }
 
     const claimDialog = document.getElementById("claim-person-dialog");
@@ -1308,10 +1308,63 @@
         : "";
     }
 
-    function renderGroupNode(node, isRoot) {
-      const persons = isRoot ? "" : node.persons.map((p) => `<li>${escapeHtml(p.name)}${isRoot ? "" : ` <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(p.id)}" data-group-person-name="${escapeHtml(p.name)}">Gruppen-Felder</button> <a class="btn-ghost btn-sm" href="/managed-person.html?id=${encodeURIComponent(p.id)}">Anmeldungen</a>`}</li>`).join("");
-      const children = node.children.map((child) => `<li><strong>${escapeHtml(child.name)}</strong>${renderGroupValues(child.groupData)} <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(child.id)}" data-group-person-name="${escapeHtml(child.name)}">Gruppen-Felder</button> <a class="btn-ghost btn-sm" href="/managed-person.html?id=${encodeURIComponent(child.id)}">Anmeldungen</a>${isRoot ? ` <button type="button" class="btn-ghost btn-sm" data-group-remove="${escapeHtml(child.id)}">Entfernen</button>` : ""}${renderGroupNode(child, false)}</li>`).join("");
-      return persons || children ? `<ul class="group-tree-list">${persons}${children}</ul>` : "";
+    const groupAct = async (fn) => {
+      try {
+        await fn();
+        await loadGroupTree();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    };
+
+    function invitedMemberCard(child, parentName) {
+      const href = (id) => `/managed-person.html?id=${encodeURIComponent(id)}`;
+      const persons = child.persons.length
+        ? child.persons.map((p) => `<div class="mp-person-row"><span>${escapeHtml(p.name)}</span><span><button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(p.id)}" data-group-person-name="${escapeHtml(p.name)}">Gruppen-Felder</button> <a class="btn-ghost btn-sm" href="${href(p.id)}">Anmelden</a></span></div>`).join("")
+        : '<p class="sub mp-empty">Keine eigenen Personen.</p>';
+      return `<div class="mp-card">
+      <div class="mp-head">
+        <span class="mp-avatar" aria-hidden="true">${escapeHtml((child.name || "?").trim().charAt(0).toUpperCase())}</span>
+        <div>
+          <h3>${escapeHtml(child.name)}</h3>
+          <p class="sub">Eigener Account · ${parentName ? `Untergruppe von ${escapeHtml(parentName)}` : "Untergruppe"}</p>
+          ${renderGroupValues(child.groupData)}
+        </div>
+        <span class="mp-origin mp-origin--invited" title="Eingeladen – hat einen eigenen Account und ist deiner Gruppe beigetreten"><span class="material-symbols-outlined" aria-hidden="true">mail</span>Eingeladen</span>
+      </div>
+      <div class="mp-chars">
+        <span class="mp-chars-label">Personen</span>
+        ${persons}
+      </div>
+      <div class="action-row">
+        <a href="${href(child.id)}" class="btn-ghost">Anmeldungen</a>
+        <button type="button" class="btn-ghost" data-group-person="${escapeHtml(child.id)}" data-group-person-name="${escapeHtml(child.name)}">Gruppen-Felder</button>
+        ${parentName ? "" : `<button type="button" class="btn-ghost" data-group-remove="${escapeHtml(child.id)}">Entfernen</button>`}
+      </div>
+    </div>`;
+    }
+
+    // One card per member: persons you created ("Angelegt") and managers who joined by invitation ("Eingeladen").
+    function renderGroupMembers() {
+      const container = document.getElementById("managed-persons-list");
+      const walk = (node, parentName) => node.children.flatMap((child) => [invitedMemberCard(child, parentName), ...walk(child, child.name)]);
+      const invited = groupTree ? walk(groupTree.node, null) : [];
+      container.innerHTML = ownCardsHtml || invited.length
+        ? `<div class="group-card-grid">${ownCardsHtml}${invited.join("")}</div>`
+        : '<p class="sub">Noch niemand in deiner Gruppe. Lege im Tab „Leute einladen“ Personen an oder lade andere Verwalter ein.</p>';
+      container.querySelectorAll("[data-managed-person-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => openManagedPersonDialog(btn.dataset.managedPersonEdit));
+      });
+      container.querySelectorAll("[data-managed-person-delete]").forEach((btn) => {
+        btn.addEventListener("click", () => openManagedPersonDeleteDialog(btn.dataset.managedPersonDelete));
+      });
+      container.querySelectorAll("[data-managed-person-convert]").forEach((btn) => {
+        btn.addEventListener("click", () => convertManagedPerson(btn.dataset.managedPersonConvert));
+      });
+      container.querySelectorAll("[data-group-remove]").forEach((b) => b.addEventListener("click", () => {
+        if (confirm("Diese Untergruppe wirklich aus deiner Gruppe entfernen?")) groupAct(() => api.delete(`/group-tree/children/${b.dataset.groupRemove}`));
+      }));
+      container.querySelectorAll("[data-group-person]").forEach((b) => b.addEventListener("click", () => openGroupFieldsDialog(b.dataset.groupPerson, b.dataset.groupPersonName)));
     }
 
     // Incoming invitations are shown at the top of the dashboard, not hidden in the group section.
@@ -1365,8 +1418,6 @@
       if (groupTree.parent) {
         parts.push(`<p>Du gehörst zur Gruppe von <strong>${escapeHtml(groupTree.parent.name)}</strong>. <button type="button" class="btn-ghost btn-sm" id="group-leave">Gruppe verlassen</button></p>`);
       }
-      const own = renderGroupNode(groupTree.node, true);
-      parts.push(own ? `<p class="sub">Deine Gruppe</p>${own}` : '<p class="sub">Noch keine Untergruppen.</p>');
       view.innerHTML = parts.join("");
       document.getElementById("group-outgoing-view").innerHTML = groupTree.outgoing.length
         ? `<p class="sub">Offene Einladungen: ${groupTree.outgoing.map((o) => `${escapeHtml(o.name)} <button type="button" class="btn-ghost btn-sm" data-group-cancel="${escapeHtml(o.id)}">Zurückziehen</button>`).join(", ")}</p>`
@@ -1374,23 +1425,13 @@
       document.getElementById("group-name-input").value = groupTree.groupName ?? "";
       renderGroupSettingsFields();
       renderGroupInvitations();
+      renderGroupMembers();
 
-      const act = async (fn) => {
-        try {
-          await fn();
-          await loadGroupTree();
-        } catch (err) {
-          notify(err.message, "error");
-        }
-      };
+      const act = groupAct;
       document.getElementById("group-outgoing-view").querySelectorAll("[data-group-cancel]").forEach((b) => b.addEventListener("click", () => act(() => api.delete(`/group-tree/invitations/${b.dataset.groupCancel}`))));
-      view.querySelectorAll("[data-group-remove]").forEach((b) => b.addEventListener("click", () => {
-        if (confirm("Diese Untergruppe wirklich aus deiner Gruppe entfernen?")) act(() => api.delete(`/group-tree/children/${b.dataset.groupRemove}`));
-      }));
       view.querySelector("#group-leave")?.addEventListener("click", () => {
         if (confirm("Gruppe wirklich verlassen?")) act(() => api.post("/group-tree/leave", {}));
       });
-      view.querySelectorAll("[data-group-person]").forEach((b) => b.addEventListener("click", () => openGroupFieldsDialog(b.dataset.groupPerson, b.dataset.groupPersonName)));
     }
 
     async function loadGroupTree() {
