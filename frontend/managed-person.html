@@ -83,7 +83,6 @@
           <h3>Foto hochladen</h3>
           <form id="photo-upload-form">
             <input type="file" id="photo-upload-input" accept="image/jpeg,image/png,image/webp" required>
-            <label><input type="checkbox" id="photo-upload-consent" required> Ich habe den Hinweis gelesen</label>
             <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an diesem Bild besitzt und einverstanden bist, dass es im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>
             <div class="dialog-actions">
               <button type="submit">Hochladen</button>
@@ -331,7 +330,6 @@
     const photoUploadDialog = document.getElementById("photo-upload-dialog");
     const photoUploadForm = document.getElementById("photo-upload-form");
     const photoUploadInput = document.getElementById("photo-upload-input");
-    const photoUploadConsent = document.getElementById("photo-upload-consent");
     let photoUploadCharacterId = null;
 
     function openPhotoUploadDialog(characterId) {
@@ -348,7 +346,7 @@
         const dataBase64 = await readFileAsBase64(file);
         await api.post(`/characters/${photoUploadCharacterId}/files`, {
           kind: "image", filename: file.name, mimeType: file.type, dataBase64,
-          isPublic: false, gdprConsent: photoUploadConsent.checked,
+          gdprConsent: true,
         });
         photoUploadDialog.close();
         await loadPhotoInto(photoUploadCharacterId);

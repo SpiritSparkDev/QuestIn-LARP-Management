@@ -482,7 +482,6 @@
     <h3>Foto hochladen</h3>
     <form id="photo-upload-form">
       <input type="file" id="photo-upload-input" accept="image/jpeg,image/png,image/webp" required>
-      <label><input type="checkbox" id="photo-upload-consent" required> Ich habe den Hinweis gelesen</label>
       <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an diesem Bild besitzt und einverstanden bist, dass es im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>
       <div class="dialog-actions">
         <button type="submit">Hochladen</button>
@@ -1992,37 +1991,56 @@
     // save; cancelling the form simply drops them.
     const stagedFiles = { "sc-files-body": [], "nsc-files-body": [] };
 
+    // Upload field: click to choose or drag files onto it. Choosing files
+    // starts the action right away (uploading counts as confirming the rights).
+    function dropZoneHtml() {
+      return `<label class="upload-drop" data-drop-zone>
+      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple>
+      <span class="material-symbols-outlined upload-drop-icon" aria-hidden="true">cloud_upload</span>
+      <span class="upload-drop-title">Dateien auswählen</span>
+      <span class="upload-drop-text">oder hierher ziehen – Bilder (JPG, PNG, WebP) und PDF</span>
+    </label>`;
+    }
+
+    function wireDropZone(zone, onFiles) {
+      const input = zone.querySelector('input[type="file"]');
+      const handle = async (fileList) => {
+        const files = [...fileList];
+        if (files.length === 0) return;
+        zone.classList.add("is-busy");
+        try {
+          await onFiles(files);
+        } finally {
+          zone.classList.remove("is-busy");
+          input.value = "";
+        }
+      };
+      input.addEventListener("change", () => handle(input.files));
+      zone.addEventListener("dragover", (event) => { event.preventDefault(); zone.classList.add("is-over"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("is-over"));
+      zone.addEventListener("drop", (event) => { event.preventDefault(); zone.classList.remove("is-over"); handle(event.dataTransfer.files); });
+    }
+
+    const UPLOAD_NOTICE = "Mit dem Hochladen bestätigst du, dass du die Rechte an den Dateien besitzt und einverstanden bist, dass sie im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden können.";
+
     function renderStagedFiles(body) {
       const staged = stagedFiles[body.id] ?? [];
-      body.innerHTML = `<form class="file-upload-form" data-stage-form>
-      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required>
-      <label><input type="checkbox" required> Ich habe den Hinweis gelesen</label>
-      <label><input type="checkbox"> Öffentlich sichtbar</label>
-      <button type="submit">Hinzufügen</button>
-    </form>
-    <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an dieser Datei besitzt und einverstanden bist, dass sie im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>
+      body.innerHTML = `${dropZoneHtml()}
+    <p class="sub">${UPLOAD_NOTICE}</p>
     <p class="sub">Die Dateien werden hochgeladen, sobald du den Charakter speicherst. Brichst du ab, werden sie verworfen.</p>
     ${staged.map((entry, index) => `<div class="file-item">
       <span>${escapeHtml(entry.file.name)}</span>
-      <span class="tag">${entry.isPublic ? "Öffentlich" : "Privat"}</span>
       ${kindForMimeType(entry.file.type) === "image" ? `<button type="button" data-stage-portrait="${index}" class="btn-ghost${entry.portrait ? " is-portrait" : ""}">${entry.portrait ? "★ Portrait" : "☆ Als Portrait"}</button>` : ""}
       <button type="button" data-unstage="${index}" class="btn-ghost">Entfernen</button>
     </div>`).join("")}`;
 
-      const form = body.querySelector("[data-stage-form]");
-      const fileInput = form.querySelector('input[type="file"]');
-      const [consent, isPublic] = form.querySelectorAll('input[type="checkbox"]');
-      const submit = form.querySelector('button[type="submit"]');
-      submit.disabled = true;
-      consent.addEventListener("change", () => { submit.disabled = !consent.checked; });
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        for (const file of fileInput.files) {
+      wireDropZone(body.querySelector("[data-drop-zone]"), (files) => {
+        for (const file of files) {
           if (!kindForMimeType(file.type)) {
             notify(`„${file.name}“: Nicht unterstützter Dateityp.`, "error");
             continue;
           }
-          stagedFiles[body.id].push({ file, isPublic: isPublic.checked, portrait: false });
+          stagedFiles[body.id].push({ file, portrait: false });
         }
         renderStagedFiles(body);
       });
@@ -2055,7 +2073,6 @@
             filename: entry.file.name,
             mimeType: entry.file.type,
             dataBase64: await readFileAsBase64(entry.file),
-            isPublic: entry.isPublic,
             gdprConsent: true,
           });
           if (entry.portrait) portraitFileId = uploaded.id;
@@ -2198,7 +2215,6 @@
           const url = `/characters/${characterId}/files/${f.id}`;
           return `<figure class="file-thumb">
       <a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${escapeHtml(f.original_filename)}" loading="lazy"></a>
-      <span class="tag file-thumb-tag">${f.is_public ? "Öffentlich" : "Privat"}</span>
       <button type="button" class="file-thumb-portrait${f.is_portrait ? " is-active" : ""}" data-portrait-file="${f.id}" data-portrait-active="${f.is_portrait ? "1" : ""}" data-portrait-character="${characterId}" title="${f.is_portrait ? "Ist das Charakterportrait (Klick: zurücksetzen)" : "Als Charakterportrait festlegen"}" aria-label="Als Charakterportrait festlegen"><span class="material-symbols-outlined" aria-hidden="true">star</span></button>
       <button type="button" class="file-thumb-delete" data-delete-file="${f.id}" data-delete-character="${characterId}" aria-label="Bild löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
     </figure>`;
@@ -2209,20 +2225,14 @@
           const url = `/characters/${characterId}/files/${f.id}`;
           return `<div class="file-item">
       <a href="${url}" target="_blank" rel="noopener">${escapeHtml(f.original_filename)}</a>
-      <span class="tag">${f.is_public ? "Öffentlich" : "Privat"}</span>
       <button type="button" data-delete-file="${f.id}" data-delete-character="${characterId}" class="btn-ghost">Löschen</button>
     </div>`;
         })
         .join("");
       const empty = files.length === 0 ? '<p class="sub">Noch keine Dateien hochgeladen.</p>' : "";
 
-      return `<form data-upload-form="${characterId}" class="file-upload-form">
-      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required>
-      <label><input type="checkbox" required> Ich habe den Hinweis gelesen</label>
-      <label><input type="checkbox"> Öffentlich sichtbar</label>
-      <button type="submit">Hochladen</button>
-    </form>
-    <p class="sub">Mit dem Hochladen bestätigst du, dass du die Rechte an dieser Datei besitzt und einverstanden bist, dass sie im Rahmen der Veranstaltung von berechtigten Personen eingesehen werden kann.</p>
+      return `<div data-upload-zone="${characterId}">${dropZoneHtml()}</div>
+    <p class="sub">${UPLOAD_NOTICE}</p>
     ${empty}${thumbs ? `<div class="file-gallery">${thumbs}</div>` : ""}${docItems}`;
     }
 
@@ -2278,7 +2288,6 @@
     const photoUploadDialog = document.getElementById("photo-upload-dialog");
     const photoUploadForm = document.getElementById("photo-upload-form");
     const photoUploadInput = document.getElementById("photo-upload-input");
-    const photoUploadConsent = document.getElementById("photo-upload-consent");
     let photoUploadCharacterId = null;
 
     function openPhotoUploadDialog(characterId) {
@@ -2302,8 +2311,7 @@
           filename: file.name,
           mimeType: file.type,
           dataBase64,
-          isPublic: false,
-          gdprConsent: photoUploadConsent.checked,
+          gdprConsent: true,
         });
         photoUploadDialog.close();
         await afterFilesChanged(photoUploadCharacterId);
@@ -2358,27 +2366,7 @@
         });
       });
 
-      const uploadForm = container.querySelector(
-        `[data-upload-form="${characterId}"]`,
-      );
-      const fileInput = uploadForm.querySelector('input[type="file"]');
-      const consentCheckbox = uploadForm.querySelector(
-        'input[type="checkbox"][required]',
-      );
-      const publicCheckbox = uploadForm.querySelectorAll(
-        'input[type="checkbox"]',
-      )[1];
-      const submitButton = uploadForm.querySelector('button[type="submit"]');
-      submitButton.disabled = true;
-      consentCheckbox.addEventListener("change", () => {
-        submitButton.disabled = !consentCheckbox.checked;
-      });
-
-      uploadForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const files = [...fileInput.files];
-        if (files.length === 0) return;
-        submitButton.disabled = true;
+      wireDropZone(container.querySelector(`[data-upload-zone="${characterId}"] [data-drop-zone]`), async (files) => {
         for (const file of files) {
           const kind = kindForMimeType(file.type);
           if (!kind) {
@@ -2391,8 +2379,7 @@
               filename: file.name,
               mimeType: file.type,
               dataBase64: await readFileAsBase64(file),
-              isPublic: publicCheckbox.checked,
-              gdprConsent: consentCheckbox.checked,
+              gdprConsent: true,
             });
           } catch (err) {
             notify(`„${file.name}“: ${err.message}`, "error");

@@ -36,8 +36,8 @@ async function canManage(character, user) {
   return isManagedBy(character.user_id, user.id);
 }
 
-async function canView(file, character, user) {
-  return file.is_public || canManage(character, user);
+async function canView(character, user) {
+  return canManage(character, user);
 }
 
 router.post('/characters/:id/files', requireAuth(async ({ req, params, user }) => {
@@ -47,7 +47,7 @@ router.post('/characters/:id/files', requireAuth(async ({ req, params, user }) =
 
   const body = await readJsonBody(req, MAX_UPLOAD_BODY_BYTES);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { kind, filename, mimeType, dataBase64, isPublic, gdprConsent } = body;
+  const { kind, filename, mimeType, dataBase64, gdprConsent } = body;
 
   if (gdprConsent !== true) return { status: 400, body: { error: 'gdprConsent must be true' } };
   if (!MIME_ALLOWLIST[kind]?.includes(mimeType)) {
@@ -100,7 +100,6 @@ router.post('/characters/:id/files', requireAuth(async ({ req, params, user }) =
     originalFilename: filename,
     mimeType,
     sizeBytes: buffer.length,
-    isPublic: isPublic === true,
     storageBackend: storageSettings.backend,
     storageKey,
   });
@@ -111,15 +110,14 @@ router.get('/characters/:characterId/files', requireAuth(async ({ params, user }
   const character = await getCharacter(params.characterId);
   if (!character) return { status: 404, body: { error: 'character not found' } };
   const files = await listCharacterFiles(character.id);
-  const visible = (await canManage(character, user)) ? files : files.filter((f) => f.is_public);
-  return { status: 200, body: visible };
+  return { status: 200, body: (await canManage(character, user)) ? files : [] };
 }));
 
 router.get('/characters/:characterId/files/:fileId', requireAuth(async ({ params, user }) => {
   const file = await getCharacterFile(params.fileId);
   if (!file || file.character_id !== params.characterId) return { status: 404, body: { error: 'not found' } };
   const character = await getCharacter(file.character_id);
-  if (!character || !(await canView(file, character, user))) return { status: 404, body: { error: 'not found' } };
+  if (!character || !(await canView(character, user))) return { status: 404, body: { error: 'not found' } };
 
   const storageSettings = await getStorageSettingsForUse();
   const storage = getStorage(file.storage_backend, storageSettings);

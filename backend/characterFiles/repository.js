@@ -1,6 +1,6 @@
 import { query, withTransaction } from '../db.js';
 
-const SELECT_COLUMNS = 'id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, is_public, is_portrait, storage_backend, storage_key, created_at';
+const SELECT_COLUMNS = 'id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, is_portrait, storage_backend, storage_key, created_at';
 
 // Where a file's bytes live in the storage backend: its own character folder
 // for new uploads, the legacy flat id for files uploaded before folders.
@@ -12,12 +12,12 @@ export function newStorageKey(characterId, fileId) {
   return `${characterId}/${fileId}`;
 }
 
-export async function createCharacterFile({ id, characterId, uploadedBy, kind, originalFilename, mimeType, sizeBytes, isPublic, storageBackend, storageKey = null }) {
+export async function createCharacterFile({ id, characterId, uploadedBy, kind, originalFilename, mimeType, sizeBytes, storageBackend, storageKey = null }) {
   const { rows } = await query(
-    `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, is_public, storage_backend, storage_key)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, storage_backend, storage_key)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING ${SELECT_COLUMNS}`,
-    [id, characterId, uploadedBy, kind, originalFilename, mimeType, sizeBytes, isPublic, storageBackend, storageKey]
+    [id, characterId, uploadedBy, kind, originalFilename, mimeType, sizeBytes, storageBackend, storageKey]
   );
   return rows[0];
 }

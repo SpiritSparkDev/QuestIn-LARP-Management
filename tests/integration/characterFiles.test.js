@@ -86,8 +86,8 @@ test('new uploads are stored in the character\'s own folder; legacy flat files s
     const bytes = Buffer.from(TINY_PNG_BASE64, 'base64');
     await localStorage().upload(legacyId, bytes);
     await query(
-      `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, is_public, storage_backend)
-       VALUES ($1, $2, $3, 'image', 'old.png', 'image/png', $4, false, 'local')`,
+      `INSERT INTO character_files (id, character_id, uploaded_by, kind, original_filename, mime_type, size_bytes, storage_backend)
+       VALUES ($1, $2, $3, 'image', 'old.png', 'image/png', $4, 'local')`,
       [legacyId, characterId, owner.userId, bytes.length]
     );
     const legacyRes = await fetch(`http://localhost:${port}/characters/${characterId}/files/${legacyId}`, { headers: { Cookie: owner.cookie } });
@@ -156,7 +156,7 @@ test('a private file is invisible (list) and unreachable (download) to a non-own
   });
 });
 
-test('a public file is visible and downloadable by anyone authenticated, but only deletable by owner/elevated', async () => {
+test('files are only reachable for the people who manage the character, even if the client asks for "public"', async () => {
   await withTestServer(async (port) => {
     const owner = await makeUserAndSession('mitglied');
     const stranger = await makeUserAndSession('mitglied');
@@ -166,21 +166,16 @@ test('a public file is visible and downloadable by anyone authenticated, but onl
     const uploadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
-      body: JSON.stringify({ kind: 'image', filename: 'public.png', mimeType: 'image/png', dataBase64: TINY_PNG_BASE64, isPublic: true, gdprConsent: true }),
+      body: JSON.stringify({ kind: 'image', filename: 'x.png', mimeType: 'image/png', dataBase64: TINY_PNG_BASE64, isPublic: true, gdprConsent: true }),
     });
+    assert.equal(uploadRes.status, 201);
     const { id: fileId } = await uploadRes.json();
 
-    const strangerListRes = await fetch(`http://localhost:${port}/characters/${characterId}/files`, { headers: { Cookie: stranger.cookie } });
-    assert.equal((await strangerListRes.json()).length, 1);
-
-    const strangerDownloadRes = await fetch(`http://localhost:${port}/characters/${characterId}/files/${fileId}`, { headers: { Cookie: stranger.cookie } });
-    assert.equal(strangerDownloadRes.status, 200);
-
-    const strangerDeleteRes = await fetch(`http://localhost:${port}/characters/${characterId}/files/${fileId}`, { method: 'DELETE', headers: { Cookie: stranger.cookie } });
-    assert.equal(strangerDeleteRes.status, 403);
-
-    const elevatedDeleteRes = await fetch(`http://localhost:${port}/characters/${characterId}/files/${fileId}`, { method: 'DELETE', headers: { Cookie: elevated.cookie } });
-    assert.equal(elevatedDeleteRes.status, 200);
+    assert.deepEqual(await (await fetch(`http://localhost:${port}/characters/${characterId}/files`, { headers: { Cookie: stranger.cookie } })).json(), []);
+    assert.equal((await fetch(`http://localhost:${port}/characters/${characterId}/files/${fileId}`, { headers: { Cookie: stranger.cookie } })).status, 404);
+    assert.equal((await fetch(`http://localhost:${port}/characters/${characterId}/files/${fileId}`, { method: 'DELETE', headers: { Cookie: stranger.cookie } })).status, 403);
+    assert.equal((await fetch(`http://localhost:${port}/characters/${characterId}/files/${fileId}`, { headers: { Cookie: elevated.cookie } })).status, 200);
+    assert.equal((await fetch(`http://localhost:${port}/characters/${characterId}/files/${fileId}`, { method: 'DELETE', headers: { Cookie: elevated.cookie } })).status, 200);
   });
 });
 
