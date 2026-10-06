@@ -280,14 +280,26 @@
                       <div id="sc-role-panel">
                         <select id="character-select" style="display:none;"></select>
                         <label for="character-select" id="character-select-label" style="display:none;">Als welcher Charakter kommst du?</label>
-                        <p id="no-character-hint" class="sub" style="display:none;">Du hast noch keinen passenden Charakter. <button
-                            type="button" id="no-character-hint-btn" class="btn-create btn-create--sm"><span class="material-symbols-outlined" aria-hidden="true">add_circle</span> Charakter anlegen</button></p>
+                        <div id="no-character-hint" style="display:none;">
+                          <p class="sub">Du hast noch keinen passenden Charakter.</p>
+                          <button type="button" id="no-character-hint-btn" class="create-card">
+                            <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
+                            <span class="create-card-title">Charakter anlegen</span>
+                            <span class="create-card-text">Erschaffe jetzt einen Spielercharakter für diese Anmeldung.</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div id="nsc-role-panel" hidden>
                         <select id="nsc-character-select"></select>
                         <label for="nsc-character-select">NSC-Charakter (optional)</label>
-                        <p class="sub"><button type="button" id="no-nsc-character-hint-btn" class="btn-create btn-create--sm"><span class="material-symbols-outlined" aria-hidden="true">person_add</span> Neuen NSC-Charakter anlegen</button></p>
+                        <div class="create-card-wrap">
+                          <button type="button" id="no-nsc-character-hint-btn" class="create-card">
+                            <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">person_add</span></span>
+                            <span class="create-card-title">Neuen NSC-Charakter anlegen</span>
+                            <span class="create-card-text">Lege eine Figur an, die du als Nichtspielercharakter darstellst.</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
 
