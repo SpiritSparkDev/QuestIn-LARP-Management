@@ -135,6 +135,29 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
   }
 });
 
+test('e-mail invitation without account: sign-up link puts the new account into the group', async () => {
+  await withTestServer(async (port) => {
+    const base = `http://localhost:${port}`;
+    const post = (cookie, path, body) => fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie ?? '' }, body: JSON.stringify(body) });
+    const a = await makeUser('Emil');
+    const email = `${TAG}-neu@example.com`;
+    assert.equal((await post(a.cookie, '/group-tree/invitations', { email })).status, 202);
+    const out = (await (await fetch(`${base}/group-tree`, { headers: { Cookie: a.cookie } })).json()).outgoing;
+    assert.equal(out[0].name, email);
+    const { rows } = await query('SELECT token FROM group_invitations WHERE parent_user_id = $1', [a.userId]);
+    const token = rows[0].token;
+    assert.equal((await fetch(`${base}/auth/group-invite/info?token=${token}`)).status, 200);
+    assert.equal((await fetch(`${base}/auth/group-invite/info?token=nope`)).status, 400);
+    assert.equal((await post(null, '/auth/group-invite/redeem', { token, password: 'passwort123' })).status, 400);
+    const res = await post(null, '/auth/group-invite/redeem', { token, password: 'passwort123', firstName: 'Neu', lastName: TAG });
+    assert.equal(res.status, 200);
+    const { rows: u } = await query('SELECT group_parent_id, email_verified FROM users WHERE email = $1', [email]);
+    assert.equal(u[0].group_parent_id, a.userId);
+    assert.equal(u[0].email_verified, true);
+    assert.equal((await post(null, '/auth/group-invite/redeem', { token, password: 'passwort123', firstName: 'Neu', lastName: TAG })).status, 400);
+  });
+});
+
 test.after(async () => {
   await query('DELETE FROM characters WHERE user_id IN (SELECT id FROM users WHERE email LIKE $1)', [`${TAG}-%@example.com`]);
   await query('DELETE FROM users WHERE email LIKE $1', [`${TAG}-%@example.com`]);

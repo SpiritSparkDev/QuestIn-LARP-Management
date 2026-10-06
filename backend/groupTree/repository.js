@@ -55,8 +55,7 @@ async function canJoin(parentId, childId) {
 export async function inviteByEmail(parentId, email) {
   const { rows } = await query('SELECT id FROM users WHERE lower(email) = lower($1) AND NOT is_guest AND deactivated_at IS NULL', [email]);
   if (rows.length > 0) return inviteById(parentId, rows[0].id);
-  // No account yet: mail a registration link. They are not added to the group automatically.
-  await notifyInvited(parentId, null, email);
+  await inviteNewPerson(parentId, email);
 }
 
 export async function inviteById(parentId, childId) {
@@ -68,9 +67,25 @@ export async function inviteById(parentId, childId) {
   if (rowCount > 0) await notifyInvited(parentId, childId);
 }
 
+const EMAIL_INVITE_TTL_DAYS = 7;
+
+// No account yet: remember the invitation and mail a sign-up link (join-group.html).
+// Inviting the same address again refreshes the token.
+async function inviteNewPerson(parentId, email) {
+  const token = crypto.randomBytes(32).toString('hex');
+  await query(
+    `INSERT INTO group_invitations (parent_user_id, email, token, expires_at)
+     VALUES ($1, $2, $3, now() + make_interval(days => $4))
+     ON CONFLICT (parent_user_id, lower(email)) WHERE email IS NOT NULL
+     DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at`,
+    [parentId, email, token, EMAIL_INVITE_TTL_DAYS]
+  );
+  await notifyInvited(parentId, null, email, token);
+}
+
 // A failed mail must not fail the invitation -- it is still visible in the account.
 // `email` is given for people without an account (childId null).
-async function notifyInvited(parentId, childId, email) {
+async function notifyInvited(parentId, childId, email, token) {
   try {
     const { rows } = await query(
       `SELECT p.first_name, p.last_name, p.nickname, p.group_name, (SELECT email FROM users WHERE id = $2) AS child_email
@@ -79,7 +94,7 @@ async function notifyInvited(parentId, childId, email) {
     );
     const to = email ?? rows[0]?.child_email;
     if (!to) return;
-    await sendGroupInvitationEmail(to, { parentName: labelOf(rows[0]), userId: childId ?? undefined, hasAccount: !!childId });
+    await sendGroupInvitationEmail(to, { parentName: labelOf(rows[0]), userId: childId ?? undefined, token });
   } catch (err) {
     logger.error('failed to send group invitation email', { error: err.message });
   }
@@ -96,11 +111,21 @@ export async function listIncoming(userId) {
 
 export async function listOutgoing(userId) {
   const { rows } = await query(
-    `SELECT gi.id, u.first_name, u.last_name, u.nickname, u.group_name FROM group_invitations gi
-     JOIN users u ON u.id = gi.child_user_id WHERE gi.parent_user_id = $1 ORDER BY gi.created_at`,
+    `SELECT gi.id, gi.email, u.first_name, u.last_name, u.nickname, u.group_name FROM group_invitations gi
+     LEFT JOIN users u ON u.id = gi.child_user_id WHERE gi.parent_user_id = $1 ORDER BY gi.created_at`,
     [userId]
   );
-  return rows.map((r) => ({ id: r.id, name: labelOf(r) }));
+  return rows.map((r) => ({ id: r.id, name: r.email ?? labelOf(r) }));
+}
+
+export async function getEmailInvitation(token) {
+  const { rows } = await query(
+    `SELECT gi.id, gi.email, gi.parent_user_id, p.first_name, p.last_name, p.nickname, p.group_name
+     FROM group_invitations gi JOIN users p ON p.id = gi.parent_user_id
+     WHERE gi.token = $1 AND gi.expires_at > now() AND p.deactivated_at IS NULL`,
+    [token]
+  );
+  return rows[0] ? { id: rows[0].id, email: rows[0].email, parentId: rows[0].parent_user_id, parentName: labelOf(rows[0]) } : null;
 }
 
 export async function acceptInvitation(id, userId) {

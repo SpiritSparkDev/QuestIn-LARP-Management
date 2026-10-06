@@ -1588,7 +1588,7 @@
       try {
         await api.post("/group-tree/invitations", { email: document.getElementById("group-invite-email").value.trim() });
         document.getElementById("group-invite-email").value = "";
-        notify("E-Mail verschickt. Hat die Person schon ein Konto, erscheint die Einladung unten unter „Ausgehend“. Sonst bekommt sie einen Registrierungslink und muss danach erneut eingeladen werden.", "success");
+        notify("E-Mail verschickt. Hat die Person schon ein Konto, erscheint die Einladung unten unter „Ausgehend“. Sonst bekommt sie einen Link, über den sie sich anmeldet und direkt in die Gruppe kommt. Die Einladung steht dann ebenfalls unter „Ausgehend“.", "success");
         await loadGroupTree();
       } catch (err) {
         notify(err.message, "error");

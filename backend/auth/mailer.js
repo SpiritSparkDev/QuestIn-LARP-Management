@@ -89,14 +89,14 @@ export async function sendInvitationEmail(to, token, { account } = {}) {
   return deliver(transporter, from, to, rendered);
 }
 
-export async function sendGroupInvitationEmail(to, { parentName, userId, hasAccount }) {
+export async function sendGroupInvitationEmail(to, { parentName, userId, token }) {
   const { transporter, from } = await getTransporterAndFrom();
-  const url = `${await baseUrl()}/${hasAccount ? 'account.html' : 'register.html'}`;
+  const url = `${await baseUrl()}/${token ? `join-group.html?token=${token}` : 'account.html'}`;
   const rendered = await renderSlotEmail('group_invitation', () => ({
     subject: `${parentName} lädt dich in eine Gruppe ein`,
-    body: hasAccount
+    body: !token
       ? `${parentName} hat dich eingeladen, einer Gruppe beizutreten. Bestätige oder lehne die Einladung in deinem Konto ab: ${url}`
-      : `${parentName} hat dich zu Pakyrion eingeladen. Lege hier dein Konto an: ${url} -- danach kann dich ${parentName} in die Gruppe aufnehmen.`,
+      : `${parentName} hat dich zu Pakyrion eingeladen. Lege hier dein Konto an, du kommst dabei direkt in die Gruppe: ${url}`,
   }), { userId, extra: { parentName, link: url } });
   return deliver(transporter, from, to, rendered);
 }

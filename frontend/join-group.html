@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Einladung annehmen – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
+  <p class="brand-sub">QuestIn LARP Management</p>
+  <div class="folio folio--narrow">
+    <p class="eyebrow text-center" id="intro">Einladung</p>
+    <h1 class="text-center">Konto anlegen</h1>
+    <form id="register-form">
+      <input id="firstName" name="firstName" type="text" required>
+      <label for="firstName">Vorname</label>
+      <input id="lastName" name="lastName" type="text" required>
+      <label for="lastName">Nachname</label>
+      <input id="nickname" name="nickname" type="text">
+      <label for="nickname">Rufname</label>
+      <input id="email" type="email" readonly>
+      <label for="email">E-Mail</label>
+      <input id="password" name="password" type="password" minlength="8" required>
+      <label for="password">Passwort</label>
+      <input id="passwordConfirm" type="password" minlength="8" required>
+      <label for="passwordConfirm">Passwort wiederholen</label>
+      <label><input type="checkbox" id="password-toggle"> Passwort anzeigen</label>
+      <label class="group-feature">
+        <span class="group-feature-icon material-symbols-outlined" aria-hidden="true">shield_lock</span>
+        <span class="group-feature-text">
+          <span class="group-feature-kicker">Datenschutz · freiwillig</span>
+          <span class="group-feature-title">Meine Daten für weitere Events speichern</span>
+          <span class="group-feature-desc">Meine Daten (Konto und Charaktere) dürfen für weitere Events gespeichert werden. Dann bleiben sie auch nach Ablauf der Löschfristen erhalten. Freiwillig, jederzeit widerrufbar – siehe <a href="/datenschutz.html" target="_blank">Datenschutzerklärung</a>.</span>
+        </span>
+        <input type="checkbox" id="keepDataConsent" class="group-feature-switch" role="switch">
+      </label>
+      <button type="submit" style="width:100%;">Konto anlegen und Gruppe beitreten</button>
+    </form>
+    <p id="message"></p>
+  </div>
+</div>
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { notify } from '/js/notifications.js';
+
+const form = document.getElementById('register-form');
+const token = new URLSearchParams(window.location.search).get('token');
+const message = document.getElementById('message');
+try {
+  const info = await api.get(`/auth/group-invite/info?token=${encodeURIComponent(token ?? '')}`);
+  document.getElementById('email').value = info.email;
+  document.getElementById('intro').textContent = `Einladung von ${info.parentName}`;
+} catch (err) {
+  form.style.display = 'none';
+  message.textContent = err.message;
+  message.className = 'error';
+}
+
+const passwordInput = document.getElementById('password');
+const passwordConfirmInput = document.getElementById('passwordConfirm');
+
+document.getElementById('password-toggle').addEventListener('change', (event) => {
+  const type = event.target.checked ? 'text' : 'password';
+  passwordInput.type = type;
+  passwordConfirmInput.type = type;
+});
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (passwordInput.value !== passwordConfirmInput.value) {
+    notify('Die Passwörter stimmen nicht überein.', 'error');
+    return;
+  }
+  const data = { ...Object.fromEntries(new FormData(form)), token, keepDataConsent: document.getElementById('keepDataConsent').checked };
+  try {
+    await api.post('/auth/group-invite/redeem', data);
+    window.location.href = '/account.html';
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+</script>
+</body>
+</html>

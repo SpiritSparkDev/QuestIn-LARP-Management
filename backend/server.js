@@ -10,6 +10,7 @@ import './auth/login.js';
 import './auth/passwordReset.js';
 import './auth/oauth.js';
 import './auth/invite.js';
+import './auth/groupInvite.js';
 import './accounts/routes.js';
 import './accounts/export.js';
 import './events/routes.js';
