@@ -20,6 +20,7 @@ const MENU_LINKS = [
   { key: 'konto', label: 'Dashboard', href: '/account.html#dashboard', icon: 'dashboard' },
   { key: 'konto', label: 'Konto', href: '/account.html#konto', icon: 'manage_accounts' },
   { key: 'konto', label: 'Anmelden', href: '/account.html#anmelden', icon: 'event' },
+  { key: 'konto', label: 'Gruppe', href: '/account.html#gruppe', icon: 'groups_2', groupMenu: true },
   { key: 'konto', label: 'Charaktere', href: '/account.html#charaktere', icon: 'theater_comedy' },
   { key: 'mitglieder', label: 'Mitglieder', href: '/admin/members.html', icon: 'group' },
   { key: 'events', label: 'Events', href: '/admin/events.html', icon: 'calendar_month' },
@@ -76,6 +77,26 @@ function showTestModeBanner(account) {
 }
 
 const ADMIN_OPEN_KEY = 'sidebarAdminOpen';
+const GROUP_MENU_KEY = 'groupMenuEnabled';
+
+export function groupMenuEnabled() {
+  try {
+    return localStorage.getItem(GROUP_MENU_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+// Per-browser switch for the "Gruppe" menu entry. Returns true if it changed.
+export function setGroupMenuEnabled(on) {
+  if (groupMenuEnabled() === on) return false;
+  try {
+    localStorage.setItem(GROUP_MENU_KEY, on ? '1' : '0');
+  } catch {
+    return false;
+  }
+  return true;
+}
 
 function readAdminSectionOpen() {
   try {
@@ -109,7 +130,7 @@ export function renderNavLinks(account, currentPath) {
   showTestModeBanner(account);
   // Add-on entries (item.flag) also need the add-on switched on; admins see
   // every enabled add-on without needing its menu key.
-  const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]));
+  const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]) && (!item.groupMenu || groupMenuEnabled()));
   let html = items.map((item) => renderNavItem(item, currentPath)).join('');
   
   // Admin-only entries and enabled add-ons live in a collapsible

@@ -91,7 +91,51 @@
                 </label>
               </div>
 
-              <div class="card form-pad" id="dashboard-managed-persons-section" style="display:none;">
+              <div class="card form-pad" id="dashboard-group-summary" style="display:none;">
+                <h2>Verwaltete Personen</h2>
+                <p class="sub" id="dashboard-group-summary-text"></p>
+                <button type="button" id="dashboard-group-link" class="btn-ghost">Zur Gruppenverwaltung</button>
+              </div>
+              </div>
+              </div>
+
+              <div class="card" id="dashboard-account-hint" style="display:none;"></div>
+            </div>
+
+            <div class="ticket-panel" id="ticket-panel" style="display:none;">
+              <h2>Dein Event-Ticket</h2>
+              <p class="lede">Am Check-In Schalter vorzeigen oder digital abspeichern.</p>
+
+              <div class="ticket-card" id="ticket-card">
+                <p class="ticket-eyebrow">Con Ticket</p>
+                <h3 class="ticket-event-name" id="ticket-event-name"></h3>
+                <hr class="ticket-divider">
+                <div class="ticket-details">
+                  <div class="ticket-field"><span class="ticket-label">Teilnehmer</span><span class="ticket-value" id="ticket-participant"></span></div>
+                  <div class="ticket-field"><span class="ticket-label">Rolle</span><span class="ticket-value" id="ticket-role"></span></div>
+                  <div class="ticket-field"><span class="ticket-label">Datum</span><span class="ticket-value" id="ticket-date"></span></div>
+                </div>
+                <p class="ticket-scan-label">Scan beim Check-In</p>
+                <div class="ticket-qr-wrap"><canvas id="qr-canvas"></canvas></div>
+                <p class="ticket-id" id="ticket-id"></p>
+              </div>
+
+              <p class="sub" id="ticket-empty-hint" style="display:none;"></p>
+
+              <div class="ticket-actions">
+                <button type="button" id="ticket-download-png">Ticket herunterladen (PNG)</button>
+                <button type="button" id="ticket-download-pdf" class="btn-secondary">Als PDF</button>
+              </div>
+              <p class="sub" id="ticket-payment-hint" style="display:none;"></p>
+              <button type="button" id="ticket-pay-btn" style="display:none;">Jetzt zahlen</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="gruppe-tab" hidden>
+          <h1>Gruppe</h1>
+          <p class="sub">Verwaltete Personen, Untergruppen und Einladungen.</p>
+              <div class="card form-pad" id="dashboard-managed-persons-section">
                 <h2>Verwaltete Personen</h2>
                 <p class="sub">Melde zusätzliche Personen an, die sich nicht selbst einloggen können oder wollen — z.B. Familienmitglieder oder Kinder. Du verwaltest ihre Daten, Charaktere und Anmeldungen stellvertretend.</p>
                 <div id="managed-persons-list"></div>
@@ -160,40 +204,6 @@
                   </div>
                 </dialog>
               </div>
-              </div>
-              </div>
-
-              <div class="card" id="dashboard-account-hint" style="display:none;"></div>
-            </div>
-
-            <div class="ticket-panel" id="ticket-panel" style="display:none;">
-              <h2>Dein Event-Ticket</h2>
-              <p class="lede">Am Check-In Schalter vorzeigen oder digital abspeichern.</p>
-
-              <div class="ticket-card" id="ticket-card">
-                <p class="ticket-eyebrow">Con Ticket</p>
-                <h3 class="ticket-event-name" id="ticket-event-name"></h3>
-                <hr class="ticket-divider">
-                <div class="ticket-details">
-                  <div class="ticket-field"><span class="ticket-label">Teilnehmer</span><span class="ticket-value" id="ticket-participant"></span></div>
-                  <div class="ticket-field"><span class="ticket-label">Rolle</span><span class="ticket-value" id="ticket-role"></span></div>
-                  <div class="ticket-field"><span class="ticket-label">Datum</span><span class="ticket-value" id="ticket-date"></span></div>
-                </div>
-                <p class="ticket-scan-label">Scan beim Check-In</p>
-                <div class="ticket-qr-wrap"><canvas id="qr-canvas"></canvas></div>
-                <p class="ticket-id" id="ticket-id"></p>
-              </div>
-
-              <p class="sub" id="ticket-empty-hint" style="display:none;"></p>
-
-              <div class="ticket-actions">
-                <button type="button" id="ticket-download-png">Ticket herunterladen (PNG)</button>
-                <button type="button" id="ticket-download-pdf" class="btn-secondary">Als PDF</button>
-              </div>
-              <p class="sub" id="ticket-payment-hint" style="display:none;"></p>
-              <button type="button" id="ticket-pay-btn" style="display:none;">Jetzt zahlen</button>
-            </div>
-          </div>
         </div>
 
         <div class="tab-panel" id="konto-tab" hidden>
@@ -547,6 +557,8 @@
     applyBranding();
     import {
       renderNavLinks,
+      setGroupMenuEnabled,
+      groupMenuEnabled,
       renderSidebarUser,
       initSidebarToggle,
     } from "/js/nav.js";
@@ -585,7 +597,7 @@
     initTabs(document.getElementById("char-class-tabs"));
     initSidebarToggle();
 
-    const TOP_TAB_HASHES = ["dashboard", "konto", "anmelden", "charaktere"];
+    const TOP_TAB_HASHES = ["dashboard", "gruppe", "konto", "anmelden", "charaktere"];
 
     // Dashboard/Konto/Anmelden/Charaktere are rendered by the shared,
     // role-driven renderNavLinks() as ordinary links (all pointing at this
@@ -1080,14 +1092,41 @@
     // least one exists, it's real state the account depends on -- show it
     // unconditionally so nobody has to re-check a box every visit to see
     // who they've already set up.
-    function updateManagedPersonsDashboardVisibility() {
-      const hasAny = managedPersons.length > 0 || groupTreeIsActive();
-      document.getElementById("dashboard-managed-persons-toggle").style.display = hasAny ? "none" : "";
-      document.getElementById("dashboard-managed-persons-section").style.display =
-        hasAny || document.getElementById("dashboard-managed-persons-checkbox").checked ? "" : "none";
+    let navAccount = null;
+    function renderNav() {
+      if (!navAccount) return;
+      document.getElementById("nav-links").innerHTML = renderNavLinks(
+        navAccount,
+        window.location.pathname + window.location.hash,
+      );
+      applyHashTab();
     }
 
-    document.getElementById("dashboard-managed-persons-checkbox").addEventListener("change", updateManagedPersonsDashboardVisibility);
+    // The group management lives in its own menu entry ("Gruppe"). Existing
+    // persons/subgroups switch it on for good; otherwise the dashboard card
+    // is an opt-in switch.
+    function updateManagedPersonsDashboardVisibility() {
+      const hasAny = managedPersons.length > 0 || groupTreeIsActive();
+      const checkbox = document.getElementById("dashboard-managed-persons-checkbox");
+      if (hasAny) {
+        checkbox.checked = true;
+        if (setGroupMenuEnabled(true)) renderNav();
+      }
+      document.getElementById("dashboard-managed-persons-toggle").style.display = hasAny ? "none" : "";
+      const summary = document.getElementById("dashboard-group-summary");
+      summary.style.display = hasAny ? "" : "none";
+      const parts = [`${managedPersons.length} verwaltete ${managedPersons.length === 1 ? "Person" : "Personen"}`];
+      if (groupTree?.node.children.length) parts.push(`${groupTree.node.children.length} Untergruppe${groupTree.node.children.length === 1 ? "" : "n"}`);
+      if (groupTree?.outgoing.length) parts.push(`${groupTree.outgoing.length} offene Einladung${groupTree.outgoing.length === 1 ? "" : "en"}`);
+      document.getElementById("dashboard-group-summary-text").textContent = parts.join(" · ");
+    }
+
+    document.getElementById("dashboard-managed-persons-checkbox").addEventListener("change", (event) => {
+      setGroupMenuEnabled(event.target.checked);
+      renderNav();
+      goToTab(event.target.checked ? "gruppe" : "dashboard");
+    });
+    document.getElementById("dashboard-group-link").addEventListener("click", () => goToTab("gruppe"));
 
     let managedPersonCharacters = {};
 
@@ -2766,11 +2805,9 @@
     try {
       const account = await api.get("/account");
       if (!window.location.hash) window.location.hash = "dashboard";
-      document.getElementById("nav-links").innerHTML = renderNavLinks(
-        account,
-        window.location.pathname + window.location.hash,
-      );
-      applyHashTab();
+      navAccount = account;
+      document.getElementById("dashboard-managed-persons-checkbox").checked = groupMenuEnabled();
+      renderNav();
       document.getElementById("sidebar-user-info").innerHTML =
         renderSidebarUser(account);
 
