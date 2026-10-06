@@ -2,6 +2,16 @@ import { parseCookies, SESSION_COOKIE_NAME } from '../auth/cookies.js';
 import { getSession } from '../auth/sessions.js';
 import { query } from '../db.js';
 
+// Group management (inviting, naming, registering people ...) is for the group
+// manager only; plain members of a group get a 403.
+export function requireGroupManager(handler) {
+  return requireAuth((ctx) => (
+    ctx.user.groupMemberOnly
+      ? { status: 403, body: { error: 'Nur der Gruppenverwalter darf die Gruppe verwalten.' } }
+      : handler(ctx)
+  ));
+}
+
 export function requireAuth(handler) {
   return async (ctx) => {
     const cookies = parseCookies(ctx.req.headers.cookie);
@@ -12,7 +22,7 @@ export function requireAuth(handler) {
     if (!session) return { status: 401, body: { error: 'Nicht angemeldet.' } };
 
     const { rows } = await query(
-      `SELECT users.id, users.email, users.deactivated_at,
+      `SELECT users.id, users.email, users.deactivated_at, users.group_member_only,
               groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
               groups.visible_menus, groups.account_fields, groups.can_edit_characters,
               groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive
@@ -28,6 +38,7 @@ export function requireAuth(handler) {
     const user = {
       id: row.id,
       email: row.email,
+      groupMemberOnly: row.group_member_only,
       group: {
         id: row.group_id,
         key: row.group_key,

@@ -39,8 +39,8 @@ router.post('/auth/group-invite/redeem', rateLimit(REDEEM_RATE_LIMIT)(async ({ r
     userId = await withTransaction(async (client) => {
       // The mail reached this address, so it counts as verified.
       const { rows } = await client.query(
-        `INSERT INTO users (email, password_hash, group_id, group_parent_id, first_name, last_name, nickname, email_verified, access_token, keep_data_consent)
-         VALUES (lower($1), $2, (SELECT id FROM groups WHERE key = 'mitglied'), $3, $4, $5, $6, true, $7, $8) RETURNING id`,
+        `INSERT INTO users (email, password_hash, group_id, group_parent_id, first_name, last_name, nickname, email_verified, access_token, keep_data_consent, group_member_only)
+         VALUES (lower($1), $2, (SELECT id FROM groups WHERE key = 'mitglied'), $3, $4, $5, $6, true, $7, $8, true) RETURNING id`,
         [invitation.email, passwordHash, invitation.parentId, firstName, lastName, nickname || null, accessToken, body.keepDataConsent === true]
       );
       await client.query('DELETE FROM group_invitations WHERE lower(email) = lower($1)', [invitation.email]);

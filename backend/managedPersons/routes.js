@@ -1,5 +1,5 @@
 import { router } from '../routes.js';
-import { requireAuth } from '../middleware/authenticate.js';
+import { requireAuth, requireGroupManager } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
 import { isValidEmail } from '../validation.js';
 import { filterToAllowedFields } from '../members/routes.js';
@@ -19,13 +19,13 @@ router.get('/managed-persons', requireAuth(async ({ user }) => {
 }));
 
 // Must be registered before '/managed-persons/:id'.
-router.get('/managed-persons/search', rateLimit(SEARCH_RATE_LIMIT)(requireAuth(async ({ req, user }) => {
+router.get('/managed-persons/search', rateLimit(SEARCH_RATE_LIMIT)(requireGroupManager(async ({ req, user }) => {
   const term = (new URL(req.url, 'http://localhost').searchParams.get('q') ?? '').trim();
   if (term.length < 3) return { status: 400, body: { error: 'Bitte mindestens 3 Zeichen eingeben.' } };
   return { status: 200, body: await searchClaimablePersons(term, user.id) };
 })));
 
-router.post('/managed-persons/:id/claim', requireAuth(async ({ params, user }) => {
+router.post('/managed-persons/:id/claim', requireGroupManager(async ({ params, user }) => {
   const person = await claimPerson(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'Person nicht gefunden oder bereits in einer Gruppe.' } };
   await logAudit({ actorId: user.id, action: 'managed_person.claim', details: { personId: params.id } });
@@ -38,7 +38,7 @@ router.get('/managed-persons/:id', requireAuth(async ({ params, user }) => {
   return { status: 200, body: person };
 }));
 
-router.post('/managed-persons', requireAuth(async ({ req, user }) => {
+router.post('/managed-persons', requireGroupManager(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { email, firstName = '', lastName = '', nickname, characterName, ...otFields } = body;
@@ -69,7 +69,7 @@ router.post('/managed-persons', requireAuth(async ({ req, user }) => {
   }
 }));
 
-router.patch('/managed-persons/:id', requireAuth(async ({ req, params, user }) => {
+router.patch('/managed-persons/:id', requireGroupManager(async ({ req, params, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (body.email && !isValidEmail(body.email)) {
@@ -92,7 +92,7 @@ router.patch('/managed-persons/:id', requireAuth(async ({ req, params, user }) =
   }
 }));
 
-router.delete('/managed-persons/:id', requireAuth(async ({ req, params, user }) => {
+router.delete('/managed-persons/:id', requireGroupManager(async ({ req, params, user }) => {
   try {
     const force = new URL(req.url, 'http://localhost').searchParams.get('force') === 'true';
     const deleted = await deleteManagedPerson(params.id, user.id, { force });

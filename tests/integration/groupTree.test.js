@@ -155,6 +155,15 @@ test('e-mail invitation without account: sign-up link puts the new account into 
     assert.equal(u[0].group_parent_id, a.userId);
     assert.equal(u[0].email_verified, true);
     assert.equal((await post(null, '/auth/group-invite/redeem', { token, password: 'passwort123', firstName: 'Neu', lastName: TAG })).status, 400);
+
+    // A plain member can't manage anything in the group.
+    const { rows: m } = await query('SELECT id FROM users WHERE email = $1', [email]);
+    const member = { cookie: `session=${(await createSession(m[0].id)).token}` };
+    assert.equal((await post(member.cookie, '/group-tree/invitations', { email: `${TAG}-x@example.com` })).status, 403);
+    assert.equal((await post(member.cookie, '/group-tree/join-code', {})).status, 403);
+    assert.equal((await post(member.cookie, '/managed-persons', { firstName: 'X' })).status, 403);
+    assert.equal((await fetch(`${base}/managed-persons/search?q=abc`, { headers: { Cookie: member.cookie } })).status, 403);
+    assert.equal((await fetch(`${base}/account`, { headers: { Cookie: member.cookie } }).then((r) => r.json())).groupMemberOnly, true);
   });
 });
 

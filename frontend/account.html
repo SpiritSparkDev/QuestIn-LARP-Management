@@ -1198,13 +1198,13 @@
     // persons/subgroups switch it on for good; otherwise the dashboard card
     // is an opt-in switch.
     function updateManagedPersonsDashboardVisibility() {
-      const hasAny = managedPersons.length > 0 || groupTreeIsActive();
+      const hasAny = !navAccount?.groupMemberOnly && (managedPersons.length > 0 || groupTreeIsActive());
       const checkbox = document.getElementById("dashboard-managed-persons-checkbox");
       if (hasAny) {
         checkbox.checked = true;
         if (setGroupMenuEnabled(true)) renderNav();
       }
-      document.getElementById("dashboard-managed-persons-toggle").style.display = hasAny ? "none" : "";
+      document.getElementById("dashboard-managed-persons-toggle").style.display = hasAny || navAccount?.groupMemberOnly ? "none" : "";
       const summary = document.getElementById("dashboard-group-summary");
       summary.style.display = hasAny ? "" : "none";
       const parts = [`${managedPersons.length} verwaltete ${managedPersons.length === 1 ? "Person" : "Personen"}`];

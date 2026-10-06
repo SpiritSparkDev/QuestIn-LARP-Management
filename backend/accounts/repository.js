@@ -22,13 +22,14 @@ function decryptAccount(row) {
     canExportSensitive: row.can_export_sensitive,
     emailVerified: row.email_verified,
     keepDataConsent: row.keep_data_consent,
+    groupMemberOnly: row.group_member_only,
     discordUsername: row.discord_username,
     ...decryptFieldBlob(row.account_data_enc),
   };
 }
 
 const SELECT_COLUMNS = `
-  users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys, users.keep_data_consent,
+  users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys, users.keep_data_consent, users.group_member_only,
   users.account_data_enc,
   groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive,
   discord_accounts.username AS discord_username

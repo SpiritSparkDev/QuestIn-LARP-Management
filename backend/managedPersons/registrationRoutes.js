@@ -1,5 +1,5 @@
 import { router } from '../routes.js';
-import { requireAuth } from '../middleware/authenticate.js';
+import { requireAuth, requireGroupManager } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
 import { getManagedPersonForRegistration } from './repository.js';
 import { registerForEvent, unregisterFromEvent, listRegistrationsForUser } from '../registrations/repository.js';
@@ -18,7 +18,7 @@ async function buildRequestingUser(personId) {
   return { id: personId, group: { key: rows[0].key, canEditCharacters: rows[0].can_edit_characters } };
 }
 
-router.post('/managed-persons/:id/events/:eventId/register', requireAuth(async ({ req, params, user }) => {
+router.post('/managed-persons/:id/events/:eventId/register', requireGroupManager(async ({ req, params, user }) => {
   const person = await getManagedPersonForRegistration(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
 
@@ -52,7 +52,7 @@ router.post('/managed-persons/:id/events/:eventId/register', requireAuth(async (
   }
 }));
 
-router.delete('/managed-persons/:id/events/:eventId/register', requireAuth(async ({ params, user }) => {
+router.delete('/managed-persons/:id/events/:eventId/register', requireGroupManager(async ({ params, user }) => {
   const person = await getManagedPersonForRegistration(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
   try {
