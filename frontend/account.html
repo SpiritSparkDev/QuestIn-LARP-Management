@@ -63,6 +63,8 @@
                 </div>
               </dialog>
 
+              <div id="group-invitations-banner"></div>
+
               <div class="dashboard-split">
               <div class="dashboard-col">
               <h2>Meine Charaktere</h2>
@@ -1205,16 +1207,31 @@
       return persons || children ? `<ul class="group-tree-list">${persons}${children}</ul>` : "";
     }
 
+    // Incoming invitations are shown at the top of the dashboard, not hidden in the group section.
+    function renderGroupInvitations() {
+      const banner = document.getElementById("group-invitations-banner");
+      const incoming = groupTree?.incoming ?? [];
+      banner.innerHTML = incoming.map((i) => `<div class="note-box"><p><strong>${escapeHtml(i.parentName)}</strong> lädt dich ein, Teil ihrer Gruppe zu werden. Als übergeordneter Verwalter sieht sie dann deine Gruppe und bearbeitet die für die Gruppenverwaltung freigegebenen Felder.</p><div class="action-row"><button type="button" class="btn-sm" data-invite-accept="${escapeHtml(i.id)}">Annehmen</button><button type="button" class="btn-ghost btn-sm" data-invite-decline="${escapeHtml(i.id)}">Ablehnen</button></div></div>`).join("");
+      const answer = (id, verb) => async () => {
+        try {
+          await api.post(`/group-tree/invitations/${id}/${verb}`, {});
+          await loadGroupTree();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      };
+      banner.querySelectorAll("[data-invite-accept]").forEach((b) => b.addEventListener("click", answer(b.dataset.inviteAccept, "accept")));
+      banner.querySelectorAll("[data-invite-decline]").forEach((b) => b.addEventListener("click", answer(b.dataset.inviteDecline, "decline")));
+    }
+
     function renderGroupTree() {
       const view = document.getElementById("group-tree-view");
       if (!groupTree) {
         view.innerHTML = "";
+        renderGroupInvitations();
         return;
       }
       const parts = [];
-      if (groupTree.incoming.length) {
-        parts.push(`<div class="note-box"><p>${groupTree.incoming.map((i) => `${escapeHtml(i.parentName)} lädt dich ein, Teil der Gruppe zu werden. <button type="button" class="btn-ghost btn-sm" data-group-accept="${escapeHtml(i.id)}">Annehmen</button> <button type="button" class="btn-ghost btn-sm" data-group-decline="${escapeHtml(i.id)}">Ablehnen</button>`).join("<br>")}</p></div>`);
-      }
       if (groupTree.parent) {
         parts.push(`<p>Du gehörst zur Gruppe von <strong>${escapeHtml(groupTree.parent.name)}</strong>. <button type="button" class="btn-ghost btn-sm" id="group-leave">Gruppe verlassen</button></p>`);
       }
@@ -1224,6 +1241,7 @@
         parts.push(`<p class="sub">Offene Einladungen: ${groupTree.outgoing.map((o) => `${escapeHtml(o.name)} <button type="button" class="btn-ghost btn-sm" data-group-cancel="${escapeHtml(o.id)}">Zurückziehen</button>`).join(", ")}</p>`);
       }
       view.innerHTML = parts.join("");
+      renderGroupInvitations();
 
       const act = async (fn) => {
         try {
@@ -1233,8 +1251,6 @@
           notify(err.message, "error");
         }
       };
-      view.querySelectorAll("[data-group-accept]").forEach((b) => b.addEventListener("click", () => act(() => api.post(`/group-tree/invitations/${b.dataset.groupAccept}/accept`, {}))));
-      view.querySelectorAll("[data-group-decline]").forEach((b) => b.addEventListener("click", () => act(() => api.post(`/group-tree/invitations/${b.dataset.groupDecline}/decline`, {}))));
       view.querySelectorAll("[data-group-cancel]").forEach((b) => b.addEventListener("click", () => act(() => api.delete(`/group-tree/invitations/${b.dataset.groupCancel}`))));
       view.querySelectorAll("[data-group-remove]").forEach((b) => b.addEventListener("click", () => {
         if (confirm("Diese Untergruppe wirklich aus deiner Gruppe entfernen?")) act(() => api.delete(`/group-tree/children/${b.dataset.groupRemove}`));
@@ -2790,6 +2806,7 @@
       renderOtFields();
       renderDashboardAccountHint(account);
       await loadManagedPersons();
+      await loadGroupTree();
 
       scSchema = await api.get("/sc-schema");
       renderScSchemaFields();
