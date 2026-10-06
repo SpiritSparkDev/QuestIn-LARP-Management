@@ -119,6 +119,12 @@
               <textarea id="guest-widget-countdown" readonly rows="3" style="flex:1;font-family:monospace;font-size:13px;"></textarea>
               <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-countdown">Kopieren</button>
             </div>
+            <label for="guest-widget-framework" style="margin-top:12px;">Für React, Next.js, Vue &amp; Co. (Platzhalter)</label>
+            <div class="guest-widget-row guest-widget-row-top">
+              <textarea id="guest-widget-framework" readonly rows="4" style="flex:1;font-family:monospace;font-size:13px;"></textarea>
+              <button type="button" class="btn-sm btn-ghost" data-copy-target="guest-widget-framework">Kopieren</button>
+            </div>
+            <p class="sub" style="margin-top:4px;">Frameworks führen <code>&lt;script&gt;</code>-Tags aus Templates nicht aus. Dort <code>widget.js</code> einmal im Layout laden (z.&nbsp;B. mit <code>next/script</code>) und die Platzhalter an die gewünschte Stelle setzen.</p>
             <p class="sub" style="margin-top:8px;">Das Formular übernimmt Schrift und Textfarbe eurer Seite; die Buttonfarbe lässt sich per CSS-Variable <code>--pk-accent</code> am umgebenden Element ändern. Der Countdown zählt bis zum Eventdatum – mit <code>data-until="2027-09-01T10:00"</code> bis zu einem eigenen Zeitpunkt (z.&nbsp;B. Vorverkaufsstart).</p>
           </div>
         </div>
@@ -485,6 +491,7 @@ const guestWidgetReady = document.getElementById('guest-widget-ready');
 const guestWidgetLink = document.getElementById('guest-widget-link');
 const guestWidgetScript = document.getElementById('guest-widget-script');
 const guestWidgetCountdown = document.getElementById('guest-widget-countdown');
+const guestWidgetFramework = document.getElementById('guest-widget-framework');
 
 function renderGuestWidgetHelp() {
   const code = form.elements.code.value.trim();
@@ -498,6 +505,10 @@ function renderGuestWidgetHelp() {
   const scriptSrc = `${window.location.origin}/widget.js`;
   const attrEvent = code.replace(/"/g, '&quot;');
   guestWidgetScript.value = `<script src="${scriptSrc}" data-event="${attrEvent}" defer><\/script>`;
+  guestWidgetFramework.value = `<script src="${scriptSrc}" defer><\/script>
+
+<div data-pakyrion="ticket" data-event="${attrEvent}"></div>
+<div data-pakyrion="countdown" data-event="${attrEvent}"></div>`;
   guestWidgetCountdown.value = `<script src="${scriptSrc}" data-widget="countdown" data-event="${attrEvent}"
   data-button="Ticket sichern" defer><\/script>`;
   guestWidgetMissingCode.style.display = 'none';

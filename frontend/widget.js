@@ -9,15 +9,20 @@
 // can't break it and ours can't leak). It inherits the page's font and text
 // colour; set --pk-accent / --pk-radius on the script's parent to restyle.
 // Optional: data-target="#some-id" mounts it there instead of after the tag.
+//
+// Frameworks (React/Next.js, Vue, ...) do not run <script> tags that are part
+// of a rendered template. There, load widget.js once (e.g. next/script) and
+// put placeholders where the widget should appear:
+//   <div data-pakyrion="ticket" data-event="<QR-Kennung>"></div>
+//   <div data-pakyrion="countdown" data-event="<QR-Kennung>" data-until="..."></div>
+// Placeholders that are rendered later are picked up automatically.
 (() => {
-  const script = document.currentScript;
-  if (!script) return;
-  const code = script.dataset.event;
-  const base = new URL(script.src).origin;
-  const host = document.createElement('div');
-  const target = script.dataset.target && document.querySelector(script.dataset.target);
-  if (target) target.appendChild(host);
-  else script.insertAdjacentElement('afterend', host);
+  const own = document.currentScript || [...document.scripts].reverse().find((s) => /\/widget\.js(\?|$)/.test(s.src));
+  if (!own) return;
+  const base = new URL(own.src).origin;
+
+  function mount(host, cfg) {
+  const code = cfg.event;
   const root = host.attachShadow({ mode: 'open' });
 
   root.innerHTML = `
@@ -111,8 +116,8 @@
   }
 
   async function initCountdown() {
-    let title = script.dataset.title ?? '';
-    let target = script.dataset.until ? new Date(script.dataset.until) : null;
+    let title = cfg.title ?? '';
+    let target = cfg.until ? new Date(cfg.until) : null;
     if (!target || !title) {
       if (!code) return say('Kein Event angegeben (data-event fehlt).', 'error');
       try {
@@ -124,14 +129,14 @@
       }
     }
     if (Number.isNaN(target.getTime())) return say('data-until ist kein gültiges Datum.', 'error');
-    const href = script.dataset.href || (code ? `${base}/ticket-widget.html?event=${encodeURIComponent(code)}` : base);
+    const href = cfg.href || (code ? `${base}/ticket-widget.html?event=${encodeURIComponent(code)}` : base);
     say('');
     form.outerHTML = `
       <div class="wrap">
         ${title ? `<h3>${esc(title)}</h3>` : ''}
         <div class="cd" aria-live="off"></div>
-        <p class="done msg" hidden>${esc(script.dataset.done ?? 'Es geht los!')}</p>
-        <a class="btn" href="${esc(href)}" target="_blank" rel="noopener">${esc(script.dataset.button ?? 'Ticket sichern')}</a>
+        <p class="done msg" hidden>${esc(cfg.done ?? 'Es geht los!')}</p>
+        <a class="btn" href="${esc(href)}" target="_blank" rel="noopener">${esc(cfg.button ?? 'Ticket sichern')}</a>
       </div>`;
     const cd = root.querySelector('.cd');
     const doneEl = root.querySelector('.done');
@@ -148,5 +153,21 @@
     tick();
   }
 
-  (script.dataset.widget === 'countdown' ? initCountdown : init)();
+  (cfg.widget === 'countdown' || cfg.pakyrion === 'countdown' ? initCountdown : init)();
+  }
+
+  if (own.dataset.event || own.dataset.widget) {
+    const host = document.createElement('div');
+    const target = own.dataset.target && document.querySelector(own.dataset.target);
+    if (target) target.appendChild(host);
+    else own.insertAdjacentElement('afterend', host);
+    mount(host, own.dataset);
+  }
+
+  const scan = () => document.querySelectorAll('[data-pakyrion]:not([data-pk-mounted])').forEach((el) => {
+    el.dataset.pkMounted = '1';
+    mount(el, el.dataset);
+  });
+  scan();
+  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
 })();
