@@ -4281,6 +4281,41 @@ th.is-sortable[data-dir="desc"]::after {
   padding: 1px 7px;
 }
 
+.file-thumb-portrait {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  color: var(--on-surface-variant);
+}
+
+.file-thumb-portrait .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.file-thumb-portrait:hover {
+  background: var(--surface-container-low);
+  color: var(--primary);
+}
+
+.file-thumb-portrait.is-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.file-item .is-portrait {
+  color: var(--primary);
+}
+
 .file-thumb-delete {
   position: absolute;
   top: 4px;

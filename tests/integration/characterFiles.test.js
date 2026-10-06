@@ -99,6 +99,39 @@ test('new uploads are stored in the character\'s own folder; legacy flat files s
   });
 });
 
+test('the owner can pick any image as the portrait; documents and foreign files are refused', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession('mitglied');
+    const stranger = await makeUserAndSession('mitglied');
+    const characterId = await makeCharacter(owner.userId);
+    const otherCharacterId = await makeCharacter(owner.userId);
+    const upload = async (cid, kind, filename, mimeType) => (await (await fetch(`http://localhost:${port}/characters/${cid}/files`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ kind, filename, mimeType, dataBase64: kind === 'image' ? TINY_PNG_BASE64 : Buffer.from('%PDF-1.4').toString('base64'), isPublic: false, gdprConsent: true }),
+    })).json());
+    const first = await upload(characterId, 'image', 'a.png', 'image/png');
+    const second = await upload(characterId, 'image', 'b.png', 'image/png');
+    const doc = await upload(characterId, 'document', 'c.pdf', 'application/pdf');
+    const foreign = await upload(otherCharacterId, 'image', 'd.png', 'image/png');
+    const put = (cookie, fileId) => fetch(`http://localhost:${port}/characters/${characterId}/portrait`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ fileId }),
+    });
+    const portraitIds = async () => (await (await fetch(`http://localhost:${port}/characters/${characterId}/files`, { headers: { Cookie: owner.cookie } })).json()).filter((f) => f.is_portrait).map((f) => f.id);
+
+    assert.deepEqual(await portraitIds(), []);
+    assert.equal((await put(stranger.cookie, second.id)).status, 403);
+    assert.equal((await put(owner.cookie, doc.id)).status, 400);
+    assert.equal((await put(owner.cookie, foreign.id)).status, 404);
+    assert.equal((await put(owner.cookie, second.id)).status, 200);
+    assert.deepEqual(await portraitIds(), [second.id]);
+    // Choosing another one replaces it; null goes back to "first image".
+    assert.equal((await put(owner.cookie, first.id)).status, 200);
+    assert.deepEqual(await portraitIds(), [first.id]);
+    assert.equal((await put(owner.cookie, null)).status, 200);
+    assert.deepEqual(await portraitIds(), []);
+  });
+});
+
 test('a private file is invisible (list) and unreachable (download) to a non-owner, non-elevated stranger', async () => {
   await withTestServer(async (port) => {
     const owner = await makeUserAndSession('mitglied');

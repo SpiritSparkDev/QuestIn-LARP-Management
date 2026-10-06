@@ -13,6 +13,7 @@ import {
   listCharacterFiles,
   getCharacterFilesTotalSize,
   deleteCharacterFile,
+  setCharacterPortrait,
   storageKeyFor,
   newStorageKey,
 } from './repository.js';
@@ -146,6 +147,23 @@ router.get('/characters/:characterId/files/:fileId', requireAuth(async ({ params
       'X-Content-Type-Options': 'nosniff',
     },
   };
+}));
+
+// Choose which image is the character's portrait (fileId null = back to the
+// first image). Only the people who manage the character.
+router.put('/characters/:characterId/portrait', requireAuth(async ({ req, params, user }) => {
+  const character = await getCharacter(params.characterId);
+  if (!character) return { status: 404, body: { error: 'character not found' } };
+  if (!(await canManage(character, user))) return { status: 403, body: { error: 'forbidden' } };
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (body.fileId !== null) {
+    const file = typeof body.fileId === 'string' ? await getCharacterFile(body.fileId).catch(() => null) : null;
+    if (!file || file.character_id !== character.id) return { status: 404, body: { error: 'file not found' } };
+    if (file.kind !== 'image') return { status: 400, body: { error: 'only an image can be the portrait' } };
+  }
+  await setCharacterPortrait(character.id, body.fileId);
+  return { status: 200, body: { portraitFileId: body.fileId } };
 }));
 
 router.delete('/characters/:characterId/files/:fileId', requireAuth(async ({ params, user }) => {

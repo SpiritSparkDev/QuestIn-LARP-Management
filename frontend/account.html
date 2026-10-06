@@ -1995,7 +1995,7 @@
     function renderStagedFiles(body) {
       const staged = stagedFiles[body.id] ?? [];
       body.innerHTML = `<form class="file-upload-form" data-stage-form>
-      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required>
       <label><input type="checkbox" required> Ich habe den Hinweis gelesen</label>
       <label><input type="checkbox"> Öffentlich sichtbar</label>
       <button type="submit">Hinzufügen</button>
@@ -2005,6 +2005,7 @@
     ${staged.map((entry, index) => `<div class="file-item">
       <span>${escapeHtml(entry.file.name)}</span>
       <span class="tag">${entry.isPublic ? "Öffentlich" : "Privat"}</span>
+      ${kindForMimeType(entry.file.type) === "image" ? `<button type="button" data-stage-portrait="${index}" class="btn-ghost${entry.portrait ? " is-portrait" : ""}">${entry.portrait ? "★ Portrait" : "☆ Als Portrait"}</button>` : ""}
       <button type="button" data-unstage="${index}" class="btn-ghost">Entfernen</button>
     </div>`).join("")}`;
 
@@ -2016,14 +2017,23 @@
       consent.addEventListener("change", () => { submit.disabled = !consent.checked; });
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        const file = fileInput.files[0];
-        if (!file) return;
-        if (!kindForMimeType(file.type)) {
-          notify("Nicht unterstützter Dateityp.", "error");
-          return;
+        for (const file of fileInput.files) {
+          if (!kindForMimeType(file.type)) {
+            notify(`„${file.name}“: Nicht unterstützter Dateityp.`, "error");
+            continue;
+          }
+          stagedFiles[body.id].push({ file, isPublic: isPublic.checked, portrait: false });
         }
-        stagedFiles[body.id].push({ file, isPublic: isPublic.checked });
         renderStagedFiles(body);
+      });
+      body.querySelectorAll("[data-stage-portrait]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const index = Number(button.dataset.stagePortrait);
+          const wasPortrait = stagedFiles[body.id][index].portrait;
+          stagedFiles[body.id].forEach((entry) => { entry.portrait = false; });
+          stagedFiles[body.id][index].portrait = !wasPortrait;
+          renderStagedFiles(body);
+        });
       });
       body.querySelectorAll("[data-unstage]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -2037,9 +2047,10 @@
     async function uploadStagedFiles(characterId, bodyId) {
       const staged = stagedFiles[bodyId] ?? [];
       let failed = 0;
+      let portraitFileId = null;
       for (const entry of staged) {
         try {
-          await api.post(`/characters/${characterId}/files`, {
+          const uploaded = await api.post(`/characters/${characterId}/files`, {
             kind: kindForMimeType(entry.file.type),
             filename: entry.file.name,
             mimeType: entry.file.type,
@@ -2047,9 +2058,17 @@
             isPublic: entry.isPublic,
             gdprConsent: true,
           });
+          if (entry.portrait) portraitFileId = uploaded.id;
         } catch (err) {
           failed += 1;
           notify(`„${entry.file.name}“ konnte nicht hochgeladen werden: ${err.message}`, "error");
+        }
+      }
+      if (portraitFileId) {
+        try {
+          await api.put(`/characters/${characterId}/portrait`, { fileId: portraitFileId });
+        } catch (err) {
+          notify(`Portrait konnte nicht gesetzt werden: ${err.message}`, "error");
         }
       }
       stagedFiles[bodyId] = [];
@@ -2180,6 +2199,7 @@
           return `<figure class="file-thumb">
       <a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${escapeHtml(f.original_filename)}" loading="lazy"></a>
       <span class="tag file-thumb-tag">${f.is_public ? "Öffentlich" : "Privat"}</span>
+      <button type="button" class="file-thumb-portrait${f.is_portrait ? " is-active" : ""}" data-portrait-file="${f.id}" data-portrait-active="${f.is_portrait ? "1" : ""}" data-portrait-character="${characterId}" title="${f.is_portrait ? "Ist das Charakterportrait (Klick: zurücksetzen)" : "Als Charakterportrait festlegen"}" aria-label="Als Charakterportrait festlegen"><span class="material-symbols-outlined" aria-hidden="true">star</span></button>
       <button type="button" class="file-thumb-delete" data-delete-file="${f.id}" data-delete-character="${characterId}" aria-label="Bild löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
     </figure>`;
         })
@@ -2197,7 +2217,7 @@
       const empty = files.length === 0 ? '<p class="sub">Noch keine Dateien hochgeladen.</p>' : "";
 
       return `<form data-upload-form="${characterId}" class="file-upload-form">
-      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required>
       <label><input type="checkbox" required> Ich habe den Hinweis gelesen</label>
       <label><input type="checkbox"> Öffentlich sichtbar</label>
       <button type="submit">Hochladen</button>
@@ -2206,8 +2226,8 @@
     ${empty}${thumbs ? `<div class="file-gallery">${thumbs}</div>` : ""}${docItems}`;
     }
 
-    // The first uploaded image doubles as the character's portrait (cards,
-    // dashboard). Cached per character; dropped whenever files change.
+    // The chosen portrait (else the first uploaded image) is shown on cards and
+    // the dashboard. Cached per character; dropped whenever files change.
     const photoUrlCache = new Map();
 
     function getCharacterPhotoUrl(characterId) {
@@ -2217,7 +2237,7 @@
           api
             .get(`/characters/${characterId}/files`)
             .then((files) => {
-              const photo = files.find((f) => f.kind === "image");
+              const photo = files.find((f) => f.kind === "image" && f.is_portrait) ?? files.find((f) => f.kind === "image");
               return photo ? `/characters/${characterId}/files/${photo.id}` : null;
             })
             .catch(() => {
@@ -2311,6 +2331,19 @@
     }
 
     function wireFileSection(characterId, container) {
+      container.querySelectorAll("[data-portrait-file]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          try {
+            await api.put(`/characters/${button.dataset.portraitCharacter}/portrait`, {
+              fileId: button.dataset.portraitActive ? null : button.dataset.portraitFile,
+            });
+            await afterFilesChanged(characterId);
+          } catch (err) {
+            notify(err.message, "error");
+          }
+        });
+      });
+
       container.querySelectorAll("[data-delete-file]").forEach((button) => {
         button.addEventListener("click", async () => {
           if (!confirm("Datei wirklich löschen?")) return;
@@ -2343,27 +2376,29 @@
 
       uploadForm.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const file = fileInput.files[0];
-        if (!file) return;
-        const kind = kindForMimeType(file.type);
-        if (!kind) {
-          notify("Nicht unterstützter Dateityp.", "error");
-          return;
+        const files = [...fileInput.files];
+        if (files.length === 0) return;
+        submitButton.disabled = true;
+        for (const file of files) {
+          const kind = kindForMimeType(file.type);
+          if (!kind) {
+            notify(`„${file.name}“: Nicht unterstützter Dateityp.`, "error");
+            continue;
+          }
+          try {
+            await api.post(`/characters/${characterId}/files`, {
+              kind,
+              filename: file.name,
+              mimeType: file.type,
+              dataBase64: await readFileAsBase64(file),
+              isPublic: publicCheckbox.checked,
+              gdprConsent: consentCheckbox.checked,
+            });
+          } catch (err) {
+            notify(`„${file.name}“: ${err.message}`, "error");
+          }
         }
-        try {
-          const dataBase64 = await readFileAsBase64(file);
-          await api.post(`/characters/${characterId}/files`, {
-            kind,
-            filename: file.name,
-            mimeType: file.type,
-            dataBase64,
-            isPublic: publicCheckbox.checked,
-            gdprConsent: consentCheckbox.checked,
-          });
-          await afterFilesChanged(characterId);
-        } catch (err) {
-          notify(err.message, "error");
-        }
+        await afterFilesChanged(characterId);
       });
     }
 

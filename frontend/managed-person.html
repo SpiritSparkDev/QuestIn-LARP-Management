@@ -321,7 +321,7 @@
       const imageSlot = container.querySelector("[data-photo-image]");
       try {
         const files = await api.get(`/characters/${characterId}/files`);
-        const photo = files.find((f) => f.kind === "image");
+        const photo = files.find((f) => f.kind === "image" && f.is_portrait) ?? files.find((f) => f.kind === "image");
         if (photo) imageSlot.innerHTML = `<img src="/characters/${characterId}/files/${photo.id}" alt="">`;
       } catch {
         // fail-quiet: card keeps its placeholder icon
