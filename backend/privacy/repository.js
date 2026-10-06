@@ -11,6 +11,7 @@ import { logAudit } from '../audit/repository.js';
 // Default retention (days after the event ended) follows the privacy policy:
 // health data 4 weeks, everything else 6 months.
 export const PRIVACY_CATEGORIES = {
+  persoenlich: { label: 'Persönliche Daten', days: 180 },
   kontakt: { label: 'Kontaktdaten', days: 180 },
   notfall: { label: 'Notfallkontakt', days: 180 },
   gesundheit: { label: 'Gesundheitsdaten', days: 28 },
