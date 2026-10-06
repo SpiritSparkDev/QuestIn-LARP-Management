@@ -4745,6 +4745,22 @@ th.is-sortable[data-dir="desc"]::after {
   font-size: 14px;
 }
 .notice-warn p { margin: 0 0 6px; }
+
+/* Neutral pointer inside a card (e.g. "this goes under Konto") */
+.notice-info {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 4px solid var(--primary);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-radius: 6px;
+  font-size: 14px;
+}
+.notice-info .material-symbols-outlined { font-size: 20px; color: var(--primary-deep-text, var(--primary-text)); }
+.notice-info a { color: inherit; text-decoration: underline; }
 .notice-warn ul { margin: 0; padding-left: 18px; }
 
 /* ---------- Character page on phones ---------- */
