@@ -134,31 +134,65 @@
 
         <div class="tab-panel" id="gruppe-tab" hidden>
           <h1>Gruppe</h1>
-          <p class="sub">Verwaltete Personen, Untergruppen und Einladungen.</p>
-              <div class="card form-pad" id="dashboard-managed-persons-section">
-                <h2>Verwaltete Personen</h2>
-                <p class="sub">Melde zusätzliche Personen an, die sich nicht selbst einloggen können oder wollen — z.B. Familienmitglieder oder Kinder. Du verwaltest ihre Daten, Charaktere und Anmeldungen stellvertretend.</p>
-                <div id="managed-persons-list"></div>
-                <button type="button" id="new-managed-person-btn" class="btn-ghost">Person hinzufügen</button>
-                <button type="button" id="claim-person-btn" class="btn-ghost">Vorhandene Person in die Gruppe holen</button>
+          <p class="sub">In drei Schritten: Gruppe benennen, Leute einladen, Leute anmelden.</p>
+              <div class="group-steps" id="dashboard-managed-persons-section">
+                <section class="card form-pad group-step">
+                  <h2><span class="group-step-no">1</span>Gruppe benennen</h2>
+                  <p class="sub">Gib deiner Gruppe einen Namen. Er erscheint in der Gruppenstruktur und in Einladungen an andere.</p>
+                  <form id="group-name-form" class="group-tree-form">
+                    <input id="group-name-input" type="text" maxlength="60" placeholder="z. B. Drachenbande">
+                    <label for="group-name-input">Gruppenname</label>
+                    <button type="submit" class="btn-ghost">Speichern</button>
+                  </form>
+                </section>
 
-                <div id="group-tree-block" class="group-tree-block">
-                  <h3>Gruppenstruktur</h3>
-                  <p class="sub">Andere Gruppenverwalter können in deine Gruppe aufgenommen werden (und du in ihre). So entstehen verschachtelte Gruppen. Der übergeordnete Verwalter sieht die Untergruppen und bearbeitet bei deren Charakteren die Felder, die als „Gruppenverwaltung“ freigegeben sind.</p>
-                  <div id="group-tree-view"></div>
-                  <form id="group-invite-form" class="group-tree-form">
-                    <input id="group-invite-email" type="email" required>
-                    <label for="group-invite-email">Gruppenverwalter per E-Mail einladen (vollständige Adresse)</label>
-                    <button type="submit" class="btn-ghost">Einladung senden</button>
-                  </form>
-                  <form id="group-redeem-form" class="group-tree-form">
-                    <input id="group-redeem-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off">
-                    <label for="group-redeem-code">Beitrittscode eines anderen Verwalters einlösen – er wird direkt aufgenommen</label>
-                    <button type="submit" class="btn-ghost">Code einlösen</button>
-                  </form>
-                  <p><button type="button" id="group-code-create" class="btn-ghost">Beitrittscode für den übergeordneten Verwalter erzeugen</button></p>
-                  <p class="sub" id="group-code-result"></p>
-                </div>
+                <section class="card form-pad group-step">
+                  <h2><span class="group-step-no">2</span>Leute einladen</h2>
+                  <p class="sub">Hole Personen in deine Gruppe – such dir den passenden Weg aus.</p>
+                  <div class="group-options">
+                    <div class="group-option">
+                      <h3>Person ohne eigenen Login</h3>
+                      <p class="sub">Familie, Kinder oder Freunde, die du selbst verwaltest.</p>
+                      <button type="button" id="new-managed-person-btn" class="btn-ghost">Neue Person anlegen</button>
+                    </div>
+                    <div class="group-option">
+                      <h3>Vorhandene Person oder Account</h3>
+                      <p class="sub">Suche nach Name, Charaktername oder E-Mail und hole die Person in deine Gruppe oder lade sie ein.</p>
+                      <button type="button" id="claim-person-btn" class="btn-ghost">Suchen</button>
+                    </div>
+                    <div class="group-option">
+                      <h3>Gruppenverwalter per E-Mail</h3>
+                      <form id="group-invite-form" class="group-tree-form">
+                        <input id="group-invite-email" type="email" required>
+                        <label for="group-invite-email">Vollständige E-Mail-Adresse</label>
+                        <button type="submit" class="btn-ghost">Einladung senden</button>
+                      </form>
+                    </div>
+                    <div class="group-option">
+                      <h3>Beitrittscode</h3>
+                      <form id="group-redeem-form" class="group-tree-form">
+                        <input id="group-redeem-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off">
+                        <label for="group-redeem-code">Code eines anderen Verwalters einlösen</label>
+                        <button type="submit" class="btn-ghost">Code einlösen</button>
+                      </form>
+                      <p><button type="button" id="group-code-create" class="btn-ghost">Eigenen Code erzeugen</button></p>
+                      <p class="sub" id="group-code-result"></p>
+                    </div>
+                  </div>
+                  <div id="group-outgoing-view"></div>
+                </section>
+
+                <section class="card form-pad group-step">
+                  <h2><span class="group-step-no">3</span>Leute anmelden</h2>
+                  <p class="sub">Melde einzelne Personen über ihre Karte an – oder alle auf einmal für ein Event.</p>
+                  <p><button type="button" id="group-bulk-btn">Ganze Gruppe anmelden</button></p>
+                  <div id="managed-persons-list"></div>
+                  <div id="group-tree-block" class="group-tree-block">
+                    <h3>Gruppenstruktur</h3>
+                    <p class="sub">Verwalter, die in deiner Gruppe sind (oder bei denen du bist). Der übergeordnete Verwalter sieht die Untergruppen und bearbeitet bei deren Charakteren die Felder, die als „Gruppenverwaltung“ freigegeben sind.</p>
+                    <div id="group-tree-view"></div>
+                  </div>
+                </section>
 
                 <dialog id="group-fields-dialog">
                   <h3 id="group-fields-title">Gruppen-Felder</h3>
@@ -176,6 +210,19 @@
                   </form>
                   <div id="claim-person-results"></div>
                   <div class="dialog-actions"><button type="button" id="claim-person-close" class="btn-ghost">Schließen</button></div>
+                </dialog>
+
+                <dialog id="group-bulk-dialog">
+                  <h3>Ganze Gruppe anmelden</h3>
+                  <p class="lede">Wähle ein Event und die Personen. Für jede Person wählst du den Spielercharakter; alles Weitere (Preisgruppe, Zusatzfelder, Unterkunft) lässt sich danach bei der Person ergänzen.</p>
+                  <div><select id="group-bulk-event"></select><label for="group-bulk-event">Event</label></div>
+                  <div id="group-bulk-persons"></div>
+                  <label class="checkbox-row" id="group-bulk-waiver-row" style="display:none;"><input type="checkbox" id="group-bulk-waiver"> <span id="group-bulk-waiver-text"></span></label>
+                  <div id="group-bulk-result"></div>
+                  <div class="dialog-actions">
+                    <button type="button" id="group-bulk-submit">Anmelden</button>
+                    <button type="button" id="group-bulk-close" class="btn-ghost">Schließen</button>
+                  </div>
                 </dialog>
 
                 <dialog id="managed-person-dialog">
@@ -1241,7 +1288,7 @@
     }
 
     function renderGroupNode(node, isRoot) {
-      const persons = node.persons.map((p) => `<li>${escapeHtml(p.name)}${isRoot ? "" : ` <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(p.id)}" data-group-person-name="${escapeHtml(p.name)}">Gruppen-Felder</button> <a class="btn-ghost btn-sm" href="/managed-person.html?id=${encodeURIComponent(p.id)}">Anmeldungen</a>`}</li>`).join("");
+      const persons = isRoot ? "" : node.persons.map((p) => `<li>${escapeHtml(p.name)}${isRoot ? "" : ` <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(p.id)}" data-group-person-name="${escapeHtml(p.name)}">Gruppen-Felder</button> <a class="btn-ghost btn-sm" href="/managed-person.html?id=${encodeURIComponent(p.id)}">Anmeldungen</a>`}</li>`).join("");
       const children = node.children.map((child) => `<li><strong>${escapeHtml(child.name)}</strong> <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(child.id)}" data-group-person-name="${escapeHtml(child.name)}">Gruppen-Felder</button>${isRoot ? ` <button type="button" class="btn-ghost btn-sm" data-group-remove="${escapeHtml(child.id)}">Entfernen</button>` : ""}${renderGroupNode(child, false)}</li>`).join("");
       return persons || children ? `<ul class="group-tree-list">${persons}${children}</ul>` : "";
     }
@@ -1276,10 +1323,11 @@
       }
       const own = renderGroupNode(groupTree.node, true);
       parts.push(own ? `<p class="sub">Deine Gruppe</p>${own}` : '<p class="sub">Noch keine Untergruppen.</p>');
-      if (groupTree.outgoing.length) {
-        parts.push(`<p class="sub">Offene Einladungen: ${groupTree.outgoing.map((o) => `${escapeHtml(o.name)} <button type="button" class="btn-ghost btn-sm" data-group-cancel="${escapeHtml(o.id)}">Zurückziehen</button>`).join(", ")}</p>`);
-      }
       view.innerHTML = parts.join("");
+      document.getElementById("group-outgoing-view").innerHTML = groupTree.outgoing.length
+        ? `<p class="sub">Offene Einladungen: ${groupTree.outgoing.map((o) => `${escapeHtml(o.name)} <button type="button" class="btn-ghost btn-sm" data-group-cancel="${escapeHtml(o.id)}">Zurückziehen</button>`).join(", ")}</p>`
+        : "";
+      document.getElementById("group-name-input").value = groupTree.groupName ?? "";
       renderGroupInvitations();
 
       const act = async (fn) => {
@@ -1290,7 +1338,7 @@
           notify(err.message, "error");
         }
       };
-      view.querySelectorAll("[data-group-cancel]").forEach((b) => b.addEventListener("click", () => act(() => api.delete(`/group-tree/invitations/${b.dataset.groupCancel}`))));
+      document.getElementById("group-outgoing-view").querySelectorAll("[data-group-cancel]").forEach((b) => b.addEventListener("click", () => act(() => api.delete(`/group-tree/invitations/${b.dataset.groupCancel}`))));
       view.querySelectorAll("[data-group-remove]").forEach((b) => b.addEventListener("click", () => {
         if (confirm("Diese Untergruppe wirklich aus deiner Gruppe entfernen?")) act(() => api.delete(`/group-tree/children/${b.dataset.groupRemove}`));
       }));
@@ -1339,6 +1387,88 @@
     }
 
     document.getElementById("group-fields-close").addEventListener("click", () => document.getElementById("group-fields-dialog").close());
+
+    document.getElementById("group-name-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        groupTree = await api.patch("/group-tree/name", { name: document.getElementById("group-name-input").value });
+        renderGroupTree();
+        notify("Gruppenname gespeichert.", "success");
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
+    // ---- Ganze Gruppe anmelden ------------------------------------------
+    const bulkDialog = document.getElementById("group-bulk-dialog");
+    let bulkRows = [];
+
+    function collectGroupPersons(node, out = []) {
+      node.persons.forEach((p) => out.push({ id: p.id, name: p.name }));
+      node.children.forEach((child) => collectGroupPersons(child, out));
+      return out;
+    }
+
+    async function loadBulkPersons() {
+      const eventId = document.getElementById("group-bulk-event").value;
+      const persons = collectGroupPersons(groupTree.node);
+      const box = document.getElementById("group-bulk-persons");
+      box.innerHTML = '<p class="sub">Lade Personen …</p>';
+      bulkRows = await Promise.all(persons.map(async (p) => {
+        const [chars, regs] = await Promise.all([
+          api.get(`/managed-persons/${p.id}/characters`).catch(() => []),
+          api.get(`/managed-persons/${p.id}/registrations`).catch(() => []),
+        ]);
+        return { ...p, chars: chars.filter((c) => c.class !== "nsc"), registered: regs.some((r) => r.eventId === eventId) };
+      }));
+      box.innerHTML = bulkRows.length === 0
+        ? '<p class="sub">Noch keine Personen in der Gruppe.</p>'
+        : bulkRows.map((p, i) => {
+          if (p.registered) return `<div class="claim-result"><div class="claim-result-info"><strong>${escapeHtml(p.name)}</strong><span class="sub">Bereits angemeldet</span></div></div>`;
+          if (p.chars.length === 0) return `<div class="claim-result"><div class="claim-result-info"><strong>${escapeHtml(p.name)}</strong><span class="sub">Noch kein Spielercharakter – <a href="/managed-person.html?id=${encodeURIComponent(p.id)}">bei der Person anlegen</a></span></div></div>`;
+          return `<div class="claim-result"><div class="claim-result-info"><span><input type="checkbox" data-bulk-person="${i}" checked> <strong>${escapeHtml(p.name)}</strong></span></div><select data-bulk-char="${i}">${p.chars.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join("")}</select></div>`;
+        }).join("");
+    }
+
+    document.getElementById("group-bulk-btn").addEventListener("click", async () => {
+      try {
+        const [events, settings] = await Promise.all([api.get("/events"), api.get("/app-settings")]);
+        const active = events.filter((e) => e.is_active);
+        if (active.length === 0) { notify("Aktuell ist kein Event für Anmeldungen offen.", "error"); return; }
+        document.getElementById("group-bulk-event").innerHTML = active.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join("");
+        const waiverRow = document.getElementById("group-bulk-waiver-row");
+        waiverRow.style.display = settings.waiverText ? "" : "none";
+        document.getElementById("group-bulk-waiver-text").textContent = "Ich habe die Einverständniserklärung gelesen und stimme für alle ausgewählten Personen zu.";
+        document.getElementById("group-bulk-waiver").checked = false;
+        document.getElementById("group-bulk-result").innerHTML = "";
+        bulkDialog.showModal();
+        await loadBulkPersons();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+    document.getElementById("group-bulk-event").addEventListener("change", () => loadBulkPersons().catch((err) => notify(err.message, "error")));
+    document.getElementById("group-bulk-close").addEventListener("click", () => bulkDialog.close());
+
+    document.getElementById("group-bulk-submit").addEventListener("click", async () => {
+      const eventId = document.getElementById("group-bulk-event").value;
+      const waiverAccepted = document.getElementById("group-bulk-waiver").checked;
+      const picked = [...document.querySelectorAll("[data-bulk-person]:checked")].map((cb) => bulkRows[Number(cb.dataset.bulkPerson)]);
+      if (picked.length === 0) { notify("Wähle mindestens eine Person.", "error"); return; }
+      const lines = [];
+      for (const p of picked) {
+        const characterId = document.querySelector(`[data-bulk-char="${bulkRows.indexOf(p)}"]`).value;
+        try {
+          await api.post(`/managed-persons/${p.id}/events/${eventId}/register`, { conRole: "sc", characterId, waiverAccepted });
+          lines.push(`<p>✓ ${escapeHtml(p.name)} angemeldet</p>`);
+        } catch (err) {
+          const detail = err.status === 400 && err.body?.details ? err.body.details.join(", ") : err.message;
+          lines.push(`<p class="error">✗ ${escapeHtml(p.name)}: ${escapeHtml(detail)} – <a href="/managed-person.html?id=${encodeURIComponent(p.id)}">einzeln anmelden</a></p>`);
+        }
+      }
+      document.getElementById("group-bulk-result").innerHTML = lines.join("");
+      await loadBulkPersons();
+    });
 
     document.getElementById("group-invite-form").addEventListener("submit", async (event) => {
       event.preventDefault();

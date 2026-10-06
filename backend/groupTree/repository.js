@@ -4,6 +4,12 @@ import { displayName } from '../displayName.js';
 
 const MAX_DEPTH = 8;
 const nameOf = (r) => displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname });
+// A group with a name reads "Drachenbande (Anna Muster)".
+const labelOf = (r) => (r.group_name ? `${r.group_name} (${nameOf(r)})` : nameOf(r));
+
+export async function setGroupName(userId, name) {
+  await query('UPDATE users SET group_name = $2 WHERE id = $1', [userId, name || null]);
+}
 
 // Is `ancestorId` a group manager above `targetUserId`? The target counts as
 // belonging to the group of whoever manages them (a managed person) or to
@@ -51,20 +57,20 @@ export async function inviteById(parentId, childId) {
 
 export async function listIncoming(userId) {
   const { rows } = await query(
-    `SELECT gi.id, u.first_name, u.last_name, u.nickname FROM group_invitations gi
+    `SELECT gi.id, u.first_name, u.last_name, u.nickname, u.group_name FROM group_invitations gi
      JOIN users u ON u.id = gi.parent_user_id WHERE gi.child_user_id = $1 ORDER BY gi.created_at`,
     [userId]
   );
-  return rows.map((r) => ({ id: r.id, parentName: nameOf(r) }));
+  return rows.map((r) => ({ id: r.id, parentName: labelOf(r) }));
 }
 
 export async function listOutgoing(userId) {
   const { rows } = await query(
-    `SELECT gi.id, u.first_name, u.last_name, u.nickname FROM group_invitations gi
+    `SELECT gi.id, u.first_name, u.last_name, u.nickname, u.group_name FROM group_invitations gi
      JOIN users u ON u.id = gi.child_user_id WHERE gi.parent_user_id = $1 ORDER BY gi.created_at`,
     [userId]
   );
-  return rows.map((r) => ({ id: r.id, name: nameOf(r) }));
+  return rows.map((r) => ({ id: r.id, name: labelOf(r) }));
 }
 
 export async function acceptInvitation(id, userId) {
@@ -141,7 +147,7 @@ export async function redeemJoinCode(parentId, code) {
 }
 
 async function buildNode(userId, depth) {
-  const { rows: self } = await query('SELECT first_name, last_name, nickname FROM users WHERE id = $1', [userId]);
+  const { rows: self } = await query('SELECT first_name, last_name, nickname, group_name FROM users WHERE id = $1', [userId]);
   const { rows: persons } = await query(
     'SELECT id, first_name, last_name, nickname FROM users WHERE managed_by_user_id = $1 ORDER BY last_name, first_name',
     [userId]
@@ -152,7 +158,7 @@ async function buildNode(userId, depth) {
   );
   return {
     id: userId,
-    name: nameOf(self[0]),
+    name: labelOf(self[0]),
     persons: persons.map((p) => ({ id: p.id, name: nameOf(p) })),
     children: await Promise.all(children.map((c) => buildNode(c.id, depth + 1))),
   };
@@ -161,11 +167,12 @@ async function buildNode(userId, depth) {
 // My group: who I belong to (if anyone), my own persons and the groups below me.
 export async function getGroupTree(userId) {
   const { rows } = await query(
-    `SELECT p.id, p.first_name, p.last_name, p.nickname FROM users u JOIN users p ON p.id = u.group_parent_id WHERE u.id = $1`,
+    `SELECT p.id, p.first_name, p.last_name, p.nickname, p.group_name FROM users u JOIN users p ON p.id = u.group_parent_id WHERE u.id = $1`,
     [userId]
   );
   return {
-    parent: rows[0] ? { id: rows[0].id, name: nameOf(rows[0]) } : null,
+    parent: rows[0] ? { id: rows[0].id, name: labelOf(rows[0]) } : null,
+    groupName: (await query('SELECT group_name FROM users WHERE id = $1', [userId])).rows[0]?.group_name ?? '',
     node: await buildNode(userId, 0),
     incoming: await listIncoming(userId),
     outgoing: await listOutgoing(userId),

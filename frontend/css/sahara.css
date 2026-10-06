@@ -4689,6 +4689,13 @@ th.is-sortable[data-dir="desc"]::after {
 .group-tree-list { margin: 4px 0 12px; padding-left: 20px; }
 .group-tree-list .group-tree-list { margin: 4px 0 4px; }
 .group-tree-form { margin: 16px 0; }
+.group-steps { display: flex; flex-direction: column; gap: 20px; }
+.group-step h2 { display: flex; align-items: center; gap: 12px; margin-top: 0; }
+.group-step-no { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 0.95rem; }
+.group-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 12px; }
+.group-option { border: 1px solid var(--outline-variant); border-radius: 10px; padding: 14px 16px; background: var(--surface-container-low); }
+.group-option h3 { margin: 0 0 4px; font-size: 1rem; }
+.group-option .group-tree-form { margin: 8px 0 0; }
 .claim-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--outline-variant); }
 .claim-result-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .claim-result .btn-ghost { flex-shrink: 0; }

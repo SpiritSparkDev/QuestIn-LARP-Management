@@ -8,7 +8,7 @@ import { listCharactersForUser } from '../characters/repository.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import {
-  isGroupAncestorOf, inviteByEmail, inviteById, acceptInvitation, declineInvitation, cancelInvitation,
+  isGroupAncestorOf, inviteByEmail, inviteById, setGroupName, acceptInvitation, declineInvitation, cancelInvitation,
   leaveParentGroup, removeChild, getGroupTree, createJoinCode, redeemJoinCode,
 } from './repository.js';
 
@@ -16,6 +16,14 @@ const INVITE_RATE_LIMIT = { keyPrefix: 'group-invite', maxAttempts: 20, windowMs
 const REDEEM_RATE_LIMIT = { keyPrefix: 'group-redeem', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
 router.get('/group-tree', requireAuth(async ({ user }) => ({ status: 200, body: await getGroupTree(user.id) })));
+
+router.patch('/group-tree/name', requireAuth(async ({ req, user }) => {
+  const body = await readJsonBody(req);
+  const name = typeof body?.name === 'string' ? body.name.trim() : null;
+  if (name === null || name.length > 60) return { status: 400, body: { error: 'Der Gruppenname darf höchstens 60 Zeichen lang sein.' } };
+  await setGroupName(user.id, name);
+  return { status: 200, body: await getGroupTree(user.id) };
+}));
 
 router.post('/group-tree/invitations', rateLimit(INVITE_RATE_LIMIT)(requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);

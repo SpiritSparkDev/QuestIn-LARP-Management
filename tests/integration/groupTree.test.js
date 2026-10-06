@@ -69,6 +69,13 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       assert.equal(tree.node.children[0].id, b.userId);
       assert.deepEqual(tree.node.children[0].persons.map((p) => p.id), [person.userId]);
 
+      // A group name shows up in the tree above and can't be abused for oversized input.
+      assert.equal((await call(b.cookie, 'PATCH', '/group-tree/name', { name: 'Drachenbande' })).status, 200);
+      assert.equal((await call(b.cookie, 'PATCH', '/group-tree/name', { name: 'x'.repeat(61) })).status, 400);
+      const named = await (await call(a.cookie, 'GET', '/group-tree')).json();
+      assert.ok(named.node.children[0].name.startsWith('Drachenbande ('));
+      assert.equal((await (await call(b.cookie, 'GET', '/group-tree')).json()).groupName, 'Drachenbande');
+
       // Only the "Gruppenverwaltung" fields are visible and editable for the manager above.
       const visible = await (await call(a.cookie, 'GET', `/group-tree/persons/${person.userId}/characters`)).json();
       assert.deepEqual(visible[0].fields.map((f) => f.key), ['wunsch']);
