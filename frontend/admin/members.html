@@ -179,13 +179,14 @@
     import { applyBranding } from '/js/branding.js';
     import { hideLoading } from '/js/loading.js';
     applyBranding();
-    import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, renderField, collectFieldValues, STATUS_LABELS } from '/js/formFields.js';
+    import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, otFieldValuesEqual, renderField, collectFieldValues, STATUS_LABELS } from '/js/formFields.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
     import { notify } from '/js/notifications.js';
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary } from '/js/extrasPicker.js';
     initSidebarToggle();
 
     let accountSchema = [];
+    let registrationSchema = [];
 
     const listBody = document.querySelector('#member-list tbody');
     const detailDialog = document.getElementById('detail-dialog');
@@ -703,11 +704,24 @@
       const registered = member.registrations ?? [];
       const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Unbekanntes Event';
       const roleLabel = (key) => REGISTER_ROLES.find(([k]) => k === key)?.[1] ?? key;
+      const editableFields = registrationSchema.filter((f) => myAccountFields.includes(f.key));
       const registeredHtml = registered.length
-        ? `<ul>${registered.map((r) => `<li>${escapeHtml(eventName(r.eventId))} <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></li>`).join('')}</ul>`
+        ? registered.map((r) => `<div class="member-registration" data-reg-event="${escapeHtml(r.eventId)}">
+            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
+            <div class="action-row">
+              ${canOverrideCheckin && r.status === 'pending' ? `<button type="button" class="btn-sm" data-reg-approve="${escapeHtml(r.eventId)}">Freigeben</button>` : ''}
+              ${canOverrideCheckin && (r.status === 'pending' || r.status === 'confirmed') ? `<button type="button" class="btn-ghost btn-sm" data-reg-cancel="${escapeHtml(r.eventId)}">Absagen</button>` : ''}
+              ${editableFields.length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
+            </div>
+            <div class="member-registration-edit" data-reg-edit-panel="${escapeHtml(r.eventId)}" hidden>
+              <p class="sub">${r.waiverAcceptedAt ? `Einverständnis erteilt am ${escapeHtml(new Date(r.waiverAcceptedAt).toLocaleString('de-DE'))} (Version ${escapeHtml(r.waiverVersionAccepted)})` : 'Kein Einverständnis hinterlegt.'}</p>
+              ${editableFields.map((field) => renderAccountFieldInput(field, r.fields?.[field.key], { idPrefix: `reg-${r.eventId}-` })).join('')}
+              <div class="settings-actions"><button type="button" data-reg-save="${escapeHtml(r.eventId)}">Anmeldedaten speichern</button></div>
+            </div>
+          </div>`).join('')
         : '<p class="sub">Dieses Mitglied ist für kein Event angemeldet.</p>';
       const openEvents = allEvents.filter((e) => !registered.some((r) => r.eventId === e.id));
-      detailRegistrations.innerHTML = registeredHtml + '<h3>Für ein Event anmelden</h3>' + (openEvents.length === 0
+      detailRegistrations.innerHTML = registeredHtml + (!canCreateForOthers ? '' : '<h3>Für ein Event anmelden</h3>' + (openEvents.length === 0
         ? '<p class="sub">Es gibt kein weiteres Event, für das dieses Mitglied angemeldet werden kann.</p>'
         : `<form id="register-member-form">
             <select id="reg-event" required>${openEvents.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join('')}</select>
@@ -718,7 +732,54 @@
             <div id="reg-price-wrap"></div>
             <div id="reg-extras-wrap"></div>
             <div class="settings-actions"><button type="submit">Anmelden</button></div>
-          </form>`);
+          </form>`));
+      const reloadMember = async () => {
+        const refreshed = await api.get(`/members/${editingMemberId}`);
+        renderRegistrationsTab(refreshed);
+        renderCharactersTab(refreshed);
+        await loadMembers();
+      };
+      const act = async (path, eventId, successText) => {
+        try {
+          await api.post(`/events/${eventId}/${path}`, { userId: editingMemberId });
+          notify(successText, 'success');
+          await reloadMember();
+        } catch (err) {
+          notify(err.message, 'error');
+        }
+      };
+      detailRegistrations.querySelectorAll('[data-reg-approve]').forEach((b) => b.addEventListener('click', () => act('approve', b.dataset.regApprove, 'Anmeldung freigegeben.')));
+      detailRegistrations.querySelectorAll('[data-reg-cancel]').forEach((b) => b.addEventListener('click', () => {
+        if (confirm('Diese Anmeldung wirklich absagen?')) act('cancel', b.dataset.regCancel, 'Anmeldung abgesagt.');
+      }));
+      detailRegistrations.querySelectorAll('[data-reg-edit]').forEach((b) => b.addEventListener('click', () => {
+        const panel = detailRegistrations.querySelector(`[data-reg-edit-panel="${b.dataset.regEdit}"]`);
+        panel.hidden = !panel.hidden;
+      }));
+      detailRegistrations.querySelectorAll('[data-reg-save]').forEach((b) => b.addEventListener('click', async () => {
+        const eventId = b.dataset.regSave;
+        const registration = registered.find((r) => r.eventId === eventId);
+        const panel = detailRegistrations.querySelector(`[data-reg-edit-panel="${eventId}"]`);
+        const collected = nullifyBlankNumberFields(editableFields, collectAccountFieldValues(panel, editableFields));
+        // Only changed fields are sent: a save that touched nothing must not mail the orga.
+        const payload = {};
+        for (const field of editableFields) {
+          const original = registration?.fields?.[field.key] ?? (field.type === 'boolean' ? false : '');
+          if (!otFieldValuesEqual(field, original, collected[field.key])) payload[field.key] = collected[field.key];
+        }
+        if (Object.keys(payload).length === 0) {
+          panel.hidden = true;
+          return;
+        }
+        try {
+          await api.put(`/events/${eventId}/registrations/${editingMemberId}/ot-fields`, payload);
+          notify('Anmeldedaten gespeichert.', 'success');
+          await reloadMember();
+        } catch (err) {
+          notify(err.message, 'error');
+        }
+      }));
+
       const form = document.getElementById('register-member-form');
       if (!form) return;
 
@@ -781,8 +842,8 @@
 
       showDetailTab('detail-tab-konto');
       renderCharactersTab(member);
-      document.getElementById('detail-regs-tab-btn').hidden = !canCreateForOthers;
-      if (canCreateForOthers) renderRegistrationsTab(member);
+      document.getElementById('detail-regs-tab-btn').hidden = !(canCreateForOthers || canOverrideCheckin);
+      if (canCreateForOthers || canOverrideCheckin) renderRegistrationsTab(member);
 
       if (myAccountFields.includes('group')) {
         detailGroupWrap.style.display = '';
@@ -971,6 +1032,7 @@
       document.getElementById('member-export').hidden = account.canExportMembers !== true;
       myUserId = account.id;
       accountSchema = await api.get('/account-schema');
+      registrationSchema = await api.get('/registration-schema');
       buildFieldInputs(inviteFields);
       await loadEventOptions(inviteEventSelect);
       // The group select is only shown (and thus only ever sent) if the

@@ -1,6 +1,6 @@
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
-import { requireMenu } from '../middleware/authorize.js';
+import { requireMenu, requireAnyMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
@@ -197,7 +197,7 @@ router.post('/events/:id/checkout', requireAuth(requireMenu('checkin')(async ({ 
   }
 })));
 
-router.post('/events/:id/approve', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
+router.post('/events/:id/approve', requireAuth(requireAnyMenu('checkin', 'mitglieder')(async ({ req, params, user }) => {
   if (!user.group.canOverrideCheckinStatus) {
     return { status: 403, body: { error: 'forbidden' } };
   }
@@ -215,7 +215,7 @@ router.post('/events/:id/approve', requireAuth(requireMenu('checkin')(async ({ r
   }
 })));
 
-router.post('/events/:id/cancel', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
+router.post('/events/:id/cancel', requireAuth(requireAnyMenu('checkin', 'mitglieder')(async ({ req, params, user }) => {
   if (!user.group.canOverrideCheckinStatus) {
     return { status: 403, body: { error: 'forbidden' } };
   }

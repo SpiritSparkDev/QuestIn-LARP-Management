@@ -68,14 +68,6 @@
       <button type="button" id="scan-confirm">Einchecken</button>
       <button type="button" id="scan-cancel" class="btn-ghost">Abbrechen</button>
     </dialog>
-    <dialog id="edit-dialog">
-      <h2 id="edit-dialog-title">Teilnehmer bearbeiten</h2>
-      <p class="sub" id="edit-waiver-status"></p>
-      <div id="edit-ot-fields"></div>
-      <div id="edit-characters"></div>
-      <button type="button" id="edit-save">Speichern</button>
-      <button type="button" id="edit-cancel" class="btn-ghost">Schließen</button>
-    </dialog>
     <dialog id="role-dialog">
       <h2 id="role-dialog-title">Rolle ändern</h2>
       <select id="role-select"></select>
@@ -216,7 +208,7 @@ function allColumns() {
     { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
     { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-stack', render: renderPaymentStatusCell },
     { id: 'status', label: 'Status', track: '130px', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span>` },
-    { id: 'actions', label: 'Aktionen', locked: true, track: 'minmax(210px, 1.3fr)', cls: 'cell-actions', render: (p) => renderApproveCell(p) + renderCheckinCell(p) + renderCheckoutCell(p) + renderCancelCell(p) + renderEditCell(p) },
+    { id: 'actions', label: 'Aktionen', locked: true, track: 'minmax(210px, 1.3fr)', cls: 'cell-actions', render: (p) => renderCheckinCell(p) + renderCheckoutCell(p) },
     ...(canOverride ? [{ id: 'override', label: 'Override', track: '150px', render: renderOverrideCell }] : []),
   ];
   return [...base, ...it, ...ot, ...rest];
@@ -513,105 +505,6 @@ document.getElementById('scan-cancel').addEventListener('click', () => {
   scanDialog.close();
 });
 
-const editDialog = document.getElementById('edit-dialog');
-const editOtFields = document.getElementById('edit-ot-fields');
-const editCharacters = document.getElementById('edit-characters');
-let editingUserId = null;
-
-function openEditDialog(userId) {
-  const p = participantsById.get(userId);
-  if (!p) return;
-  editingUserId = userId;
-  document.getElementById('edit-dialog-title').textContent = `Bearbeiten: ${p.name}`;
-  document.getElementById('edit-waiver-status').textContent = p.waiverAcceptedAt
-    ? `Einverständnis erteilt am ${new Date(p.waiverAcceptedAt).toLocaleString('de-DE')} (Version ${p.waiverVersionAccepted})`
-    : 'Kein Einverständnis hinterlegt.';
-
-  // Derived from the schema/permission intersection, not p.otFields' own
-  // keys -- a brand-new admin-added field has no guaranteed presence in the
-  // payload for a participant who doesn't have a value yet (see
-  // listParticipantsForEvent), so keying off the payload would make it
-  // permanently uneditable until someone else set a value first.
-  const otKeys = canManageMembers ? [...otFieldsByKey.keys()].filter((key) => myAccountFields.includes(key)) : [];
-  const editableOtFields = otKeys.map((key) => otFieldsByKey.get(key)).filter(Boolean);
-  editOtFields.innerHTML = editableOtFields.length > 0
-    ? `<h3>Weitere Felder</h3>` + editableOtFields.map((field) => renderAccountFieldInput(field, p.otFields[field.key])).join('')
-    : '';
-
-  editCharacters.innerHTML = canOverride
-    ? (p.characters ?? []).map((c) => `
-      <form class="checkin-character-form" data-character-id="${escapeHtml(c.id)}">
-        <h3>${escapeHtml(c.name)}</h3>
-        ${currentSchema.map((field) => renderField(field, c.data?.[field.key], `char-${c.id}-`)).join('')}
-      </form>
-    `).join('')
-    : '';
-
-  editDialog.showModal();
-}
-
-document.getElementById('edit-cancel').addEventListener('click', () => {
-  editingUserId = null;
-  editDialog.close();
-});
-
-document.getElementById('edit-save').addEventListener('click', async () => {
-  const original = participantsById.get(editingUserId)?.otFields ?? {};
-  const editedFields = [...editOtFields.querySelectorAll('[data-field]')]
-    .map((input) => otFieldsByKey.get(input.dataset.field))
-    .filter((field, index, arr) => field && arr.findIndex((f) => f.key === field.key) === index);
-  const collected = nullifyBlankNumberFields(editedFields, collectAccountFieldValues(editOtFields, editedFields));
-  const accountAccountFieldKeys = new Set(accountSchema.map((f) => f.key));
-  const accountPayload = {};
-  const registrationPayload = {};
-  for (const field of editedFields) {
-    const originalValue = original[field.key] ?? (field.type === 'boolean' ? false : '');
-    const newValue = collected[field.key];
-    // Only send a field whose value actually changed -- an edit-save that
-    // touched nothing OT-related (e.g. only a character field) must not
-    // trigger PATCH /members or PUT .../ot-fields, since either one mails
-    // every event orga/hilfs_orga plus every admin/moderator on success.
-    if (otFieldValuesEqual(field, originalValue, newValue)) continue;
-    if (accountAccountFieldKeys.has(field.key)) accountPayload[field.key] = newValue;
-    else registrationPayload[field.key] = newValue;
-  }
-  const characterForms = [...editCharacters.querySelectorAll('.checkin-character-form')];
-  let savedAnything = false;
-  let currentStep = '';
-  try {
-    if (Object.keys(accountPayload).length > 0) {
-      currentStep = 'Konto-Feldern';
-      await api.patch(`/members/${editingUserId}`, accountPayload);
-      savedAnything = true;
-    }
-    if (Object.keys(registrationPayload).length > 0) {
-      currentStep = 'Anmeldungsfeldern';
-      await api.put(`/events/${eventSelect.value}/registrations/${editingUserId}/ot-fields`, registrationPayload);
-      savedAnything = true;
-    }
-    for (const form of characterForms) {
-      currentStep = 'Charakterfeldern';
-      const data = collectFieldValues(form, currentSchema);
-      await api.put(`/characters/${form.dataset.characterId}`, { data });
-      savedAnything = true;
-    }
-    notify('Gespeichert.', 'success');
-    editDialog.close();
-    await loadParticipants(eventSelect.value);
-  } catch (err) {
-    notify(
-      savedAnything
-        ? `Teilweise gespeichert, dann Fehler bei ${currentStep}: ${err.message}`
-        : err.message,
-      'error',
-    );
-    if (savedAnything) {
-      editDialog.close();
-      await loadParticipants(eventSelect.value);
-    }
-  }
-});
-
 function setScanMode(mode) {
   localStorage.setItem('qrScanMode', mode);
   scanModeButtons.forEach((button) => button.classList.toggle('active', button.dataset.mode === mode));
@@ -745,11 +638,6 @@ searchInput.addEventListener('input', () => {
 // each returning either its one button or '' when that action doesn't
 // apply to this participant's current status/permissions.
 
-function renderApproveCell(p) {
-  if (p.status !== 'pending' || !canOverride) return '';
-  return `<button type="button" class="btn btn-sm" data-approve="${p.userId}">Freigeben</button>`;
-}
-
 function renderCheckinCell(p) {
   if (p.status === 'notified') return '';
   return `<button type="button" class="btn btn-sm" data-checkin="${p.userId}" ${p.status !== 'confirmed' ? 'disabled' : ''}>Check-In</button>`;
@@ -758,27 +646,6 @@ function renderCheckinCell(p) {
 function renderCheckoutCell(p) {
   if (p.status === 'notified') return '';
   return `<button type="button" class="btn-ghost btn-sm" data-checkout="${p.userId}" ${p.status !== 'checked_in' ? 'disabled' : ''}>Check-Out</button>`;
-}
-
-// "Absagen" cancels two different things depending on status (an open
-// invitation vs. an existing registration) but the two are mutually
-// exclusive per row and share the same label, so they share one column.
-function renderCancelCell(p) {
-  if (p.status === 'notified') {
-    return canManageMembers ? `<button type="button" class="btn-ghost btn-sm" data-cancel-invitation="${p.invitationId}">Absagen</button>` : '';
-  }
-  if ((p.status === 'pending' || p.status === 'confirmed') && canOverride) {
-    return `<button type="button" class="btn-ghost btn-sm" data-cancel="${p.userId}">Absagen</button>`;
-  }
-  return '';
-}
-
-function renderEditCell(p) {
-  if (p.status === 'notified') return '';
-  const canEditOt = canManageMembers && [...otFieldsByKey.keys()].some((key) => myAccountFields.includes(key));
-  const canEditCharacters = canOverride && (p.characters ?? []).length > 0;
-  if (!canEditOt && !canEditCharacters) return '';
-  return `<button type="button" class="btn-ghost btn-sm" data-edit="${p.userId}">Bearbeiten</button>`;
 }
 
 async function loadParticipants(eventId) {
@@ -808,15 +675,6 @@ function renderParticipants(participants, eventId) {
   listBody.querySelectorAll('[data-checkout]').forEach((button) => {
     button.addEventListener('click', () => transition(eventId, button.dataset.checkout, 'checkout'));
   });
-  listBody.querySelectorAll('[data-approve]').forEach((button) => {
-    button.addEventListener('click', () => transition(eventId, button.dataset.approve, 'approve'));
-  });
-  listBody.querySelectorAll('[data-cancel]').forEach((button) => {
-    button.addEventListener('click', () => transition(eventId, button.dataset.cancel, 'cancel'));
-  });
-  listBody.querySelectorAll('[data-cancel-invitation]').forEach((button) => {
-    button.addEventListener('click', () => cancelInvitationRow(button.dataset.cancelInvitation, eventId));
-  });
   listBody.querySelectorAll('[data-override]').forEach((select) => {
     select.addEventListener('change', () => overrideStatus(eventId, select.dataset.override, select.value, select.dataset.prevStatus));
   });
@@ -838,20 +696,8 @@ function renderParticipants(participants, eventId) {
   listBody.querySelectorAll('[data-refund]').forEach((button) => {
     button.addEventListener('click', () => refundPayment(eventId, button.dataset.refund));
   });
-  listBody.querySelectorAll('[data-edit]').forEach((button) => {
-    button.addEventListener('click', () => openEditDialog(button.dataset.edit));
-  });
 
   applySearchFilter();
-}
-
-async function cancelInvitationRow(invitationId, eventId) {
-  try {
-    await api.post(`/members/invitations/${invitationId}/cancel`, {});
-    await loadParticipants(eventId);
-  } catch (err) {
-    notify(err.message, 'error');
-  }
 }
 
 async function transition(eventId, userId, action) {

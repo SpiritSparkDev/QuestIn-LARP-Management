@@ -77,9 +77,15 @@ router.post('/members/export', requireAuth(requireMenu('mitglieder')(async ({ re
     },
   };
 })));
-router.get('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ params }) => {
+router.get('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ params, user }) => {
   const member = await getMember(params.id);
   if (!member) return { status: 404, body: { error: 'member not found' } };
+  // Registration fields only as far as the viewer's group may see them.
+  const visible = user.group.accountFields ?? [];
+  member.registrations = member.registrations.map((r) => ({
+    ...r,
+    fields: Object.fromEntries(Object.entries(r.fields ?? {}).filter(([key]) => visible.includes(key))),
+  }));
   return { status: 200, body: member };
 })));
 

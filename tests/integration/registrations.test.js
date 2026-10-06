@@ -1460,6 +1460,26 @@ test('an admin can register another member for an event (even with a waiver conf
   });
 });
 
+test('approve and cancel work with the Mitglieder menu alone (override permission still required); member details carry the registration fields', async () => {
+  await withTestServer(async (port) => {
+    const owner = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const staff = await makeCustomGroupUserAndSession({ visibleMenus: ['mitglieder'], accountFields: ['conTage'], canOverrideCheckinStatus: true });
+    const noOverride = await makeCustomGroupUserAndSession({ visibleMenus: ['mitglieder'], accountFields: ['conTage'] });
+    await query("INSERT INTO registrations (user_id, event_id, con_role, status) VALUES ($1, $2, 'helfer', 'pending')", [owner.userId, eventId]);
+    const post = (cookie, path) => fetch(`http://localhost:${port}/events/${eventId}/${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ userId: owner.userId }),
+    });
+    assert.equal((await post(noOverride.cookie, 'approve')).status, 403);
+    assert.equal((await post(staff.cookie, 'approve')).status, 200);
+    assert.equal((await post(staff.cookie, 'cancel')).status, 200);
+
+    const detail = await (await fetch(`http://localhost:${port}/members/${owner.userId}`, { headers: { Cookie: staff.cookie } })).json();
+    assert.equal(detail.registrations[0].status, 'cancelled');
+    assert.ok('fields' in detail.registrations[0]);
+  });
+});
+
 test.after(async () => {
   // Users created in a reg_custom_* group must be deleted before the group
   // itself (users.group_id -> groups.id has no ON DELETE CASCADE), otherwise
