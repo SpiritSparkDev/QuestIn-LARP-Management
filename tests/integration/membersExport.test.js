@@ -158,7 +158,7 @@ test('without an event filter the export gets one registration column per event 
     assert.deepEqual(columns.filter((c) => c.startsWith('Anmeldung')), ['Anmeldung: Frühcon', 'Anmeldung: Spätcon']);
     assert.ok(!header.includes('Unbeteiligt-Con'));
     const cells = row.split(';');
-    assert.equal(cells[columns.indexOf('Anmeldung: Frühcon')], 'Angemeldet');
+    assert.equal(cells[columns.indexOf('Anmeldung: Frühcon')], 'Bestätigt');
     assert.equal(cells[columns.indexOf('Anmeldung: Spätcon')], 'Warteliste');
     const emptyCells = emptyRow.split(';');
     assert.equal(emptyCells[columns.indexOf('Anmeldung: Frühcon')], 'Nicht angemeldet');

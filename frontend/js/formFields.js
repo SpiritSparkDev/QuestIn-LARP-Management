@@ -2,7 +2,7 @@ import { renderToolbar, sanitizeHtml, htmlToPlainText } from './richText.js';
 
 // Registration/participant status, keyed by the status column's DB value.
 export const STATUS_LABELS = {
-  notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet',
+  notified: 'Benachrichtigt', pending: 'Angemeldet, noch nicht bezahlt', confirmed: 'Bestätigt',
   checked_in: 'Eingecheckt', checked_out: 'Ausgecheckt', cancelled: 'Abgesagt',
   waitlisted: 'Warteliste',
 };

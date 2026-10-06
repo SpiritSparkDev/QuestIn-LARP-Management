@@ -136,6 +136,7 @@
 
           <div id="registration-card" class="card">
             <h2>Neu anmelden</h2>
+            <p class="sub" id="registration-all-done" style="display:none;">Diese Person ist für alle offenen Events schon angemeldet.</p>
             <form id="registration-form">
               <h3>1. Veranstaltung</h3>
               <select id="event-select" required></select>
@@ -724,9 +725,23 @@
       container.querySelectorAll("[data-reg-pay]").forEach((btn) => btn.addEventListener("click", () => payForRegistration(btn.dataset.regPay)));
     }
 
+    // A person who already has a registration for an event (whatever its status) can't be registered again.
+    function renderRegistrableEvents() {
+      const registered = new Set(currentRegistrations.map((r) => r.eventId));
+      const open = events.filter((e) => !registered.has(e.id));
+      eventSelect.innerHTML = renderEventOptions(open);
+      document.getElementById("registration-form").style.display = open.length ? "" : "none";
+      document.getElementById("registration-all-done").style.display = open.length ? "none" : "";
+      renderRegistrationFlags();
+      renderRegistrationPriceGroup();
+      renderRegistrationExtras();
+      renderRegistrationLodging();
+    }
+
     async function loadRegistrations() {
       currentRegistrations = await api.get(`/managed-persons/${managedPersonId}/registrations`);
       renderRegistrationsList();
+      renderRegistrableEvents();
       const wantsNsc = nscSchemaAvailable;
       nscSection.style.display = wantsNsc ? "" : "none";
       nscRoleTabButton.style.display = wantsNsc ? "" : "none";

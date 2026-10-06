@@ -3,7 +3,7 @@ import { isSensitiveField } from '../members/exportCsv.js';
 
 const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga', ticket: 'Gast-Ticket' };
 const STATUS_LABELS = {
-  notified: 'Benachrichtigt', pending: 'Vorgemerkt', confirmed: 'Angemeldet', checked_in: 'Eingecheckt',
+  notified: 'Benachrichtigt', pending: 'Angemeldet, noch nicht bezahlt', confirmed: 'Bestätigt', checked_in: 'Eingecheckt',
   checked_out: 'Ausgecheckt', cancelled: 'Abgesagt', waitlisted: 'Warteliste',
 };
 const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', bank_transfer: 'Überweisung', stripe_bank_transfer: 'Überweisung (Stripe)' };
