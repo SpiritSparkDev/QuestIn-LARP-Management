@@ -1170,6 +1170,18 @@ h3 {
   gap: 24px;
   margin-bottom: 28px;
   border-bottom: 1px solid var(--outline-variant);
+  /* Many tabs on a narrow screen: scroll sideways instead of widening the page. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tabs--sub {
@@ -1228,6 +1240,7 @@ label {
 }
 #account-form {
     width: 960px;
+    max-width: 100%;
 }
 
 label:first-child {
@@ -1317,13 +1330,13 @@ textarea.invalid {
 
 .field-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0 24px;
 }
 
 @media (max-width: 560px) {
   .field-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
