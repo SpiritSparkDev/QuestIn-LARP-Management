@@ -837,6 +837,12 @@
       renderRegistrationLodging();
       const person = await api.get(`/managed-persons/${managedPersonId}`);
       document.getElementById("managed-person-heading").textContent = `${person.name} verwalten`;
+      if (person.groupView) {
+        // A group manager above the owner only handles registrations, not the person's data.
+        const dataTabBtn = document.querySelector('.tab-btn[data-tab="daten-tab"]');
+        dataTabBtn.style.display = "none";
+        document.querySelector('.tab-btn[data-tab="anmelden-tab"]').click();
+      }
       dataForm.elements.firstName.value = person.firstName ?? "";
       dataForm.elements.lastName.value = person.lastName ?? "";
       dataForm.elements.nickname.value = person.nickname ?? "";

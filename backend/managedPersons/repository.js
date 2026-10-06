@@ -57,7 +57,7 @@ export async function getManagedPersonForRegistration(id, actorId) {
   const { rows } = await query('SELECT id, first_name, last_name, nickname FROM users WHERE id = $1', [id]);
   const r = rows[0];
   return { id: r.id, email: null, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname,
-    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }), canDelete: false };
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }), canDelete: false, groupView: true };
 }
 
 export async function listManagedPersons(ownerId) {
