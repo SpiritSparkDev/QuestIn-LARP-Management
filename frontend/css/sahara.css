@@ -19,7 +19,7 @@
   --on-surface-variant: #605850;
   --outline: #9a9088;
   --outline-variant: #d8d0c8;
-  --primary: #c2652a;
+  --primary: #b25d27;
   --primary-deep: #8a4518;
   --primary-container: #fbe8d8;
   --on-primary: #ffffff;
@@ -27,7 +27,7 @@
   --gold: #8c3c3c;
   --gold-container: #fce0e0;
   --on-gold-container: #3a2020;
-  --secondary: #78706a;
+  --secondary: #766e68;
   --secondary-container: #eae2da;
   --error: #c0392b;
   --success: #2c5223;
@@ -44,6 +44,8 @@
   --field-bg-focus: color-mix(in srgb, var(--primary-container) 60%, var(--surface-container-lowest));
   --field-bg-disabled: color-mix(in srgb, var(--on-surface) 9%, var(--surface-container));
   --field-ring: color-mix(in srgb, var(--primary) 30%, transparent);
+  --primary-text: #ab5925;
+  --on-error: #ffffff;
 }
 
 html[data-theme="dark"] {
@@ -70,6 +72,8 @@ html[data-theme="dark"] {
   --error: #e57368;
   --success: #7fbf6e;
   --shadow: rgba(0, 0, 0, 0.4);
+  --primary-text: var(--primary);
+  --on-error: #241c16;
 }
 
 html[data-scheme="ozean"] {
@@ -81,7 +85,7 @@ html[data-scheme="ozean"] {
   --surface-container-highest: #cde0e7;
   --on-surface: #1c2e33;
   --on-surface-variant: #46606a;
-  --outline: #7f9aa3;
+  --outline: #7b959e;
   --outline-variant: #c3d6dc;
   --primary: #1870a8;
   --primary-deep: #0f4d73;
@@ -91,11 +95,13 @@ html[data-scheme="ozean"] {
   --gold: #2a8c82;
   --gold-container: #d6f0ec;
   --on-gold-container: #16453f;
-  --secondary: #5c7b85;
+  --secondary: #57757e;
   --secondary-container: #dceaee;
   --error: #c0392b;
   --success: #1f7a52;
   --shadow: rgba(10, 40, 50, 0.08);
+  --primary-text: var(--primary);
+  --on-error: #ffffff;
 }
 
 html[data-scheme="ozean"][data-theme="dark"] {
@@ -122,6 +128,8 @@ html[data-scheme="ozean"][data-theme="dark"] {
   --error: #e8766a;
   --success: #5fcf96;
   --shadow: rgba(0, 0, 0, 0.5);
+  --primary-text: var(--primary);
+  --on-error: #0d1b22;
 }
 
 html[data-scheme="wald"] {
@@ -143,11 +151,13 @@ html[data-scheme="wald"] {
   --gold: #a3792e;
   --gold-container: #f3e3c4;
   --on-gold-container: #5c3f12;
-  --secondary: #6b7a5c;
+  --secondary: #667457;
   --secondary-container: #dde6d1;
   --error: #c0392b;
   --success: #2c5223;
   --shadow: rgba(30, 40, 20, 0.08);
+  --primary-text: var(--primary);
+  --on-error: #ffffff;
 }
 
 html[data-scheme="wald"][data-theme="dark"] {
@@ -174,6 +184,8 @@ html[data-scheme="wald"][data-theme="dark"] {
   --error: #e8766a;
   --success: #7fcf6e;
   --shadow: rgba(0, 0, 0, 0.45);
+  --primary-text: var(--primary);
+  --on-error: #131a0f;
 }
 
 html[data-scheme="hoehle"] {
@@ -195,11 +207,13 @@ html[data-scheme="hoehle"] {
   --gold: #b8823d;
   --gold-container: #f3e0bf;
   --on-gold-container: #5c3f12;
-  --secondary: #6e716d;
+  --secondary: #6a6c69;
   --secondary-container: #dfe1de;
   --error: #c0392b;
   --success: #3a6b4a;
   --shadow: rgba(20, 22, 20, 0.1);
+  --primary-text: var(--primary);
+  --on-error: #ffffff;
 }
 
 html[data-scheme="hoehle"][data-theme="dark"] {
@@ -226,6 +240,8 @@ html[data-scheme="hoehle"][data-theme="dark"] {
   --error: #e8766a;
   --success: #6fc98f;
   --shadow: rgba(0, 0, 0, 0.55);
+  --primary-text: var(--primary);
+  --on-error: #15171a;
 }
 
 html[data-scheme="horror"] {
@@ -252,6 +268,8 @@ html[data-scheme="horror"] {
   --error: #9c1c1c;
   --success: #2c5223;
   --shadow: rgba(30, 10, 10, 0.1);
+  --primary-text: var(--primary);
+  --on-error: #ffffff;
 }
 
 html[data-scheme="horror"][data-theme="dark"] {
@@ -265,8 +283,8 @@ html[data-scheme="horror"][data-theme="dark"] {
   --on-surface-variant: #bfa6a5;
   --outline: #7a5c5c;
   --outline-variant: #3d2527;
-  --primary: #c9393f;
-  --primary-deep: #e3626a;
+  --primary: #c5383e;
+  --primary-deep: #a93035;
   --primary-container: #551518;
   --on-primary: #fceeee;
   --on-primary-container: #ffd9da;
@@ -278,6 +296,9 @@ html[data-scheme="horror"][data-theme="dark"] {
   --error: #ff5c5c;
   --success: #6fc98f;
   --shadow: rgba(0, 0, 0, 0.6);
+  --primary-text: #cd5257;
+  --primary-deep-text: #e67077;
+  --on-error: #120a0b;
 }
 
 /* "-intensiv" variants of each scheme: same hue families, but saturated
@@ -295,7 +316,7 @@ html[data-scheme="sahara-intensiv"] {
   --on-surface-variant: #5a3c24;
   --outline: #9c6b3f;
   --outline-variant: #d9b48a;
-  --primary: #d4531a;
+  --primary: #c74e18;
   --primary-deep: #9c3508;
   --primary-container: #ffd3b0;
   --on-primary: #ffffff;
@@ -305,9 +326,11 @@ html[data-scheme="sahara-intensiv"] {
   --on-gold-container: #4a1010;
   --secondary: #8a5a30;
   --secondary-container: #f0d3b0;
-  --error: #c62828;
+  --error: #c22727;
   --success: #1f6b1a;
   --shadow: rgba(90, 40, 10, 0.12);
+  --primary-text: #ad4415;
+  --on-error: #ffffff;
 }
 
 html[data-scheme="sahara-intensiv"][data-theme="dark"] {
@@ -334,6 +357,8 @@ html[data-scheme="sahara-intensiv"][data-theme="dark"] {
   --error: #ff6b5e;
   --success: #7fd36e;
   --shadow: rgba(0, 0, 0, 0.5);
+  --primary-text: var(--primary);
+  --on-error: #2a1608;
 }
 
 html[data-scheme="ozean-intensiv"] {
@@ -355,11 +380,13 @@ html[data-scheme="ozean-intensiv"] {
   --gold: #0f9d8e;
   --gold-container: #bff0e8;
   --on-gold-container: #08403a;
-  --secondary: #3d7388;
+  --secondary: #3b7084;
   --secondary-container: #c6e2ee;
   --error: #c62828;
-  --success: #15803d;
+  --success: #147a3a;
   --shadow: rgba(5, 50, 70, 0.12);
+  --primary-text: #0a6db1;
+  --on-error: #ffffff;
 }
 
 html[data-scheme="ozean-intensiv"][data-theme="dark"] {
@@ -386,6 +413,8 @@ html[data-scheme="ozean-intensiv"][data-theme="dark"] {
   --error: #ff6b5e;
   --success: #4be08a;
   --shadow: rgba(0, 0, 0, 0.55);
+  --primary-text: var(--primary);
+  --on-error: #04202e;
 }
 
 html[data-scheme="wald-intensiv"] {
@@ -399,7 +428,7 @@ html[data-scheme="wald-intensiv"] {
   --on-surface-variant: #38542a;
   --outline: #5f8a45;
   --outline-variant: #a9cc8d;
-  --primary: #2f8f1f;
+  --primary: #2c861d;
   --primary-deep: #1c5e10;
   --primary-container: #c5eeb0;
   --on-primary: #ffffff;
@@ -407,11 +436,13 @@ html[data-scheme="wald-intensiv"] {
   --gold: #b8860b;
   --gold-container: #fbe6a6;
   --on-gold-container: #5a3f00;
-  --secondary: #577a3f;
+  --secondary: #51713b;
   --secondary-container: #d3e8bf;
   --error: #c62828;
-  --success: #1f7a1a;
+  --success: #1f791a;
   --shadow: rgba(20, 50, 10, 0.12);
+  --primary-text: #27771a;
+  --on-error: #ffffff;
 }
 
 html[data-scheme="wald-intensiv"][data-theme="dark"] {
@@ -438,6 +469,8 @@ html[data-scheme="wald-intensiv"][data-theme="dark"] {
   --error: #ff6b5e;
   --success: #6fe06a;
   --shadow: rgba(0, 0, 0, 0.5);
+  --primary-text: var(--primary);
+  --on-error: #0c1f06;
 }
 
 html[data-scheme="hoehle-intensiv"] {
@@ -459,11 +492,13 @@ html[data-scheme="hoehle-intensiv"] {
   --gold: #d98a14;
   --gold-container: #ffe0a8;
   --on-gold-container: #5a3500;
-  --secondary: #55766a;
+  --secondary: #4d6a5f;
   --secondary-container: #cfe0d8;
-  --error: #c62828;
-  --success: #1f7a4a;
+  --error: #c02727;
+  --success: #1d7145;
   --shadow: rgba(10, 30, 20, 0.12);
+  --primary-text: #1d7156;
+  --on-error: #ffffff;
 }
 
 html[data-scheme="hoehle-intensiv"][data-theme="dark"] {
@@ -490,6 +525,8 @@ html[data-scheme="hoehle-intensiv"][data-theme="dark"] {
   --error: #ff6b5e;
   --success: #4ade80;
   --shadow: rgba(0, 0, 0, 0.55);
+  --primary-text: var(--primary);
+  --on-error: #0b1612;
 }
 
 html[data-scheme="horror-intensiv"] {
@@ -516,6 +553,8 @@ html[data-scheme="horror-intensiv"] {
   --error: #b00010;
   --success: #1f6b1a;
   --shadow: rgba(60, 0, 0, 0.14);
+  --primary-text: var(--primary);
+  --on-error: #ffffff;
 }
 
 html[data-scheme="horror-intensiv"][data-theme="dark"] {
@@ -542,6 +581,8 @@ html[data-scheme="horror-intensiv"][data-theme="dark"] {
   --error: #ff5c5c;
   --success: #6fd99a;
   --shadow: rgba(0, 0, 0, 0.6);
+  --primary-text: var(--primary);
+  --on-error: #1a0507;
 }
 
 * {
@@ -568,6 +609,15 @@ body::before {
   background-repeat: no-repeat;
   opacity: var(--bg-image-opacity);
   pointer-events: none;
+}
+
+/* Links: scheme colours instead of the browser's blue/purple (which is unreadable on dark schemes). */
+a {
+  color: var(--primary-text, var(--primary));
+}
+
+a:hover {
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 /* Global texture: a grunge image used as a mask, so it takes the colour of the
@@ -633,7 +683,7 @@ h1, h2, h3 {
 }
 
 .brand-name {
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
   font-family: "EB Garamond", serif;
   font-size: 26px;
   font-weight: 600;
@@ -834,7 +884,7 @@ h1, h2, h3 {
   font-family: "EB Garamond", serif;
   font-size: 20px;
   font-weight: 600;
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
   letter-spacing: 0.01em;
 }
 
@@ -882,7 +932,7 @@ h1, h2, h3 {
 .sidebar-nav-item.current,
 .sidebar-nav-item.active {
   background: var(--primary-container);
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
   font-weight: 600;
 }
 
@@ -1131,12 +1181,12 @@ h3 {
 }
 
 .tab-btn.active {
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
   border-bottom-color: var(--primary);
 }
 
 .tab-btn:not(.active):hover {
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .tab-btn:hover {
@@ -1380,7 +1430,7 @@ textarea.invalid {
 }
 
 .role-card-icon {
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
   font-size: 26px;
 }
 
@@ -1402,7 +1452,7 @@ textarea.invalid {
   gap: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
 }
 
 .role-card-selected .material-symbols-outlined {
@@ -1433,7 +1483,7 @@ textarea.invalid {
 
 .note-box .material-symbols-outlined {
   flex: none;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .note-box p {
@@ -1610,7 +1660,8 @@ button:hover {
 }
 
 .btn-secondary {
-  border-color: var(--outline-variant);
+  /* the border is what makes the button visible, so it needs real contrast */
+  border-color: var(--outline);
 }
 
 /* "Create" card: a clickable card to start a new character / NSC character. */
@@ -1704,7 +1755,7 @@ button.create-card:focus-visible {
 
 .btn-danger:hover {
   background: var(--error);
-  color: #fff;
+  color: var(--on-error, #fff);
 }
 
 .material-symbols-outlined {
@@ -1903,7 +1954,7 @@ tbody tr:last-child td {
 
 .status-confirmed {
   background: var(--primary-container);
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .status-cancelled {
@@ -2012,7 +2063,7 @@ tbody tr:last-child td {
   font-size: 44px;
   font-weight: 600;
   line-height: 1;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
   font-variant-numeric: tabular-nums;
 }
 
@@ -2085,7 +2136,7 @@ tbody tr:last-child td {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .ticket-event-name {
@@ -2237,7 +2288,7 @@ tbody tr:last-child td {
   align-items: center;
   justify-content: center;
   background: var(--primary-container);
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
   font-family: "EB Garamond", Georgia, serif;
   font-size: 22px;
   font-weight: 600;
@@ -2354,7 +2405,7 @@ tbody tr:last-child td {
   padding: 0;
   background: none;
   border: none;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -2499,7 +2550,7 @@ tbody tr:last-child td {
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
   text-transform: none;
   letter-spacing: 0;
 }
@@ -2780,13 +2831,13 @@ dialog#toast-stack::backdrop {
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .group-feature-title {
   font-size: 1.15rem;
   font-weight: 600;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .group-feature-desc {
@@ -2903,7 +2954,7 @@ input[type="checkbox"].group-feature-switch:checked {
   height: 48px;
   border-radius: 50%;
   background: var(--primary-container);
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
   font-size: 1.3rem;
   font-weight: 600;
 }
@@ -2921,7 +2972,7 @@ input[type="checkbox"].group-feature-switch:checked {
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .mp-char {
@@ -2962,7 +3013,7 @@ input[type="checkbox"].group-feature-switch:checked {
 
 .confirm-check {
   font-size: 64px;
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
 }
 
 .confirm-grid {
@@ -2992,7 +3043,7 @@ input[type="checkbox"].group-feature-switch:checked {
   font-size: 0.8rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .confirm-row dd {
@@ -3068,7 +3119,7 @@ input[type="checkbox"].group-feature-switch:checked {
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .event-subcard address {
@@ -3135,7 +3186,7 @@ input[type="checkbox"].group-feature-switch:checked {
   height: 52px;
   border-radius: 50%;
   background: var(--primary-container);
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
   font-family: "EB Garamond", Georgia, serif;
   font-size: 1.5rem;
   font-weight: 600;
@@ -3163,7 +3214,7 @@ input[type="checkbox"].group-feature-switch:checked {
 
 .dash-char-tag.is-registered {
   background: var(--primary-container);
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 /* Draggable check-in column headers */
@@ -3601,7 +3652,7 @@ select.suggested {
   font-family: "EB Garamond", Georgia, serif;
   font-size: 26px;
   font-weight: 600;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
 }
 
 .tavern-result-text {
@@ -3639,7 +3690,7 @@ select.suggested {
   font-size: 44px;
   font-weight: 600;
   line-height: 1;
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
   font-variant-numeric: tabular-nums;
 }
 
@@ -3691,7 +3742,7 @@ select.suggested {
 }
 
 .tavern-tile-main span {
-  color: var(--primary-deep);
+  color: var(--primary-deep-text, var(--primary-deep));
   font-weight: 700;
 }
 
@@ -4005,7 +4056,7 @@ input[type="checkbox"].switch:checked::after {
 .standalone-bar strong {
   font-family: "EB Garamond", serif;
   font-size: 20px;
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
 }
 
 .standalone-bar a {
@@ -4098,13 +4149,13 @@ th.is-sortable::after {
 th.is-sortable[data-dir="asc"]::after {
   content: "▲";
   opacity: 1;
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
 }
 
 th.is-sortable[data-dir="desc"]::after {
   content: "▼";
   opacity: 1;
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
 }
 
 .member-character-actions {
@@ -4127,7 +4178,7 @@ th.is-sortable[data-dir="desc"]::after {
   display: inline-flex;
   vertical-align: middle;
   margin-left: 2px;
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
   cursor: help;
   text-transform: none;
   letter-spacing: 0;
@@ -4247,7 +4298,7 @@ th.is-sortable[data-dir="desc"]::after {
 }
 
 .rte-editor a {
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
 }
 
 .rte-readonly {
@@ -4449,7 +4500,7 @@ th.is-sortable[data-dir="desc"]::after {
 
 .upload-drop-icon {
   font-size: 36px;
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
 }
 
 .upload-drop-title {
@@ -4484,7 +4535,7 @@ th.is-sortable[data-dir="desc"]::after {
 
 .file-thumb-portrait:hover {
   background: var(--surface-container-low);
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
 }
 
 .file-thumb-portrait.is-active {
@@ -4495,7 +4546,7 @@ th.is-sortable[data-dir="desc"]::after {
 
 .file-item-name { flex: 1; overflow-wrap: anywhere; min-width: 0; }
 .file-item .is-portrait {
-  color: var(--primary);
+  color: var(--primary-text, var(--primary));
 }
 
 .file-thumb-delete {
