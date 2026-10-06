@@ -108,7 +108,21 @@ export function initBranding({ notify }) {
   // Background picker: "no graphic", the built-in presets (tinted with the
   // scheme colour) and -- once uploaded -- the own picture. Choosing one
   // previews it right away; "Speichern" stores it.
-  function buildBackgroundPicker({ backgroundPreset, hasUploadedBackgroundImage }) {
+  const opacitySlider = document.getElementById('bg-opacity');
+  const opacityOutput = document.getElementById('bg-opacity-value');
+  let backgroundState = { hasUploadedBackgroundImage: false };
+
+  function previewBackground() {
+    const backgroundPreset = form.querySelector('input[name="backgroundPreset"]:checked')?.value;
+    opacityOutput.textContent = `${opacitySlider.value} %`;
+    applyBackground({ backgroundPreset, hasUploadedBackgroundImage: backgroundState.hasUploadedBackgroundImage, backgroundOpacity: Number(opacitySlider.value) });
+  }
+  opacitySlider.addEventListener('input', previewBackground);
+
+  function buildBackgroundPicker({ backgroundPreset, hasUploadedBackgroundImage, backgroundOpacity }) {
+    backgroundState = { hasUploadedBackgroundImage };
+    opacitySlider.value = backgroundOpacity ?? 20;
+    opacityOutput.textContent = `${opacitySlider.value} %`;
     const picker = document.getElementById('bg-picker');
     const options = [
       ['none', 'Kein Hintergrund', ''],
@@ -127,7 +141,7 @@ export function initBranding({ notify }) {
     picker.querySelectorAll('input[name="backgroundPreset"]').forEach((radio) => {
       radio.addEventListener('change', () => {
         picker.querySelectorAll('.bg-tile').forEach((tile) => tile.classList.toggle('is-selected', tile.querySelector('input').checked));
-        applyBackground({ backgroundPreset: radio.value, hasUploadedBackgroundImage });
+        previewBackground();
       });
     });
   }
@@ -274,6 +288,7 @@ export function initBranding({ notify }) {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
     data.quotaMbPerCharacter = data.quotaMbPerCharacter ? Number(data.quotaMbPerCharacter) : undefined;
+    data.backgroundOpacity = Number(data.backgroundOpacity);
     if (form.elements.colorScheme.value === 'custom') data.customColors = readCustomColors();
     try {
       await api.put('/app-settings', data);

@@ -32,12 +32,14 @@ export const BACKGROUND_PRESETS = [
   ['marmor', 'Marmor'], ['nebel', 'Nebel'], ['metall', 'Metall'], ['holz', 'Holz'], ['glitzer', 'Glitzer'],
 ];
 
-export function applyBackground({ backgroundPreset, hasUploadedBackgroundImage }) {
+export function applyBackground({ backgroundPreset, hasUploadedBackgroundImage, backgroundOpacity }) {
   const root = document.documentElement.style;
   const preset = backgroundPreset || 'grunge';
   const isMask = BACKGROUND_PRESETS.some(([key]) => key === preset);
+  const opacity = (Number.isInteger(backgroundOpacity) ? backgroundOpacity : 20) / 100;
   root.setProperty('--bg-mask', isMask ? `url(/img/bg/${preset}.webp)` : 'none');
-  root.setProperty('--bg-mask-opacity', isMask ? '0.2' : '0');
+  root.setProperty('--bg-mask-opacity', isMask ? String(opacity) : '0');
+  root.setProperty('--bg-image-opacity', String(opacity));
   root.setProperty('--app-bg-image', preset === 'custom' && hasUploadedBackgroundImage ? 'url(/app-settings/background-image)' : 'none');
 }
 

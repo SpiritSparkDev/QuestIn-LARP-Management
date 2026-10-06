@@ -367,6 +367,11 @@
           <label>Hintergrund</label>
           <p class="sub">Grafik hinter allen Seiten und in der Seitenleiste (20% Deckkraft). Die Vorlagen nehmen die Farbe des gewählten Farbschemas an. Die Auswahl wird mit „Speichern“ übernommen.</p>
           <div class="bg-picker" id="bg-picker"></div>
+          <div class="bg-opacity">
+            <input id="bg-opacity" name="backgroundOpacity" type="range" min="0" max="100" step="5" value="20">
+            <output id="bg-opacity-value" for="bg-opacity">20 %</output>
+          </div>
+          <label for="bg-opacity">Deckkraft des Hintergrunds</label>
         </div>
         <div class="save-bar"><button type="submit">Speichern</button></div>
       </form>

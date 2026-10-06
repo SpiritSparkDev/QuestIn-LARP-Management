@@ -35,6 +35,7 @@
   --app-bg-image: none;
   --bg-mask: url("/img/bg/grunge.webp");
   --bg-mask-opacity: 0.2;
+  --bg-image-opacity: 0.2;
   /* Form-field states derive from the scheme's own colors (incl. 'custom'),
      so every scheme gets: normal = bright field, active = tinted + ring,
      inactive/read-only = grey. */
@@ -565,7 +566,7 @@ body::before {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  opacity: 0.2;
+  opacity: var(--bg-image-opacity);
   pointer-events: none;
 }
 
@@ -731,7 +732,7 @@ h1, h2, h3 {
   background-image: var(--app-bg-image);
   background-size: cover;
   background-position: center;
-  opacity: 0.2;
+  opacity: var(--bg-image-opacity);
 }
 
 .sidebar-top {
