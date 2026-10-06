@@ -2025,22 +2025,35 @@
 
     function renderStagedFiles(body) {
       const staged = stagedFiles[body.id] ?? [];
+      const indexed = staged.map((entry, index) => ({ entry, index }));
+      const images = indexed.filter(({ entry }) => kindForMimeType(entry.file.type) === "image");
+      const documents = indexed.filter(({ entry }) => kindForMimeType(entry.file.type) !== "image");
       body.innerHTML = `${dropZoneHtml()}
     <p class="sub">${UPLOAD_NOTICE}</p>
     <p class="sub">Die Dateien werden hochgeladen, sobald du den Charakter speicherst. Brichst du ab, werden sie verworfen.</p>
-    ${staged.map((entry, index) => `<div class="file-item">
-      <span>${escapeHtml(entry.file.name)}</span>
-      ${kindForMimeType(entry.file.type) === "image" ? `<button type="button" data-stage-portrait="${index}" class="btn-ghost${entry.portrait ? " is-portrait" : ""}">${entry.portrait ? "★ Portrait" : "☆ Als Portrait"}</button>` : ""}
+    ${images.length ? `<div class="file-gallery">${images.map(({ entry, index }) => `<figure class="file-thumb">
+      <img src="${entry.url}" alt="${escapeHtml(entry.file.name)}">
+      <button type="button" class="file-thumb-portrait${entry.portrait ? " is-active" : ""}" data-stage-portrait="${index}" title="${entry.portrait ? "Ist das Charakterportrait (Klick: zurücksetzen)" : "Als Charakterportrait festlegen"}" aria-label="Als Charakterportrait festlegen"><span class="material-symbols-outlined" aria-hidden="true">star</span></button>
+      <button type="button" class="file-thumb-delete" data-unstage="${index}" aria-label="Bild entfernen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
+    </figure>`).join("")}</div>` : ""}
+    ${documents.map(({ entry, index }) => `<div class="file-item">
+      <span class="file-item-name">${escapeHtml(entry.file.name)}</span>
       <button type="button" data-unstage="${index}" class="btn-ghost">Entfernen</button>
     </div>`).join("")}`;
 
       wireDropZone(body.querySelector("[data-drop-zone]"), (files) => {
+        let added = 0;
         for (const file of files) {
           if (!kindForMimeType(file.type)) {
             notify(`„${file.name}“: Nicht unterstützter Dateityp.`, "error");
             continue;
           }
-          stagedFiles[body.id].push({ file, portrait: false });
+          // The preview is a local blob URL; nothing is uploaded yet.
+          stagedFiles[body.id].push({ file, portrait: false, url: URL.createObjectURL(file) });
+          added += 1;
+        }
+        if (added > 0) {
+          notify(added === 1 ? `„${files.find((f) => kindForMimeType(f.type)).name}“ vorgemerkt – wird beim Speichern des Charakters hochgeladen.` : `${added} Dateien vorgemerkt – sie werden beim Speichern des Charakters hochgeladen.`, "success");
         }
         renderStagedFiles(body);
       });
@@ -2055,7 +2068,8 @@
       });
       body.querySelectorAll("[data-unstage]").forEach((button) => {
         button.addEventListener("click", () => {
-          stagedFiles[body.id].splice(Number(button.dataset.unstage), 1);
+          const [removed] = stagedFiles[body.id].splice(Number(button.dataset.unstage), 1);
+          URL.revokeObjectURL(removed.url);
           renderStagedFiles(body);
         });
       });
@@ -2065,6 +2079,7 @@
     async function uploadStagedFiles(characterId, bodyId) {
       const staged = stagedFiles[bodyId] ?? [];
       let failed = 0;
+      let uploadedCount = 0;
       let portraitFileId = null;
       for (const entry of staged) {
         try {
@@ -2075,6 +2090,7 @@
             dataBase64: await readFileAsBase64(entry.file),
             gdprConsent: true,
           });
+          uploadedCount += 1;
           if (entry.portrait) portraitFileId = uploaded.id;
         } catch (err) {
           failed += 1;
@@ -2088,7 +2104,11 @@
           notify(`Portrait konnte nicht gesetzt werden: ${err.message}`, "error");
         }
       }
+      staged.forEach((entry) => URL.revokeObjectURL(entry.url));
       stagedFiles[bodyId] = [];
+      if (uploadedCount > 0) {
+        notify(uploadedCount === 1 ? "Die Datei wurde hochgeladen." : `${uploadedCount} Dateien wurden hochgeladen.`, "success");
+      }
       return failed;
     }
 
@@ -2315,6 +2335,7 @@
         });
         photoUploadDialog.close();
         await afterFilesChanged(photoUploadCharacterId);
+        notify("Das Foto wurde hochgeladen.", "success");
       } catch (err) {
         notify(err.message, "error");
       }
@@ -2367,6 +2388,7 @@
       });
 
       wireDropZone(container.querySelector(`[data-upload-zone="${characterId}"] [data-drop-zone]`), async (files) => {
+        let uploadedCount = 0;
         for (const file of files) {
           const kind = kindForMimeType(file.type);
           if (!kind) {
@@ -2381,11 +2403,15 @@
               dataBase64: await readFileAsBase64(file),
               gdprConsent: true,
             });
+            uploadedCount += 1;
           } catch (err) {
             notify(`„${file.name}“: ${err.message}`, "error");
           }
         }
         await afterFilesChanged(characterId);
+        if (uploadedCount > 0) {
+          notify(uploadedCount === 1 ? "Die Datei wurde hochgeladen." : `${uploadedCount} Dateien wurden hochgeladen.`, "success");
+        }
       });
     }
 

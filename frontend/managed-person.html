@@ -350,6 +350,7 @@
         });
         photoUploadDialog.close();
         await loadPhotoInto(photoUploadCharacterId);
+        notify("Das Foto wurde hochgeladen.", "success");
       } catch (err) {
         notify(err.message, "error");
       }

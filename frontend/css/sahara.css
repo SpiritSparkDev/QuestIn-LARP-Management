@@ -2393,16 +2393,6 @@ tbody tr:last-child td {
   margin-bottom: 10px;
 }
 
-.file-upload-form {
-  margin-top: 10px;
-}
-
-.file-upload-form button[type="submit"] {
-  padding: 9px 20px;
-  font-size: 14px;
-  margin-top: 8px;
-}
-
 /* ---------- Stats (admin dashboards) ---------- */
 
 .stat-row {
@@ -4369,6 +4359,7 @@ th.is-sortable[data-dir="desc"]::after {
   color: var(--on-primary);
 }
 
+.file-item-name { flex: 1; overflow-wrap: anywhere; min-width: 0; }
 .file-item .is-portrait {
   color: var(--primary);
 }
