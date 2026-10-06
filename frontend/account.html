@@ -946,12 +946,15 @@
     }
 
     function applyPaymentGate(eventId, registration) {
-      const gated = registration.amountDueCents != null && !registration.paidAt;
+      const noAmount = registration.amountDueCents == null;
+      const gated = noAmount || (registration.amountDueCents > 0 && !registration.paidAt);
       const hint = document.getElementById("ticket-payment-hint");
       const payButton = document.getElementById("ticket-pay-btn");
       hint.style.display = gated ? "" : "none";
-      payButton.style.display = gated ? "" : "none";
-      if (gated) {
+      payButton.style.display = gated && !noAmount ? "" : "none";
+      if (noAmount) {
+        hint.textContent = "Dein Ticket erscheint, sobald der Betrag festgelegt und die Zahlung bestätigt ist.";
+      } else if (gated) {
         hint.textContent = `Zahlung offen: ${formatEuro(registration.amountDueCents)}. Dein Ticket erscheint, sobald die Zahlung bestätigt ist.`;
         payButton.onclick = () => openPaymentDialog(eventId, registration);
       }
