@@ -16,12 +16,29 @@ import { setGuestPaymentToken } from '../payments/repository.js';
 import { sendGuestTicketEmail } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 import { getAppSettings } from '../appSettings/repository.js';
-import { sanitizeRichText } from '../richText.js';
+import { sanitizeRichText, sanitizeFieldValue } from '../richText.js';
+import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
+import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
+import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 
 const GUEST_REGISTER_RATE_LIMIT = { keyPrefix: 'guest-register', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 const PAYMENT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const GUEST_GROUP_KEY = 'mitglied';
 const COMING_SOON_ERROR = { status: 409, body: { error: 'Die Anmeldung ist noch gesperrt und startet bald.' } };
+
+// The account (personal-data) fields a guest is asked for: the same schema a
+// normal member fills in under "Konto" (minus the access-control field "group").
+async function guestAccountSchema() {
+  return (await getAccountFieldSchema()).filter((field) => field.key !== 'group');
+}
+
+function pickFields(schema, values) {
+  const picked = {};
+  for (const field of schema) {
+    if (values?.[field.key] !== undefined) picked[field.key] = sanitizeFieldValue(field, values[field.key]);
+  }
+  return picked;
+}
 
 // Open events a guest can book (login page: "Ohne Konto").
 router.get('/public/events', async () => {
@@ -54,6 +71,8 @@ router.get('/public/events/:code', async ({ params }) => {
     status: 200,
     body: {
       id: event.id, name: event.name, eventDate: event.event_date, priceGroups: groups, prices,
+      accountFields: await guestAccountSchema(),
+      registrationFields: await getRegistrationFieldSchema(),
       // Ready-to-insert HTML for the embeddable widget (plain-text waivers keep their line breaks).
       waiverHtml: waiverText ? sanitizeRichText(waiverText).replace(/\n/g, '<br>') : null,
     },
@@ -64,7 +83,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   if ((await getAppSettings()).comingSoonEnabled) return COMING_SOON_ERROR;
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { firstName, lastName, nickname, priceGroup, waiverAccepted } = body;
+  const { firstName, lastName, nickname, priceGroup, waiverAccepted, accountData, registrationData } = body;
   const email = body.email?.toLowerCase();
   if (!email || !firstName || !lastName) {
     return { status: 400, body: { error: 'email, firstName, and lastName are required' } };
@@ -100,7 +119,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
 
   const requestingUser = { id: userId, group: { key: GUEST_GROUP_KEY, canEditCharacters: false } };
   try {
-    await registerForEvent(userId, params.eventId, 'ticket', null, false, null, [], priceGroup, {}, requestingUser, waiverAccepted);
+    await registerForEvent(userId, params.eventId, 'ticket', null, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted);
   } catch (err) {
     // Only clean up the guest row if THIS request created it -- an existing
     // guest reusing their email for a second event must never be deleted
@@ -124,6 +143,13 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
       return { status: 400, body: { error: err.message } };
     }
     throw err;
+  }
+
+  const accountValues = pickFields(await guestAccountSchema(), accountData);
+  if (Object.keys(accountValues).length > 0) {
+    const { rows: blobRows } = await query('SELECT account_data_enc FROM users WHERE id = $1', [userId]);
+    const merged = { ...decryptFieldBlob(blobRows[0]?.account_data_enc), ...accountValues };
+    await query('UPDATE users SET account_data_enc = $2 WHERE id = $1', [userId, encryptFieldBlob(merged)]);
   }
 
   const { rows: amountRows } = await query(

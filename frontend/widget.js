@@ -31,6 +31,9 @@
   * { box-sizing: border-box; font: inherit; }
   form { display: grid; gap: 4px; max-width: 480px; }
   h3 { margin: 0; font-size: 1.25em; font-weight: 600; }
+  h4 { margin: 18px 0 8px; font-size: 1em; font-weight: 600; }
+  .multi > span { display: block; margin-bottom: 4px; }
+  textarea { width: 100%; padding: 10px 12px; border: 1px solid rgba(128,128,128,.6); border-radius: var(--radius); background: transparent; color: inherit; }
   .date { margin: 0 0 12px; opacity: .7; }
   input, select { width: 100%; padding: 10px 12px; border: 1px solid rgba(128,128,128,.6); border-radius: var(--radius); background: transparent; color: inherit; }
   input[type=checkbox] { width: auto; margin-right: 8px; }
@@ -58,6 +61,38 @@
   const field = (name, label, type = 'text', required = false) =>
     `<input id="pk-${name}" name="${name}" type="${type}"${required ? ' required' : ''}><label for="pk-${name}">${label}</label>`;
 
+  // Schema-driven extra fields (same definitions as in the app). "Dokument"
+  // fields are plain text areas here; the server cleans them anyway.
+  const fieldHtml = (f, prefix) => {
+    const id = `pk-${prefix}-${f.key}`;
+    const label = esc(f.label ?? f.key) + (f.required ? ' *' : '');
+    const req = f.required ? ' required' : '';
+    const opts = (f.options ?? []).map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+    if (f.type === 'boolean') return `<label class="check"><input type="checkbox" data-field="${esc(f.key)}"${req}> ${label}</label>`;
+    if (f.type === 'multiselect') {
+      return `<div class="multi"><span>${label}</span>${(f.options ?? []).map((o) => `<label class="check"><input type="checkbox" data-field="${esc(f.key)}" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</div>`;
+    }
+    let control;
+    if (f.type === 'select') control = `<select id="${id}" data-field="${esc(f.key)}"${req}><option value=""></option>${opts}</select>`;
+    else if (f.type === 'textarea' || f.type === 'document') control = `<textarea id="${id}" data-field="${esc(f.key)}" rows="3"${req}></textarea>`;
+    else control = `<input id="${id}" data-field="${esc(f.key)}" type="${{ number: 'number', date: 'date', link: 'url' }[f.type] ?? 'text'}"${req}>`;
+    return `${control}<label for="${id}">${label}</label>`;
+  };
+  const fieldsSection = (title, fields, prefix) => (fields?.length
+    ? `<h4>${esc(title)}</h4><div data-fields="${prefix}">${fields.map((f) => fieldHtml(f, prefix)).join('')}</div>` : '');
+  const collectFields = (container, fields) => {
+    const out = {};
+    for (const f of fields ?? []) {
+      const inputs = [...(container?.querySelectorAll('[data-field]') ?? [])].filter((i) => i.dataset.field === f.key);
+      if (inputs.length === 0) continue;
+      if (f.type === 'boolean') out[f.key] = inputs[0].checked;
+      else if (f.type === 'multiselect') out[f.key] = inputs.filter((i) => i.checked).map((i) => i.value);
+      else if (f.type === 'number') out[f.key] = inputs[0].value === '' ? null : Number(inputs[0].value);
+      else out[f.key] = inputs[0].value;
+    }
+    return out;
+  };
+
   async function call(path, options) {
     const res = await fetch(base + path, options);
     const body = await res.json().catch(() => ({}));
@@ -84,6 +119,8 @@
       ${field('nickname', 'Rufname')}
       ${field('email', 'E-Mail', 'email', true)}
       ${groups ? `<select id="pk-priceGroup" name="priceGroup">${groups}</select><label for="pk-priceGroup">Teilnahmegruppe</label>` : ''}
+      ${fieldsSection('Persönliche Angaben', event.accountFields, 'account')}
+      ${fieldsSection('Angaben zur Anmeldung', event.registrationFields, 'registration')}
       ${event.waiverHtml ? `<div class="waiver">${event.waiverHtml}</div><label class="check"><input type="checkbox" name="waiverAccepted" required> Ich habe die AGB und die Einverständniserklärung gelesen und stimme zu.</label>` : ''}
       <button type="submit">Ticket sichern</button>`;
     say('');
@@ -96,6 +133,8 @@
       say('');
       const data = Object.fromEntries(new FormData(form));
       data.waiverAccepted = Boolean(form.elements.waiverAccepted?.checked);
+      data.accountData = collectFields(form.querySelector('[data-fields=account]'), event.accountFields);
+      data.registrationData = collectFields(form.querySelector('[data-fields=registration]'), event.registrationFields);
       try {
         const result = await call(`/public/events/${event.id}/guest-registration`, {
           method: 'POST',

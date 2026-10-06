@@ -28,6 +28,14 @@
         <select id="priceGroup" name="priceGroup"></select>
         <label for="priceGroup">Teilnahmegruppe</label>
       </div>
+      <div id="account-fields-wrap" style="display:none;">
+        <h3>Persönliche Angaben</h3>
+        <div id="account-fields"></div>
+      </div>
+      <div id="registration-fields-wrap" style="display:none;">
+        <h3>Angaben zur Anmeldung</h3>
+        <div id="registration-fields"></div>
+      </div>
       <div id="waiver-wrap" style="display:none;">
         <div class="sub" id="waiver-text-display"></div>
         <label><input type="checkbox" id="waiverAccepted" name="waiverAccepted"> Ich habe die AGB und die Einverständniserklärung gelesen und stimme zu.</label>
@@ -39,7 +47,7 @@
 <script type="module">
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
-import { escapeHtml } from '/js/formFields.js';
+import { escapeHtml, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, attachLiveValidation } from '/js/formFields.js';
 import { renderRichText } from '/js/richText.js';
 applyBranding();
 import { notify } from '/js/notifications.js';
@@ -75,6 +83,16 @@ if (!code) {
         return `<option value="${escapeHtml(g)}">${escapeHtml(g)}${priceLabel}</option>`;
       }).join('');
     }
+    const accountContainer = document.getElementById('account-fields');
+    const registrationContainer = document.getElementById('registration-fields');
+    const renderFields = (container, wrap, fields, idPrefix) => {
+      if (fields.length === 0) return;
+      container.innerHTML = fields.map((f) => renderAccountFieldInput(f, undefined, { idPrefix })).join('');
+      wrap.style.display = '';
+    };
+    renderFields(accountContainer, document.getElementById('account-fields-wrap'), event.accountFields, 'guest-account-');
+    renderFields(registrationContainer, document.getElementById('registration-fields-wrap'), event.registrationFields, 'guest-reg-');
+
     const { waiverText } = await api.get('/app-settings');
     if (waiverText) {
       waiverTextDisplay.innerHTML = renderRichText(waiverText);
@@ -82,6 +100,7 @@ if (!code) {
       waiverCheckbox.required = true;
     }
 
+    attachLiveValidation(form);
     form.style.display = '';
 
     form.addEventListener('submit', async (evt) => {
@@ -92,6 +111,8 @@ if (!code) {
       const data = Object.fromEntries(formData);
       if (!data.priceGroup) delete data.priceGroup;
       data.waiverAccepted = formData.has('waiverAccepted');
+      data.accountData = nullifyBlankNumberFields(event.accountFields, collectAccountFieldValues(accountContainer, event.accountFields));
+      data.registrationData = nullifyBlankNumberFields(event.registrationFields, collectAccountFieldValues(registrationContainer, event.registrationFields));
       try {
         const result = await api.post(`/public/events/${event.id}/guest-registration`, data);
         if (result.paymentUrl) {

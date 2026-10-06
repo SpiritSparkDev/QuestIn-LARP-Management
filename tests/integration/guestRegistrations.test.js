@@ -13,6 +13,9 @@ await runMigrations();
 const { seedGroups } = await import('../../db/seedGroups.js');
 await seedGroups();
 const { query, closePool } = await import('../../backend/db.js');
+const { resetRateLimits } = await import('../../backend/middleware/rateLimit.js');
+
+test.beforeEach(resetRateLimits);
 
 async function makeEvent({ code, pricing, isActive = true } = {}) {
   const { rows } = await query(
@@ -88,6 +91,32 @@ test('GET /public/events lists only active events that have a code', async () =>
     assert.ok(codes.includes(open));
     assert.ok(!codes.includes(closed));
     assert.ok(!codes.includes(null));
+  });
+});
+
+test('guests are asked for the full data and it is stored', async () => {
+  await withTestServer(async (port) => {
+    const code = `FULL-${crypto.randomUUID().slice(0, 8)}`;
+    const eventId = await makeEvent({ code });
+    const base = `http://localhost:${port}`;
+
+    const event = await (await fetch(`${base}/public/events/${code}`)).json();
+    assert.ok(event.accountFields.length > 0, 'guest group has account fields');
+    assert.ok(!event.accountFields.some((f) => f.key === 'group'));
+    assert.ok(Array.isArray(event.registrationFields));
+    const accountKey = event.accountFields.find((f) => f.type === 'text' || f.type === 'textarea').key;
+
+    const payload = guestPayload({ accountData: { [accountKey]: 'Musterweg 1', notAField: 'x' } });
+    const res = await fetch(`${base}/public/events/${eventId}/guest-registration`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    assert.equal(res.status, 201);
+
+    const { rows } = await query('SELECT account_data_enc FROM users WHERE email = $1', [payload.email]);
+    const { decryptFieldBlob } = await import('../../backend/accountFields.js');
+    const stored = decryptFieldBlob(rows[0].account_data_enc);
+    assert.equal(stored[accountKey], 'Musterweg 1');
+    assert.equal(stored.notAField, undefined);
   });
 });
 
