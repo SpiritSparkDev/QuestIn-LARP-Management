@@ -1538,8 +1538,7 @@
         ? '<p class="sub">Noch keine Personen in der Gruppe.</p>'
         : bulkRows.map((p, i) => {
           if (p.registered) return `<div class="claim-result"><div class="claim-result-info"><strong>${escapeHtml(p.name)}</strong><span class="sub">Bereits angemeldet</span></div></div>`;
-          if (p.chars.length === 0) return `<div class="claim-result"><div class="claim-result-info"><strong>${escapeHtml(p.name)}</strong><span class="sub">Noch kein Spielercharakter – <a href="/managed-person.html?id=${encodeURIComponent(p.id)}">bei der Person anlegen</a></span></div></div>`;
-          return `<div class="claim-result"><div class="claim-result-info"><span><input type="checkbox" data-bulk-person="${i}" checked> <strong>${escapeHtml(p.name)}</strong></span></div><select data-bulk-char="${i}">${p.chars.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join("")}</select></div>`;
+          return `<div class="claim-result"><div class="claim-result-info"><span><input type="checkbox" data-bulk-person="${i}" checked> <strong>${escapeHtml(p.name)}</strong></span></div><select data-bulk-char="${i}">${p.chars.length ? "" : '<option value="">Charakter folgt später</option>'}${p.chars.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join("")}</select></div>`;
         }).join("");
     }
 
@@ -1570,7 +1569,7 @@
       if (picked.length === 0) { notify("Wähle mindestens eine Person.", "error"); return; }
       const lines = [];
       for (const p of picked) {
-        const characterId = document.querySelector(`[data-bulk-char="${bulkRows.indexOf(p)}"]`).value;
+        const characterId = document.querySelector(`[data-bulk-char="${bulkRows.indexOf(p)}"]`).value || undefined;
         try {
           await api.post(`/managed-persons/${p.id}/events/${eventId}/register`, { conRole: "sc", characterId, waiverAccepted });
           lines.push(`<p>✓ ${escapeHtml(p.name)} angemeldet</p>`);
@@ -2127,7 +2126,7 @@
 
     function labelForRegisteredAs(r) {
       const flagsSuffix = r.flags && r.flags.length > 0 ? ` (${r.flags.join(", ")})` : "";
-      if (r.conRole === "sc") return `Angemeldet als SC${flagsSuffix}: ${r.characterName}`;
+      if (r.conRole === "sc") return `Angemeldet als SC${flagsSuffix}: ${r.characterName ?? "Charakter folgt"}`;
       if (r.conRole === "nsc") {
         return r.characterName
           ? `Angemeldet als NSC${flagsSuffix}: ${r.characterName}`

@@ -308,11 +308,12 @@ test('POST/DELETE /managed-persons/:id/events/:eventId/register registers and un
     const registerRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/events/${eventId}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'helfer' }),
+      body: JSON.stringify({ conRole: 'sc' }), // no character yet: "Charakter folgt"
     });
     assert.equal(registerRes.status, 201);
     const registration = await registerRes.json();
     assert.equal(registration.user_id, managedId);
+    assert.equal(registration.character_id, null);
 
     const listRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/registrations`, { headers: { Cookie: cookie } });
     const list = await listRes.json();

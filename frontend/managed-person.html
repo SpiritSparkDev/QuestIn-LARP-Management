@@ -155,7 +155,7 @@
               <div id="sc-role-panel">
                 <select id="character-select" style="display:none;"></select>
                 <label for="character-select" id="character-select-label" style="display:none;">Als welcher Charakter?</label>
-                <p id="no-character-hint" class="sub" style="display:none;">Noch kein passender Charakter angelegt.</p>
+                <p id="no-character-hint" class="sub" style="display:none;">Noch kein Charakter angelegt – die Anmeldung geht trotzdem, der Charakter kann später ergänzt werden.</p>
               </div>
               <div id="nsc-role-panel" hidden>
                 <select id="nsc-character-select"></select>
@@ -659,7 +659,7 @@
 
     function populateRegistrationCharacterFields() {
       const scCharacters = characters.filter((c) => c.class === "sc");
-      characterSelect.innerHTML = ['<option value="">Bitte wählen</option>'].concat(scCharacters.map(scCharacterOption)).join("");
+      characterSelect.innerHTML = ['<option value="">Charakter folgt später</option>'].concat(scCharacters.map(scCharacterOption)).join("");
       const hasNone = scCharacters.length === 0;
       document.getElementById("no-character-hint").style.display = hasNone ? "" : "none";
       characterSelect.style.display = hasNone ? "none" : "";
@@ -700,7 +700,7 @@
     const CON_ROLE_LABELS = { sc: "SC", nsc: "NSC", helfer: "Helfer" };
     function labelForRegisteredAs(r) {
       const flagsSuffix = r.flags && r.flags.length > 0 ? ` (${r.flags.join(", ")})` : "";
-      if (r.conRole === "sc") return `Angemeldet als SC${flagsSuffix}: ${r.characterName}`;
+      if (r.conRole === "sc") return `Angemeldet als SC${flagsSuffix}: ${r.characterName ?? "Charakter folgt"}`;
       if (r.conRole === "nsc") return r.characterName ? `Angemeldet als NSC${flagsSuffix}: ${r.characterName}` : `Angemeldet als NSC${flagsSuffix}`;
       return `Angemeldet als ${CON_ROLE_LABELS[r.conRole] ?? r.conRole}${flagsSuffix}`;
     }
@@ -814,7 +814,6 @@
         characterId = nscCharacterSelect.value || undefined;
       } else {
         characterId = characterSelect.value || undefined;
-        if (!characterId) { notify("Wähle einen Charakter.", "error"); return; }
         conRole = "sc";
       }
       const lodgingChoice = collectLodgingSection(registrationLodgingContainer);

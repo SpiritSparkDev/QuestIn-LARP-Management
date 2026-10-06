@@ -46,10 +46,10 @@ async function canGrantStaffConRole(eventId, requestingUser) {
 // doesn't flag itself as a conflict. NSC stays exempt: it remains reusable
 // across many events, unchanged from before this spec.
 // Returns the characterId to store (null when none applies).
-async function resolveCharacterId(userId, conRole, characterId, eventId) {
-  const isRequired = CHARACTER_REQUIRED_CON_ROLES.includes(conRole);
+async function resolveCharacterId(userId, conRole, characterId, eventId, { allowMissingSc = false } = {}) {
+  const isRequired = CHARACTER_REQUIRED_CON_ROLES.includes(conRole) && !allowMissingSc;
   const isOptional = CHARACTER_OPTIONAL_CON_ROLES.includes(conRole);
-  if (!isRequired && !isOptional) {
+  if (!isRequired && !isOptional && !(allowMissingSc && conRole === 'sc')) {
     if (characterId) {
       const err = new Error(`Für die Rolle "${conRole}" darf kein Charakter angegeben werden.`);
       err.code = 'CHARACTER_NOT_ALLOWED';
@@ -278,7 +278,7 @@ async function assertExtrasCapacity(client, event, extras, excludeUserId = null)
   }
 }
 
-export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, extras: requestedExtras, lodgingId: requestedLodgingId, lodgingDetails: requestedLodgingDetails } = {}) {
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, allowMissingCharacter = false, extras: requestedExtras, lodgingId: requestedLodgingId, lodgingDetails: requestedLodgingDetails } = {}) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -319,7 +319,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
     throw err;
   }
 
-  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
+  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId, { allowMissingSc: allowMissingCharacter });
   const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId);
   const resolvedFlags = resolveFlags(event.flags, flags);
   const resolvedPrice = resolvePriceGroup(event, priceGroup);
