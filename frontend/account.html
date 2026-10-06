@@ -281,13 +281,13 @@
                         <select id="character-select" style="display:none;"></select>
                         <label for="character-select" id="character-select-label" style="display:none;">Als welcher Charakter kommst du?</label>
                         <p id="no-character-hint" class="sub" style="display:none;">Du hast noch keinen passenden Charakter. <button
-                            type="button" id="no-character-hint-btn" class="btn-sm btn-ghost">Charakter anlegen</button></p>
+                            type="button" id="no-character-hint-btn" class="btn-create btn-create--sm"><span class="material-symbols-outlined" aria-hidden="true">add_circle</span> Charakter anlegen</button></p>
                       </div>
 
                       <div id="nsc-role-panel" hidden>
                         <select id="nsc-character-select"></select>
                         <label for="nsc-character-select">NSC-Charakter (optional)</label>
-                        <p class="sub"><button type="button" id="no-nsc-character-hint-btn" class="btn-sm btn-ghost">Neuen NSC-Charakter anlegen</button></p>
+                        <p class="sub"><button type="button" id="no-nsc-character-hint-btn" class="btn-create btn-create--sm"><span class="material-symbols-outlined" aria-hidden="true">person_add</span> Neuen NSC-Charakter anlegen</button></p>
                       </div>
                     </div>
 
@@ -352,7 +352,7 @@
               <div class="char-layout">
                 <div class="char-col-main">
                   <div class="action-row">
-                    <button type="button" id="new-character-btn">Neuen Charakter anlegen</button>
+                    <button type="button" id="new-character-btn" class="btn-create"><span class="material-symbols-outlined" aria-hidden="true">add_circle</span> Neuen Charakter anlegen</button>
                     <button type="button" id="copy-character-btn">Aus bestehendem Charakter
                       kopieren</button>
                   </div>
@@ -420,7 +420,7 @@
                 <div class="char-layout">
                   <div class="char-col-main">
                     <div class="action-row">
-                      <button type="button" id="new-nsc-character-btn" class="btn-ghost">Neuen NSC-Charakter anlegen</button>
+                      <button type="button" id="new-nsc-character-btn" class="btn-create"><span class="material-symbols-outlined" aria-hidden="true">person_add</span> Neuen NSC-Charakter anlegen</button>
                     </div>
                     <div id="nsc-character-list" class="char-grid"></div>
 

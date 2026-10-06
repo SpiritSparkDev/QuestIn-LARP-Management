@@ -1484,6 +1484,48 @@ button:hover {
   border-color: var(--outline-variant);
 }
 
+/* Prominent "create" button (new character, new NSC character). */
+.btn-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px 11px 14px;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 6px 16px color-mix(in srgb, var(--primary) 32%, transparent);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.btn-create .material-symbols-outlined {
+  font-size: 22px;
+}
+
+.btn-create:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.14), 0 10px 22px color-mix(in srgb, var(--primary) 38%, transparent);
+}
+
+.btn-create:active {
+  transform: translateY(0);
+}
+
+.btn-create--sm {
+  padding: 7px 14px 7px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.btn-create--sm .material-symbols-outlined {
+  font-size: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-create,
+  .btn-create:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
 .btn-sm {
   padding: 6px 10px;
   font-size: 12px;
