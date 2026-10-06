@@ -118,7 +118,7 @@
             <p class="settings-hint">Änderungen werden sofort gespeichert.</p>
           </div>
           <div class="card form-pad">
-            <h2>Einverständniserklärung</h2>
+            <h2>AGB &amp; Einverständniserklärung</h2>
             <p class="sub">
               Wird bei der Event-Anmeldung (Konto-Bereich und öffentliches
               Ticket-Widget) als Pflicht-Häkchen angezeigt. Leer lassen, um
@@ -128,7 +128,7 @@
             </p>
             <form id="waiver-form">
               <textarea id="waiver-text" name="waiverText" rows="6"></textarea>
-              <label for="waiver-text">Text der Einverständniserklärung (einfaches HTML erlaubt: &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;ul&gt;/&lt;ol&gt;/&lt;li&gt;, &lt;h3&gt;, &lt;a href&gt;)</label>
+              <label for="waiver-text">Text der AGB &amp; Einverständniserklärung (einfaches HTML erlaubt: &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;ul&gt;/&lt;ol&gt;/&lt;li&gt;, &lt;h3&gt;, &lt;a href&gt;)</label>
               <p class="sub" id="waiver-version-note"></p>
               <div class="settings-actions">
                 <button type="submit">Speichern</button>
@@ -745,7 +745,7 @@
         waiverForm.elements.waiverText.value = settings.waiverText ?? "";
         waiverVersionNote.textContent = settings.waiverText
           ? `Aktuelle Version: ${settings.waiverVersion}`
-          : "Keine Einverständniserklärung konfiguriert.";
+          : "Keine AGB / Einverständniserklärung konfiguriert.";
       }
 
       waiverForm.addEventListener("submit", async (event) => {

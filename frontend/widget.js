@@ -84,7 +84,7 @@
       ${field('nickname', 'Rufname')}
       ${field('email', 'E-Mail', 'email', true)}
       ${groups ? `<select id="pk-priceGroup" name="priceGroup">${groups}</select><label for="pk-priceGroup">Teilnahmegruppe</label>` : ''}
-      ${event.waiverHtml ? `<div class="waiver">${event.waiverHtml}</div><label class="check"><input type="checkbox" name="waiverAccepted" required> Ich habe die Einverständniserklärung gelesen und stimme zu.</label>` : ''}
+      ${event.waiverHtml ? `<div class="waiver">${event.waiverHtml}</div><label class="check"><input type="checkbox" name="waiverAccepted" required> Ich habe die AGB und die Einverständniserklärung gelesen und stimme zu.</label>` : ''}
       <button type="submit">Ticket sichern</button>`;
     say('');
     form.hidden = false;

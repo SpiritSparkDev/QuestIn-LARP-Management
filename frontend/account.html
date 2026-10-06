@@ -413,9 +413,9 @@
                     <div id="ot-fields" class="field-grid"></div>
 
                     <div id="registration-waiver" style="display:none;">
-                      <h3>4. Einverständniserklärung</h3>
+                      <h3>4. AGB &amp; Einverständniserklärung</h3>
                       <div class="sub" id="registration-waiver-text"></div>
-                      <label><input type="checkbox" id="registration-waiver-checkbox" required> Ich habe die Einverständniserklärung gelesen und stimme zu.</label>
+                      <label><input type="checkbox" id="registration-waiver-checkbox" required> Ich habe die AGB und die Einverständniserklärung gelesen und stimme zu.</label>
                     </div>
 
                     <div class="note-box">
@@ -1550,7 +1550,7 @@
         document.getElementById("group-bulk-event").innerHTML = active.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join("");
         const waiverRow = document.getElementById("group-bulk-waiver-row");
         waiverRow.style.display = settings.waiverText ? "" : "none";
-        document.getElementById("group-bulk-waiver-text").textContent = "Ich habe die Einverständniserklärung gelesen und stimme für alle ausgewählten Personen zu.";
+        document.getElementById("group-bulk-waiver-text").textContent = "Ich habe die AGB und die Einverständniserklärung gelesen und stimme für alle ausgewählten Personen zu.";
         document.getElementById("group-bulk-waiver").checked = false;
         document.getElementById("group-bulk-result").innerHTML = "";
         bulkDialog.showModal();
