@@ -70,8 +70,10 @@ export async function buildBlankForm(sections, { template = 'klassisch', title =
   const form = doc.getForm();
   const taken = new Set();
   const uniqueName = (label) => {
-    let name = clean(label); let n = 2;
-    while (taken.has(name)) name = `${clean(label)} (${n++})`;
+    // A period starts a sub-field in AcroForm names ("Ende." is invalid), and an empty name is too.
+    const base = clean(label).replace(/\./g, '·').trim() || 'Feld';
+    let name = base; let n = 2;
+    while (taken.has(name)) name = `${base} (${n++})`;
     taken.add(name);
     return name;
   };
