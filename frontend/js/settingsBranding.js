@@ -2,7 +2,7 @@
 // title, color scheme and image uploads. Call initBranding() once after the
 // page's DOM exists, then load() once the admin session is confirmed.
 import { api } from '/js/api.js';
-import { applyBranding, applyColorScheme, CUSTOM_COLOR_KEYS } from '/js/branding.js';
+import { applyBranding, applyColorScheme, applyBackground, BACKGROUND_PRESETS, CUSTOM_COLOR_KEYS } from '/js/branding.js';
 
 export function initBranding({ notify }) {
   const form = document.getElementById('branding-form');
@@ -105,7 +105,35 @@ export function initBranding({ notify }) {
 
   form.elements.themeMode.addEventListener('change', previewScheme);
 
+  // Background picker: "no graphic", the built-in presets (tinted with the
+  // scheme colour) and -- once uploaded -- the own picture. Choosing one
+  // previews it right away; "Speichern" stores it.
+  function buildBackgroundPicker({ backgroundPreset, hasUploadedBackgroundImage }) {
+    const picker = document.getElementById('bg-picker');
+    const options = [
+      ['none', 'Kein Hintergrund', ''],
+      ...BACKGROUND_PRESETS.map(([key, label]) => [key, label, `--tile-mask:url(/img/bg/${key}.webp);--tile-opacity:0.55`]),
+      ['custom', 'Eigenes Bild', ''],
+    ];
+    picker.innerHTML = options.map(([key, label, style]) => {
+      const disabled = key === 'custom' && !hasUploadedBackgroundImage;
+      const preview = key === 'custom' && hasUploadedBackgroundImage ? 'background-image:url(/app-settings/background-image)' : style;
+      return `<label class="bg-tile${backgroundPreset === key ? ' is-selected' : ''}${disabled ? ' is-disabled' : ''}">
+        <input type="radio" name="backgroundPreset" value="${key}" ${backgroundPreset === key ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+        <span class="bg-tile-preview" style="${preview}"></span>
+        <span>${label}${disabled ? ' (erst hochladen)' : ''}</span>
+      </label>`;
+    }).join('');
+    picker.querySelectorAll('input[name="backgroundPreset"]').forEach((radio) => {
+      radio.addEventListener('change', () => {
+        picker.querySelectorAll('.bg-tile').forEach((tile) => tile.classList.toggle('is-selected', tile.querySelector('input').checked));
+        applyBackground({ backgroundPreset: radio.value, hasUploadedBackgroundImage });
+      });
+    });
+  }
+
   function refreshBgImagePreview(hasUploadedBackgroundImage) {
+    api.get('/app-settings').then(buildBackgroundPicker).catch(() => {});
     const preview = document.getElementById('bg-image-preview');
     const empty = document.getElementById('bg-image-preview-empty');
     const removeBtn = document.getElementById('bg-image-remove-btn');
@@ -123,6 +151,7 @@ export function initBranding({ notify }) {
 
   async function loadSettings() {
     const settings = await api.get('/app-settings');
+    buildBackgroundPicker(settings);
     form.elements.appTitle.value = settings.appTitle ?? '';
     form.elements.eventName.value = settings.eventName ?? '';
     form.elements.logoUrl.value = settings.logoUrl ?? '';

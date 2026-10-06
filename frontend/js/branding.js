@@ -24,11 +24,21 @@ export function applyColorScheme({ themeMode, colorScheme, customColors }) {
   }
 }
 
-export function applyBackgroundImage(hasUploadedBackgroundImage) {
-  document.documentElement.style.setProperty(
-    '--app-bg-image',
-    hasUploadedBackgroundImage ? 'url(/app-settings/background-image)' : 'none'
-  );
+// Background graphic: a built-in preset is a mask that takes the scheme's
+// colour (shown behind the page and in the sidebar); 'custom' is the uploaded
+// picture as it is; 'none' switches the graphic off.
+export const BACKGROUND_PRESETS = [
+  ['grunge', 'Verwittert'], ['netz', 'Netzwerk'], ['halle', 'Forschungshalle'], ['daten', 'Daten-Sog'],
+  ['marmor', 'Marmor'], ['nebel', 'Nebel'], ['metall', 'Metall'], ['holz', 'Holz'], ['glitzer', 'Glitzer'],
+];
+
+export function applyBackground({ backgroundPreset, hasUploadedBackgroundImage }) {
+  const root = document.documentElement.style;
+  const preset = backgroundPreset || 'grunge';
+  const isMask = BACKGROUND_PRESETS.some(([key]) => key === preset);
+  root.setProperty('--bg-mask', isMask ? `url(/img/bg/${preset}.webp)` : 'none');
+  root.setProperty('--bg-mask-opacity', isMask ? '0.2' : '0');
+  root.setProperty('--app-bg-image', preset === 'custom' && hasUploadedBackgroundImage ? 'url(/app-settings/background-image)' : 'none');
 }
 
 export async function applyBranding() {
@@ -42,7 +52,7 @@ export async function applyBranding() {
   }
 
   applyColorScheme(settings);
-  applyBackgroundImage(settings.hasUploadedBackgroundImage);
+  applyBackground(settings);
 
   if (settings.appTitle) document.title = document.title.replace('Pakyrion', settings.appTitle);
 
