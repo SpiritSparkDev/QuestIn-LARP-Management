@@ -1,6 +1,7 @@
 import { escapeHtml } from './formFields.js';
 import { APP_VERSION } from './version.js';
 import { initResponsiveTables } from './responsiveTables.js';
+import { api } from './api.js';
 
 // Every page that renders the sidebar also gets the narrow-screen table
 // labelling -- nav.js is the one module they all share.
@@ -51,17 +52,27 @@ function renderNavItem({ href, label, icon }, currentPath) {
 // page that has the sidebar, so it is the one place that sees the account.
 function showTestModeBanner(account) {
   const existing = document.getElementById('testmode-banner');
-  document.body?.classList.toggle('has-testmode-banner', Boolean(account.testMode));
-  if (!account.testMode) {
+  // "Als [Rolle] betrachten" (admins) takes the strip over while it is active.
+  const viewing = account.viewingAs;
+  document.body?.classList.toggle('has-testmode-banner', Boolean(account.testMode || viewing));
+  if (!account.testMode && !viewing) {
     existing?.remove();
     return;
   }
-  if (existing || !document.body) return;
-  const banner = document.createElement('div');
+  if (!document.body) return;
+  const banner = existing ?? document.createElement('div');
   banner.id = 'testmode-banner';
   banner.className = 'testmode-banner';
-  banner.textContent = 'Test-Modus aktiv – alle Personen und das Event sind fiktiv';
-  document.body.prepend(banner);
+  if (viewing) {
+    banner.innerHTML = `Du betrachtest das Tool als „${escapeHtml(viewing.name)}“ <button type="button" class="btn-sm" id="view-as-stop">Ansicht beenden</button>`;
+    banner.querySelector('#view-as-stop').addEventListener('click', async () => {
+      await api.post('/view-as', { groupId: null });
+      window.location.reload();
+    });
+  } else {
+    banner.textContent = 'Test-Modus aktiv – alle Personen und das Event sind fiktiv';
+  }
+  if (!existing) document.body.prepend(banner);
 }
 
 const ADMIN_OPEN_KEY = 'sidebarAdminOpen';

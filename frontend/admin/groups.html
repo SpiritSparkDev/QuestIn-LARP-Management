@@ -141,8 +141,19 @@ async function loadGroups() {
     <td>${g.can_edit_characters ? 'Ja' : 'Nein'}</td>
     <td>${g.is_protected
       ? '<span class="badge badge-inactive">Geschützt</span>'
-      : `<button type="button" class="btn-sm btn-ghost" data-edit="${g.id}">Bearbeiten</button> <button type="button" class="btn-sm btn-ghost" data-delete="${g.id}">Löschen</button>`}</td>
+      : `<button type="button" class="btn-sm btn-ghost" data-edit="${g.id}">Bearbeiten</button> <button type="button" class="btn-sm btn-ghost" data-delete="${g.id}">Löschen</button>`} <button type="button" class="btn-sm btn-ghost" data-view-as="${g.id}" title="Das Tool so sehen, wie diese Gruppe es sieht">Als diese Rolle betrachten</button></td>
   </tr>`).join('');
+
+  listBody.querySelectorAll('[data-view-as]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await api.post('/view-as', { groupId: button.dataset.viewAs });
+        window.location.href = '/account.html#dashboard';
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+    });
+  });
 
   listBody.querySelectorAll('[data-edit]').forEach((button) => {
     button.addEventListener('click', () => {

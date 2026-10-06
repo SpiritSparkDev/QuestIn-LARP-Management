@@ -3703,6 +3703,11 @@ select.suggested {
   border-bottom: 1px solid var(--outline-variant);
 }
 
+.testmode-banner button {
+  margin-left: 10px;
+  padding: 2px 10px;
+}
+
 /* Keep the fixed sidebar and menu button below the test-mode strip */
 .has-testmode-banner .sidebar {
   top: 32px;

@@ -41,6 +41,32 @@ export function requireAuth(handler) {
       },
     };
 
+    // "Als [Rolle] betrachten": a real admin sees (and acts with) another group's
+    // permissions for this session. The identity stays the same.
+    if (session.viewAsGroupId && user.group.key === 'admin') {
+      const { rows: viewRows } = await query(
+        `SELECT id, key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive
+         FROM groups WHERE id = $1`,
+        [session.viewAsGroupId]
+      );
+      if (viewRows.length > 0) {
+        const v = viewRows[0];
+        user.realGroup = user.group;
+        user.viewingAs = { id: v.id, key: v.key, name: v.name };
+        user.group = {
+          id: v.id,
+          key: v.key,
+          name: v.name,
+          visibleMenus: v.visible_menus,
+          accountFields: v.account_fields,
+          canEditCharacters: v.can_edit_characters,
+          canOverrideCheckinStatus: v.can_override_checkin_status,
+          canExportMembers: v.can_export_members,
+          canExportSensitive: v.can_export_sensitive,
+        };
+      }
+    }
+
     return handler({ ...ctx, user });
   };
 }

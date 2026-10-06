@@ -11,14 +11,18 @@ export async function createSession(userId) {
 }
 
 export async function getSession(token) {
-  const { rows } = await query('SELECT user_id, expires_at FROM sessions WHERE token = $1', [token]);
+  const { rows } = await query('SELECT user_id, expires_at, view_as_group_id FROM sessions WHERE token = $1', [token]);
   if (rows.length === 0) return null;
   const session = rows[0];
   if (new Date(session.expires_at) < new Date()) {
     await destroySession(token);
     return null;
   }
-  return { userId: session.user_id, expiresAt: session.expires_at };
+  return { userId: session.user_id, expiresAt: session.expires_at, viewAsGroupId: session.view_as_group_id };
+}
+
+export async function setSessionViewAs(token, groupId) {
+  await query('UPDATE sessions SET view_as_group_id = $2 WHERE token = $1', [token, groupId]);
 }
 
 export async function destroySession(token) {
