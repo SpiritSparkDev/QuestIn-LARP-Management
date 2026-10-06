@@ -31,12 +31,12 @@ function validateLodgings(lodgings) {
   return null;
 }
 
-// Beds and who sleeps where are visible to every logged-in user -- people
-// choose a hut (and find their family or group) before they register.
-router.get('/events/:id/lodgings', requireAuth(async ({ params }) => {
+// Beds are visible to every logged-in user -- people choose a hut before they
+// register. Real names only for staff; see listLodgings.
+router.get('/events/:id/lodgings', requireAuth(async ({ params, user }) => {
   if (!(await getAppSettings()).lodgingEnabled) return DISABLED;
   if (!(await getEvent(params.id))) return { status: 404, body: { error: 'event not found' } };
-  return { status: 200, body: await listLodgings(params.id, { showNames: true }) };
+  return { status: 200, body: await listLodgings(params.id, { showNames: user.group.visibleMenus.includes('events') }) };
 }));
 
 router.put('/events/:id/lodgings', requireAuth(requireMenu('events')(async ({ req, params }) => {

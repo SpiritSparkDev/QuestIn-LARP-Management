@@ -39,8 +39,8 @@ function lodgingCard(lodging, selectedId, disabled, selectedDetails) {
   const mine = lodging.id === selectedId;
   const full = !lodging.unlimited && lodging.free === 0 && !mine;
   const occupants = lodging.occupants.length
-    ? `<ul class="lodging-occupants">${lodging.occupants.map((o) => `<li>${escapeHtml(o.name)}${o.details ? ` <span class="sub">${escapeHtml(formatTent(o.details))}</span>` : ''}</li>`).join('')}</ul>`
-    : '<p class="sub">Noch niemand eingetragen.</p>';
+    ? `<p class="sub">Aus Gruppen:</p><ul class="lodging-occupants">${lodging.occupants.map((o) => `<li>${escapeHtml(o.name)}${o.details ? ` <span class="sub">${escapeHtml(formatTent(o.details))}</span>` : ''}</li>`).join('')}</ul>`
+    : (lodging.taken > 0 ? '' : '<p class="sub">Noch niemand eingetragen.</p>');
   return `<label class="lodging-card${mine ? ' is-selected' : ''}${full ? ' is-full' : ''}">
     <input type="radio" name="lodging" value="${escapeHtml(lodging.id)}" ${lodging.isDefault ? 'data-default' : ''} ${mine ? 'checked' : ''} ${full || disabled ? 'disabled' : ''}>
     <span class="lodging-card-head">

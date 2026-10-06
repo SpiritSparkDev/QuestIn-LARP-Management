@@ -8,16 +8,23 @@ function lodgingError(code, message) {
   return err;
 }
 
-// Every lodging of the event with its beds, free beds and -- when allowed --
-// who sleeps there, so families and groups can find each other.
+// Every lodging of the event with its beds and free beds. Who sleeps there:
+// staff (`showNames`) see the real (OT) names; everyone else only gets the
+// count, plus the character (IT) names of occupants who belong to a group, so
+// groups can find each other without exposing anybody's real name.
 export async function listLodgings(eventId, { showNames }) {
   const { rows: lodgings } = await query(
     'SELECT id, name, description, beds, price_cents, kind, is_default FROM event_lodgings WHERE event_id = $1 ORDER BY position, name',
     [eventId]
   );
   const { rows: occupants } = await query(
-    `SELECT r.lodging_id, r.lodging_details, r.user_id, u.first_name, u.last_name, u.nickname
+    `SELECT r.lodging_id, r.lodging_details, r.user_id, u.first_name, u.last_name, u.nickname,
+            COALESCE(c.name, nc.name) AS character_name,
+            (u.managed_by_user_id IS NOT NULL OR u.group_parent_id IS NOT NULL
+              OR EXISTS (SELECT 1 FROM users m WHERE m.managed_by_user_id = u.id OR m.group_parent_id = u.id)) AS in_group
      FROM registrations r JOIN users u ON u.id = r.user_id
+     LEFT JOIN characters c ON c.id = r.character_id
+     LEFT JOIN characters nc ON nc.id = r.nsc_character_id
      WHERE r.event_id = $1 AND r.lodging_id IS NOT NULL AND r.status = ANY($2::text[])
      ORDER BY u.last_name, u.first_name`,
     [eventId, COUNTED_STATUSES]
@@ -37,7 +44,7 @@ export async function listLodgings(eventId, { showNames }) {
       free: l.kind === 'pitch' && l.beds === 0 ? null : Math.max(l.beds - sleeping.length, 0),
       occupants: showNames
         ? sleeping.map((o) => ({ userId: o.user_id, name: displayName({ firstName: o.first_name, lastName: o.last_name, nickname: o.nickname }), details: o.lodging_details ?? null }))
-        : [],
+        : sleeping.filter((o) => o.in_group && o.character_name).map((o) => ({ name: o.character_name, details: o.lodging_details ?? null })),
     };
   });
 }

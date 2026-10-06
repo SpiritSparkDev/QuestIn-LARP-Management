@@ -68,12 +68,20 @@ test('lodging add-on: setup, booking, sold-out, visibility, switching and locks'
     const due = async (userId) => (await query('SELECT amount_due_cents, lodging_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0];
     assert.deepEqual(await due(alice.userId), { amount_due_cents: 1500, lodging_cents: 1500 });
 
-    // Beds and names are visible to every logged-in user, registered or not.
+    // Beds are visible to every logged-in user; real names are not -- only staff sees them.
     const aliceView = await (await getLodgings(alice.cookie)).json();
-    assert.deepEqual(aliceView[0].occupants.map((o) => o.name).sort(), ['Alice Test', 'Bob Test']);
+    assert.equal(aliceView[0].taken, 2);
+    assert.deepEqual(aliceView[0].occupants, []);
     const carolView = await (await getLodgings(carol.cookie)).json();
     assert.equal(carolView[0].free, 0);
-    assert.deepEqual(carolView[0].occupants.map((o) => o.name).sort(), ['Alice Test', 'Bob Test']);
+    assert.deepEqual(carolView[0].occupants, []);
+    assert.deepEqual((await (await getLodgings(admin.cookie)).json())[0].occupants.map((o) => o.name).sort(), ['Alice Test', 'Bob Test']);
+    // Someone who belongs to a group shows up with the character (IT) name only.
+    const { rows: held } = await query("INSERT INTO characters (user_id, class, name) VALUES ($1, 'sc', 'Bobs Held') RETURNING id", [bob.userId]);
+    await query('UPDATE registrations SET character_id = $2, con_role = $4 WHERE event_id = $1 AND user_id = $3', [eventId, held[0].id, bob.userId, 'sc']);
+    await query('UPDATE users SET group_parent_id = $1 WHERE id = $2', [carol.userId, bob.userId]);
+    assert.deepEqual((await (await getLodgings(carol.cookie)).json())[0].occupants.map((o) => o.name), ['Bobs Held']);
+    await query('UPDATE users SET group_parent_id = NULL WHERE id = $1', [bob.userId]);
 
     // Switching frees the bed and moves the price.
     const put = (cookie, userId, lodgingId) => fetch(`${base}/events/${eventId}/registrations/${userId}/lodging`, {
@@ -145,9 +153,9 @@ test('lodging add-on: free tent pitches need size and IT/OT, beds ignore tent de
     assert.deepEqual(stored.lodging_details, { lengthCm: 400, widthCm: 300, tentType: 'it' });
     assert.equal(stored.amount_due_cents, null);
 
-    // The one pitch is taken; the neighbours see whose tent it is.
+    // The one pitch is taken; the organisers see whose tent it is.
     assert.equal((await register(emil.cookie, pitch.id, { lengthCm: 200, widthCm: 200, tentType: 'ot' })).status, 409);
-    const view = await (await fetch(`${base}/events/${eventId}/lodgings`, { headers: json(emil.cookie) })).json();
+    const view = await (await fetch(`${base}/events/${eventId}/lodgings`, { headers: json(admin.cookie) })).json();
     assert.deepEqual(view[0].occupants[0].details, { lengthCm: 400, widthCm: 300, tentType: 'it' });
 
     // Tent details given for a bed are dropped.
