@@ -947,16 +947,15 @@
 
     function applyPaymentGate(eventId, registration) {
       const gated = registration.amountDueCents != null && !registration.paidAt;
-      document.getElementById("ticket-download-png").disabled = gated;
-      document.getElementById("ticket-download-pdf").disabled = gated;
       const hint = document.getElementById("ticket-payment-hint");
       const payButton = document.getElementById("ticket-pay-btn");
       hint.style.display = gated ? "" : "none";
       payButton.style.display = gated ? "" : "none";
       if (gated) {
-        hint.textContent = `Zahlung offen: ${formatEuro(registration.amountDueCents)}`;
+        hint.textContent = `Zahlung offen: ${formatEuro(registration.amountDueCents)}. Dein Ticket erscheint, sobald die Zahlung bestätigt ist.`;
         payButton.onclick = () => openPaymentDialog(eventId, registration);
       }
+      return gated;
     }
 
     const paymentDialog = document.getElementById("payment-dialog");
@@ -1050,7 +1049,13 @@
           return;
         }
 
-        applyPaymentGate(activeEvent.id, registration);
+        if (applyPaymentGate(activeEvent.id, registration)) {
+          panel.style.display = "";
+          card.style.display = "none";
+          document.getElementById("ticket-empty-hint").style.display = "none";
+          document.querySelector("#ticket-panel .ticket-actions").style.display = "none";
+          return;
+        }
 
         const code = buildScanCode({
           eventCode: activeEvent.code,
