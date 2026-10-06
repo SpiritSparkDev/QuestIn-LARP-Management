@@ -36,6 +36,7 @@
       <button type="button" class="tab-btn" data-tab="nsc-schema-tab">NSC</button>
       <button type="button" class="tab-btn" data-tab="account-schema-tab">Konto</button>
       <button type="button" class="tab-btn" data-tab="registration-schema-tab">Anmeldung</button>
+      <button type="button" class="tab-btn" data-tab="group-schema-tab">Gruppe</button>
     </div>
 
     <div class="tab-panel card form-pad" id="sc-schema-tab">
@@ -61,6 +62,13 @@
       <div id="registration-schema-rows"></div>
       <button type="button" id="registration-add-field">Feld hinzufügen</button>
       <div class="save-bar"><button type="button" id="registration-schema-save">Speichern</button></div>
+    </div>
+
+    <div class="tab-panel card form-pad" id="group-schema-tab" hidden>
+      <p class="sub">Felder, die Gruppenverwalter unter „Gruppe → Gruppeneinstellungen“ für ihre Gruppe ausfüllen.</p>
+      <div id="group-schema-rows"></div>
+      <button type="button" id="group-add-field">Feld hinzufügen</button>
+      <div class="save-bar"><button type="button" id="group-schema-save">Speichern</button></div>
     </div>
 
   </div></div>
@@ -212,6 +220,7 @@ const scRows = setupSchemaEditor({ rowsId: 'sc-schema-rows', addFieldId: 'sc-add
 const nscRows = setupSchemaEditor({ rowsId: 'nsc-schema-rows', addFieldId: 'nsc-add-field', saveId: 'nsc-schema-save', endpoint: '/nsc-schema', allowGroup: true });
 const accountRows = setupSchemaEditor({ rowsId: 'account-schema-rows', addFieldId: 'account-add-field', saveId: 'account-schema-save', endpoint: '/account-schema', allowPublic: false, allowSensitive: true });
 const registrationRows = setupSchemaEditor({ rowsId: 'registration-schema-rows', addFieldId: 'registration-add-field', saveId: 'registration-schema-save', endpoint: '/registration-schema', allowPublic: false, allowSensitive: true });
+const groupRows = setupSchemaEditor({ rowsId: 'group-schema-rows', addFieldId: 'group-add-field', saveId: 'group-schema-save', endpoint: '/group-schema', allowPublic: false });
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
@@ -227,9 +236,10 @@ try {
   if (account.group.key !== 'admin') {
     notify('Kein Zugriff – nur für Admin.', 'error');
   } else {
-    const [scSchema, nscSchema, accountSchema, registrationSchema] = await Promise.all([
-      api.get('/sc-schema'), api.get('/nsc-schema'), api.get('/account-schema'), api.get('/registration-schema'),
+    const [scSchema, nscSchema, accountSchema, registrationSchema, groupSchema] = await Promise.all([
+      api.get('/sc-schema'), api.get('/nsc-schema'), api.get('/account-schema'), api.get('/registration-schema'), api.get('/group-schema'),
     ]);
+    groupSchema.forEach((field) => addSchemaRow(groupRows, field, { allowPublic: false }));
     scSchema.forEach((field) => addSchemaRow(scRows, field, { allowGroup: true }));
     nscSchema.forEach((field) => addSchemaRow(nscRows, field, { allowGroup: true }));
     accountSchema.forEach((field) => addSchemaRow(accountRows, field, { allowPublic: false, allowSensitive: true }));

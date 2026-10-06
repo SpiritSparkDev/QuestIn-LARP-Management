@@ -1,11 +1,23 @@
 import crypto from 'node:crypto';
 import { query, withTransaction } from '../db.js';
 import { displayName } from '../displayName.js';
+import { getGroupFieldSchema } from '../groupSchema/repository.js';
+import { sanitizeFieldValue } from '../richText.js';
 
 const MAX_DEPTH = 8;
 const nameOf = (r) => displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname });
 // A group with a name reads "Drachenbande (Anna Muster)".
 const labelOf = (r) => (r.group_name ? `${r.group_name} (${nameOf(r)})` : nameOf(r));
+
+export async function setGroupFields(userId, values) {
+  const schema = await getGroupFieldSchema();
+  const data = {};
+  for (const field of schema) {
+    if (values?.[field.key] !== undefined) data[field.key] = sanitizeFieldValue(field, values[field.key]);
+  }
+  const { rows } = await query('SELECT group_data FROM users WHERE id = $1', [userId]);
+  await query('UPDATE users SET group_data = $2 WHERE id = $1', [userId, JSON.stringify({ ...rows[0]?.group_data, ...data })]);
+}
 
 export async function setGroupName(userId, name) {
   await query('UPDATE users SET group_name = $2 WHERE id = $1', [userId, name || null]);
@@ -173,6 +185,7 @@ export async function getGroupTree(userId) {
   return {
     parent: rows[0] ? { id: rows[0].id, name: labelOf(rows[0]) } : null,
     groupName: (await query('SELECT group_name FROM users WHERE id = $1', [userId])).rows[0]?.group_name ?? '',
+    groupData: (await query('SELECT group_data FROM users WHERE id = $1', [userId])).rows[0]?.group_data ?? {},
     node: await buildNode(userId, 0),
     incoming: await listIncoming(userId),
     outgoing: await listOutgoing(userId),

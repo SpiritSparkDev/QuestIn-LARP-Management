@@ -134,20 +134,39 @@
 
         <div class="tab-panel" id="gruppe-tab" hidden>
           <h1>Gruppe</h1>
-          <p class="sub">In drei Schritten: Gruppe benennen, Leute einladen, Leute anmelden.</p>
+          <p class="sub">Deine Gruppe verwalten, einstellen und Leute einladen.</p>
               <div class="group-steps" id="dashboard-managed-persons-section">
-                <section class="card form-pad group-step">
-                  <h2><span class="group-step-no">1</span>Gruppe benennen</h2>
-                  <p class="sub">Gib deiner Gruppe einen Namen. Er erscheint in der Gruppenstruktur und in Einladungen an andere.</p>
+                <div class="tabs" id="group-tabs">
+                  <button type="button" class="tab-btn active" data-tab="group-members-tab">Gruppe</button>
+                  <button type="button" class="tab-btn" data-tab="group-settings-tab">Gruppeneinstellungen</button>
+                  <button type="button" class="tab-btn" data-tab="group-invite-tab">Leute einladen</button>
+                </div>
+                <div class="tab-panel card form-pad" id="group-members-tab">
+                  <h2>Leute anmelden</h2>
+                  <p class="sub">Melde einzelne Personen über ihre Karte an – oder alle auf einmal für ein Event.</p>
+                  <p><button type="button" id="group-bulk-btn">Ganze Gruppe anmelden</button></p>
+                  <div id="managed-persons-list"></div>
+                  <div id="group-tree-block" class="group-tree-block">
+                    <h3>Gruppenstruktur</h3>
+                    <p class="sub">Verwalter, die in deiner Gruppe sind (oder bei denen du bist). Der übergeordnete Verwalter sieht die Untergruppen und bearbeitet bei deren Charakteren die Felder, die als „Gruppenverwaltung“ freigegeben sind.</p>
+                    <div id="group-tree-view"></div>
+                  </div>
+                </div>
+                <div class="tab-panel card form-pad" id="group-settings-tab" hidden>
+                  <h2>Gruppeneinstellungen</h2>
+                  <p class="sub">Name und Angaben deiner Gruppe. Der Name erscheint in der Gruppenstruktur und in Einladungen an andere.</p>
                   <form id="group-name-form" class="group-tree-form">
                     <input id="group-name-input" type="text" maxlength="60" placeholder="z. B. Drachenbande">
                     <label for="group-name-input">Gruppenname</label>
                     <button type="submit" class="btn-ghost">Speichern</button>
                   </form>
-                </section>
-
-                <section class="card form-pad group-step">
-                  <h2><span class="group-step-no">2</span>Leute einladen</h2>
+                  <form id="group-settings-fields-form" class="group-tree-form" style="display:none;">
+                    <div id="group-settings-fields"></div>
+                    <button type="submit" class="btn-ghost">Gruppenangaben speichern</button>
+                  </form>
+                </div>
+                <div class="tab-panel card form-pad" id="group-invite-tab" hidden>
+                  <h2>Leute einladen</h2>
                   <p class="sub">Hole Personen in deine Gruppe – such dir den passenden Weg aus.</p>
                   <div class="group-options">
                     <div class="group-option">
@@ -180,19 +199,7 @@
                     </div>
                   </div>
                   <div id="group-outgoing-view"></div>
-                </section>
-
-                <section class="card form-pad group-step">
-                  <h2><span class="group-step-no">3</span>Leute anmelden</h2>
-                  <p class="sub">Melde einzelne Personen über ihre Karte an – oder alle auf einmal für ein Event.</p>
-                  <p><button type="button" id="group-bulk-btn">Ganze Gruppe anmelden</button></p>
-                  <div id="managed-persons-list"></div>
-                  <div id="group-tree-block" class="group-tree-block">
-                    <h3>Gruppenstruktur</h3>
-                    <p class="sub">Verwalter, die in deiner Gruppe sind (oder bei denen du bist). Der übergeordnete Verwalter sieht die Untergruppen und bearbeitet bei deren Charakteren die Felder, die als „Gruppenverwaltung“ freigegeben sind.</p>
-                    <div id="group-tree-view"></div>
-                  </div>
-                </section>
+                </div>
 
                 <dialog id="group-fields-dialog">
                   <h3 id="group-fields-title">Gruppen-Felder</h3>
@@ -642,6 +649,7 @@
     }
 
     initTabs(document.getElementById("char-class-tabs"));
+    initTabs(document.getElementById("group-tabs"));
     initSidebarToggle();
 
     const TOP_TAB_HASHES = ["dashboard", "gruppe", "konto", "anmelden", "charaktere"];
@@ -1310,6 +1318,29 @@
       banner.querySelectorAll("[data-invite-decline]").forEach((b) => b.addEventListener("click", answer(b.dataset.inviteDecline, "decline")));
     }
 
+    let groupFieldSchema = [];
+    function renderGroupSettingsFields() {
+      const form = document.getElementById("group-settings-fields-form");
+      form.style.display = groupFieldSchema.length ? "" : "none";
+      if (!groupFieldSchema.length) return;
+      document.getElementById("group-settings-fields").innerHTML = groupFieldSchema
+        .map((field) => renderAccountFieldInput(field, groupTree?.groupData?.[field.key], { idPrefix: "group-" }))
+        .join("");
+      attachLiveValidation(form);
+    }
+
+    document.getElementById("group-settings-fields-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const values = nullifyBlankNumberFields(groupFieldSchema, collectAccountFieldValues(document.getElementById("group-settings-fields"), groupFieldSchema));
+        groupTree = await api.patch("/group-tree/fields", values);
+        renderGroupTree();
+        notify("Gruppenangaben gespeichert.", "success");
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
     function renderGroupTree() {
       const view = document.getElementById("group-tree-view");
       if (!groupTree) {
@@ -1328,6 +1359,7 @@
         ? `<p class="sub">Offene Einladungen: ${groupTree.outgoing.map((o) => `${escapeHtml(o.name)} <button type="button" class="btn-ghost btn-sm" data-group-cancel="${escapeHtml(o.id)}">Zurückziehen</button>`).join(", ")}</p>`
         : "";
       document.getElementById("group-name-input").value = groupTree.groupName ?? "";
+      renderGroupSettingsFields();
       renderGroupInvitations();
 
       const act = async (fn) => {
@@ -1350,6 +1382,7 @@
 
     async function loadGroupTree() {
       try {
+        if (groupFieldSchema.length === 0) groupFieldSchema = await api.get("/group-schema").catch(() => []);
         groupTree = await api.get("/group-tree");
       } catch {
         groupTree = null;

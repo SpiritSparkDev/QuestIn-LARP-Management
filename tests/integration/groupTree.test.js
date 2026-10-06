@@ -76,6 +76,18 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       assert.ok(named.node.children[0].name.startsWith('Drachenbande ('));
       assert.equal((await (await call(b.cookie, 'GET', '/group-tree')).json()).groupName, 'Drachenbande');
 
+      // Group fields defined by the admin are stored per group; unknown keys are ignored.
+      const { rows: oldGroupSchema } = await query('SELECT schema FROM group_field_schema LIMIT 1');
+      await query('DELETE FROM group_field_schema');
+      await query('INSERT INTO group_field_schema (schema) VALUES ($1)', [JSON.stringify([{ key: 'lager', label: 'Lager', type: 'text', required: false }])]);
+      try {
+        const saved = await (await call(b.cookie, 'PATCH', '/group-tree/fields', { lager: 'Nordwiese', fremd: 'x' })).json();
+        assert.deepEqual(saved.groupData, { lager: 'Nordwiese' });
+      } finally {
+        await query('DELETE FROM group_field_schema');
+        if (oldGroupSchema.length) await query('INSERT INTO group_field_schema (schema) VALUES ($1)', [JSON.stringify(oldGroupSchema[0].schema)]);
+      }
+
       // Only the "Gruppenverwaltung" fields are visible and editable for the manager above.
       const visible = await (await call(a.cookie, 'GET', `/group-tree/persons/${person.userId}/characters`)).json();
       assert.deepEqual(visible[0].fields.map((f) => f.key), ['wunsch']);

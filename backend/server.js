@@ -29,6 +29,7 @@ import './managedPersons/registrationRoutes.js';
 import './managedPersons/convertRoutes.js';
 import './nscSchema/routes.js';
 import './scSchema/routes.js';
+import './groupSchema/routes.js';
 import './accountFieldSchema/routes.js';
 import './registrationFieldSchema/routes.js';
 import './smtpSettings/routes.js';
