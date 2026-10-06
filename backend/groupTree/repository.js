@@ -159,7 +159,7 @@ export async function redeemJoinCode(parentId, code) {
 }
 
 async function buildNode(userId, depth) {
-  const { rows: self } = await query('SELECT first_name, last_name, nickname, group_name FROM users WHERE id = $1', [userId]);
+  const { rows: self } = await query('SELECT first_name, last_name, nickname, group_name, group_data FROM users WHERE id = $1', [userId]);
   const { rows: persons } = await query(
     'SELECT id, first_name, last_name, nickname FROM users WHERE managed_by_user_id = $1 ORDER BY last_name, first_name',
     [userId]
@@ -171,6 +171,7 @@ async function buildNode(userId, depth) {
   return {
     id: userId,
     name: labelOf(self[0]),
+    groupData: self[0].group_data ?? {},
     persons: persons.map((p) => ({ id: p.id, name: nameOf(p) })),
     children: await Promise.all(children.map((c) => buildNode(c.id, depth + 1))),
   };

@@ -83,6 +83,8 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       try {
         const saved = await (await call(b.cookie, 'PATCH', '/group-tree/fields', { lager: 'Nordwiese', fremd: 'x' })).json();
         assert.deepEqual(saved.groupData, { lager: 'Nordwiese' });
+        // The manager above sees the values of the subgroup.
+        assert.deepEqual((await (await call(a.cookie, 'GET', '/group-tree')).json()).node.children[0].groupData, { lager: 'Nordwiese' });
       } finally {
         await query('DELETE FROM group_field_schema');
         if (oldGroupSchema.length) await query('INSERT INTO group_field_schema (schema) VALUES ($1)', [JSON.stringify(oldGroupSchema[0].schema)]);
