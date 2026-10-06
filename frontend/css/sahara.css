@@ -4689,6 +4689,9 @@ th.is-sortable[data-dir="desc"]::after {
 .group-tree-list { margin: 4px 0 12px; padding-left: 20px; }
 .group-tree-list .group-tree-list { margin: 4px 0 4px; }
 .group-tree-form { margin: 16px 0; }
+.claim-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--outline-variant); }
+.claim-result-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.claim-result .btn-ghost { flex-shrink: 0; }
 .group-char-form { margin-bottom: 20px; }
 .extras-picker-row { margin-bottom: 14px; }
 .extras-picker-row input[type="number"] { max-width: 120px; }
