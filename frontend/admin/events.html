@@ -54,7 +54,15 @@
     <div class="card form-pad" id="event-form-card" hidden>
       <h2 id="form-title">Neues Event anlegen</h2>
       <form id="event-form">
-        <h3 class="event-form-section">Grunddaten</h3>
+        <div class="tabs" id="event-tabs">
+  <button type="button" class="tab-btn active" data-tab="ev-tab-basis">Grunddaten</button>
+  <button type="button" class="tab-btn" data-tab="ev-tab-ort">Ort &amp; Texte</button>
+  <button type="button" class="tab-btn" data-tab="ev-tab-preise">Preise &amp; Extras</button>
+  <button type="button" class="tab-btn" data-tab="ev-tab-widget">Gast-Widget</button>
+  <button type="button" class="tab-btn" data-tab="ev-tab-privacy">Datenschutz</button>
+</div>
+<div class="tab-panel" id="ev-tab-basis">
+<h3 class="event-form-section">Grunddaten</h3>
         <input id="event-name" name="name" type="text" required>
         <label for="event-name">Name</label>
         <input id="event-date" name="eventDate" type="date" required>
@@ -69,7 +77,9 @@
         <div id="flag-list"></div>
         <button type="button" id="add-flag" class="btn-sm">+ Sonderrolle hinzufügen</button>
 
-        <h3 class="event-form-section">Ort</h3>
+        </div>
+<div class="tab-panel" id="ev-tab-ort" hidden>
+<h3 class="event-form-section">Ort</h3>
         <p class="sub">Erscheint im Dashboard nur, wenn ausgefüllt. Ohne eigene Links werden Google-Maps- und OpenStreetMap-Link automatisch aus der Adresse erzeugt.</p>
         <textarea id="event-address" name="address" rows="3" placeholder="Burg Beispiel&#10;Musterweg 1&#10;12345 Musterstadt"></textarea>
         <label for="event-address">Adresse</label>
@@ -84,7 +94,9 @@
         <textarea id="event-briefing" name="briefing" rows="6"></textarea>
         <label for="event-briefing">Plot &amp; Briefing <span style="opacity:0.6;font-size:12px;">optional, erscheint im Dashboard nur wenn ausgefüllt</span></label>
 
-        <h3 class="event-form-section">Gast-Widget</h3>
+        </div>
+<div class="tab-panel" id="ev-tab-widget" hidden>
+<h3 class="event-form-section">Gast-Widget</h3>
         <div id="guest-widget-help" style="margin:4px 0 20px;padding:12px 16px;border:1px solid var(--border-color, #ddd);border-radius:8px;">
           <strong>Gast-Widget einbetten</strong>
           <p class="sub" style="margin-top:4px;">Damit können Gäste sich ohne Konto für dieses Event ein Ticket sichern (z.B. eingebettet auf eurer Website).</p>
@@ -103,7 +115,9 @@
           </div>
         </div>
 
-        <h3 class="event-form-section">Preisstufen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
+        </div>
+<div class="tab-panel" id="ev-tab-preise" hidden>
+<h3 class="event-form-section">Preisstufen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Lege Teilnahmegruppen (z.B. Erwachsene, Kinder) und terminierte Preisstufen (z.B. Frühbucher) an. Bei der Anmeldung wird automatisch die erste noch gültige Stufe verwendet.</p>
 
         <label>Teilnahmegruppen</label>
@@ -119,14 +133,17 @@
         <div id="extras-list"></div>
         <button type="button" id="add-extra" class="btn-sm">+ Extra hinzufügen</button>
 
-        <h3 class="event-form-section">Datenschutz &amp; Löschung <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
+        </div>
+<div class="tab-panel" id="ev-tab-privacy" hidden>
+<h3 class="event-form-section">Datenschutz &amp; Löschung <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Ordne Felder aus den Feldschemas einer Datenart zu und lege je Datenart fest, wann (Tage nach „Event beenden“) und wie gelöscht wird: automatisch, oder erst nach Benachrichtigung und deiner Bestätigung. Anmeldungsfelder werden immer gelöscht; Konto- und Charakterfelder nur bei Teilnehmenden, die der Speicherung für weitere Events nicht zugestimmt haben.</p>
         <div id="privacy-rules"></div>
         <label style="margin-top:16px;">Feldzuordnung</label>
         <div id="privacy-fields"></div>
         <div id="privacy-status"></div>
 
-        <div class="event-form-actions save-bar">
+        </div>
+<div class="event-form-actions save-bar">
           <button type="button" id="event-cancel-edit" class="btn-ghost">Abbrechen</button>
           <button type="submit">Speichern</button>
         </div>
@@ -144,6 +161,8 @@ import { escapeHtml } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 import { notify } from '/js/notifications.js';
 initSidebarToggle();
+
+document.querySelectorAll('#event-tabs .tab-btn').forEach((btn, _, all) => btn.addEventListener('click', () => all.forEach((b) => { b.classList.toggle('active', b === btn); document.getElementById(b.dataset.tab).hidden = b !== btn; })));
 
 const listBody = document.querySelector('#event-list tbody');
 const form = document.getElementById('event-form');
@@ -489,6 +508,7 @@ document.getElementById('force-delete-confirm').addEventListener('click', async 
 let editingEventId = null;
 
 function showForm() {
+  document.querySelector('#event-tabs .tab-btn').click();
   formCard.hidden = false;
   formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
