@@ -131,7 +131,7 @@ export function renderNavLinks(account, currentPath, { accountIncomplete = false
   showTestModeBanner(account);
   // Add-on entries (item.flag) also need the add-on switched on; admins see
   // every enabled add-on without needing its menu key.
-  const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]) && (!item.groupMenu || (groupMenuEnabled() && !account.groupMemberOnly)));
+  const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]) && (!item.groupMenu || (groupMenuEnabled() || account.groupMemberOnly)));
   let html = items.map((item) => renderNavItem(item.label === 'Konto' ? { ...item, dot: accountIncomplete } : item, currentPath)).join('');
   
   // Admin-only entries and enabled add-ons live in a collapsible

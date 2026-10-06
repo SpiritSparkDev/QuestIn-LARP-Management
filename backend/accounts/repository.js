@@ -29,7 +29,7 @@ function decryptAccount(row) {
 }
 
 const SELECT_COLUMNS = `
-  users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys, users.keep_data_consent, users.group_member_only,
+  users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys, users.keep_data_consent, (users.group_member_only OR users.group_parent_id IS NOT NULL) AS group_member_only,
   users.account_data_enc,
   groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive,
   discord_accounts.username AS discord_username

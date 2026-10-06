@@ -70,8 +70,10 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       assert.deepEqual(tree.node.children[0].persons.map((p) => p.id), [person.userId]);
 
       // A group name shows up in the tree above and can't be abused for oversized input.
-      assert.equal((await call(b.cookie, 'PATCH', '/group-tree/name', { name: 'Drachenbande' })).status, 200);
-      assert.equal((await call(b.cookie, 'PATCH', '/group-tree/name', { name: 'x'.repeat(61) })).status, 400);
+      // Bernd joined a group, so he is a plain member now and may not manage anything.
+      assert.equal((await call(b.cookie, 'PATCH', '/group-tree/name', { name: 'Drachenbande' })).status, 403);
+      assert.equal((await call(a.cookie, 'PATCH', '/group-tree/name', { name: 'x'.repeat(61) })).status, 400);
+      await query('UPDATE users SET group_name = $2 WHERE id = $1', [b.userId, 'Drachenbande']);
       const named = await (await call(a.cookie, 'GET', '/group-tree')).json();
       assert.ok(named.node.children[0].name.startsWith('Drachenbande ('));
       assert.equal((await (await call(b.cookie, 'GET', '/group-tree')).json()).groupName, 'Drachenbande');
@@ -81,8 +83,8 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       await query('DELETE FROM group_field_schema');
       await query('INSERT INTO group_field_schema (schema) VALUES ($1)', [JSON.stringify([{ key: 'lager', label: 'Lager', type: 'text', required: false }])]);
       try {
-        const saved = await (await call(b.cookie, 'PATCH', '/group-tree/fields', { lager: 'Nordwiese', fremd: 'x' })).json();
-        assert.deepEqual(saved.groupData, { lager: 'Nordwiese' });
+        assert.equal((await call(b.cookie, 'PATCH', '/group-tree/fields', { lager: 'Nordwiese' })).status, 403);
+        await query('UPDATE users SET group_data = $2 WHERE id = $1', [b.userId, JSON.stringify({ lager: 'Nordwiese' })]);
         // The manager above sees the values of the subgroup.
         assert.deepEqual((await (await call(a.cookie, 'GET', '/group-tree')).json()).node.children[0].groupData, { lager: 'Nordwiese' });
       } finally {

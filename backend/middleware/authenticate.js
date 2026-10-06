@@ -22,7 +22,7 @@ export function requireAuth(handler) {
     if (!session) return { status: 401, body: { error: 'Nicht angemeldet.' } };
 
     const { rows } = await query(
-      `SELECT users.id, users.email, users.deactivated_at, users.group_member_only,
+      `SELECT users.id, users.email, users.deactivated_at, (users.group_member_only OR users.group_parent_id IS NOT NULL) AS group_member_only,
               groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
               groups.visible_menus, groups.account_fields, groups.can_edit_characters,
               groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive

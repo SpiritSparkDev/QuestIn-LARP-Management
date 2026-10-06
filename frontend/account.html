@@ -144,7 +144,7 @@
                 </div>
                 <div class="tab-panel card form-pad" id="group-members-tab">
                   <h2>Mitglieder &amp; Anmeldung</h2>
-                  <p class="sub">Alle in deiner Gruppe: von dir angelegte Personen und eingeladene Verwalter mit ihren Personen. Melde sie über ihre Karte an – oder alle auf einmal.</p>
+                  <p class="sub" id="group-members-tab-intro">Alle in deiner Gruppe: von dir angelegte Personen und eingeladene Verwalter mit ihren Personen. Melde sie über ihre Karte an – oder alle auf einmal.</p>
                   <p><button type="button" id="group-bulk-btn">Ganze Gruppe anmelden</button></p>
                   <div id="managed-persons-list"></div>
                   <div id="group-tree-block"><div id="group-tree-view"></div></div>
@@ -3069,6 +3069,12 @@
       const account = await api.get("/account");
       if (!window.location.hash) window.location.hash = "dashboard";
       navAccount = account;
+      if (account.groupMemberOnly) {
+        // Plain members only see who is in their group and can leave it.
+        for (const id of ["group-tabs", "group-bulk-btn", "group-members-tab-intro"]) document.getElementById(id)?.setAttribute("hidden", "");
+        document.querySelector("#gruppe-tab > .sub").textContent = "Deine Gruppe.";
+        updateManagedPersonsDashboardVisibility();
+      }
       document.getElementById("dashboard-managed-persons-checkbox").checked = groupMenuEnabled();
       renderNav();
       document.getElementById("sidebar-user-info").innerHTML =
