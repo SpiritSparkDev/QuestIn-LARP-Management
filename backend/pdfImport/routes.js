@@ -14,6 +14,7 @@ import {
   createPdfImport, listPdfImports, getPdfImport, deletePdfImport, markPdfImportEmail, markPdfImportAdopted,
 } from './repository.js';
 import { adoptImport } from './adopt.js';
+import { buildBlankForm } from './blankForm.js';
 import { suggestMapping } from './suggest.js';
 import { getEvent } from '../events/repository.js';
 
@@ -121,6 +122,33 @@ router.post('/pdf-import/template', requireAddon(async ({ req }) => {
     if (err.code === 'INVALID_PDF') return { status: 400, body: { error: err.message } };
     throw err;
   }
+}));
+
+router.get('/pdf-import/blank-form', requireAddon(async () => {
+  const [accountSchema, registrationSchema, scSchema] = await Promise.all([
+    getAccountFieldSchema(), getRegistrationFieldSchema(), getScCharacterSchema(),
+  ]);
+  const text = (label) => ({ label, type: 'text' });
+  const pdf = await buildBlankForm('Anmeldung', [
+    { title: 'Konto', fields: [text('Vorname'), text('Nachname'), text('Rufname'), text('E-Mail')] },
+    { title: 'Anmeldung', fields: [
+      { label: 'Rolle', type: 'select', options: ['Spieler', 'NSC', 'Helfer'] },
+      text('Teilnahmegruppe'),
+      ...registrationSchema,
+      { label: 'Einverständnis', type: 'boolean' },
+    ] },
+    { title: 'Person (OT)', fields: accountSchema },
+    { title: 'Charakter (IT)', fields: [text('Charaktername'), ...scSchema] },
+  ].map((section) => ({
+    ...section,
+    fields: section.fields.map((f) => ({ ...f, label: f.label ?? f.key })),
+  })));
+  return {
+    status: 200,
+    isBinary: true,
+    body: Buffer.from(pdf),
+    headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="anmeldung.pdf"' },
+  };
 }));
 
 router.delete('/pdf-import/config', requireAddon(async () => {
