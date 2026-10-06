@@ -1484,6 +1484,72 @@ button:hover {
   border-color: var(--outline-variant);
 }
 
+/* "Create" card: a clickable card to start a new character / NSC character. */
+button.create-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 260px;
+  padding: 22px 20px;
+  text-align: center;
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+  border: 1.5px dashed var(--primary);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-style 0.12s ease;
+}
+
+button.create-card:hover {
+  background: var(--surface-container-low);
+  border-style: solid;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+button.create-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.create-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.create-card-icon .material-symbols-outlined {
+  font-size: 28px;
+}
+
+.create-card-title {
+  font-family: "EB Garamond", serif;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.create-card-text {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--on-surface-variant);
+  letter-spacing: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.create-card,
+  button.create-card:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
 /* Prominent "create" button (new character, new NSC character). */
 .btn-create {
   display: inline-flex;
