@@ -3,7 +3,7 @@ import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, created_at';
+const SELECT_COLUMNS = 'id, name, event_date, code, capacity, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at';
 
 // Trims, drops empty strings, and deduplicates while preserving first-seen
 // order -- the admin-facing comma-separated textfield can easily produce
@@ -111,7 +111,7 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { name, eventDate, code, capacity, clearCapacity, flags, flagDetails, flagRenames, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function updateEvent(id, { privacyDeletion, name, eventDate, code, capacity, clearCapacity, flags, flagDetails, flagRenames, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   // code/capacity are the fields a caller can legitimately want to CLEAR
   // (empty string / "unbegrenzt") rather than just omit -- COALESCE alone
   // can't tell those apart, since both arrive as a falsy value. $6/$7
@@ -148,7 +148,8 @@ export async function updateEvent(id, { name, eventDate, code, capacity, clearCa
        maps_url = CASE WHEN $16 THEN $17 ELSE maps_url END,
        osm_url = CASE WHEN $18 THEN $19 ELSE osm_url END,
        extras = COALESCE($20, extras),
-       flag_details = COALESCE($21, flag_details)
+       flag_details = COALESCE($21, flag_details),
+       privacy_deletion = COALESCE($22, privacy_deletion)
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
     [
@@ -163,6 +164,7 @@ export async function updateEvent(id, { name, eventDate, code, capacity, clearCa
       osmUrl !== undefined, normalizeText(osmUrl),
       extras !== undefined ? JSON.stringify(normalizeExtras(extras)) : null,
       nextDetails,
+      privacyDeletion !== undefined ? JSON.stringify(privacyDeletion) : null,
     ]
   );
   return rows[0] ?? null;

@@ -28,6 +28,7 @@
       <input id="passwordConfirm" type="password" minlength="8" required>
       <label for="passwordConfirm">Passwort wiederholen</label>
       <label><input type="checkbox" id="password-toggle"> Passwort anzeigen</label>
+      <label><input type="checkbox" id="keepDataConsent"> Meine Daten (Konto und Charaktere) dürfen für weitere Events gespeichert werden. Freiwillig, jederzeit widerrufbar – siehe <a href="/datenschutz.html" target="_blank">Datenschutzerklärung</a>.</label>
       <button type="submit">Registrieren</button>
     </form>
     <p class="text-center" style="margin-top:28px;"><a href="/login.html" class="btn-ghost">Bereits registriert? Anmelden</a></p>
@@ -57,7 +58,7 @@ form.addEventListener('submit', async (event) => {
     notify('Die Passwörter stimmen nicht überein.', 'error');
     return;
   }
-  const data = Object.fromEntries(new FormData(form));
+  const data = { ...Object.fromEntries(new FormData(form)), keepDataConsent: document.getElementById('keepDataConsent').checked };
   try {
     await api.post('/auth/register', data);
     notify('Konto erstellt. Bitte prüfe dein E-Mail-Postfach und bestätige deine Adresse, bevor du dich einloggst.', 'success');

@@ -13,6 +13,8 @@ import './auth/invite.js';
 import './accounts/routes.js';
 import './accounts/export.js';
 import './events/routes.js';
+import './privacy/routes.js';
+import { runDueAutoDeletions } from './privacy/repository.js';
 import './characters/routes.js';
 import './characterFiles/routes.js';
 import './registrations/routes.js';
@@ -105,4 +107,7 @@ if (isMain) {
   createServer().listen(port, () => {
     logger.info('server started', { port });
   });
+  const runCleanup = () => runDueAutoDeletions().catch((err) => logger.error('privacy cleanup failed', { error: err.message }));
+  setTimeout(runCleanup, 60_000).unref();
+  setInterval(runCleanup, 6 * 60 * 60 * 1000).unref();
 }

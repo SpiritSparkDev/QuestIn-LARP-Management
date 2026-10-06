@@ -203,6 +203,7 @@
               <div><p id="discordUsername">–</p><label for="discordUsername">Discord-Nutzername</label></div>
             </div>
             <div id="account-ot-fields"></div>
+            <label><input type="checkbox" id="keepDataConsent"> Meine Daten (Konto und Charaktere) dürfen für weitere Events gespeichert werden. Freiwillig, jederzeit widerrufbar – siehe <a href="/datenschutz.html" target="_blank">Datenschutzerklärung</a>.</label>
 
             <div class="save-bar"><button type="submit">Speichern</button></div>
           </form>
@@ -1041,6 +1042,7 @@
       const data = {
         ...Object.fromEntries(new FormData(accountForm)),
         ...nullifyBlankNumberFields(accountSchema, collectAccountFieldValues(accountOtFieldsContainer, accountSchema)),
+        keepDataConsent: document.getElementById("keepDataConsent").checked,
       };
       try {
         const updated = await api.patch("/account", data);
@@ -2730,6 +2732,7 @@
       accountForm.elements.firstName.value = account.firstName ?? "";
       accountForm.elements.lastName.value = account.lastName ?? "";
       accountForm.elements.nickname.value = account.nickname ?? "";
+      document.getElementById("keepDataConsent").checked = account.keepDataConsent === true;
       accountSchema = await api.get("/account-schema");
       managedPersonSchema = accountSchema.filter((field) => account.accountFields.includes(field.key));
       accountOtFieldsContainer.innerHTML = accountSchema

@@ -5,6 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEvent, setEventEnded } from './repository.js';
 import { query } from '../db.js';
 import { maybePromoteFromWaitlist } from '../registrations/repository.js';
+import { validatePrivacyDeletion } from '../privacy/repository.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -162,6 +163,8 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   }
   const urlError = validateMapUrls(body);
   if (urlError) return { status: 400, body: { error: urlError } };
+  const privacyError = body.privacyDeletion === undefined ? null : validatePrivacyDeletion(body.privacyDeletion);
+  if (privacyError) return { status: 400, body: { error: privacyError } };
   const before = await getEvent(params.id);
   if (!before) return { status: 404, body: { error: 'event not found' } };
   // An extra that is already booked can't disappear -- registrations refer to it.
