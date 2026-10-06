@@ -4,7 +4,7 @@ import { readJsonBody } from '../httpBody.js';
 import { isValidEmail } from '../validation.js';
 import { filterToAllowedFields } from '../members/routes.js';
 import {
-  listManagedPersons, getManagedPerson, createManagedPerson, updateManagedPerson, deleteManagedPerson,
+  listManagedPersons, getManagedPersonForRegistration, createManagedPerson, updateManagedPerson, deleteManagedPerson,
   searchClaimablePersons, claimPerson,
 } from './repository.js';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -32,7 +32,7 @@ router.post('/managed-persons/:id/claim', requireAuth(async ({ params, user }) =
 }));
 
 router.get('/managed-persons/:id', requireAuth(async ({ params, user }) => {
-  const person = await getManagedPerson(params.id, user.id);
+  const person = await getManagedPersonForRegistration(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
   return { status: 200, body: person };
 }));

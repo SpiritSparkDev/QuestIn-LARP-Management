@@ -1202,7 +1202,7 @@
     }
 
     function renderGroupNode(node, isRoot) {
-      const persons = node.persons.map((p) => `<li>${escapeHtml(p.name)}${isRoot ? "" : ` <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(p.id)}" data-group-person-name="${escapeHtml(p.name)}">Gruppen-Felder</button>`}</li>`).join("");
+      const persons = node.persons.map((p) => `<li>${escapeHtml(p.name)}${isRoot ? "" : ` <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(p.id)}" data-group-person-name="${escapeHtml(p.name)}">Gruppen-Felder</button> <a class="btn-ghost btn-sm" href="/managed-person.html?id=${encodeURIComponent(p.id)}">Anmeldungen</a>`}</li>`).join("");
       const children = node.children.map((child) => `<li><strong>${escapeHtml(child.name)}</strong> <button type="button" class="btn-ghost btn-sm" data-group-person="${escapeHtml(child.id)}" data-group-person-name="${escapeHtml(child.name)}">Gruppen-Felder</button>${isRoot ? ` <button type="button" class="btn-ghost btn-sm" data-group-remove="${escapeHtml(child.id)}">Entfernen</button>` : ""}${renderGroupNode(child, false)}</li>`).join("");
       return persons || children ? `<ul class="group-tree-list">${persons}${children}</ul>` : "";
     }

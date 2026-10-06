@@ -1,7 +1,7 @@
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
-import { getManagedPerson } from './repository.js';
+import { getManagedPersonForRegistration } from './repository.js';
 import { registerForEvent, unregisterFromEvent, listRegistrationsForUser } from '../registrations/repository.js';
 
 // groups/repository.js isn't imported here -- the managed person's own
@@ -19,7 +19,7 @@ async function buildRequestingUser(personId) {
 }
 
 router.post('/managed-persons/:id/events/:eventId/register', requireAuth(async ({ req, params, user }) => {
-  const person = await getManagedPerson(params.id, user.id);
+  const person = await getManagedPersonForRegistration(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
 
   const body = await readJsonBody(req);
@@ -53,7 +53,7 @@ router.post('/managed-persons/:id/events/:eventId/register', requireAuth(async (
 }));
 
 router.delete('/managed-persons/:id/events/:eventId/register', requireAuth(async ({ params, user }) => {
-  const person = await getManagedPerson(params.id, user.id);
+  const person = await getManagedPersonForRegistration(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
   try {
     await unregisterFromEvent(person.id, params.eventId);
@@ -66,7 +66,7 @@ router.delete('/managed-persons/:id/events/:eventId/register', requireAuth(async
 }));
 
 router.get('/managed-persons/:id/registrations', requireAuth(async ({ params, user }) => {
-  const person = await getManagedPerson(params.id, user.id);
+  const person = await getManagedPersonForRegistration(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
   const registrations = await listRegistrationsForUser(person.id);
   return { status: 200, body: registrations };

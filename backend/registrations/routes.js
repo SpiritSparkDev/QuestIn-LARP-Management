@@ -9,7 +9,7 @@ import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { buildParticipantsCsv } from './exportCsv.js';
 import { logAudit } from '../audit/repository.js';
 import { query } from '../db.js';
-import { isManagedBy } from '../managedPersons/repository.js';
+import { canRegisterFor } from '../managedPersons/repository.js';
 import {
   registerForEvent,
   setConRole,
@@ -286,7 +286,7 @@ router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ re
 // manager of a managed person, or an admin/moderator.
 router.put('/events/:id/registrations/:userId/extras', requireAuth(async ({ req, params, user }) => {
   const isStaff = ['admin', 'moderator'].includes(user.group.key);
-  const isOwner = params.userId === user.id || await isManagedBy(params.userId, user.id);
+  const isOwner = params.userId === user.id || await canRegisterFor(params.userId, user.id);
   if (!isOwner && !isStaff) return { status: 403, body: { error: 'forbidden' } };
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
@@ -302,7 +302,7 @@ router.put('/events/:id/registrations/:userId/extras', requireAuth(async ({ req,
 }));
 
 router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ req, params, user }) => {
-  const isOwner = params.userId === user.id || await isManagedBy(params.userId, user.id);
+  const isOwner = params.userId === user.id || await canRegisterFor(params.userId, user.id);
   const isStaff = user.group.visibleMenus.includes('mitglieder');
   if (!isOwner && !isStaff) return { status: 403, body: { error: 'forbidden' } };
   const body = await readJsonBody(req);

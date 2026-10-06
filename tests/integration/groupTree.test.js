@@ -93,9 +93,15 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       assert.deepEqual((await redeemed.json()).node.children.map((ch) => ch.id).sort(), [b.userId, c.userId].sort());
       assert.equal((await call(d.cookie, 'POST', '/group-tree/join-code/redeem', { code })).status, 404);
 
+      // The parent may handle event registrations of persons below them -- but only sees their name.
+      assert.equal((await call(a.cookie, 'GET', `/managed-persons/${person.userId}/registrations`)).status, 200);
+      const seen = await (await call(a.cookie, 'GET', `/managed-persons/${person.userId}`)).json();
+      assert.equal(seen.email, null);
+      assert.equal((await call(d.cookie, 'GET', `/managed-persons/${person.userId}/registrations`)).status, 404);
       // Leaving ends the access.
       assert.equal((await call(b.cookie, 'POST', '/group-tree/leave', {})).status, 200);
       assert.equal((await call(a.cookie, 'PUT', `/characters/${characterId}`, { data: { wunsch: 'zu spät' } })).status, 403);
+      assert.equal((await call(a.cookie, 'GET', `/managed-persons/${person.userId}/registrations`)).status, 404);
       // The parent can also remove a child.
       assert.equal((await call(a.cookie, 'DELETE', `/group-tree/children/${c.userId}`)).status, 200);
     });

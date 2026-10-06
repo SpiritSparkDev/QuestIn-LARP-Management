@@ -3,6 +3,7 @@ import { displayName } from '../displayName.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 import { sanitizeFieldValue } from '../richText.js';
+import { isGroupAncestorOf } from '../groupTree/repository.js';
 
 // A person can be deleted unless a registration is already binding: paid, or
 // confirmed/checked in. Open registrations (pending, waitlisted, ...) are
@@ -37,6 +38,26 @@ export async function isManagedBy(targetUserId, ownerId) {
     [targetUserId, ownerId]
   );
   return rows.length > 0;
+}
+
+// Event registration (sign up, extras, lodging, payment) is open to the
+// person's manager AND to group managers above them in the group tree. Only
+// managed persons count -- people with their own login register themselves.
+export async function canRegisterFor(targetUserId, actorId) {
+  if (await isManagedBy(targetUserId, actorId)) return true;
+  const { rows } = await query('SELECT 1 FROM users WHERE id = $1 AND managed_by_user_id IS NOT NULL', [targetUserId]);
+  return rows.length > 0 && isGroupAncestorOf(actorId, targetUserId);
+}
+
+// Like getManagedPerson, but for a group manager above the owner only the
+// name is returned (no e-mail, no OT data).
+export async function getManagedPersonForRegistration(id, actorId) {
+  const own = await getManagedPerson(id, actorId);
+  if (own || !(await canRegisterFor(id, actorId))) return own;
+  const { rows } = await query('SELECT id, first_name, last_name, nickname FROM users WHERE id = $1', [id]);
+  const r = rows[0];
+  return { id: r.id, email: null, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname,
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }), canDelete: false };
 }
 
 export async function listManagedPersons(ownerId) {

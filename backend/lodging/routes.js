@@ -4,7 +4,7 @@ import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
-import { isManagedBy } from '../managedPersons/repository.js';
+import { canRegisterFor } from '../managedPersons/repository.js';
 import { updateRegistrationLodging } from '../registrations/repository.js';
 import { listLodgings, replaceLodgings } from './repository.js';
 
@@ -59,7 +59,7 @@ router.put('/events/:id/lodgings', requireAuth(requireMenu('events')(async ({ re
 // person, or an admin/moderator.
 router.put('/events/:id/registrations/:userId/lodging', requireAuth(async ({ req, params, user }) => {
   const isStaff = ['admin', 'moderator'].includes(user.group.key);
-  const isOwner = params.userId === user.id || await isManagedBy(params.userId, user.id);
+  const isOwner = params.userId === user.id || await canRegisterFor(params.userId, user.id);
   if (!isOwner && !isStaff) return { status: 403, body: { error: 'forbidden' } };
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };

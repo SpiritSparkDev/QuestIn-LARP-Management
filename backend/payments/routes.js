@@ -8,7 +8,7 @@ import { getEvent } from '../events/repository.js';
 import { baseUrl, getTransporterAndFrom, sendPaymentReminderEmail } from '../auth/mailer.js';
 import { getStripeClient } from './stripeClient.js';
 import { getPaymentSettingsForUse } from '../paymentSettings/repository.js';
-import { isManagedBy } from '../managedPersons/repository.js';
+import { canRegisterFor } from '../managedPersons/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { topUpFromStripe, findActiveAccountForUser } from '../tavern/repository.js';
 import {
@@ -83,7 +83,7 @@ async function createCheckoutSession({
 }
 
 router.post('/events/:eventId/registrations/:userId/checkout-session', requireAuth(async ({ req, params, user }) => {
-  if (params.userId !== user.id && !(await isManagedBy(params.userId, user.id))) {
+  if (params.userId !== user.id && !(await canRegisterFor(params.userId, user.id))) {
     return { status: 403, body: { error: 'forbidden' } };
   }
   const body = await readJsonBody(req);
