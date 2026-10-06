@@ -208,7 +208,15 @@
               <div><p id="discordUsername">–</p><label for="discordUsername">Discord-Nutzername</label></div>
             </div>
             <div id="account-ot-fields"></div>
-            <label><input type="checkbox" id="keepDataConsent"> Meine Daten (Konto und Charaktere) dürfen für weitere Events gespeichert werden. Freiwillig, jederzeit widerrufbar – siehe <a href="/datenschutz.html" target="_blank">Datenschutzerklärung</a>.</label>
+            <label class="group-feature">
+              <span class="group-feature-icon material-symbols-outlined" aria-hidden="true">shield_lock</span>
+              <span class="group-feature-text">
+                <span class="group-feature-kicker">Datenschutz · freiwillig</span>
+                <span class="group-feature-title">Meine Daten für weitere Events speichern</span>
+                <span class="group-feature-desc">Meine Daten (Konto und Charaktere) dürfen für weitere Events gespeichert werden. Dann bleiben sie auch nach Ablauf der Löschfristen erhalten. Freiwillig, jederzeit widerrufbar – siehe <a href="/datenschutz.html" target="_blank">Datenschutzerklärung</a>.</span>
+              </span>
+              <input type="checkbox" id="keepDataConsent" class="group-feature-switch" role="switch">
+            </label>
 
             <div class="save-bar"><button type="submit">Speichern</button></div>
           </form>

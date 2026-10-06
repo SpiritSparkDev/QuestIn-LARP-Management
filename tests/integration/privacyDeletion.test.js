@@ -84,6 +84,28 @@ test('auto mode deletes due categories; not-yet-due ones stay', async () => {
   assert.deepEqual(privacyStatus(rows[0]).map((s) => s.state), ['pending', 'pending']);
 });
 
+test('after the deadline, characters of consenting accounts keep their fields; the others lose them', async () => {
+  const config = { fields: { 'sc:volk': 'charakter' }, rules: { charakter: { mode: 'auto', days: 10 } } };
+  const { rows: eventRows } = await query(
+    "INSERT INTO events (name, event_date, privacy_deletion, ended_at) VALUES ('Privacy chars', '2026-01-01', $1, now() - interval '20 days') RETURNING id",
+    [JSON.stringify(config)]
+  );
+  const eventId = eventRows[0].id;
+  const plain = await makeUser(false);
+  const consenting = await makeUser(true);
+  const characterOf = {};
+  for (const [name, userId] of [['plain', plain], ['consenting', consenting]]) {
+    const { rows } = await query("INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', $2, $3) RETURNING id", [userId, name, JSON.stringify({ volk: 'Elf', beruf: 'Schmied' })]);
+    characterOf[name] = rows[0].id;
+    await query("INSERT INTO registrations (user_id, event_id, con_role, status, character_id) VALUES ($1, $2, 'sc', 'confirmed', $3)", [userId, eventId, rows[0].id]);
+  }
+
+  await runDueAutoDeletions();
+  const data = async (id) => (await query('SELECT data FROM characters WHERE id = $1', [id])).rows[0].data;
+  assert.deepEqual(await data(characterOf.plain), { beruf: 'Schmied' });
+  assert.deepEqual(await data(characterOf.consenting), { volk: 'Elf', beruf: 'Schmied' });
+});
+
 test.after(async () => {
   await closePool();
 });
