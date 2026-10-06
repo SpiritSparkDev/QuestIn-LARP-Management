@@ -258,6 +258,26 @@ test('POST guest-registration is rejected without waiverAccepted once a waiver i
   });
 });
 
+test('ticket widget endpoints are blocked while coming-soon is enabled', async () => {
+  (await import('../../backend/middleware/rateLimit.js')).resetRateLimits();
+  const eventCode = `CS${crypto.randomUUID().slice(0, 8)}`;
+  const eventId = await makeEvent({ code: eventCode });
+  await query('DELETE FROM app_settings');
+  await query('INSERT INTO app_settings (coming_soon_enabled) VALUES (true)');
+  try {
+    await withTestServer(async (port) => {
+      const info = await fetch(`http://localhost:${port}/public/events/${eventCode}`);
+      assert.equal(info.status, 409);
+      const reg = await fetch(`http://localhost:${port}/public/events/${eventId}/guest-registration`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(guestPayload()),
+      });
+      assert.equal(reg.status, 409);
+    });
+  } finally {
+    await query('DELETE FROM app_settings');
+  }
+});
+
 test.after(async () => {
   await query("DELETE FROM users WHERE email LIKE 'guest-reg-%'");
   await query("DELETE FROM events WHERE name = 'Guest Reg Test Con'");

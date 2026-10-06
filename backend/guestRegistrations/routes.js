@@ -15,12 +15,15 @@ import { getEvent, getEventByCode, resolvePriceForGroup } from '../events/reposi
 import { setGuestPaymentToken } from '../payments/repository.js';
 import { sendGuestTicketEmail } from '../auth/mailer.js';
 import { logger } from '../logger.js';
+import { getAppSettings } from '../appSettings/repository.js';
 
 const GUEST_REGISTER_RATE_LIMIT = { keyPrefix: 'guest-register', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 const PAYMENT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const GUEST_GROUP_KEY = 'mitglied';
+const COMING_SOON_ERROR = { status: 409, body: { error: 'Die Anmeldung ist noch gesperrt und startet bald.' } };
 
 router.get('/public/events/:code', async ({ params }) => {
+  if ((await getAppSettings()).comingSoonEnabled) return COMING_SOON_ERROR;
   // The router matches raw, still-percent-encoded path segments (see
   // Router.match in backend/router.js), so a code containing "/" -- the
   // exact format the admin UI suggests, e.g. "P17/2027" -- arrives here as
@@ -45,6 +48,7 @@ router.get('/public/events/:code', async ({ params }) => {
 });
 
 router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGISTER_RATE_LIMIT)(async ({ req, params }) => {
+  if ((await getAppSettings()).comingSoonEnabled) return COMING_SOON_ERROR;
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { firstName, lastName, nickname, priceGroup, waiverAccepted } = body;

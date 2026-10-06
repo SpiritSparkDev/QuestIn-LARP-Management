@@ -10,6 +10,7 @@ import {
 import { sendComingSoonReminders } from '../comingSoon/notify.js';
 
 const ALLOWED_THEME_MODES = ['light', 'dark'];
+const ALLOWED_BACKGROUND_PRESETS = ['none', 'custom', 'grunge', 'netz', 'halle', 'daten', 'marmor', 'nebel', 'metall', 'holz', 'glitzer'];
 const ALLOWED_COLOR_SCHEMES = [
   'sahara', 'ozean', 'wald', 'hoehle', 'horror',
   'sahara-intensiv', 'ozean-intensiv', 'wald-intensiv', 'hoehle-intensiv', 'horror-intensiv',
@@ -41,7 +42,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const {
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
-    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, tavernEnabled, lodgingEnabled,
+    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset,
   } = body;
   if (waiverText !== undefined && typeof waiverText !== 'string') {
     return { status: 400, body: { error: 'waiverText must be a string' } };
@@ -68,6 +69,12 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   }
   if (tavernEnabled !== undefined && typeof tavernEnabled !== 'boolean') {
     return { status: 400, body: { error: 'tavernEnabled must be a boolean' } };
+  }
+  if (backgroundPreset !== undefined && !ALLOWED_BACKGROUND_PRESETS.includes(backgroundPreset)) {
+    return { status: 400, body: { error: `backgroundPreset must be one of: ${ALLOWED_BACKGROUND_PRESETS.join(', ')}` } };
+  }
+  if (backgroundPreset === 'custom' && !(await getUploadedBackgroundImage())) {
+    return { status: 400, body: { error: 'Es ist kein eigenes Hintergrundbild hochgeladen.' } };
   }
   if (lodgingEnabled !== undefined && typeof lodgingEnabled !== 'boolean') {
     return { status: 400, body: { error: 'lodgingEnabled must be a boolean' } };
@@ -113,7 +120,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   const saved = await setAppSettings({
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText,
     baseUrl: baseUrl === undefined ? undefined : baseUrl.replace(/\/+$/, ''),
-    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, tavernEnabled, lodgingEnabled,
+    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset,
   });
 
   // Fire-and-forget: sendComingSoonReminders never throws (own try/catch per

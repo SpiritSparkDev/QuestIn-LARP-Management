@@ -30,7 +30,30 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, tavernEnabled: false, lodgingEnabled: false, hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, tavernEnabled: false, lodgingEnabled: false, backgroundPreset: 'grunge', hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
+  });
+});
+
+test('backgroundPreset: valid presets are saved, unknown ones and "custom" without an upload are rejected, an upload selects "custom", removing it resets', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: cookie };
+    const put = (body) => fetch(`http://localhost:${port}/app-settings`, { method: 'PUT', headers, body: JSON.stringify(body) });
+    assert.equal((await put({ backgroundPreset: 'nope' })).status, 400);
+    assert.equal((await put({ backgroundPreset: 'custom' })).status, 400);
+    const saved = await put({ backgroundPreset: 'marmor' });
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).backgroundPreset, 'marmor');
+    assert.equal((await (await put({ backgroundPreset: 'none' })).json()).backgroundPreset, 'none');
+
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64').toString('base64');
+    const upload = await fetch(`http://localhost:${port}/app-settings/background-image`, { method: 'PUT', headers, body: JSON.stringify({ dataBase64: png, mimeType: 'image/png' }) });
+    assert.equal(upload.status, 200);
+    assert.equal((await upload.json()).backgroundPreset, 'custom');
+    assert.equal((await (await put({ backgroundPreset: 'holz' })).json()).backgroundPreset, 'holz');
+    assert.equal((await (await put({ backgroundPreset: 'custom' })).json()).backgroundPreset, 'custom');
+    const removed = await fetch(`http://localhost:${port}/app-settings/background-image`, { method: 'DELETE', headers });
+    assert.equal((await removed.json()).backgroundPreset, 'grunge');
   });
 });
 
@@ -49,7 +72,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, tavernEnabled: false, lodgingEnabled: false, hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, tavernEnabled: false, lodgingEnabled: false, backgroundPreset: 'grunge', hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
