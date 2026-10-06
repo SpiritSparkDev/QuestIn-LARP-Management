@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { logger } from '../logger.js';
-import { getAppSettings } from '../appSettings/repository.js';
+import { getAppSettings, getUploadedLogo, getUploadedTicketBackground } from '../appSettings/repository.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
@@ -14,7 +14,7 @@ import {
   createPdfImport, listPdfImports, getPdfImport, deletePdfImport, markPdfImportEmail, markPdfImportAdopted,
 } from './repository.js';
 import { adoptImport } from './adopt.js';
-import { buildBlankForm } from './blankForm.js';
+import { buildBlankForm, TEMPLATES } from './blankForm.js';
 import { suggestMapping } from './suggest.js';
 import { getEvent } from '../events/repository.js';
 
@@ -133,11 +133,18 @@ router.post('/pdf-import/template', requireAddon(async ({ req }) => {
   }
 }));
 
-// GET: from scratch. POST { dataBase64 }: extends that fillable PDF with the
-// app fields it lacks.
-async function blankFormHandler(basePdf) {
-  const [accountSchema, registrationSchema, scSchema] = await Promise.all([
+router.get('/pdf-export/templates', requireExportAddon(async () => ({
+  status: 200,
+  body: Object.entries(TEMPLATES).map(([key, { name, description }]) => ({ key, name, description })),
+})));
+
+// ?template=<key>: fillable registration PDF with cover (logo + ticket motif).
+router.get('/pdf-export/blank-form', requireExportAddon(async ({ req }) => {
+  const template = new URL(req.url, 'http://localhost').searchParams.get('template') ?? 'klassisch';
+  if (!TEMPLATES[template]) return { status: 400, body: { error: 'Unbekannte Vorlage.' } };
+  const [accountSchema, registrationSchema, scSchema, settings, logo, motif] = await Promise.all([
     getAccountFieldSchema(), getRegistrationFieldSchema(), getScCharacterSchema(),
+    getAppSettings(), getUploadedLogo(), getUploadedTicketBackground(),
   ]);
   const text = (label) => ({ label, type: 'text' });
   const sections = [
@@ -154,27 +161,15 @@ async function blankFormHandler(basePdf) {
     ...section,
     fields: section.fields.map((f) => ({ ...f, label: f.label ?? f.key })),
   }));
-  const pdf = await buildBlankForm('Anmeldung', sections, basePdf);
+  const pdf = await buildBlankForm(sections, {
+    template, subtitle: settings.eventName ?? settings.appTitle ?? '', logo, motif,
+  });
   return {
     status: 200,
     isBinary: true,
     body: Buffer.from(pdf),
-    headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="anmeldung.pdf"' },
+    headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="anmeldung-${template}.pdf"` },
   };
-}
-
-router.get('/pdf-export/blank-form', requireExportAddon(() => blankFormHandler()));
-
-router.post('/pdf-export/blank-form', requireExportAddon(async ({ req }) => {
-  const body = await readJsonBody(req, MAX_UPLOAD_BODY_BYTES);
-  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const decoded = decodePdf(body);
-  if (decoded.error) return decoded.error;
-  try {
-    return await blankFormHandler(decoded.buffer);
-  } catch {
-    return { status: 400, body: { error: 'Die Datei ist kein lesbares PDF.' } };
-  }
 }));
 
 router.delete('/pdf-import/config', requireAddon(async () => {

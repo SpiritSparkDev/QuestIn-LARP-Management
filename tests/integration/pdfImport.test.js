@@ -204,7 +204,7 @@ test('PDF import: an import with an event becomes a registered guest account; a 
   });
 });
 
-test('PDF export: separate add-on 404s while off, then returns a fillable PDF; a base PDF keeps its fields', async () => {
+test('PDF export: separate add-on 404s while off, then returns a fillable PDF per template', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');
     const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
@@ -219,9 +219,9 @@ test('PDF export: separate add-on 404s while off, then returns a fillable PDF; a
     const names = (await PDFDocument.load(await res.arrayBuffer())).getForm().getFields().map((f) => f.getName());
     assert.ok(names.includes('Vorname') && names.includes('E-Mail'));
 
-    const withBase = await fetch(`${base}/pdf-export/blank-form`, { method: 'POST', headers, body: JSON.stringify({ filename: 'b.pdf', dataBase64: await makeFilledPdf({ name: 'X', email: 'x@example.com' }) }) });
-    assert.equal(withBase.status, 200);
-    const merged = (await PDFDocument.load(await withBase.arrayBuffer())).getForm().getFields().map((f) => f.getName());
-    assert.ok(merged.includes('Name') && merged.includes('Vorname'));
+    const compact = await fetch(`${base}/pdf-export/blank-form?template=kompakt`, { headers });
+    assert.equal(compact.status, 200);
+    assert.ok((await PDFDocument.load(await compact.arrayBuffer())).getPageCount() >= 2);
+    assert.equal((await fetch(`${base}/pdf-export/blank-form?template=nope`, { headers })).status, 400);
   });
 });
