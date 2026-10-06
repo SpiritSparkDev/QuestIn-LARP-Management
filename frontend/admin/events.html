@@ -139,6 +139,8 @@
         <p class="sub">Ordne Felder aus den Feldschemas einer Datenart zu und lege je Datenart fest, wann (Tage nach „Event beenden“) und wie gelöscht wird: automatisch, oder erst nach Benachrichtigung und deiner Bestätigung. Anmeldungsfelder werden immer gelöscht; Konto- und Charakterfelder nur bei Teilnehmenden, die der Speicherung für weitere Events nicht zugestimmt haben.</p>
         <div id="privacy-rules"></div>
         <label style="margin-top:16px;">Feldzuordnung</label>
+        <button type="button" id="privacy-autodetect" class="btn-sm">Automatisch erkennen</button>
+        <span class="sub"> Ordnet noch nicht zugeordnete Felder anhand von Bezeichnung und Schlüssel zu – bitte danach prüfen.</span>
         <div id="privacy-fields"></div>
         <div id="privacy-status"></div>
 
@@ -400,6 +402,26 @@ async function renderPrivacyStatus(eventId) {
   }));
 }
 renderPrivacy();
+
+const PRIVACY_GUESS = [
+  ['notfall', /notfall|emergency/i],
+  ['gesundheit', /gesund|allerg|unvertr|unverträ|intoleran|medizin|medical|krank|erkrank|diät|diaet|medikament|einschränk/i],
+  ['kontakt', /adress|anschrift|stra(ß|ss)e|plz|wohn|telefon|phone|handy|mobil|mail|kontakt/i],
+  ['teilnahme', /con-?tage|unterbring|übernacht|uebernacht|anreise|abreise|travel|accommodation|ticket|zelt|hütte|huette|handwerk|craft|teilnahme/i],
+];
+
+document.getElementById('privacy-autodetect').addEventListener('click', () => {
+  privacy = collectPrivacy();
+  let found = 0;
+  for (const f of privacyMeta.fields) {
+    if (privacy.fields[f.id]) continue;
+    const text = `${f.id.split(':')[1]} ${f.label}`;
+    const category = f.scope === 'sc' || f.scope === 'nsc' ? 'charakter' : PRIVACY_GUESS.find(([, re]) => re.test(text))?.[0];
+    if (category) { privacy.fields[f.id] = category; found += 1; }
+  }
+  renderPrivacy();
+  notify(found ? `${found} Felder zugeordnet – bitte prüfen.` :'Keine weiteren Felder erkannt.', 'info');
+});
 
 const extrasContainer = document.getElementById('extras-list');
 let extras = [];
