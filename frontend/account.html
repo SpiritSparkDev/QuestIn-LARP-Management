@@ -67,6 +67,11 @@
               <div class="dashboard-col">
               <h2>Meine Charaktere</h2>
               <div id="dashboard-character-list" class="char-grid"></div>
+              <button type="button" id="dashboard-new-character-btn" class="create-card">
+                <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
+                <span class="create-card-title">Neuen Charakter anlegen</span>
+                <span class="create-card-text">Erschaffe einen Spielercharakter für dein nächstes Abenteuer.</span>
+              </button>
               <button type="button" id="dashboard-characters-link" class="btn-ghost">Alle Charaktere verwalten</button>
               </div>
 
@@ -1979,6 +1984,10 @@
 
     const scFormSection = document.getElementById("sc-form-section");
     const newCharacterBtn = document.getElementById("new-character-btn");
+    document.getElementById("dashboard-new-character-btn").addEventListener("click", () => {
+      goToTab("charaktere");
+      newCharacterBtn.click();
+    });
     const scFilesPanel = document.getElementById("sc-files-panel");
     const scFilesBody = document.getElementById("sc-files-body");
 
