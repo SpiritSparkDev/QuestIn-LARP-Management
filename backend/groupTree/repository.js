@@ -3,6 +3,8 @@ import { query, withTransaction } from '../db.js';
 import { displayName } from '../displayName.js';
 import { getGroupFieldSchema } from '../groupSchema/repository.js';
 import { sanitizeFieldValue } from '../richText.js';
+import { sendGroupInvitationEmail } from '../auth/mailer.js';
+import { logger } from '../logger.js';
 
 const MAX_DEPTH = 8;
 const nameOf = (r) => displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname });
@@ -52,19 +54,35 @@ async function canJoin(parentId, childId) {
 // can't be used to find out who has an account.
 export async function inviteByEmail(parentId, email) {
   const { rows } = await query('SELECT id FROM users WHERE lower(email) = lower($1) AND NOT is_guest AND deactivated_at IS NULL', [email]);
-  if (rows.length === 0 || !(await canJoin(parentId, rows[0].id))) return;
-  await query(
-    'INSERT INTO group_invitations (parent_user_id, child_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-    [parentId, rows[0].id]
-  );
+  if (rows.length > 0) return inviteById(parentId, rows[0].id);
+  // No account yet: mail a registration link. They are not added to the group automatically.
+  await notifyInvited(parentId, null, email);
 }
 
 export async function inviteById(parentId, childId) {
   if (!(await canJoin(parentId, childId))) return;
-  await query(
+  const { rowCount } = await query(
     'INSERT INTO group_invitations (parent_user_id, child_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
     [parentId, childId]
   );
+  if (rowCount > 0) await notifyInvited(parentId, childId);
+}
+
+// A failed mail must not fail the invitation -- it is still visible in the account.
+// `email` is given for people without an account (childId null).
+async function notifyInvited(parentId, childId, email) {
+  try {
+    const { rows } = await query(
+      `SELECT p.first_name, p.last_name, p.nickname, p.group_name, (SELECT email FROM users WHERE id = $2) AS child_email
+       FROM users p WHERE p.id = $1`,
+      [parentId, childId]
+    );
+    const to = email ?? rows[0]?.child_email;
+    if (!to) return;
+    await sendGroupInvitationEmail(to, { parentName: labelOf(rows[0]), userId: childId ?? undefined, hasAccount: !!childId });
+  } catch (err) {
+    logger.error('failed to send group invitation email', { error: err.message });
+  }
 }
 
 export async function listIncoming(userId) {

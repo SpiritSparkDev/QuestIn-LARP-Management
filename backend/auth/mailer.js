@@ -89,6 +89,18 @@ export async function sendInvitationEmail(to, token, { account } = {}) {
   return deliver(transporter, from, to, rendered);
 }
 
+export async function sendGroupInvitationEmail(to, { parentName, userId, hasAccount }) {
+  const { transporter, from } = await getTransporterAndFrom();
+  const url = `${await baseUrl()}/${hasAccount ? 'account.html' : 'register.html'}`;
+  const rendered = await renderSlotEmail('group_invitation', () => ({
+    subject: `${parentName} lädt dich in eine Gruppe ein`,
+    body: hasAccount
+      ? `${parentName} hat dich eingeladen, einer Gruppe beizutreten. Bestätige oder lehne die Einladung in deinem Konto ab: ${url}`
+      : `${parentName} hat dich zu Pakyrion eingeladen. Lege hier dein Konto an: ${url} -- danach kann dich ${parentName} in die Gruppe aufnehmen.`,
+  }), { userId, extra: { parentName, link: url } });
+  return deliver(transporter, from, to, rendered);
+}
+
 export async function sendRegistrationOtFieldsChangedEmail(to, { userName, eventName }, { transporter, from }) {
   const rendered = await renderSlotEmail('registration_ot_changed', () => ({
     subject: `Anmeldungsdaten geändert: ${eventName}`,

@@ -24,6 +24,15 @@ export const EMAIL_SLOTS = [
     extraFields: [{ key: 'link', label: 'Link zum Passwort setzen' }],
   },
   {
+    key: 'group_invitation',
+    label: 'Gruppeneinladung (an bestehendes Konto)',
+    supportsAccount: true,
+    extraFields: [
+      { key: 'parentName', label: 'Name des einladenden Gruppenverwalters' },
+      { key: 'link', label: 'Link zum Konto' },
+    ],
+  },
+  {
     key: 'registration_ot_changed',
     label: 'Orga-Hinweis: Anmeldedaten geändert',
     supportsAccount: false,
