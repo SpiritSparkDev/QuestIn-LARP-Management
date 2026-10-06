@@ -8,7 +8,7 @@ import { listCharactersForUser } from '../characters/repository.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import {
-  isGroupAncestorOf, inviteByEmail, acceptInvitation, declineInvitation, cancelInvitation,
+  isGroupAncestorOf, inviteByEmail, inviteById, acceptInvitation, declineInvitation, cancelInvitation,
   leaveParentGroup, removeChild, getGroupTree, createJoinCode, redeemJoinCode,
 } from './repository.js';
 
@@ -20,6 +20,10 @@ router.get('/group-tree', requireAuth(async ({ user }) => ({ status: 200, body: 
 router.post('/group-tree/invitations', rateLimit(INVITE_RATE_LIMIT)(requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (typeof body.userId === 'string') {
+    await inviteById(user.id, body.userId);
+    return { status: 202, body: { sent: true } };
+  }
   if (typeof body.email !== 'string' || !isValidEmail(body.email.trim())) {
     return { status: 400, body: { error: 'Bitte die vollständige E-Mail-Adresse des anderen Gruppenverwalters angeben.' } };
   }

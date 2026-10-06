@@ -41,6 +41,14 @@ export async function inviteByEmail(parentId, email) {
   );
 }
 
+export async function inviteById(parentId, childId) {
+  if (!(await canJoin(parentId, childId))) return;
+  await query(
+    'INSERT INTO group_invitations (parent_user_id, child_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [parentId, childId]
+  );
+}
+
 export async function listIncoming(userId) {
   const { rows } = await query(
     `SELECT gi.id, u.first_name, u.last_name, u.nickname FROM group_invitations gi

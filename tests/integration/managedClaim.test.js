@@ -42,9 +42,9 @@ test('a group owner can search and claim unmanaged guest accounts -- and nothing
 
     assert.equal((await search('ab')).status, 400);
 
-    // Only the free guest account is found -- not the managed one, not the full account.
+    // The free guest is claimable and the full account only invitable -- the managed one isn't found.
     const found = await (await search(`${TAG}Muster`)).json();
-    assert.deepEqual(found.map((p) => p.id), [guest.userId]);
+    assert.deepEqual(found.map((p) => [p.id, p.kind]), [[guest.userId, 'claim'], [fullAccount.userId, 'invite']]);
     assert.equal(found[0].emailHint, `g***@example.com`);
     assert.equal(JSON.stringify(found).includes(`gast.${TAG}`), false);
 
@@ -52,9 +52,15 @@ test('a group owner can search and claim unmanaged guest accounts -- and nothing
     await query("INSERT INTO characters (user_id, class, name) VALUES ($1, 'sc', $2)", [guest.userId, `Ritter${TAG}`]);
     assert.deepEqual((await (await search(`ritter${TAG}`)).json()).map((p) => p.id), [guest.userId]);
 
-    // An e-mail only matches when typed in full.
-    assert.deepEqual(await (await search(`gast.${TAG}`)).json(), []);
-    assert.deepEqual((await (await search(`gast.${TAG}@example.com`)).json()).map((p) => p.id), [guest.userId]);
+    // Part of the e-mail matches guests; full accounts are only found by name, as an invite.
+    assert.deepEqual((await (await search(`gast.${TAG}`)).json()).map((p) => p.id), [guest.userId]);
+    const byName = await (await search(`vollkon`)).json();
+    assert.deepEqual(byName.filter((p) => p.id === fullAccount.userId).map((p) => p.kind), ['invite']);
+    assert.equal((await (await search(`${TAG}-`)).json()).some((p) => p.id === fullAccount.userId), false);
+    const inv = await fetch(`${base}/group-tree/invitations`, { method: 'POST', headers: headers(owner.cookie), body: JSON.stringify({ userId: fullAccount.userId }) });
+    assert.equal(inv.status, 202);
+    const out = await (await fetch(`${base}/group-tree`, { headers: headers(owner.cookie) })).json();
+    assert.equal(JSON.stringify(out.outgoing).includes("Vollkonto"), true);
 
     // Full accounts and already managed persons can't be claimed.
     for (const id of [fullAccount.userId, managed.userId, owner.userId]) {

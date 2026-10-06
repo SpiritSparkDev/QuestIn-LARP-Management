@@ -152,20 +152,31 @@ function maskEmail(email) {
 }
 
 export async function searchClaimablePersons(term, ownerId) {
-  const pattern = `%${term.toLowerCase().replace(/[\\%_]/g, '\\$&')}%`;
-  const { rows } = await query(
+  const pattern = `%${term.toLowerCase().replace(/[\%_]/g, '\$&')}%`;
+  const NAME_MATCH = `(lower(first_name || ' ' || last_name) LIKE $2 OR lower(coalesce(nickname, '')) LIKE $2
+       OR EXISTS (SELECT 1 FROM characters c WHERE c.user_id = users.id AND lower(c.name) LIKE $2))`;
+  // Guests without a login can be claimed directly (also found by part of the e-mail).
+  const { rows: guests } = await query(
     `SELECT id, email, first_name, last_name, nickname FROM users
      WHERE is_guest AND managed_by_user_id IS NULL AND deactivated_at IS NULL AND id <> $1
-       AND (lower(first_name || ' ' || last_name) LIKE $2 OR lower(coalesce(nickname, '')) LIKE $2 OR lower(email) = lower($3)
-         OR EXISTS (SELECT 1 FROM characters c WHERE c.user_id = users.id AND lower(c.name) LIKE $2))
+       AND (${NAME_MATCH} OR lower(email) LIKE $2)
      ORDER BY last_name, first_name LIMIT 20`,
-    [ownerId, pattern, term]
+    [ownerId, pattern]
   );
-  return rows.map((r) => ({
-    id: r.id,
-    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
-    emailHint: maskEmail(r.email),
-  }));
+  // Full accounts can't be taken over; they can only be invited as a sub-group.
+  // Matched by name only, so the search can't be used to harvest e-mail addresses.
+  const { rows: accounts } = await query(
+    `SELECT id, first_name, last_name, nickname FROM users
+     WHERE NOT is_guest AND group_parent_id IS NULL AND deactivated_at IS NULL AND id <> $1
+       AND ${NAME_MATCH}
+     ORDER BY last_name, first_name LIMIT 20`,
+    [ownerId, pattern]
+  );
+  const name = (r) => displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname });
+  return [
+    ...guests.map((r) => ({ id: r.id, kind: 'claim', name: name(r), emailHint: maskEmail(r.email) })),
+    ...accounts.map((r) => ({ id: r.id, kind: 'invite', name: name(r) })),
+  ];
 }
 
 export async function claimPerson(id, ownerId) {
