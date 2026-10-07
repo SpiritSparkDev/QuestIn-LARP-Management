@@ -49,6 +49,7 @@ import './tavern/routes.js';
 import './testMode/routes.js';
 import './audit/routes.js';
 import './appModeRoutes.js';
+import './offlineRoutes.js';
 import { isOffline, warnIfWrongDatabase } from './appMode.js';
 import { checkWriteGuard } from './instanceAuthority/guard.js';
 

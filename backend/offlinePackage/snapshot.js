@@ -156,5 +156,8 @@ export async function exportReturnPackage(db, passphrase) {
     return_token: returnToken(state.snapshot_id),
     event_id: state.event_id,
   };
+  // Every export is a sync point: the next one carries a higher generation, so the
+  // online side can tell a newer package from an already merged one.
+  await db.query("UPDATE instance_authority SET generation = generation + 1 WHERE event_id = $1 AND role = 'offline_primary'", [state.event_id]);
   return seal({ manifest, data }, passphrase);
 }
