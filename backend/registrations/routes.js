@@ -242,7 +242,7 @@ const VALID_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out', 'ca
 // OT-schema-driven ones -- see the strip loop below.
 const STRUCTURAL_REGISTRATION_KEYS = ['userId', 'eventId', 'status', 'conRole', 'characterId', 'flags', 'checkedInAt', 'checkedOutAt'];
 
-router.put('/events/:id/checkin/:userId', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
+router.put('/events/:id/checkin/:userId', requireAuth(requireAnyMenu('checkin', 'mitglieder')(async ({ req, params, user }) => {
   if (!user.group.canOverrideCheckinStatus) {
     return { status: 403, body: { error: 'forbidden' } };
   }

@@ -281,6 +281,23 @@ test('a user without canOverrideCheckinStatus cannot use the override endpoint',
   });
 });
 
+test('the status override also works from the Mitglieder menu (mitglieder menu + canOverrideCheckinStatus)', async () => {
+  await withTestServer(async (port) => {
+    const staff = await makeCustomGroupUserAndSession({ visibleMenus: ['mitglieder'], canOverrideCheckinStatus: true });
+    const { userId } = await makeUserAndSession('mitglied');
+    const eventId = await makeEvent();
+    const characterId = await makeCharacter(userId);
+    await query('INSERT INTO registrations (user_id, event_id, character_id) VALUES ($1, $2, $3)', [userId, eventId, characterId]);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${userId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: staff.cookie },
+      body: JSON.stringify({ status: 'confirmed', previousStatus: 'pending' }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).status, 'confirmed');
+  });
+});
+
 test('a user without canOverrideCheckinStatus cannot use the approve endpoint', async () => {
   await withTestServer(async (port) => {
     const stranger = await makeCustomGroupUserAndSession({ visibleMenus: ['checkin'], canOverrideCheckinStatus: false });
