@@ -132,6 +132,7 @@
           <h2>NSC-Übersicht</h2>
           <div id="nsc-overview-body" class="table-scroll"></div>
           <div class="dialog-actions">
+            <button type="button" id="nsc-overview-print" class="btn-secondary">Drucken</button>
             <button type="button" id="nsc-overview-close" class="btn-ghost">Schließen</button>
           </div>
         </dialog>
@@ -551,6 +552,16 @@
         body.innerHTML = '';
         notify(err.message, 'error');
       }
+    });
+    // Prints just the table: a separate window, so the rest of the page stays out of the printout.
+    document.getElementById('nsc-overview-print').addEventListener('click', () => {
+      const table = document.querySelector('#nsc-overview-body table');
+      if (!table) return;
+      const win = window.open('', '_blank');
+      if (!win) { notify('Das Druckfenster wurde blockiert.', 'error'); return; }
+      win.document.write(`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>NSC-Übersicht</title><style>body{font:12px sans-serif}table{border-collapse:collapse;width:100%}th,td{border:1px solid #888;padding:4px 6px;text-align:left;vertical-align:top}</style></head><body><h1>NSC-Übersicht</h1>${table.outerHTML}</body></html>`);
+      win.document.close();
+      win.print();
     });
     document.getElementById('nsc-overview-close').addEventListener('click', () => document.getElementById('nsc-overview-dialog').close());
 
