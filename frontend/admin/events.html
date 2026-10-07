@@ -251,13 +251,17 @@ function renderPriceTiers() {
   const groups = currentPriceGroups();
   priceTiersContainer.innerHTML = priceTiers.map((tier, i) => `
     <div data-tier-row="${i}" class="price-tier-row">
-      <div class="price-tier-field"><input type="text" data-tier-name value="${escapeHtml(tier.name)}" placeholder="Name, z.B. Frühbucher"><label>Preisstufe</label></div>
-      <div class="price-tier-field"><input type="date" data-tier-until value="${escapeHtml(tier.until ?? '')}"><label>Gültig bis <span style="opacity:0.6;font-size:12px;">leer = letzte Stufe</span></label></div>
-      <label class="price-tier-conpayer" title="Wer in dieser Preisstufe bucht, zahlt erst vor Ort. Das Ticket wird trotzdem ausgestellt."><input type="checkbox" data-tier-conpayer ${tier.conPayer ? 'checked' : ''}> Con-Zahler (Zahlung vor Ort)</label>
-      ${groups.map((g) => `
-        <div class="price-tier-field price-tier-amount"><input type="number" min="0" step="0.01" data-tier-amount="${escapeHtml(g)}" value="${escapeHtml(tier.amounts[g] ?? '')}"><label>${escapeHtml(g)} (€)</label></div>
-      `).join('')}
-      <div><button type="button" class="btn-sm btn-ghost" data-remove-tier="${i}">Entfernen</button></div>
+      <div class="price-tier-head">
+        <div class="price-tier-field"><input type="text" data-tier-name value="${escapeHtml(tier.name)}" placeholder="z.B. Frühbucher"><label>Preisstufe</label></div>
+        <div class="price-tier-field"><input type="date" data-tier-until value="${escapeHtml(tier.until ?? '')}"><label>Gültig bis <span class="price-tier-hint">leer = letzte Stufe</span></label></div>
+        <label class="price-tier-conpayer" title="Wer in dieser Preisstufe bucht, zahlt erst vor Ort. Das Ticket wird trotzdem ausgestellt."><input type="checkbox" data-tier-conpayer ${tier.conPayer ? 'checked' : ''}> Con-Zahler <span class="price-tier-hint">zahlt vor Ort</span></label>
+        <button type="button" class="btn-sm btn-ghost price-tier-remove" data-remove-tier="${i}">Entfernen</button>
+      </div>
+      <div class="price-tier-amounts">
+        ${groups.map((g) => `
+          <div class="price-tier-field"><input type="number" min="0" step="0.01" data-tier-amount="${escapeHtml(g)}" value="${escapeHtml(tier.amounts[g] ?? '')}"><label>${escapeHtml(g)} (€)</label></div>
+        `).join('')}
+      </div>
     </div>
   `).join('') || (groups.length === 0
     ? '<p class="sub">Erst Teilnahmegruppen eintragen, dann Preisstufen hinzufügen.</p>'

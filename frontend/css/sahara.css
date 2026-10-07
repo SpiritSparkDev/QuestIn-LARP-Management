@@ -4781,23 +4781,28 @@ th.is-sortable[data-dir="desc"]::after {
 }
 .price-group-row input { max-width: 240px; }
 .price-tier-row {
-  display: flex; flex-wrap: wrap; align-items: end; gap: 8px 16px;
-  padding: 10px 0; border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  position: relative; padding: 14px 16px; margin-bottom: 12px;
+  border: 1px solid var(--outline-variant); border-radius: 10px; background: var(--surface-container-low);
 }
-.price-tier-field { min-width: 160px; }
-.price-tier-amount { min-width: 120px; }
+.price-tier-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 16px; padding-right: 84px; }
+.price-tier-head .price-tier-field { flex: 1 1 180px; }
+.price-tier-conpayer { flex: 0 1 auto; align-self: center; margin-top: -10px; }
+.price-tier-remove { position: absolute; top: 12px; right: 12px; }
+.price-tier-amounts {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 16px;
+  margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--outline-variant);
+}
+.price-tier-field { min-width: 0; }
+.price-tier-hint { opacity: 0.6; font-size: 12px; text-transform: none; letter-spacing: 0; }
 .guest-widget-row { display: flex; gap: 8px; align-items: center; }
 .guest-widget-row-top { align-items: flex-start; }
 
 @media (max-width: 700px) {
   .price-group-row input { max-width: none; flex: 1; min-width: 0; }
-  .price-tier-row {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px;
-  }
-  .price-tier-field { min-width: 0; }
-  .price-tier-row > .price-tier-field:nth-child(-n+2) { grid-column: 1 / -1; }
-  .price-tier-row > div:last-child:not(.price-tier-field) { grid-column: 1 / -1; }
-  .price-tier-row > div:last-child button { width: 100%; }
+  .price-tier-head .price-tier-field { flex-basis: 100%; }
+  .price-tier-conpayer { margin-top: 0; }
+  .price-tier-head { padding-right: 0; }
+  .price-tier-remove { position: static; width: 100%; }
   .guest-widget-row { flex-direction: column; align-items: stretch; }
   .guest-widget-row input, .guest-widget-row textarea { width: 100%; box-sizing: border-box; }
 }
@@ -4852,4 +4857,4 @@ th.is-sortable[data-dir="desc"]::after {
     padding: 0;
   }
 }
-.price-tier-conpayer { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.price-tier-conpayer { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; text-transform: none; letter-spacing: 0; }
