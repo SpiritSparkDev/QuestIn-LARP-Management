@@ -18,11 +18,21 @@ import { logger } from '../logger.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { sanitizeRichText, sanitizeFieldValue } from '../richText.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
+import { getScCharacterSchema } from '../scSchema/repository.js';
+import { getNscProfileSchema } from '../nscSchema/repository.js';
+import { createCharacter } from '../characters/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 
 const GUEST_REGISTER_RATE_LIMIT = { keyPrefix: 'guest-register', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 const PAYMENT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// The link doubles as the ticket link, so it must outlive the event.
+function tokenTtlMs(event) {
+  const untilEvent = event?.event_date ? new Date(event.event_date).getTime() + 2 * DAY_MS - Date.now() : 0;
+  return Math.max(PAYMENT_TOKEN_TTL_MS, untilEvent);
+}
 const GUEST_GROUP_KEY = 'mitglied';
 const COMING_SOON_ERROR = { status: 409, body: { error: 'Die Anmeldung ist noch gesperrt und startet bald.' } };
 
@@ -31,6 +41,14 @@ const COMING_SOON_ERROR = { status: 409, body: { error: 'Die Anmeldung ist noch 
 async function guestAccountSchema() {
   return (await getAccountFieldSchema()).filter((field) => field.key !== 'group');
 }
+
+// Character fields a guest may fill in (staff-only fields stay with the orga).
+async function guestCharacterSchema(characterClass) {
+  const schema = characterClass === 'nsc' ? await getNscProfileSchema() : await getScCharacterSchema();
+  return schema.filter((field) => !field.staffOnly);
+}
+
+const hasValue = (v) => v !== undefined && v !== null && v !== '' && v !== false && !(Array.isArray(v) && v.length === 0);
 
 function pickFields(schema, values) {
   const picked = {};
@@ -73,6 +91,8 @@ router.get('/public/events/:code', async ({ params }) => {
       id: event.id, name: event.name, eventDate: event.event_date, priceGroups: groups, prices,
       accountFields: await guestAccountSchema(),
       registrationFields: await getRegistrationFieldSchema(),
+      scFields: await guestCharacterSchema('sc'),
+      nscFields: await guestCharacterSchema('nsc'),
       // Ready-to-insert HTML for the embeddable widget (plain-text waivers keep their line breaks).
       waiverHtml: waiverText ? sanitizeRichText(waiverText).replace(/\n/g, '<br>') : null,
     },
@@ -83,7 +103,11 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   if ((await getAppSettings()).comingSoonEnabled) return COMING_SOON_ERROR;
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { firstName, lastName, nickname, priceGroup, waiverAccepted, accountData, registrationData } = body;
+  const { firstName, lastName, nickname, priceGroup, waiverAccepted, accountData, registrationData, character } = body;
+  const conRole = body.conRole ?? 'ticket';
+  if (!['ticket', 'sc', 'nsc'].includes(conRole)) return { status: 400, body: { error: 'conRole must be ticket, sc or nsc' } };
+  const characterName = typeof character?.name === 'string' ? character.name.trim() : '';
+  if (conRole === 'sc' && !characterName) return { status: 400, body: { error: 'Bitte gib einen Charakternamen an.' } };
   const conPayer = body.conPayer === true;
   const email = body.email?.toLowerCase();
   if (!email || !firstName || !lastName) {
@@ -119,14 +143,26 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   }
 
   const requestingUser = { id: userId, group: { key: GUEST_GROUP_KEY, canEditCharacters: false } };
+  let createdCharacterId = null;
   try {
-    await registerForEvent(userId, params.eventId, 'ticket', null, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { conPayer });
+    // SC: a character is required. NSC: only when the guest filled in the profile.
+    const characterData = pickFields(await guestCharacterSchema(conRole), character?.data);
+    if (conRole === 'sc' || (conRole === 'nsc' && Object.values(characterData).some(hasValue))) {
+      const created = await createCharacter(userId, { characterClass: conRole, name: characterName || nickname || firstName, data: characterData });
+      createdCharacterId = created.id;
+    }
+    await registerForEvent(userId, params.eventId, conRole, createdCharacterId, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { conPayer });
   } catch (err) {
     // Only clean up the guest row if THIS request created it -- an existing
     // guest reusing their email for a second event must never be deleted
     // just because that particular registration attempt failed.
     if (createdNewUser) {
       await query('DELETE FROM users WHERE id = $1', [userId]).catch(() => {});
+    } else if (createdCharacterId) {
+      await query('DELETE FROM characters WHERE id = $1', [createdCharacterId]).catch(() => {});
+    }
+    if (err.code === 'INVALID_CHARACTER_DATA') {
+      return { status: 400, body: { error: 'Bitte vervollständige die Angaben zum Charakter.', details: err.details } };
     }
     if (err.code === 'ALREADY_REGISTERED') {
       return {
@@ -159,18 +195,16 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   );
   const amountDueCents = amountRows[0]?.amount_due_cents ?? null;
 
-  if (!amountDueCents) {
-    return { status: 201, body: { status: 'confirmed' } };
-  }
-
-  const { token } = await setGuestPaymentToken(params.eventId, userId, PAYMENT_TOKEN_TTL_MS);
+  const { token } = await setGuestPaymentToken(params.eventId, userId, tokenTtlMs(event));
+  const ticketUrl = `/guest-payment.html?token=${token}`;
   try {
-    await sendGuestTicketEmail(email, { eventName: event.name, paymentToken: token, userId, conPayer });
+    await sendGuestTicketEmail(email, { eventName: event.name, paymentToken: token, userId, conPayer, free: !amountDueCents });
   } catch (err) {
     logger.error('failed to send guest ticket email', { error: err.message, eventId: params.eventId, userId });
   }
 
+  if (!amountDueCents) return { status: 201, body: { status: 'confirmed', ticketUrl } };
   // Con-Zahler pay at the con: no redirect to the payment page, the ticket is theirs anyway.
-  if (conPayer) return { status: 201, body: { status: 'con_payer' } };
-  return { status: 201, body: { status: 'registered', paymentUrl: `/guest-payment.html?token=${token}` } };
+  if (conPayer) return { status: 201, body: { status: 'con_payer', ticketUrl } };
+  return { status: 201, body: { status: 'registered', paymentUrl: ticketUrl } };
 }));

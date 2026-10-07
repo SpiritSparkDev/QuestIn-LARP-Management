@@ -145,15 +145,17 @@ export async function sendPaymentReminderEmail(to, { eventName, amountDueCents, 
   return deliver(transporter, from, to, rendered);
 }
 
-export async function sendGuestTicketEmail(to, { eventName, paymentToken, userId, conPayer = false }) {
+export async function sendGuestTicketEmail(to, { eventName, paymentToken, userId, conPayer = false, free = false }) {
   const { transporter, from } = await getTransporterAndFrom();
   const url = `${await baseUrl()}/guest-payment.html?token=${paymentToken}`;
   const rendered = await renderSlotEmail('guest_ticket', () => ({
     subject: `Dein Ticket für ${eventName}`,
-    body: conPayer
-      ? `Deine Anmeldung für "${eventName}" ist eingegangen. Du bist als Con-Zahler angemeldet und bezahlst vor Ort beim Check-In. Wenn du lieber schon vorab online zahlen möchtest: ${url}`
-      : `Deine Anmeldung für "${eventName}" ist eingegangen. Falls die Bezahlung gerade nicht geklappt hat oder du sie später abschließen möchtest, geht es hier weiter: ${url}`,
-  }), { userId, extra: { eventName, link: url, conPayer } });
+    body: free
+      ? `Deine Anmeldung für "${eventName}" ist eingegangen. Hier findest du dein Ticket: ${url}`
+      : conPayer
+        ? `Deine Anmeldung für "${eventName}" ist eingegangen. Du bist als Con-Zahler angemeldet und bezahlst vor Ort beim Check-In. Dein Ticket (und auf Wunsch die Online-Zahlung) findest du hier: ${url}`
+        : `Deine Anmeldung für "${eventName}" ist eingegangen. Falls die Bezahlung gerade nicht geklappt hat oder du sie später abschließen möchtest, geht es hier weiter – nach der Zahlung findest du dort auch dein Ticket: ${url}`,
+  }), { userId, extra: { eventName, link: url, conPayer, free } });
   return deliver(transporter, from, to, rendered);
 }
 

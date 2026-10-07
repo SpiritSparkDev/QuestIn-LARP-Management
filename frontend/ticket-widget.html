@@ -123,6 +123,12 @@ if (!code) {
           form.style.display = 'none';
           messageEl.textContent = 'Dein Ticket ist gesichert! Du erhältst eine Bestätigung per E-Mail.';
           messageEl.className = 'success';
+          if (result.ticketUrl) {
+            const link = document.createElement('a');
+            link.href = result.ticketUrl;
+            link.textContent = ' Ticket anzeigen';
+            messageEl.append(link);
+          }
         }
       } catch (err) {
         notify(err.message, 'error');

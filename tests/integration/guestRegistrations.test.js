@@ -120,6 +120,36 @@ test('guests are asked for the full data and it is stored', async () => {
   });
 });
 
+test('guests can register as SC (character created) or NSC (character only if filled in)', async () => {
+  await withTestServer(async (port) => {
+    const code = `ROLE-${crypto.randomUUID().slice(0, 8)}`;
+    const eventId = await makeEvent({ code });
+    const base = `http://localhost:${port}`;
+    const post = (body) => fetch(`${base}/public/events/${eventId}/guest-registration`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(guestPayload(body)),
+    });
+
+    const event = await (await fetch(`${base}/public/events/${code}`)).json();
+    assert.ok(Array.isArray(event.scFields) && Array.isArray(event.nscFields));
+
+    assert.equal((await post({ conRole: 'admin' })).status, 400);
+    assert.equal((await post({ conRole: 'sc' })).status, 400, 'SC needs a character name');
+
+    const sc = guestPayload({ conRole: 'sc', character: { name: 'Thorin Testschild', data: {} } });
+    assert.equal((await post(sc)).status, 201);
+    const { rows: scRows } = await query(
+      `SELECT r.con_role, c.name, c.class FROM registrations r JOIN users u ON u.id = r.user_id
+         LEFT JOIN characters c ON c.id = r.character_id WHERE u.email = $1`, [sc.email]);
+    assert.deepEqual(scRows[0], { con_role: 'sc', name: 'Thorin Testschild', class: 'sc' });
+
+    const nsc = guestPayload({ conRole: 'nsc' });
+    assert.equal((await post(nsc)).status, 201);
+    const { rows: nscRows } = await query(
+      `SELECT r.con_role, r.character_id FROM registrations r JOIN users u ON u.id = r.user_id WHERE u.email = $1`, [nsc.email]);
+    assert.deepEqual(nscRows[0], { con_role: 'nsc', character_id: null });
+  });
+});
+
 test('GET /public/events/:code returns 404 for an unknown code', async () => {
   await withTestServer(async (port) => {
     const res = await fetch(`http://localhost:${port}/public/events/does-not-exist`);
@@ -160,7 +190,9 @@ test('POST guest-registration on a free event creates a guest user and confirms 
       [eventId, payload.email]
     );
     assert.equal(regRows[0].con_role, 'ticket');
-    assert.equal(regRows[0].payment_token, null);
+    // The link doubles as the ticket link, so free events get one too.
+    assert.ok(regRows[0].payment_token);
+    assert.match(body.ticketUrl, /^\/guest-payment\.html\?token=/);
   });
 });
 
@@ -207,6 +239,38 @@ test('POST guest-registration as Con-Zahler skips the payment redirect but still
       [eventId, payload.email]
     );
     assert.deepEqual(rows[0], { con_payer: true, amount_due_cents: 3000, paid_at: null });
+  });
+});
+
+test('guest ticket link: ticket only when paid, free or Con-Zahler; the QR code carries event, group and user', async () => {
+  await withTestServer(async (port) => {
+    const code = `GT${crypto.randomUUID().slice(0, 6)}`;
+    const eventId = await makeEvent({
+      code,
+      pricing: { groups: ['Erwachsene'], tiers: [{ name: 'Standard', until: null, amounts: { Erwachsene: 3000 } }] },
+    });
+    const register = async (extra) => {
+      const payload = guestPayload({ priceGroup: 'Erwachsene', ...extra });
+      const res = await fetch(`http://localhost:${port}/public/events/${eventId}/guest-registration`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      const body = await res.json();
+      const token = new URL(body.paymentUrl ?? body.ticketUrl, 'http://x').searchParams.get('token');
+      return { payload, token, info: await (await fetch(`http://localhost:${port}/public/registrations/${token}`)).json() };
+    };
+
+    const unpaid = await register({});
+    assert.equal(unpaid.info.ticket, null);
+
+    const conPayer = await register({ conPayer: true });
+    assert.equal(conPayer.info.ticket.conPayer, true);
+    const { rows } = await query('SELECT id FROM users WHERE email = $1', [conPayer.payload.email]);
+    assert.equal(conPayer.info.ticket.scanCode, `${code}-mitglied-${rows[0].id}`);
+
+    await query("UPDATE registrations SET paid_at = now() WHERE payment_token = $1", [unpaid.token]);
+    const paid = await (await fetch(`http://localhost:${port}/public/registrations/${unpaid.token}`)).json();
+    assert.equal(paid.ticket.conPayer, false);
+    assert.equal(paid.ticket.participant, 'Guest Tester'.replace('Tester', unpaid.payload.lastName));
   });
 });
 

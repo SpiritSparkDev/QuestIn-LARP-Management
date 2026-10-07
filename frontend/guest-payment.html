@@ -3,17 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zahlung – Pakyrion</title>
+<title>Ticket – Pakyrion</title>
 <link rel="stylesheet" href="/css/fonts.css">
 <link rel="stylesheet" href="/css/sahara.css">
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1/dist/html2canvas.min.js"></script>
 </head>
 <body>
 <div class="shell">
   <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
   <div class="folio folio--narrow">
-    <h1 class="text-center">Zahlung</h1>
+    <h1 class="text-center" id="heading">Ticket &amp; Zahlung</h1>
     <p id="message">Bitte warten …</p>
+    <div class="ticket-panel" id="ticket-panel" style="display:none;">
+      <p class="lede">Am Check-In Schalter vorzeigen oder digital abspeichern.</p>
+      <div class="ticket-card" id="ticket-card">
+        <p class="ticket-eyebrow">Con Ticket</p>
+        <h3 class="ticket-event-name" id="ticket-event-name"></h3>
+        <hr class="ticket-divider">
+        <div class="ticket-details">
+          <div class="ticket-field"><span class="ticket-label">Teilnehmer</span><span class="ticket-value" id="ticket-participant"></span></div>
+          <div class="ticket-field"><span class="ticket-label">Rolle</span><span class="ticket-value" id="ticket-role"></span></div>
+          <div class="ticket-field"><span class="ticket-label">Datum</span><span class="ticket-value" id="ticket-date"></span></div>
+          <div class="ticket-field" id="ticket-conpayer-field" style="display:none;"><span class="ticket-label">Zahlung</span><span class="ticket-value">Con-Zahler</span></div>
+        </div>
+        <p class="ticket-scan-label">Scan beim Check-In</p>
+        <div class="ticket-qr-wrap"><canvas id="qr-canvas"></canvas></div>
+        <p class="ticket-id" id="ticket-id"></p>
+      </div>
+      <div class="ticket-actions">
+        <button type="button" id="ticket-download-png">Ticket herunterladen (PNG)</button>
+        <button type="button" id="ticket-download-pdf" class="btn-secondary">Als PDF</button>
+      </div>
+    </div>
     <button type="button" id="retry-button" style="display:none;">Zur Bezahlung</button>
   </div>
 </div>
@@ -39,31 +62,85 @@ async function startCheckout() {
   }
 }
 
-if (!token) {
-  messageEl.textContent = 'Kein Zahlungslink angegeben.';
-  messageEl.className = 'error';
-} else if (payment === 'success') {
-  messageEl.textContent = 'Zahlung erfolgreich! Du erhältst in Kürze eine Bestätigung per E-Mail.';
-  messageEl.className = 'success';
-} else if (payment === 'cancelled') {
-  messageEl.textContent = 'Die Zahlung wurde abgebrochen.';
-  retryButton.style.display = '';
-} else {
-  try {
-    const registration = await api.get(`/public/registrations/${token}`);
-    if (registration.paid) {
-      messageEl.textContent = 'Dieses Ticket ist bereits bezahlt.';
-      messageEl.className = 'success';
-    } else {
-      await startCheckout();
+function renderQrToCanvas(text, canvas) {
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  const moduleCount = qr.getModuleCount();
+  const cellSize = 6;
+  canvas.width = moduleCount * cellSize;
+  canvas.height = moduleCount * cellSize;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#000000';
+  for (let row = 0; row < moduleCount; row++) {
+    for (let col = 0; col < moduleCount; col++) {
+      if (qr.isDark(row, col)) ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
     }
-  } catch (err) {
-    messageEl.textContent = err.status === 410 ? 'Dieser Zahlungslink ist abgelaufen.' : err.message;
-    messageEl.className = 'error';
   }
 }
 
+function showTicket(registration) {
+  const t = registration.ticket;
+  document.getElementById('heading').textContent = 'Dein Ticket';
+  document.getElementById('ticket-event-name').textContent = registration.eventName;
+  document.getElementById('ticket-participant').textContent = t.participant;
+  document.getElementById('ticket-role').textContent = t.role;
+  document.getElementById('ticket-date').textContent = t.eventDate;
+  document.getElementById('ticket-conpayer-field').style.display = t.conPayer ? '' : 'none';
+  document.getElementById('ticket-id').textContent = `ID: ${t.scanCode}`;
+  renderQrToCanvas(t.scanCode, document.getElementById('qr-canvas'));
+  document.getElementById('ticket-panel').style.display = '';
+}
+
+document.getElementById('ticket-download-png').addEventListener('click', async () => {
+  const canvas = await html2canvas(document.getElementById('ticket-card'), { backgroundColor: null, scale: 2 });
+  const link = document.createElement('a');
+  link.download = 'pakyrion-ticket.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+document.getElementById('ticket-download-pdf').addEventListener('click', () => {
+  document.body.classList.add('printing-ticket');
+  window.print();
+});
+window.addEventListener('afterprint', () => document.body.classList.remove('printing-ticket'));
 retryButton.addEventListener('click', startCheckout);
+
+if (!token) {
+  messageEl.textContent = 'Kein Link angegeben.';
+  messageEl.className = 'error';
+} else {
+  try {
+    const registration = await api.get(`/public/registrations/${token}`);
+    const open = registration.amountDueCents > 0 && !registration.paid;
+    if (registration.ticket) {
+      showTicket(registration);
+      if (registration.ticket.conPayer) {
+        messageEl.textContent = 'Con-Zahler: Du zahlst vor Ort beim Check-In. Dein Ticket ist trotzdem gültig.';
+        retryButton.textContent = 'Lieber schon jetzt online zahlen';
+        if (open) retryButton.style.display = '';
+      } else {
+        messageEl.textContent = payment === 'success' ? 'Zahlung erfolgreich!' : '';
+        messageEl.className = 'success';
+      }
+    } else if (payment === 'success') {
+      messageEl.textContent = 'Zahlung erfolgreich! Sobald sie bestätigt ist, erscheint hier dein Ticket – bitte die Seite gleich noch einmal laden.';
+      messageEl.className = 'success';
+    } else if (payment === 'cancelled') {
+      messageEl.textContent = 'Die Zahlung wurde abgebrochen.';
+      retryButton.style.display = '';
+    } else if (open) {
+      await startCheckout();
+    } else {
+      messageEl.textContent = 'Für dieses Event ist noch kein Ticket verfügbar.';
+    }
+  } catch (err) {
+    messageEl.textContent = err.status === 410 ? 'Dieser Link ist abgelaufen.' : err.message;
+    messageEl.className = 'error';
+  }
+}
 </script>
 </body>
 </html>

@@ -29,7 +29,30 @@
 <style>
   :host { display: block; font: inherit; color: inherit; --accent: var(--pk-accent, #9c4a1a); --radius: var(--pk-radius, 6px); }
   * { box-sizing: border-box; font: inherit; }
-  form { display: grid; gap: 4px; max-width: 480px; }
+  form { display: grid; gap: 4px; max-width: 520px; }
+  header { margin-bottom: 4px; }
+  .progress { list-style: none; display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; padding: 0; font-size: .8em; }
+  .progress li { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; background: rgba(128,128,128,.12); opacity: .65; }
+  .progress li span { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(128,128,128,.35); font-weight: 600; font-size: .9em; }
+  .progress li.current { opacity: 1; background: color-mix(in srgb, var(--accent) 16%, transparent); font-weight: 600; }
+  .progress li.current span, .progress li.done span { background: var(--accent); color: #fff; }
+  .progress li.done { opacity: .9; }
+  section h4 { margin: 4px 0 2px; font-size: 1.1em; }
+  .intro { margin: 0 0 14px; opacity: .75; font-size: .9em; }
+  .roles { display: grid; gap: 10px; margin-bottom: 16px; }
+  .role { position: relative; display: grid; gap: 2px; padding: 14px 16px 14px 44px; margin: 0; border: 1.5px solid rgba(128,128,128,.4); border-radius: calc(var(--radius) * 1.5); opacity: 1; font-size: 1em; cursor: pointer; }
+  .role input { position: absolute; left: 16px; top: 18px; width: auto; margin: 0; accent-color: var(--accent); }
+  .role strong { font-size: 1em; }
+  .role span { font-size: .85em; opacity: .75; }
+  .role:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .role:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .summary { margin: 0 0 14px; padding: 12px 14px; border: 1px solid rgba(128,128,128,.4); border-radius: var(--radius); }
+  .summary div { display: flex; gap: 12px; justify-content: space-between; padding: 3px 0; }
+  .summary dt { opacity: .7; } .summary dd { margin: 0; font-weight: 600; text-align: right; }
+  .nav { display: flex; gap: 10px; justify-content: space-between; margin-top: 8px; }
+  .nav [data-next], .nav [data-submit] { margin-left: auto; }
+  button.ghost { background: transparent; color: inherit; border: 1px solid rgba(128,128,128,.6); }
+  [hidden] { display: none !important; }
   h3 { margin: 0; font-size: 1.25em; font-weight: 600; }
   h4 { margin: 18px 0 8px; font-size: 1em; font-weight: 600; }
   .multi > span { display: block; margin-bottom: 4px; }
@@ -100,6 +123,13 @@
     return body;
   }
 
+  const ROLES = [
+    { key: 'sc', title: 'Spielercharakter (SC)', text: 'Du reist mit eigenem Charakter an.' },
+    { key: 'nsc', title: 'Nichtspieler (NSC)', text: 'Du unterstützt die Spielleitung, ob in einer Festrolle oder bei einer Quest.' },
+    { key: 'ticket', title: 'Nur Ticket', text: 'Du kommst ohne Charakter, z. B. als Besucher*in oder Begleitung.' },
+  ];
+  const euro = (cents) => `${(cents / 100).toFixed(2).replace('.', ',')} €`;
+
   async function init() {
     if (!code) return say('Kein Event angegeben (data-event fehlt).', 'error');
     let event;
@@ -108,35 +138,110 @@
     } catch (err) {
       return say(err.message, 'error');
     }
-    const groups = event.priceGroups.map((g) => {
+    const scFields = event.scFields ?? [];
+    const nscFields = event.nscFields ?? [];
+    const priceOptions = event.priceGroups.map((g) => {
       const cents = event.prices[g];
-      return `<option value="${esc(g)}">${esc(g)}${Number.isInteger(cents) ? ` (${(cents / 100).toFixed(2).replace('.', ',')} €)` : ''}</option>`;
+      return `<option value="${esc(g)}">${esc(g)}${Number.isInteger(cents) ? ` (${euro(cents)})` : ''}</option>`;
     }).join('');
+
+    const section = (id, title, intro, body) =>
+      `<section data-step="${id}" data-title="${esc(title)}" hidden><h4>${esc(title)}</h4>${intro ? `<p class="intro">${intro}</p>` : ''}${body}</section>`;
     form.innerHTML = `
-      <h3>${esc(event.name)}</h3><p class="date">${esc(event.eventDate)}</p>
-      ${field('firstName', 'Vorname', 'text', true)}
-      ${field('lastName', 'Nachname', 'text', true)}
-      ${field('nickname', 'Rufname')}
-      ${field('email', 'E-Mail', 'email', true)}
-      ${groups ? `<select id="pk-priceGroup" name="priceGroup">${groups}</select><label for="pk-priceGroup">Teilnahmegruppe</label>` : ''}
-      ${fieldsSection('Persönliche Angaben', event.accountFields, 'account')}
-      ${fieldsSection('Angaben zur Anmeldung', event.registrationFields, 'registration')}
-      ${event.waiverHtml ? `<div class="waiver">${event.waiverHtml}</div><label class="check"><input type="checkbox" name="waiverAccepted" required> Ich habe die AGB und die Einverständniserklärung gelesen und stimme zu.</label>` : ''}
-      <label class="check"><input type="checkbox" name="conPayer"> Con-Zahler: Ich bezahle erst vor Ort beim Check-In. Das Ticket wird trotzdem ausgestellt und als „Con-Zahler“ gekennzeichnet.</label>
-      <button type="submit">Ticket sichern</button>`;
+      <header><h3>${esc(event.name)}</h3><p class="date">${esc(event.eventDate)}</p></header>
+      <ol class="progress" aria-label="Fortschritt"></ol>
+      ${section('role', 'Teilnahme', 'Wie nimmst du am Event teil?', `
+        <div class="roles">${ROLES.map((r, i) => `<label class="role"><input type="radio" name="conRole" value="${r.key}"${i === 0 ? ' checked' : ''}><strong>${esc(r.title)}</strong><span>${esc(r.text)}</span></label>`).join('')}</div>
+        ${priceOptions ? `<select id="pk-priceGroup" name="priceGroup">${priceOptions}</select><label for="pk-priceGroup">Teilnahmegruppe</label>` : ''}`)}
+      ${section('person', 'Zur Person', 'Damit wir dich erreichen und dein Ticket zuordnen können.', `
+        ${field('firstName', 'Vorname', 'text', true)}${field('lastName', 'Nachname', 'text', true)}
+        ${field('nickname', 'Rufname')}${field('email', 'E-Mail', 'email', true)}`)}
+      ${event.accountFields.length ? section('account', 'Persönliche Angaben', 'Diese Angaben bleiben verschlüsselt gespeichert und helfen uns bei Verpflegung, Sicherheit und Erster Hilfe.', `<div data-fields="account">${event.accountFields.map((f) => fieldHtml(f, 'account')).join('')}</div>`) : ''}
+      ${section('sc', 'Dein Charakter', 'Wer wirst du auf dem Event sein?', `
+        ${field('characterName', 'Charaktername', 'text', true)}
+        <div data-fields="sc">${scFields.map((f) => fieldHtml(f, 'sc')).join('')}</div>`)}
+      ${nscFields.length ? section('nsc', 'Dein NSC-Profil', 'Optional – je mehr du uns verrätst, desto besser können wir dich einsetzen.', `<div data-fields="nsc">${nscFields.map((f) => fieldHtml(f, 'nsc')).join('')}</div>`) : ''}
+      ${event.registrationFields.length ? section('registration', 'Zur Anmeldung', '', `<div data-fields="registration">${event.registrationFields.map((f) => fieldHtml(f, 'registration')).join('')}</div>`) : ''}
+      ${section('confirm', 'Abschluss', 'Bitte prüfe deine Angaben.', `
+        <dl class="summary"></dl>
+        ${event.waiverHtml ? `<div class="waiver">${event.waiverHtml}</div><label class="check"><input type="checkbox" name="waiverAccepted" required> Ich habe die AGB und die Einverständniserklärung gelesen und stimme zu.</label>` : ''}
+        <label class="check"><input type="checkbox" name="conPayer"> Con-Zahler: Ich bezahle erst vor Ort beim Check-In. Das Ticket wird trotzdem ausgestellt und als „Con-Zahler“ gekennzeichnet.</label>`)}
+      <div class="nav"><button type="button" class="ghost" data-back>Zurück</button><button type="button" data-next>Weiter</button><button type="submit" data-submit>Ticket sichern</button></div>`;
     say('');
     form.hidden = false;
+    form.noValidate = true; // steps are validated one by one, hidden steps must not block submit
+
+    const sections = [...form.querySelectorAll('section')];
+    const byId = (id) => sections.find((s) => s.dataset.step === id);
+    const roleOf = () => form.querySelector('input[name=conRole]:checked').value;
+    // Which steps apply depends on the chosen role: SC gets a character, NSC an optional profile.
+    const activeSteps = () => {
+      const role = roleOf();
+      return sections.filter((s) => {
+        const id = s.dataset.step;
+        if (id === 'sc') return role === 'sc';
+        if (id === 'nsc') return role === 'nsc';
+        return true;
+      });
+    };
+    let index = 0;
+    const value = (name) => form.elements[name]?.value.trim() ?? '';
+
+    const fillSummary = () => {
+      const role = ROLES.find((r) => r.key === roleOf());
+      const rows = [['Teilnahme', role.title]];
+      if (form.elements.priceGroup) {
+        const g = form.elements.priceGroup.value;
+        rows.push(['Teilnahmegruppe', `${g}${Number.isInteger(event.prices[g]) ? ` – ${euro(event.prices[g])}` : ''}`]);
+      }
+      rows.push(['Name', [value('firstName'), value('lastName')].join(' ')], ['E-Mail', value('email')]);
+      if (roleOf() === 'sc') rows.push(['Charakter', value('characterName')]);
+      form.querySelector('.summary').innerHTML = rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
+    };
+
+    const show = (i) => {
+      const steps = activeSteps();
+      index = Math.max(0, Math.min(i, steps.length - 1));
+      sections.forEach((s) => { s.hidden = s !== steps[index]; });
+      if (steps[index].dataset.step === 'confirm') fillSummary();
+      form.querySelector('.progress').innerHTML = steps.map((s, n) =>
+        `<li class="${n < index ? 'done' : ''}${n === index ? ' current' : ''}"><span>${n < index ? '✓' : n + 1}</span>${esc(s.dataset.title)}</li>`).join('');
+      const last = index === steps.length - 1;
+      form.querySelector('[data-back]').hidden = index === 0;
+      form.querySelector('[data-next]').hidden = last;
+      form.querySelector('[data-submit]').hidden = !last;
+      say('');
+    };
+    const valid = () => {
+      for (const el of activeSteps()[index].querySelectorAll('input, select, textarea')) {
+        if (!el.checkValidity()) { el.reportValidity(); return false; }
+      }
+      return true;
+    };
+    form.querySelector('[data-next]').addEventListener('click', () => { if (valid()) show(index + 1); });
+    form.querySelector('[data-back]').addEventListener('click', () => show(index - 1));
+    form.querySelectorAll('input[name=conRole]').forEach((r) => r.addEventListener('change', () => show(index)));
+    show(0);
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const button = form.querySelector('button');
+      if (!valid()) return;
+      if (index < activeSteps().length - 1) return show(index + 1); // Enter key on an early step
+      const button = form.querySelector('[data-submit]');
       button.disabled = true;
       say('');
-      const data = Object.fromEntries(new FormData(form));
-      data.waiverAccepted = Boolean(form.elements.waiverAccepted?.checked);
-      data.conPayer = Boolean(form.elements.conPayer?.checked);
-      data.accountData = collectFields(form.querySelector('[data-fields=account]'), event.accountFields);
-      data.registrationData = collectFields(form.querySelector('[data-fields=registration]'), event.registrationFields);
+      const role = roleOf();
+      const data = {
+        conRole: role,
+        firstName: value('firstName'), lastName: value('lastName'), nickname: value('nickname'), email: value('email'),
+        waiverAccepted: Boolean(form.elements.waiverAccepted?.checked),
+        conPayer: Boolean(form.elements.conPayer?.checked),
+        accountData: collectFields(form.querySelector('[data-fields=account]'), event.accountFields),
+        registrationData: collectFields(form.querySelector('[data-fields=registration]'), event.registrationFields),
+      };
+      if (form.elements.priceGroup) data.priceGroup = form.elements.priceGroup.value;
+      if (role === 'sc') data.character = { name: value('characterName'), data: collectFields(form.querySelector('[data-fields=sc]'), scFields) };
+      if (role === 'nsc') data.character = { data: collectFields(form.querySelector('[data-fields=nsc]'), nscFields) };
       try {
         const result = await call(`/public/events/${event.id}/guest-registration`, {
           method: 'POST',
@@ -149,6 +254,7 @@
         }
         form.hidden = true;
         say('Dein Ticket ist gesichert! Du erhältst eine Bestätigung per E-Mail.', 'success');
+        if (result.ticketUrl) msg.insertAdjacentHTML('beforeend', ` <a href="${base}${result.ticketUrl}">Ticket anzeigen</a>`);
       } catch (err) {
         say(err.message, 'error');
         button.disabled = false;

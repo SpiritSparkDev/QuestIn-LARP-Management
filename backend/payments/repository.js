@@ -119,7 +119,7 @@ export async function setGuestPaymentToken(eventId, userId, ttlMs) {
 
 export async function getRegistrationByPaymentToken(token) {
   const { rows } = await query(
-    `SELECT event_id, user_id, amount_due_cents, paid_at, payment_token_expires_at
+    `SELECT event_id, user_id, amount_due_cents, paid_at, payment_token_expires_at, con_payer, con_role
      FROM registrations WHERE payment_token = $1`,
     [token]
   );
@@ -130,6 +130,8 @@ export async function getRegistrationByPaymentToken(token) {
     amountDueCents: rows[0].amount_due_cents,
     paidAt: rows[0].paid_at,
     paymentTokenExpiresAt: rows[0].payment_token_expires_at,
+    conPayer: rows[0].con_payer,
+    conRole: rows[0].con_role,
   };
 }
 

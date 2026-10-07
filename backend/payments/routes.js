@@ -4,6 +4,7 @@ import { requireMenu } from '../middleware/authorize.js';
 import { readJsonBody, readRawBody } from '../httpBody.js';
 import { logger } from '../logger.js';
 import { query } from '../db.js';
+import { displayName } from '../displayName.js';
 import { getEvent } from '../events/repository.js';
 import { baseUrl, getTransporterAndFrom, sendPaymentReminderEmail } from '../auth/mailer.js';
 import { getStripeClient } from './stripeClient.js';
@@ -125,12 +126,32 @@ router.get('/public/registrations/:token', async ({ params }) => {
     return { status: 410, body: { error: 'Dieser Zahlungslink ist abgelaufen.' } };
   }
   const event = await getEvent(registration.eventId);
+  // Same rule as the ticket in the account: paid, free or Con-Zahler.
+  const ticketAllowed = Boolean(event?.code) && (
+    Boolean(registration.paidAt) || registration.conPayer || registration.amountDueCents === 0
+  );
+  let ticket = null;
+  if (ticketAllowed) {
+    const { rows } = await query(
+      'SELECT u.first_name, u.last_name, u.nickname, g.key AS group_key FROM users u JOIN groups g ON g.id = u.group_id WHERE u.id = $1',
+      [registration.userId]
+    );
+    const u = rows[0];
+    ticket = {
+      participant: displayName({ firstName: u.first_name, lastName: u.last_name, nickname: u.nickname }),
+      role: 'Ticket',
+      eventDate: event.event_date,
+      scanCode: `${event.code}-${u.group_key}-${registration.userId}`,
+      conPayer: registration.conPayer && !registration.paidAt,
+    };
+  }
   return {
     status: 200,
     body: {
       eventName: event?.name ?? 'Event',
       amountDueCents: registration.amountDueCents,
       paid: Boolean(registration.paidAt),
+      ticket,
     },
   };
 });
