@@ -170,3 +170,11 @@ export async function sendPdfImportReceivedEmail(to, { name }, { transporter, fr
   }), { extra: { name } });
   return deliver(transporter, from, to, rendered);
 }
+
+export async function sendUnpaidReminderOrgaEmail(to, { eventName, reminderNumber, list }, { transporter, from }) {
+  const rendered = await renderSlotEmail('unpaid_reminder_orga', () => ({
+    subject: `Offene Zahlungen: ${eventName} (Erinnerung ${reminderNumber})`,
+    body: `Für "${eventName}" haben folgende per PDF angemeldete Personen noch nicht gezahlt:\n\n${list}\n\nBitte schreibt sie ggf. noch einmal an.`,
+  }), { extra: { eventName, reminderNumber, list } });
+  return deliver(transporter, from, to, rendered);
+}

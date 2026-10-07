@@ -1,0 +1,120 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import { withTestServer } from '../testServer.js';
+
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
+  || 'postgres://app:app@localhost:5433/pakyrion_test';
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64);
+delete process.env.SMTP_HOST;
+
+const { runMigrations } = await import('../../db/migrate.js');
+await runMigrations();
+
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+
+const { query, closePool } = await import('../../backend/db.js');
+const { createSession } = await import('../../backend/auth/sessions.js');
+const { runUnpaidReminders } = await import('../../backend/registrations/unpaidReminders.js');
+
+const TAG = `conpayer-${crypto.randomUUID().slice(0, 6)}`;
+
+async function makeUser(groupKey, firstName) {
+  const { rows } = await query(
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, $2, 'Test', (SELECT id FROM groups WHERE key = $3), true) RETURNING id",
+    [`${TAG}-${crypto.randomUUID()}@example.com`, firstName, groupKey]
+  );
+  const session = await createSession(rows[0].id);
+  return { userId: rows[0].id, cookie: `session=${session.token}` };
+}
+
+test('Con-Zahler: ticket flag, toggling, and check-in asks for / books the payment', async () => {
+  await withTestServer(async (port) => {
+    const base = `http://localhost:${port}`;
+    const json = (cookie) => ({ 'Content-Type': 'application/json', Cookie: cookie });
+    const admin = await makeUser('admin', 'Admin');
+    const alice = await makeUser('mitglied', 'Alice');
+    const bob = await makeUser('mitglied', 'Bob');
+    const { rows: ev } = await query(`INSERT INTO events (name, event_date, is_active) VALUES ('${TAG} Con', '2099-08-01', true) RETURNING id`);
+    const eventId = ev[0].id;
+    const register = (user, body) => fetch(`${base}/events/${eventId}/register`, { method: 'POST', headers: json(user.cookie), body: JSON.stringify({ conRole: 'helfer', ...body }) });
+
+    assert.equal((await register(alice, { conPayer: true })).status, 201);
+    assert.equal((await register(bob, {})).status, 201);
+    const mine = async (user) => (await (await fetch(`${base}/registrations`, { headers: json(user.cookie) })).json())[0];
+    assert.equal((await mine(alice)).conPayer, true);
+    assert.equal((await mine(bob)).conPayer, false);
+
+    // Toggle: the person themself, not somebody else.
+    const put = (user, target, conPayer) => fetch(`${base}/events/${eventId}/registrations/${target.userId}/con-payer`, { method: 'PUT', headers: json(user.cookie), body: JSON.stringify({ conPayer }) });
+    assert.equal((await put(alice, bob, true)).status, 403);
+    assert.equal((await put(bob, bob, true)).status, 200);
+    assert.equal((await mine(bob)).conPayer, true);
+    assert.equal((await put(bob, bob, 'yes')).status, 400);
+
+    // A pending Con-Zahler can be checked in (approved on the spot); the confirmed payment is booked.
+    await query('UPDATE registrations SET amount_due_cents = 4000 WHERE event_id = $1', [eventId]);
+    const checkin = (userId, body) => fetch(`${base}/events/${eventId}/checkin`, { method: 'POST', headers: json(admin.cookie), body: JSON.stringify({ userId, ...body }) });
+    const scan = await (await fetch(`${base}/events/${eventId}/participants`, { headers: json(admin.cookie) })).json();
+    assert.equal(scan.find((p) => p.userId === alice.userId).conPayer, true);
+    assert.equal((await checkin(alice.userId, { paidConfirmed: true })).status, 200);
+    const row = (await query('SELECT status, paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, alice.userId])).rows[0];
+    assert.equal(row.status, 'checked_in');
+    assert.ok(row.paid_at);
+    assert.equal((await query('SELECT count(*)::int AS n FROM payments WHERE event_id = $1 AND user_id = $2', [eventId, alice.userId])).rows[0].n, 1);
+
+    // Paid Con-Zahler can't be toggled any more; a normal pending person still can't check in.
+    assert.equal((await put(alice, alice, false)).status, 409);
+    await query("UPDATE registrations SET con_payer = false WHERE event_id = $1 AND user_id = $2", [eventId, bob.userId]);
+    assert.equal((await checkin(bob.userId, {})).status, 409);
+  });
+});
+
+test('unpaid reminders: up to the configured count, one mail per event, Con-Zahler and paid left out', async () => {
+  const admin = await makeUser('admin', 'Rem');
+  const a = await makeUser('mitglied', 'Anna');
+  const b = await makeUser('mitglied', 'Berta');
+  const c = await makeUser('mitglied', 'Clara');
+  const { rows: ev } = await query(`INSERT INTO events (name, event_date, is_active) VALUES ('${TAG} Reminder', '2099-09-01', true) RETURNING id`);
+  const eventId = ev[0].id;
+  const insert = (user, extra) => query(
+    `INSERT INTO registrations (user_id, event_id, con_role, status, amount_due_cents, pdf_import, created_at, ${extra.col}) VALUES ($1, $2, 'helfer', 'pending', 2500, true, now() - interval '10 days', ${extra.val})`,
+    [user.userId, eventId]
+  );
+  await insert(a, { col: 'con_payer', val: 'false' });
+  await insert(b, { col: 'con_payer', val: 'true' });
+  await insert(c, { col: 'paid_at', val: 'now()' });
+  await query('INSERT INTO app_settings DEFAULT VALUES').catch(() => {});
+  await query("UPDATE app_settings SET unpaid_reminder_days = '{3,7}'");
+
+  const sent = [];
+  const send = async (to, payload) => { sent.push({ to, ...payload }); };
+  // Nobody wants mail for other tests' leftovers: only look at our event.
+  const mine = () => sent.filter((m) => m.eventName === `${TAG} Reminder`);
+
+  await runUnpaidReminders({ send });
+  assert.ok(mine().length >= 1);
+  assert.ok(mine()[0].list.includes('Anna'));
+  assert.ok(!mine()[0].list.includes('Berta') && !mine()[0].list.includes('Clara'));
+  assert.equal(mine()[0].reminderNumber, 1);
+  assert.equal((await query('SELECT unpaid_reminders_sent AS n FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, a.userId])).rows[0].n, 1);
+
+  // Reminder 2 is due after 7 days (the registration is 10 days old), reminder 3 doesn't exist.
+  sent.length = 0;
+  await runUnpaidReminders({ send });
+  assert.equal(mine()[0].reminderNumber, 2);
+  sent.length = 0;
+  await runUnpaidReminders({ send });
+  assert.equal(mine().length, 0);
+  assert.equal(admin.userId !== undefined, true);
+});
+
+test.after(async () => {
+  await query("DELETE FROM registrations WHERE event_id IN (SELECT id FROM events WHERE name LIKE $1)", [`${TAG}%`]);
+  await query("DELETE FROM payments WHERE event_id IN (SELECT id FROM events WHERE name LIKE $1)", [`${TAG}%`]);
+  await query("DELETE FROM events WHERE name LIKE $1", [`${TAG}%`]);
+  await query("DELETE FROM users WHERE email LIKE $1", [`${TAG}-%`]);
+  await query("UPDATE app_settings SET unpaid_reminder_days = '{}'");
+  await closePool();
+});

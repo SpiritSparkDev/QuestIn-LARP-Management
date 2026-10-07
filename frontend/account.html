@@ -115,6 +115,7 @@
                   <div class="ticket-field"><span class="ticket-label">Teilnehmer</span><span class="ticket-value" id="ticket-participant"></span></div>
                   <div class="ticket-field"><span class="ticket-label">Rolle</span><span class="ticket-value" id="ticket-role"></span></div>
                   <div class="ticket-field"><span class="ticket-label">Datum</span><span class="ticket-value" id="ticket-date"></span></div>
+                  <div class="ticket-field" id="ticket-conpayer-field" style="display:none;"><span class="ticket-label">Zahlung</span><span class="ticket-value" id="ticket-conpayer">Con-Zahler</span></div>
                 </div>
                 <p class="ticket-scan-label">Scan beim Check-In</p>
                 <div class="ticket-qr-wrap"><canvas id="qr-canvas"></canvas></div>
@@ -412,6 +413,7 @@
                     <h3>3. Weitere Angaben zu dieser Anmeldung</h3>
                     <div id="ot-fields" class="field-grid"></div>
 
+                    <label id="registration-conpayer-row"><input type="checkbox" id="registration-conpayer-checkbox"> <strong>Con-Zahler:</strong> Ich bezahle erst vor Ort. Das Ticket wird trotzdem ausgestellt und als „Con-Zahler“ gekennzeichnet.</label>
                     <div id="registration-waiver" style="display:none;">
                       <h3>4. AGB &amp; Einverständniserklärung</h3>
                       <div class="sub" id="registration-waiver-text"></div>
@@ -441,6 +443,7 @@
                 </p>
                 <button type="button" id="active-registration-edit-btn">Bearbeiten</button>
                 <button type="button" id="active-registration-lodging-btn" class="btn-secondary" style="display:none;">Unterkunft wählen</button>
+                <button type="button" id="active-registration-conpayer-btn" class="btn-secondary" style="display:none;"></button>
                 <button type="button" id="active-registration-unregister-btn" class="btn-secondary" style="display:none;">Abmelden</button>
               </div>
 
@@ -956,6 +959,14 @@
     }
 
     function applyPaymentGate(eventId, registration) {
+      // Con-Zahler pay at the con: the ticket is issued anyway (and marked as such).
+      if (registration.conPayer && !registration.paidAt) {
+        const hint = document.getElementById("ticket-payment-hint");
+        hint.style.display = "";
+        hint.textContent = "Con-Zahler: Du zahlst vor Ort beim Check-In. Dein Ticket ist trotzdem gültig.";
+        document.getElementById("ticket-pay-btn").style.display = "none";
+        return false;
+      }
       const noAmount = registration.amountDueCents == null;
       const gated = noAmount || (registration.amountDueCents > 0 && !registration.paidAt);
       const hint = document.getElementById("ticket-payment-hint");
@@ -1083,6 +1094,7 @@
         document.getElementById("ticket-role").textContent =
           CON_ROLE_LABELS[registration.conRole] ?? registration.conRole;
         document.getElementById("ticket-date").textContent = activeEvent.event_date;
+        document.getElementById("ticket-conpayer-field").style.display = registration.conPayer && !registration.paidAt ? "" : "none";
         document.getElementById("ticket-id").textContent = `ID: ${code}`;
 
         const { hasUploadedTicketBackground } = await api.get("/app-settings");
@@ -2211,6 +2223,21 @@
 
       document.getElementById("active-registration-edit-btn").onclick = () =>
         openEditOtDialog(activeEvent.id);
+      const conPayerBtn = document.getElementById("active-registration-conpayer-btn");
+      if (!registration.paidAt && ["pending", "confirmed", "waitlisted"].includes(registration.status)) {
+        conPayerBtn.textContent = registration.conPayer ? "Con-Zahler aufheben" : "Als Con-Zahler markieren";
+        conPayerBtn.style.display = "";
+        conPayerBtn.onclick = async () => {
+          try {
+            await api.put(`/events/${activeEvent.id}/registrations/${currentUserId}/con-payer`, { conPayer: !registration.conPayer });
+            await loadRegistrations();
+          } catch (err) {
+            notify(err.message, "error");
+          }
+        };
+      } else {
+        conPayerBtn.style.display = "none";
+      }
       const unregisterBtn = document.getElementById("active-registration-unregister-btn");
       if (registration.status === "pending" || registration.status === "waitlisted") {
         unregisterBtn.style.display = "";
@@ -2306,6 +2333,7 @@
           lodgingDetails: lodgingChoice.lodgingDetails,
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
+          conPayer: document.getElementById("registration-conpayer-checkbox").checked,
         });
         window.location.href = `/registration-confirmation.html?event=${eventId}`;
         return;

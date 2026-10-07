@@ -31,6 +31,7 @@ import './managedPersons/convertRoutes.js';
 import './nscSchema/routes.js';
 import './scSchema/routes.js';
 import './groupSchema/routes.js';
+import { runUnpaidReminders } from './registrations/unpaidReminders.js';
 import './accountFieldSchema/routes.js';
 import './registrationFieldSchema/routes.js';
 import './smtpSettings/routes.js';
@@ -124,4 +125,6 @@ if (isMain) {
   const runCleanup = () => runDueAutoDeletions().catch((err) => logger.error('privacy cleanup failed', { error: err.message }));
   setTimeout(runCleanup, 60_000).unref();
   setInterval(runCleanup, 6 * 60 * 60 * 1000).unref();
+  setTimeout(runUnpaidReminders, 120_000).unref();
+  setInterval(runUnpaidReminders, 6 * 60 * 60 * 1000).unref();
 }

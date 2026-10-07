@@ -384,6 +384,7 @@ let scanIntervalId = null;
 let scanPushTimeoutId = null;
 let scanDialogAutoCloseId = null;
 let dialogOpenForEventId = null;
+let scanLookupForConfirm = null;
 let scanLookupPending = false;
 
 const scanViewport = document.getElementById('scan-viewport');
@@ -501,7 +502,8 @@ function openScanDialog(eventId, lookup) {
   const warning = document.getElementById('scan-warning');
   const confirmButton = document.getElementById('scan-confirm');
   const NOT_READY_MESSAGES = { pending: 'Noch nicht freigegeben.', cancelled: 'Abgesagt.', checked_in: 'Bereits eingecheckt.', checked_out: 'Bereits ausgecheckt.' };
-  if (lookup.status !== 'confirmed') {
+  scanLookupForConfirm = lookup;
+  if (!(lookup.status === 'confirmed' || (lookup.status === 'pending' && lookup.conPayer))) {
     warning.textContent = NOT_READY_MESSAGES[lookup.status] ?? 'Nicht bereit zum Einchecken.';
     warning.style.display = '';
     confirmButton.disabled = true;
@@ -523,7 +525,8 @@ document.getElementById('scan-confirm').addEventListener('click', async (event) 
   clearTimeout(scanDialogAutoCloseId);
   const userId = event.target.dataset.userId;
   scanDialog.close();
-  await transition(dialogOpenForEventId, userId, 'checkin');
+  if (!confirmPaid(scanLookupForConfirm)) return;
+  await transition(dialogOpenForEventId, userId, 'checkin', { paidConfirmed: !scanLookupForConfirm?.paidAt });
 });
 
 document.getElementById('scan-cancel').addEventListener('click', () => {
@@ -667,7 +670,9 @@ searchInput.addEventListener('input', () => {
 
 function renderCheckinCell(p) {
   if (p.status === 'notified') return '';
-  return `<button type="button" class="btn btn-sm" data-checkin="${p.userId}" ${p.status !== 'confirmed' ? 'disabled' : ''}>Check-In</button>`;
+  const ready = p.status === 'confirmed' || (p.status === 'pending' && p.conPayer);
+  const tag = p.conPayer && !p.paidAt ? ' <span class="tag">Con-Zahler</span>' : '';
+  return `<button type="button" class="btn btn-sm" data-checkin="${p.userId}" ${ready ? '' : 'disabled'}>Check-In</button>${tag}`;
 }
 
 function renderCheckoutCell(p) {
@@ -699,7 +704,11 @@ function renderParticipants(participants, eventId) {
   statCheckedIn.textContent = participants.filter((p) => p.status === 'checked_in').length;
 
   listBody.querySelectorAll('[data-checkin]').forEach((button) => {
-    button.addEventListener('click', () => transition(eventId, button.dataset.checkin, 'checkin'));
+    button.addEventListener('click', () => {
+      const p = participantsById.get(button.dataset.checkin);
+      if (!confirmPaid(p)) return;
+      transition(eventId, button.dataset.checkin, 'checkin', { paidConfirmed: !p?.paidAt });
+    });
   });
   listBody.querySelectorAll('[data-checkout]').forEach((button) => {
     button.addEventListener('click', () => transition(eventId, button.dataset.checkout, 'checkout'));
@@ -729,13 +738,20 @@ function renderParticipants(participants, eventId) {
   applySearchFilter();
 }
 
-async function transition(eventId, userId, action) {
+async function transition(eventId, userId, action, extra = {}) {
   try {
-    await api.post(`/events/${eventId}/${action}`, { userId });
+    await api.post(`/events/${eventId}/${action}`, { userId, ...extra });
     await loadParticipants(eventId);
   } catch (err) {
     notify(err.message, 'error');
   }
+}
+
+// Before checking in: has the person really paid? Already booked payments need no question.
+function confirmPaid(p) {
+  if (!p || p.paidAt) return true;
+  const amount = p.amountDueCents != null ? ` (${(p.amountDueCents / 100).toFixed(2).replace('.', ',')} €)` : '';
+  return confirm(`${p.conPayer ? 'Con-Zahler: ' : ''}Hat ${p.name ?? 'die Person'} den Betrag${amount} wirklich gezahlt?`);
 }
 
 async function overrideStatus(eventId, userId, newStatus, previousStatus) {

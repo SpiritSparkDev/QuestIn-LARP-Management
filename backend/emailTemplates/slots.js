@@ -90,6 +90,16 @@ export const EMAIL_SLOTS = [
     extraFields: [{ key: 'eventName', label: 'Eventname' }],
   },
   {
+    key: 'unpaid_reminder_orga',
+    label: 'Orga-Erinnerung: offene Zahlungen (PDF-Anmeldungen)',
+    supportsAccount: false,
+    extraFields: [
+      { key: 'eventName', label: 'Eventname' },
+      { key: 'reminderNumber', label: 'Nummer der Erinnerung' },
+      { key: 'list', label: 'Liste der Personen mit offener Zahlung' },
+    ],
+  },
+  {
     key: 'pdf_import_received',
     label: 'PDF-Import: Eingangsbestätigung',
     supportsAccount: false,

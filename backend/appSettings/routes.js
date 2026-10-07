@@ -42,7 +42,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const {
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
-    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity,
+    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity, unpaidReminderDays,
   } = body;
   if (waiverText !== undefined && typeof waiverText !== 'string') {
     return { status: 400, body: { error: 'waiverText must be a string' } };
@@ -60,6 +60,10 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   }
   if (invitationTtlDays !== undefined && (!Number.isInteger(invitationTtlDays) || invitationTtlDays < 1)) {
     return { status: 400, body: { error: 'invitationTtlDays must be a positive integer' } };
+  }
+  if (unpaidReminderDays !== undefined && !(Array.isArray(unpaidReminderDays) && unpaidReminderDays.length <= 3
+    && unpaidReminderDays.every((d) => Number.isInteger(d) && d >= 1 && d <= 365))) {
+    return { status: 400, body: { error: 'unpaidReminderDays must be a list of up to 3 whole numbers from 1 to 365' } };
   }
   if (characterBrowsingEnabled !== undefined && typeof characterBrowsingEnabled !== 'boolean') {
     return { status: 400, body: { error: 'characterBrowsingEnabled must be a boolean' } };
@@ -126,7 +130,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   const saved = await setAppSettings({
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText,
     baseUrl: baseUrl === undefined ? undefined : baseUrl.replace(/\/+$/, ''),
-    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity,
+    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity, unpaidReminderDays,
   });
 
   // Fire-and-forget: sendComingSoonReminders never throws (own try/catch per

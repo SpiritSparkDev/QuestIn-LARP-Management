@@ -93,6 +93,24 @@
             </form>
           </div>
           <div class="card form-pad">
+            <h2>Zahlungserinnerungen an die Orga</h2>
+            <p class="sub">
+              Per PDF angemeldete Personen bleiben offen, bis sie zahlen. Die Orga bekommt bis zu drei
+              Mails, wer noch nicht gezahlt hat. Leer lassen = keine Erinnerung. Con-Zahler zählen nicht.
+            </p>
+            <form id="unpaid-reminder-form">
+              <input id="unpaid-reminder-1" name="d1" type="number" min="1" max="365" />
+              <label for="unpaid-reminder-1">1. Erinnerung nach (Tagen)</label>
+              <input id="unpaid-reminder-2" name="d2" type="number" min="1" max="365" />
+              <label for="unpaid-reminder-2">2. Erinnerung nach (Tagen)</label>
+              <input id="unpaid-reminder-3" name="d3" type="number" min="1" max="365" />
+              <label for="unpaid-reminder-3">3. Erinnerung nach (Tagen)</label>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+              </div>
+            </form>
+          </div>
+          <div class="card form-pad">
             <h2>Warteliste</h2>
             <p class="sub">
               Wenn ein Platz frei wird (z.B. durch eine Absage), rückt
@@ -715,6 +733,31 @@
         }
       });
 
+      const unpaidReminderForm = document.getElementById("unpaid-reminder-form");
+
+      async function loadUnpaidReminderSettings() {
+        const settings = await api.get("/app-settings");
+        ["d1", "d2", "d3"].forEach((name, i) => {
+          unpaidReminderForm.elements[name].value = settings.unpaidReminderDays?.[i] ?? "";
+        });
+      }
+
+      unpaidReminderForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const days = ["d1", "d2", "d3"]
+          .map((name) => unpaidReminderForm.elements[name].value)
+          .filter((v) => v !== "")
+          .map(Number)
+          .sort((a, b) => a - b);
+        try {
+          await api.put("/app-settings", { unpaidReminderDays: days });
+          await loadUnpaidReminderSettings();
+          notify("Gespeichert.", "success");
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
+
       async function loadCharacterBrowsingSetting() {
         const settings = await api.get("/app-settings");
         document.getElementById("pdf-import-toggle").checked =
@@ -1026,6 +1069,7 @@
         await loadSettings();
         await loadBaseUrlSettings();
         await loadInvitationSettings();
+        await loadUnpaidReminderSettings();
         await loadCharacterBrowsingSetting();
         await refreshTestMode();
         await loadWaitlistSetting();

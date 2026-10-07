@@ -107,7 +107,7 @@ export async function adoptImport(mapped, { eventId, actingUser }) {
     try {
       await registerForEvent(
         userId, eventId, conRole, characterId, false, null, flags, priceGroup,
-        mapped.registration ?? {}, actingUser, mapped.meta?.waiver === true,
+        mapped.registration ?? {}, actingUser, mapped.meta?.waiver === true, { pdfImport: true },
       );
     } catch (err) {
       if (err.code === 'ALREADY_REGISTERED') throw adoptionError('Dieser Gast ist für das Event bereits angemeldet.', 'ALREADY_REGISTERED');

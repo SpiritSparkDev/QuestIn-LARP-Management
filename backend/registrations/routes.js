@@ -17,6 +17,7 @@ import {
   listParticipantsForEvent,
   listRegistrationsForUser,
   checkIn,
+  setConPayer,
   checkOut,
   approveRegistration,
   cancelRegistration,
@@ -44,7 +45,7 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, body.waiverAccepted, { extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails });
+    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, body.waiverAccepted, { extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails, conPayer: body.conPayer === true });
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
@@ -169,12 +170,12 @@ router.get('/events/:eventId/scan-lookup', requireAuth(requireMenu('checkin')(as
   return { status: 200, body: lookup };
 })));
 
-router.post('/events/:id/checkin', requireAuth(requireMenu('checkin')(async ({ req, params }) => {
+router.post('/events/:id/checkin', requireAuth(requireMenu('checkin')(async ({ req, params, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (!body.userId) return { status: 400, body: { error: 'userId is required' } };
   try {
-    const registration = await checkIn(params.id, body.userId);
+    const registration = await checkIn(params.id, body.userId, { paidConfirmed: body.paidConfirmed === true, confirmedBy: user.id });
     return { status: 200, body: registration };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
@@ -259,6 +260,21 @@ router.put('/events/:id/checkin/:userId', requireAuth(requireMenu('checkin')(asy
     throw err;
   }
 })));
+
+// Mark (or unmark) a registration as "Con-Zahler": the person, their manager or staff.
+router.put('/events/:id/registrations/:userId/con-payer', requireAuth(async ({ req, params, user }) => {
+  const isStaff = ['admin', 'moderator'].includes(user.group.key);
+  const allowed = params.userId === user.id || isStaff || await canRegisterFor(params.userId, user.id);
+  if (!allowed) return { status: 403, body: { error: 'forbidden' } };
+  const body = await readJsonBody(req);
+  if (body === null || typeof body.conPayer !== 'boolean') return { status: 400, body: { error: 'conPayer (boolean) is required' } };
+  try {
+    return { status: 200, body: await setConPayer(params.id, params.userId, body.conPayer) };
+  } catch (err) {
+    if (err.code === 'CON_PAYER_LOCKED') return { status: 409, body: { error: err.message } };
+    throw err;
+  }
+}));
 
 router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ req, params, user }) => {
   const body = await readJsonBody(req);

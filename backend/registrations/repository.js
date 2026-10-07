@@ -278,7 +278,7 @@ async function assertExtrasCapacity(client, event, extras, excludeUserId = null)
   }
 }
 
-export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, allowMissingCharacter = false, extras: requestedExtras, lodgingId: requestedLodgingId, lodgingDetails: requestedLodgingDetails } = {}) {
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, allowMissingCharacter = false, extras: requestedExtras, lodgingId: requestedLodgingId, lodgingDetails: requestedLodgingDetails, conPayer = false, pdfImport = false } = {}) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -350,8 +350,8 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
       await assertLodgingCapacity(client, lodging.lodging);
       const amountDueCents = amountDueFor(resolvedPrice.priceListCents, extrasCents + lodging.lodgingCents);
       const { rows } = await client.query(
-        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20)
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details, con_payer, pdf_import)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20, $21, $22)
          RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, waiver_version_accepted, waiver_accepted_at, extras, extras_cents`,
         [
           userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags,
@@ -360,6 +360,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
           waiverAccepted === true ? appSettings.waiverVersion : null,
           waiverAccepted === true ? new Date() : null,
           amountDueCents, JSON.stringify(resolvedExtras), extrasCents, lodging.lodging?.id ?? null, lodging.lodgingCents, lodging.details ? JSON.stringify(lodging.details) : null,
+          conPayer === true, pdfImport === true,
         ]
       );
       return rows[0];
@@ -630,7 +631,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
 
   const { rows: registrations } = await query(
     `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, r.lodging_id, r.lodging_details, lodging.name AS lodging_name, latest_payment.method AS payment_method,
+            r.amount_due_cents, r.paid_at, r.con_payer, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, r.lodging_id, r.lodging_details, lodging.name AS lodging_name, latest_payment.method AS payment_method,
             latest_payment.refund_amount_cents, latest_payment.refunded_at,
             r.waiver_version_accepted, r.waiver_accepted_at,
             u.account_data_enc, r.registration_data_enc
@@ -705,6 +706,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       checkedOutAt: r.checked_out_at,
       amountDueCents: r.amount_due_cents,
       paidAt: r.paid_at,
+      conPayer: r.con_payer,
       priceGroup: r.price_group,
       priceTier: r.price_tier,
       discountCents: r.discount_cents,
@@ -755,7 +757,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
 
 export async function getScanLookup(eventId, userId) {
   const { rows } = await query(
-    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, g.key AS group_key, r.status, r.con_role, r.nsc_available, r.flags
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, g.key AS group_key, r.status, r.con_role, r.nsc_available, r.flags, r.paid_at, r.amount_due_cents, r.con_payer
      FROM registrations r
      JOIN users u ON u.id = r.user_id
      JOIN groups g ON g.id = u.group_id
@@ -779,6 +781,9 @@ export async function getScanLookup(eventId, userId) {
     conRole: r.con_role,
     nscAvailable: r.nsc_available,
     flags: r.flags,
+    paidAt: r.paid_at,
+    amountDueCents: r.amount_due_cents,
+    conPayer: r.con_payer,
     characters: characters.map((c) => ({ id: c.id, name: c.name })),
   };
 }
@@ -787,7 +792,7 @@ export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
     `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.flags, r.checked_in_at, r.checked_out_at,
             r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.waiver_version_accepted, r.waiver_accepted_at, r.extras, r.extras_cents, r.lodging_id, r.lodging_cents, r.lodging_details, lodging.name AS lodging_name,
-            r.registration_data_enc, c.name AS character_name, nc.name AS nsc_character_name
+            r.registration_data_enc, r.con_payer, c.name AS character_name, nc.name AS nsc_character_name
      FROM registrations r
      JOIN events e ON e.id = r.event_id
      LEFT JOIN characters c ON c.id = r.character_id
@@ -813,6 +818,7 @@ export async function listRegistrationsForUser(userId) {
     checkedOutAt: r.checked_out_at,
     amountDueCents: r.amount_due_cents,
     paidAt: r.paid_at,
+    conPayer: r.con_payer,
     priceGroup: r.price_group,
     priceTier: r.price_tier,
     extras: r.extras,
@@ -859,8 +865,45 @@ async function transitionStatus(eventId, userId, action) {
   return updated[0];
 }
 
-export async function checkIn(eventId, userId) {
-  return transitionStatus(eventId, userId, 'checkin');
+// At the desk the person is asked whether they really paid. A "yes"
+// (`paidConfirmed`) books the open amount as paid in cash; a Con-Zahler who is
+// not approved yet is approved on the spot, since paying at the con is exactly
+// their way in.
+export async function checkIn(eventId, userId, { paidConfirmed = false, confirmedBy = null } = {}) {
+  const { markPaidManually } = await import('../payments/repository.js');
+  const { rows } = await query(
+    'SELECT status, paid_at, amount_due_cents, con_payer FROM registrations WHERE event_id = $1 AND user_id = $2',
+    [eventId, userId]
+  );
+  if (rows.length === 0) {
+    const err = new Error('registration not found');
+    err.code = 'REGISTRATION_NOT_FOUND';
+    throw err;
+  }
+  const reg = rows[0];
+  if (reg.status === 'pending' && reg.con_payer) await transitionStatus(eventId, userId, 'approve');
+  const result = await transitionStatus(eventId, userId, 'checkin');
+  if (paidConfirmed && reg.paid_at == null && reg.amount_due_cents != null) {
+    await markPaidManually(eventId, userId, confirmedBy);
+  }
+  return result;
+}
+
+// Con-Zahler = pays at the con. Only while nothing is paid yet and the
+// registration is still open.
+export async function setConPayer(eventId, userId, conPayer) {
+  const { rows } = await query(
+    `UPDATE registrations SET con_payer = $3
+     WHERE event_id = $1 AND user_id = $2 AND paid_at IS NULL AND status IN ('pending', 'waitlisted', 'confirmed')
+     RETURNING con_payer`,
+    [eventId, userId, conPayer === true]
+  );
+  if (rows.length === 0) {
+    const err = new Error('Con-Zahler lässt sich nur für offene, unbezahlte Anmeldungen ändern.');
+    err.code = 'CON_PAYER_LOCKED';
+    throw err;
+  }
+  return rows[0];
 }
 
 export async function checkOut(eventId, userId) {

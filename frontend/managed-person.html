@@ -170,6 +170,7 @@
               <h3>3. Weitere Angaben</h3>
               <div id="ot-fields" class="field-grid"></div>
 
+              <label id="registration-conpayer-row"><input type="checkbox" id="registration-conpayer-checkbox"> <strong>Con-Zahler:</strong> Ich bezahle erst vor Ort. Das Ticket wird trotzdem ausgestellt und als „Con-Zahler“ gekennzeichnet.</label>
               <div id="registration-waiver" style="display:none;">
                 <h3>4. AGB &amp; Einverständniserklärung</h3>
                 <div class="sub" id="registration-waiver-text"></div>
@@ -713,14 +714,24 @@
       }
       container.innerHTML = currentRegistrations.map((r) => `<div class="card form-pad" data-reg-for="${r.eventId}">
       <h3>${escapeHtml(r.eventName)}</h3>
-      <p>${escapeHtml(labelForRegisteredAs(r))} &ndash; <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
+      <p>${escapeHtml(labelForRegisteredAs(r))} &ndash; <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span>${r.conPayer && !r.paidAt ? ' <span class="tag">Con-Zahler</span>' : ""}</p>
       <div class="action-row">
         <button type="button" data-reg-edit="${r.eventId}" class="btn-ghost">Bearbeiten</button>
+        ${(!r.paidAt && ["pending", "confirmed", "waitlisted"].includes(r.status)) ? `<button type="button" data-reg-conpayer="${r.eventId}" class="btn-ghost">${r.conPayer ? "Con-Zahler aufheben" : "Als Con-Zahler markieren"}</button>` : ""}
         ${(r.status === "pending" || r.status === "waitlisted") ? `<button type="button" data-reg-unregister="${r.eventId}" class="btn-secondary">Abmelden</button>` : ""}
         ${(r.amountDueCents != null && !r.paidAt) ? `<button type="button" data-reg-pay="${r.eventId}">Jetzt zahlen (${(r.amountDueCents / 100).toFixed(2).replace(".", ",")} &euro;)</button>` : ""}
       </div>
     </div>`).join("");
       container.querySelectorAll("[data-reg-edit]").forEach((btn) => btn.addEventListener("click", () => openEditOtDialog(btn.dataset.regEdit)));
+      container.querySelectorAll("[data-reg-conpayer]").forEach((btn) => btn.addEventListener("click", async () => {
+        const reg = currentRegistrations.find((r) => r.eventId === btn.dataset.regConpayer);
+        try {
+          await api.put(`/events/${reg.eventId}/registrations/${managedPersonId}/con-payer`, { conPayer: !reg.conPayer });
+          await loadRegistrations();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      }));
       container.querySelectorAll("[data-reg-unregister]").forEach((btn) => btn.addEventListener("click", () => unregister(btn.dataset.regUnregister)));
       container.querySelectorAll("[data-reg-pay]").forEach((btn) => btn.addEventListener("click", () => payForRegistration(btn.dataset.regPay)));
     }
@@ -836,6 +847,7 @@
           lodgingDetails: lodgingChoice.lodgingDetails,
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
+          conPayer: document.getElementById("registration-conpayer-checkbox").checked,
         });
         window.location.href = `/registration-confirmation.html?event=${eventId}&person=${encodeURIComponent(managedPersonId)}`;
         return;
