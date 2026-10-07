@@ -120,7 +120,6 @@ export function buildTestDataset() {
       paid: status === 'checked_in' || (status === 'confirmed' && i % 3 !== 0),
       characterName,
       hasNscCharacter: role === 'nsc' || i % 9 === 4,
-      nscCharacterName: `${characterNames[(i + 7) % characterNames.length]} (NSC)`,
     });
   }
 

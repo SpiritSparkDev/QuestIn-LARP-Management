@@ -77,10 +77,7 @@
         <select id="role-character-select"></select>
         <label for="role-character-select" id="role-character-label">Charakter</label>
       </div>
-      <div id="role-wishes-wrap">
-        <textarea id="role-wishes" rows="3" maxlength="2000"></textarea>
-        <label for="role-wishes">Springer-Wünsche</label>
-      </div>
+      <div id="role-nsc-wrap"><div id="role-nsc-fields"></div></div>
       <div id="role-flags-wrap">
         <div id="role-flags" class="checkbox-group"></div>
         <label>Sonderrollen</label>
@@ -133,6 +130,7 @@ import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js
 initSidebarToggle();
 import { parseScanCode } from '/js/qrCode.js';
 import { notify } from '/js/notifications.js';
+import { renderNscFields, collectNscFields } from '/js/nscFields.js';
 
 const eventSelect = document.getElementById('event-select');
 const participantList = document.getElementById('participant-list');
@@ -159,6 +157,7 @@ let myAccountFields = [];
 let currentSchema = [];
 let accountSchema = [];
 let registrationSchema = [];
+let nscSchema = [];
 let otFieldsByKey = new Map();
 let selectedColumns = { it: [], ot: [] };
 let participantsById = new Map();
@@ -624,7 +623,7 @@ function renderConRoleCell(p) {
     ? `<button type="button" class="btn-ghost btn-sm" data-change-role="${escapeHtml(p.userId)}">Rolle ändern</button>`
     : '';
   const nscInfo = p.conRole === 'nsc'
-    ? `<div class="sub" style="white-space:normal;">${p.characters?.[0]?.name ? `Fester NSC: ${escapeHtml(p.characters[0].name)}` : 'Springer'}${p.nscWishes ? `<br>Wünsche: ${escapeHtml(p.nscWishes)}` : ''}</div>`
+    ? `<div class="sub" style="white-space:normal;">${p.characters?.[0]?.name ? `Fester NSC: ${escapeHtml(p.characters[0].name)}` : 'Springer'}</div>`
     : '';
   return `<div><strong>${escapeHtml(label)}</strong>${badge}</div>${nscInfo}${changeButton}`;
 }
@@ -786,31 +785,40 @@ const roleDialog = document.getElementById('role-dialog');
 const roleSelect = document.getElementById('role-select');
 const roleCharacterWrap = document.getElementById('role-character-wrap');
 const roleCharacterSelect = document.getElementById('role-character-select');
-const roleWishesWrap = document.getElementById('role-wishes-wrap');
-const roleWishes = document.getElementById('role-wishes');
 const roleFlagsWrap = document.getElementById('role-flags-wrap');
 const roleFlags = document.getElementById('role-flags');
 let changingRoleUserId = null;
 
 // SC needs an SC character, NSC may take an NSC character, every other role
 // takes none -- the same rule the backend enforces (resolveCharacterId).
+function updateRoleNscFields() {
+  const p = participantsById.get(changingRoleUserId);
+  const isNsc = roleSelect.value === 'nsc';
+  document.getElementById('role-nsc-wrap').style.display = isNsc ? '' : 'none';
+  if (!isNsc) return;
+  const charId = roleCharacterSelect.value;
+  const current = charId === (p?.characters?.[0]?.id ?? '');
+  const data = current ? p?.nscData : p?.selectableCharacters?.find((c) => c.id === charId)?.nscData;
+  renderNscFields(document.getElementById('role-nsc-fields'), nscSchema, data, canOverride);
+}
+roleCharacterSelect.addEventListener('change', updateRoleNscFields);
+
 function updateRoleCharacterOptions() {
   const p = participantsById.get(changingRoleUserId);
   const role = roleSelect.value;
   const characterClass = role === 'sc' ? 'sc' : role === 'nsc' ? 'nsc' : null;
   roleCharacterWrap.style.display = characterClass ? '' : 'none';
-  if (!characterClass) return;
-  const candidates = (p?.selectableCharacters ?? []).filter((c) => characterClass === 'nsc' || c.class === 'sc');
+  if (!characterClass) { updateRoleNscFields(); return; }
+  const candidates = (p?.selectableCharacters ?? []).filter((c) => characterClass === 'nsc' || c.freeForSc);
   const currentId = p?.characters?.[0]?.id;
-  const blank = characterClass === 'nsc' ? '<option value="">Springer (kein fester NSC)</option>' : '';
+  const blank = characterClass === 'nsc' ? '<option value="">Kein Charakter – Springer</option>' : '';
   roleCharacterSelect.innerHTML = blank + candidates
-    .map((c) => `<option value="${escapeHtml(c.id)}" ${c.id === currentId ? 'selected' : ''}>${escapeHtml(c.name)}${characterClass === 'nsc' && c.class === 'sc' ? ' (SC)' : ''}</option>`)
+    .map((c) => `<option value="${escapeHtml(c.id)}" ${c.id === currentId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
     .join('');
-  roleWishesWrap.style.display = characterClass === 'nsc' ? '' : 'none';
-  roleWishes.value = p?.conRole === 'nsc' ? (p.nscWishes ?? '') : '';
   if (candidates.length === 0 && characterClass === 'sc') {
     roleCharacterSelect.innerHTML = '<option value="">Kein SC-Charakter vorhanden</option>';
   }
+  updateRoleNscFields();
 }
 
 function openRoleDialog(userId) {
@@ -843,11 +851,11 @@ document.getElementById('role-save').addEventListener('click', async () => {
   const payload = { conRole, flags };
   if (conRole === 'sc' || conRole === 'nsc') {
     payload.characterId = roleCharacterSelect.value || undefined;
-    if (conRole === 'nsc') payload.nscWishes = roleWishes.value;
     if (conRole === 'sc' && !payload.characterId) {
       notify('Für Teilnehmer (SC) wird ein Charakter benötigt.', 'error');
       return;
     }
+    if (conRole === 'nsc') payload.nscData = collectNscFields(document.getElementById('role-nsc-fields'), nscSchema, canOverride);
   }
   if (conRole === 'sc' && p?.conRole === 'sc') {
     payload.nscAvailable = p.nscAvailable;
@@ -858,7 +866,7 @@ document.getElementById('role-save').addEventListener('click', async () => {
     roleDialog.close();
     notify('Gespeichert.', 'success');
   } catch (err) {
-    notify(err.message, 'error');
+    notify(err.status === 400 && err.body?.details ? err.body.details.join(', ') : err.message, 'error');
   }
   await loadParticipants(eventId);
 });
@@ -974,6 +982,7 @@ try {
   myAccountFields = account.accountFields ?? [];
   currentHotkeys = { ...DEFAULT_HOTKEYS, ...(account.hotkeys ?? {}) };
   currentSchema = await api.get('/sc-schema');
+  nscSchema = await api.get('/nsc-schema').catch(() => []);
   [accountSchema, registrationSchema] = await Promise.all([api.get('/account-schema'), api.get('/registration-schema')]);
   otFieldsByKey = new Map([...accountSchema, ...registrationSchema].map((f) => [f.key, f]));
   events = (await api.get('/events')).filter((e) => e.is_active);

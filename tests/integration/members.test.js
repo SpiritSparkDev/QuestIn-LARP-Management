@@ -122,7 +122,7 @@ test('GET /members/:id returns every field regardless of the viewer\'s own permi
       "INSERT INTO events (name, event_date) VALUES ('Detail Test Event', '2026-01-01') RETURNING id"
     );
     const { rows: charRows } = await query(
-      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Detail Test Char', '{}') RETURNING id",
+      "INSERT INTO characters (user_id, name, data) VALUES ($1, 'Detail Test Char', '{}') RETURNING id",
       [targetId]
     );
     await query(

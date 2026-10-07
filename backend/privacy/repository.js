@@ -66,15 +66,27 @@ export function privacyStatus(event, now = new Date()) {
 // the user is registered for another event that is still running.
 const OTHER_OPEN_EVENT = `NOT EXISTS (SELECT 1 FROM registrations r2 JOIN events e2 ON e2.id = r2.event_id WHERE r2.user_id = u.id AND r2.event_id <> $1 AND e2.ended_at IS NULL)`;
 
-async function wipeCharacterFields(event, category, scope, idColumn) {
+// 'sc' wipes characters.data of the registrations' sc characters. 'nsc' wipes
+// characters.nsc_data of every character attached to a registration (as sc or nsc
+// character) plus the Springer values on the registration itself.
+async function wipeCharacterFields(event, category, scope) {
   const keys = fieldsOf(event, category, scope);
   if (keys.length === 0) return;
+  const column = scope === 'nsc' ? 'nsc_data' : 'data';
+  const idCondition = scope === 'nsc' ? '(r.character_id = c.id OR r.nsc_character_id = c.id)' : 'r.character_id = c.id';
   await query(
-    `UPDATE characters c SET data = c.data - $2::text[]
-     WHERE c.id IN (SELECT r.${idColumn} FROM registrations r JOIN users u ON u.id = r.user_id
-                    WHERE r.event_id = $1 AND r.${idColumn} IS NOT NULL AND NOT u.keep_data_consent AND ${OTHER_OPEN_EVENT})`,
+    `UPDATE characters c SET ${column} = c.${column} - $2::text[]
+     WHERE EXISTS (SELECT 1 FROM registrations r JOIN users u ON u.id = r.user_id
+                   WHERE r.event_id = $1 AND ${idCondition} AND NOT u.keep_data_consent AND ${OTHER_OPEN_EVENT})`,
     [event.id, keys]
   );
+  if (scope === 'nsc') {
+    await query(
+      `UPDATE registrations r SET nsc_data = r.nsc_data - $2::text[]
+       FROM users u WHERE u.id = r.user_id AND r.event_id = $1 AND NOT u.keep_data_consent AND ${OTHER_OPEN_EVENT}`,
+      [event.id, keys]
+    );
+  }
 }
 
 export async function runPrivacyDeletion(eventId, category, actor = null) {
@@ -102,8 +114,8 @@ export async function runPrivacyDeletion(eventId, category, actor = null) {
       await query('UPDATE users SET account_data_enc = $2 WHERE id = $1', [u.id, encryptAccountBlob(data)]);
     }
   }
-  await wipeCharacterFields(event, category, 'sc', 'character_id');
-  await wipeCharacterFields(event, category, 'nsc', 'nsc_character_id');
+  await wipeCharacterFields(event, category, 'sc');
+  await wipeCharacterFields(event, category, 'nsc');
 
   await query(`UPDATE events SET privacy_deleted = privacy_deleted || jsonb_build_object($2::text, now()::text) WHERE id = $1`, [eventId, category]);
   await logAudit({ actorId: actor, action: 'privacy.deletion', details: { eventId, category } });

@@ -22,7 +22,6 @@
           <button type="button" class="tab-btn active" data-tab="daten-tab">Konto</button>
           <button type="button" class="tab-btn" data-tab="anmelden-tab">Anmeldung</button>
           <button type="button" class="tab-btn" data-tab="sc-tab" id="sc-tab-btn">Charaktere</button>
-          <button type="button" class="tab-btn" data-tab="nsc-tab" id="nsc-tab-btn" style="display:none;">NSC-Charaktere</button>
         </div>
 
         <div class="tab-panel" id="daten-tab">
@@ -43,12 +42,11 @@
           <div class="dashboard-layout">
             <div class="dashboard-main">
               <div class="action-row">
-                <button type="button" class="create-card character-create-btn">
+                <button type="button" id="new-character-btn" class="create-card">
                   <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
                   <span class="create-card-title">Neuen Charakter anlegen</span>
-                  <span class="create-card-text">Spielercharakter oder Nichtspielercharakter.</span>
+                  <span class="create-card-text">Erschaffe einen Charakter für die nächsten Abenteuer.</span>
                 </button>
-                <button type="button" id="new-character-btn" hidden aria-hidden="true" tabindex="-1">Neuen Charakter anlegen</button>
               </div>
 
               <div id="sc-form-section" class="card" style="display:none;">
@@ -96,40 +94,6 @@
           </form>
         </dialog>
 
-        <div class="tab-panel" id="nsc-tab" hidden>
-          <div id="nsc-section" style="display:none;">
-            <div class="dashboard-layout">
-              <div class="dashboard-main">
-                <div class="action-row">
-                  <button type="button" class="create-card character-create-btn">
-                  <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
-                  <span class="create-card-title">Neuen Charakter anlegen</span>
-                  <span class="create-card-text">Spielercharakter oder Nichtspielercharakter.</span>
-                </button>
-                <button type="button" id="new-nsc-character-btn" hidden aria-hidden="true" tabindex="-1">Neuen NSC-Charakter anlegen</button>
-                </div>
-                <div id="nsc-form-section" class="card" style="display:none;">
-                  <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
-                  <hr class="rule">
-                  <form id="nsc-character-form">
-                    <h3>1. Charaktername</h3>
-                    <input id="nsc-character-name" name="name" type="text" required>
-                    <label for="nsc-character-name">Charaktername</label>
-                    <h3>2. Charakterdaten</h3>
-                    <div id="nsc-dynamic-fields"></div>
-                    <div class="dialog-actions save-bar">
-                      <button type="button" id="nsc-cancel-edit" class="btn-ghost">Abbrechen</button>
-                      <button type="submit">Speichern</button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-              <div>
-                <div id="nsc-character-list" class="char-grid"></div>
-              </div>
-            </div>
-          </div>
-        </div>
         <div class="tab-panel" id="anmelden-tab" hidden>
           <h2>Anmeldungen</h2>
           <dialog id="edit-ot-dialog">
@@ -168,12 +132,10 @@
                 <p id="no-character-hint" class="sub" style="display:none;">Noch kein Charakter angelegt – die Anmeldung geht trotzdem, der Charakter kann später ergänzt werden.</p>
               </div>
               <div id="nsc-role-panel" hidden>
-                <h3>Spielt die Person einen festen NSC?</h3>
+                <h3>Mit welchem Charakter spielt die Person?</h3>
                 <select id="nsc-character-select"></select>
-                <label for="nsc-character-select">Fester NSC (optional)</label>
-                <label for="nsc-wishes-input">Springer-Wünsche (optional)</label>
-                <textarea id="nsc-wishes-input" rows="3" maxlength="2000"></textarea>
-                <p class="sub">Welche Rollen/Einsätze liegen der Person, was lieber nicht?</p>
+                <label for="nsc-character-select">Charakter</label>
+                <div id="nsc-questionnaire"></div>
               </div>
 
               <div id="registration-price-group" class="price-group-card"></div>
@@ -205,7 +167,6 @@
     import { api } from "/js/api.js";
     import { applyBranding } from "/js/branding.js";
     import { hideLoading } from "/js/loading.js";
-    import { attachCreateMenu } from "/js/createMenu.js";
     applyBranding();
     import {
       escapeHtml,
@@ -222,6 +183,7 @@
     } from "/js/formFields.js";
     import { suggestPriceGroup, describeRules, PARTICIPATION_FIELDS } from "/js/priceGroupRules.js";
     import { renderPriceTable } from "/js/priceTable.js";
+    import { renderNscFields, collectNscFields } from "/js/nscFields.js";
     import { renderRichText } from "/js/richText.js";
     import { renderFlagCards, collectFlagCards, bindFlagCards } from "/js/flagCards.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal } from "/js/extrasPicker.js";
@@ -377,8 +339,7 @@
     });
 
     function renderCharacterList() {
-      const scCharacters = characters.filter((c) => c.class !== "nsc");
-      characterListBody.innerHTML = scCharacters
+      characterListBody.innerHTML = characters
         .map((c) => `<div class="char-card" data-card-for="${c.id}">
       <button type="button" class="char-card-delete" data-delete="${c.id}" aria-label="Charakter löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
       <div class="char-photo" data-photo-for="${c.id}">
@@ -404,17 +365,13 @@
           openPhotoUploadDialog(button.closest("[data-card-for]").dataset.cardFor);
         });
       });
-      scCharacters.forEach((c) => loadPhotoInto(c.id));
+      characters.forEach((c) => loadPhotoInto(c.id));
     }
 
     async function loadCharacters() {
       characters = await api.get(`/managed-persons/${managedPersonId}/characters`);
       renderCharacterList();
       populateRegistrationCharacterFields();
-      if (nscSection.style.display !== "none") {
-        nscCharacters = characters.filter((c) => c.class === "nsc");
-        renderNscList();
-      }
     }
 
     function startEdit(characterId) {
@@ -486,7 +443,7 @@
         if (editingCharacterId) {
           await api.put(`/characters/${editingCharacterId}`, { name, data });
         } else {
-          await api.post(`/managed-persons/${managedPersonId}/characters`, { class: "sc", name, data });
+          await api.post(`/managed-persons/${managedPersonId}/characters`, { name, data });
         }
         notify("Gespeichert.", "success");
         resetCharacterForm();
@@ -497,102 +454,8 @@
       }
     });
 
-    let nscSchema = [];
     let nscSchemaAvailable = false;
-    let nscCharacters = [];
-    let editingNscCharacterId = null;
-    const nscSection = document.getElementById("nsc-section");
-    const scTabButton = document.getElementById("sc-tab-btn");
-    const nscTabButton = document.getElementById("nsc-tab-btn");
     const nscRoleTabButton = document.getElementById("nsc-role-tab-btn");
-
-    // The Charaktere/NSC-Charaktere tabs track which role is currently
-    // selected in Anmeldung's step 2 -- only the tab matching that role is
-    // offered, guiding "pick a role, then go create that kind of character".
-    function updateCharacterTabVisibility() {
-      nscTabButton.style.display = nscSchemaAvailable ? "" : "none";
-    }
-
-    function renderNscSchemaFields(data = {}) {
-      renderGroupedFields(document.getElementById("nsc-dynamic-fields"), nscSchema, data, "nsc-");
-    }
-
-    function renderNscList() {
-      const nscListBody = document.getElementById("nsc-character-list");
-      nscListBody.innerHTML = nscCharacters
-        .map((c) => `<div class="char-card" data-card-for="${c.id}">
-      <button type="button" class="char-card-delete" data-delete="${c.id}" aria-label="Charakter löschen"><span class="material-symbols-outlined" aria-hidden="true">close</span></button>
-      <h3>${escapeHtml(c.name)}</h3>
-    </div>`)
-        .join("");
-      nscListBody.querySelectorAll("[data-card-for]").forEach((card) => {
-        card.addEventListener("click", () => startNscEdit(card.dataset.cardFor));
-      });
-      nscListBody.querySelectorAll("[data-delete]").forEach((button) => {
-        button.addEventListener("click", (event) => {
-          event.stopPropagation();
-          openDeleteCharacterDialog(button.dataset.delete);
-        });
-      });
-    }
-
-    function startNscEdit(characterId) {
-      const character = nscCharacters.find((c) => c.id === characterId);
-      if (!character) return;
-      editingNscCharacterId = characterId;
-      document.getElementById("nsc-form-title").textContent = `NSC-Charakter bearbeiten: ${character.name}`;
-      document.getElementById("nsc-character-form").elements.name.value = character.name;
-      renderNscSchemaFields(character.data);
-      document.getElementById("nsc-form-section").style.display = "";
-    }
-
-    function resetNscForm() {
-      editingNscCharacterId = null;
-      document.getElementById("nsc-form-title").textContent = "Neuen NSC-Charakter anlegen";
-      document.getElementById("nsc-character-form").reset();
-      renderNscSchemaFields();
-    }
-
-    document.getElementById("new-nsc-character-btn").addEventListener("click", () => {
-      resetNscForm();
-      document.getElementById("nsc-form-section").style.display = "";
-    });
-    // One "Neuen Charakter anlegen" entry (SC/NSC menu) in both character tabs.
-    for (const btn of document.querySelectorAll(".character-create-btn")) {
-      attachCreateMenu(btn, {
-        hasNsc: () => nscSchemaAvailable,
-        onSc: () => {
-          scTabButton.click();
-          document.getElementById("new-character-btn").click();
-        },
-        onNsc: () => {
-          nscTabButton.click();
-          document.getElementById("new-nsc-character-btn").click();
-        },
-      });
-    }
-    document.getElementById("nsc-cancel-edit").addEventListener("click", () => {
-      resetNscForm();
-      document.getElementById("nsc-form-section").style.display = "none";
-    });
-    document.getElementById("nsc-character-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const name = document.getElementById("nsc-character-form").elements.name.value;
-      const data = collectFieldValues(document.getElementById("nsc-character-form"), nscSchema);
-      try {
-        if (editingNscCharacterId) {
-          await api.put(`/characters/${editingNscCharacterId}`, { name, data });
-        } else {
-          await api.post(`/managed-persons/${managedPersonId}/characters`, { class: "nsc", name, data });
-        }
-        notify("Gespeichert.", "success");
-        resetNscForm();
-        document.getElementById("nsc-form-section").style.display = "none";
-        await loadCharacters();
-      } catch (err) {
-        notify(err.status === 400 && err.body?.details ? err.body.details.join(", ") : err.message, "error");
-      }
-    });
 
     // registration section
     let events = [];
@@ -709,7 +572,6 @@
         document.querySelectorAll("#registration-role-tabs .role-card").forEach((b) => b.classList.toggle("active", b === btn));
         scRolePanel.hidden = isNscRoleSelected();
         nscRolePanel.hidden = !isNscRoleSelected();
-        updateCharacterTabVisibility();
       });
     });
 
@@ -728,16 +590,22 @@
       return `<option value="${escapeHtml(c.id)}" disabled>${escapeHtml(c.name)} – angemeldet für ${escapeHtml(c.registeredFor.eventName)}</option>`;
     }
 
+    let nscSchema = [];
+    function renderNscQuestionnaire() {
+      const character = characters.find((c) => c.id === nscCharacterSelect.value);
+      renderNscFields(document.getElementById("nsc-questionnaire"), nscSchema, character?.nscData, canOverrideCheckin);
+    }
+    nscCharacterSelect.addEventListener("change", renderNscQuestionnaire);
+
     function populateRegistrationCharacterFields() {
-      const scCharacters = characters.filter((c) => c.class === "sc");
-      characterSelect.innerHTML = ['<option value="">Charakter folgt später</option>'].concat(scCharacters.map(scCharacterOption)).join("");
-      const hasNone = scCharacters.length === 0;
+      characterSelect.innerHTML = ['<option value="">Charakter folgt später</option>'].concat(characters.map(scCharacterOption)).join("");
+      const hasNone = characters.length === 0;
       document.getElementById("no-character-hint").style.display = hasNone ? "" : "none";
       characterSelect.style.display = hasNone ? "none" : "";
       document.getElementById("character-select-label").style.display = hasNone ? "none" : "";
 
-      const nscFirst = characters.filter((c) => c.class === "nsc").concat(scCharacters);
-      nscCharacterSelect.innerHTML = ['<option value="">Nein – kommt als Springer</option>'].concat(nscFirst.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}${c.class === "sc" ? " (SC)" : ""}</option>`)).join("");
+      nscCharacterSelect.innerHTML = ['<option value="">Kein Charakter – kommt als Springer</option>'].concat(characters.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`)).join("");
+      renderNscQuestionnaire();
     }
 
     eventSelect.addEventListener("change", () => {
@@ -814,10 +682,7 @@
       currentRegistrations = await api.get(`/managed-persons/${managedPersonId}/registrations`);
       renderRegistrationsList();
       renderRegistrableEvents();
-      const wantsNsc = nscSchemaAvailable;
-      nscSection.style.display = wantsNsc ? "" : "none";
-      nscRoleTabButton.style.display = wantsNsc ? "" : "none";
-      updateCharacterTabVisibility();
+      nscRoleTabButton.style.display = nscSchemaAvailable ? "" : "none";
     }
 
     async function unregister(eventId) {
@@ -880,11 +745,11 @@
     document.getElementById("registration-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const eventId = eventSelect.value;
-      let conRole, characterId, nscWishes;
+      let conRole, characterId, nscData;
       if (isNscRoleSelected()) {
         conRole = "nsc";
         characterId = nscCharacterSelect.value || undefined;
-        nscWishes = document.getElementById("nsc-wishes-input").value;
+        nscData = collectNscFields(document.getElementById("nsc-questionnaire"), nscSchema, canOverrideCheckin);
       } else {
         characterId = characterSelect.value || undefined;
         conRole = "sc";
@@ -901,7 +766,7 @@
 
       try {
         await api.post(`/managed-persons/${managedPersonId}/events/${eventId}/register`, {
-          conRole, characterId, nscWishes,
+          conRole, characterId, nscData,
           flags: collectRegistrationFlags(),
           priceGroup: collectRegistrationPriceGroup(),
           extras: collectExtras(registrationExtrasContainer),
@@ -949,7 +814,7 @@
       try {
         nscSchema = await api.get("/nsc-schema");
         nscSchemaAvailable = true;
-        renderNscSchemaFields();
+        renderNscQuestionnaire();
       } catch {
         // NSC schema is optional-ish, same as account.html's own bootstrap.
       }
@@ -958,8 +823,6 @@
       await loadEvents();
       await loadRegistrationWaiver();
       await loadRegistrations();
-      // Called last, like account.html's own init -- loadCharacters()'s NSC-list
-      // guard reads nscSection's visibility, which loadRegistrations() just set.
       await loadCharacters();
     } catch (err) {
       if (err.status === 401) window.location.href = "/login.html";

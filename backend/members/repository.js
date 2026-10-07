@@ -76,16 +76,16 @@ export async function getMember(id) {
   // LEFT JOINs keep characters that aren't registered anywhere yet, so staff
   // can still find (and edit) them here.
   const { rows: characterRows } = await query(
-    `SELECT characters.id, characters.name, characters.class, registrations.event_id, events.name AS event_name
+    `SELECT characters.id, characters.name, characters.nsc_data, registrations.event_id, events.name AS event_name
      FROM characters
      LEFT JOIN registrations ON registrations.character_id = characters.id
      LEFT JOIN events ON events.id = registrations.event_id
      WHERE characters.user_id = $1 ORDER BY events.event_date DESC NULLS LAST, characters.created_at`,
     [id]
   );
-  member.characters = characterRows.map((r) => ({ id: r.id, name: r.name, class: r.class, eventId: r.event_id, eventName: r.event_name }));
+  member.characters = characterRows.map((r) => ({ id: r.id, name: r.name, nscData: r.nsc_data, eventId: r.event_id, eventName: r.event_name }));
   const { rows: registrationRows } = await query(
-    `SELECT r.event_id, r.status, r.con_role, r.extras, r.waiver_version_accepted, r.waiver_accepted_at, r.registration_data_enc, r.nsc_wishes, c.name AS character_name
+    `SELECT r.event_id, r.status, r.con_role, r.extras, r.waiver_version_accepted, r.waiver_accepted_at, r.registration_data_enc, r.nsc_data AS reg_nsc_data, c.nsc_data AS char_nsc_data, c.name AS character_name
      FROM registrations r LEFT JOIN characters c ON c.id = r.character_id WHERE r.user_id = $1`,
     [id]
   );
@@ -94,7 +94,7 @@ export async function getMember(id) {
     status: r.status,
     conRole: r.con_role,
     characterName: r.character_name,
-    nscWishes: r.nsc_wishes,
+    nscData: r.char_nsc_data ?? r.reg_nsc_data,
     extras: r.extras,
     waiverVersionAccepted: r.waiver_version_accepted,
     waiverAcceptedAt: r.waiver_accepted_at,

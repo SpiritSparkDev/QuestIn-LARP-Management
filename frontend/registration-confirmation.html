@@ -118,7 +118,7 @@
       } else {
         let schema = [];
         try {
-          schema = await api.get(character.class === "nsc" ? "/nsc-schema" : "/sc-schema");
+          schema = await api.get("/sc-schema");
         } catch {
           // Schema is optional; fall back to just the name.
         }

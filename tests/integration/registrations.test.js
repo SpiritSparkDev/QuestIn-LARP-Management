@@ -785,19 +785,6 @@ test('con_role nsc accepts an sc-class character, even one already registered as
   });
 });
 
-test('con_role sc rejects an nsc-class character (class mismatch)', async () => {
-  await withTestServer(async (port) => {
-    const { cookie } = await makeUserAndSession();
-    const eventId = await makeEvent();
-    const nscCharacterId = await makeCharacter(port, cookie, 'nsc', 'Wache');
-    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'sc', characterId: nscCharacterId }),
-    });
-    assert.equal(res.status, 400);
-  });
-});
-
 test('deleting an sc character used by an nsc registration is blocked without force and works with force', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession();
@@ -1531,39 +1518,87 @@ test.after(async () => {
   await closePool();
 });
 
-test('nscWishes: stored trimmed and returned for nsc, discarded for sc, too long rejected, cleared when switching to sc', async () => {
-  await withTestServer(async (port) => {
+const NSC_TEST_SCHEMA = [
+  { key: 'kampf', label: 'Kampf', type: 'text', required: true },
+  { key: 'notiz', label: 'Notiz', type: 'text', staffOnly: true },
+];
+
+async function withNscSchema(fn) {
+  const { rows } = await query('SELECT schema FROM nsc_profile_schema LIMIT 1');
+  await query('UPDATE nsc_profile_schema SET schema = $1', [JSON.stringify(NSC_TEST_SCHEMA)]);
+  try { await fn(); } finally {
+    await query('UPDATE nsc_profile_schema SET schema = $1', [JSON.stringify(rows[0].schema)]);
+  }
+}
+
+test('nscData: NSC with character writes characters.nsc_data, Springer writes registrations.nsc_data, effective value in lists', async () => {
+  await withNscSchema(() => withTestServer(async (port) => {
+    const { cookie, userId } = await makeUserAndSession();
+    const eventA = await makeEventNamed('Reg Test Con NscData A', '2027-10-01');
+    const eventB = await makeEventNamed('Reg Test Con NscData B', '2027-10-02');
+    const characterId = await makeCharacter(port, cookie, 'sc', 'Wache');
+    const post = (eventId, body) => fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body),
+    });
+    const mine = async (eventId) => (await (await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: cookie } })).json()).find((r) => r.eventId === eventId);
+
+    assert.equal((await post(eventA, { conRole: 'nsc', characterId, nscData: { kampf: 'Schwert', notiz: 'hack' } })).status, 201);
+    const { rows: [c] } = await query('SELECT nsc_data FROM characters WHERE id = $1', [characterId]);
+    assert.deepEqual(c.nsc_data, { kampf: 'Schwert' }); // staffOnly kept from stored (absent)
+    const { rows: [r] } = await query('SELECT nsc_data FROM registrations WHERE event_id = $1 AND user_id = $2', [eventA, userId]);
+    assert.deepEqual(r.nsc_data, {});
+    assert.deepEqual((await mine(eventA)).nscData, { kampf: 'Schwert' });
+
+    assert.equal((await post(eventB, { conRole: 'nsc', nscData: { kampf: 'Bogen' } })).status, 201);
+    const { rows: [r2] } = await query('SELECT nsc_data FROM registrations WHERE event_id = $1 AND user_id = $2', [eventB, userId]);
+    assert.deepEqual(r2.nsc_data, { kampf: 'Bogen' });
+    assert.deepEqual((await mine(eventB)).nscData, { kampf: 'Bogen' });
+  }));
+});
+
+test('nscData: invalid fields -> 400; ignored for sc; role change nsc->sc clears registration nsc_data; con-role route writes it', async () => {
+  await withNscSchema(() => withTestServer(async (port) => {
     const { cookie, userId } = await makeUserAndSession();
     const eventId = await makeEvent();
     const post = (body) => fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body),
     });
-    const list = async () => (await (await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: cookie } })).json()).find((r) => r.eventId === eventId);
-
-    assert.equal((await post({ conRole: 'nsc', nscWishes: 'x'.repeat(2001) })).status, 400);
-    assert.equal((await post({ conRole: 'nsc', nscWishes: '  Gerne Wache  ' })).status, 201);
-    assert.equal((await list()).nscWishes, 'Gerne Wache');
-
-    const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
     const put = (body) => fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/con-role`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body),
     });
-    assert.equal((await put({ conRole: 'sc', characterId: scCharacterId, nscWishes: 'ignored' })).status, 200);
-    assert.equal((await list()).nscWishes, null);
-  });
+    const stored = async () => (await query('SELECT nsc_data FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0]?.nsc_data;
+
+    assert.equal((await post({ conRole: 'nsc', nscData: {} })).status, 400); // kampf required
+    assert.equal((await post({ conRole: 'nsc', nscData: { kampf: 1 } })).status, 400);
+    assert.equal(await stored(), undefined);
+
+    assert.equal((await post({ conRole: 'nsc', nscData: { kampf: 'Axt' } })).status, 201);
+    assert.deepEqual(await stored(), { kampf: 'Axt' });
+    assert.equal((await put({ conRole: 'nsc', nscData: { kampf: 'Speer' } })).status, 200);
+    assert.deepEqual(await stored(), { kampf: 'Speer' });
+    assert.equal((await put({ conRole: 'nsc', nscData: {} })).status, 400);
+
+    const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
+    assert.equal((await put({ conRole: 'sc', characterId: scCharacterId, nscData: { kampf: 'ignored' } })).status, 200);
+    assert.deepEqual(await stored(), {});
+    const { rows: [c] } = await query('SELECT nsc_data FROM characters WHERE id = $1', [scCharacterId]);
+    assert.deepEqual(c.nsc_data, {});
+  }));
 });
 
-test('nscWishes is discarded when registering as sc', async () => {
+test('nscData is ignored when registering as sc', async () => {
   await withTestServer(async (port) => {
-    const { cookie } = await makeUserAndSession();
+    const { cookie, userId } = await makeUserAndSession();
     const eventId = await makeEvent();
     const scCharacterId = await makeCharacter(port, cookie, 'sc', 'Aldric');
     const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId, nscWishes: 'nope' }),
+      body: JSON.stringify({ conRole: 'sc', characterId: scCharacterId, nscData: { kampf: 'nope' } }),
     });
     assert.equal(res.status, 201);
-    const list = await (await fetch(`http://localhost:${port}/registrations`, { headers: { Cookie: cookie } })).json();
-    assert.equal(list.find((r) => r.eventId === eventId).nscWishes, null);
+    const { rows: [r] } = await query('SELECT nsc_data FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.deepEqual(r.nsc_data, {});
+    const { rows: [c] } = await query('SELECT nsc_data FROM characters WHERE id = $1', [scCharacterId]);
+    assert.deepEqual(c.nsc_data, {});
   });
 });

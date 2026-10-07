@@ -29,7 +29,7 @@ async function makeUserAndSession(groupKey, { firstName = 'Email', lastName = 'T
 
 async function createCharacterFor(userId, name) {
   const { rows } = await query(
-    "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', $2, '{}') RETURNING id",
+    "INSERT INTO characters (user_id, name, data) VALUES ($1, $2, '{}') RETURNING id",
     [userId, name]
   );
   return rows[0].id;

@@ -34,7 +34,7 @@ async function makeEvent() {
 
 async function makeCharacter(userId) {
   const { rows } = await query(
-    "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Test Char', '{}') RETURNING id",
+    "INSERT INTO characters (user_id, name, data) VALUES ($1, 'Test Char', '{}') RETURNING id",
     [userId]
   );
   return rows[0].id;

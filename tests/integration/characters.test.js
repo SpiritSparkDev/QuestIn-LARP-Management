@@ -167,24 +167,26 @@ test('a participant cannot view or edit another participant\'s character; an adm
   });
 });
 
-test('creating an nsc-class character validates against the current nsc_profile_schema, unaffected by the sc schema change', async () => {
+test('POST /characters ignores a sent class: the character is a plain sc-schema character with empty nscData', async () => {
   await withTestServer(async (port) => {
-    const nscUser = await makeUserAndSession('mitglied');
-
-    const missingRequired = await fetch(`http://localhost:${port}/characters`, {
+    const user = await makeUserAndSession('mitglied');
+    const res = await fetch(`http://localhost:${port}/characters`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-      body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: { rollenAusruestung: ['NichtErlaubt'] } }),
-    });
-    assert.equal(missingRequired.status, 400);
-
-    const ok = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
+      headers: { 'Content-Type': 'application/json', Cookie: user.cookie },
       body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: {} }),
     });
+    // validated against the sc schema (fraction required) -> class: 'nsc' gives no escape from it
+    assert.equal(res.status, 400);
+    const ok = await fetch(`http://localhost:${port}/characters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: user.cookie },
+      body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: { fraction: 'Nordmark' } }),
+    });
     assert.equal(ok.status, 201);
-    assert.equal((await ok.json()).class, 'nsc');
+    const created = await ok.json();
+    assert.equal('class' in created, false);
+    assert.deepEqual(created.data, { fraction: 'Nordmark' });
+    assert.deepEqual(created.nsc_data, {});
   });
 });
 
@@ -205,32 +207,104 @@ test('a user can create multiple sc-class characters (Ersatzcharaktere)', async 
     assert.equal(second.status, 201);
 
     const list = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: participant.cookie } })).json();
-    assert.equal(list.filter((c) => c.class === 'sc').length, 2);
+    assert.equal(list.length, 2);
   });
 });
 
-test('PUT on an nsc-class character validates against the current nsc_profile_schema', async () => {
-  await withTestServer(async (port) => {
-    const nscUser = await makeUserAndSession('mitglied');
+const NSC_TEST_SCHEMA = [
+  { key: 'kampf', label: 'Kampf', type: 'text', required: true },
+  { key: 'notiz', label: 'Notiz', type: 'text', staffOnly: true },
+];
 
-    const createRes = await fetch(`http://localhost:${port}/characters`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-      body: JSON.stringify({ class: 'nsc', name: 'Wache Eins', data: {} }),
-    });
-    const { id } = await createRes.json();
+async function withNscSchema(fn) {
+  const { rows } = await query('SELECT schema FROM nsc_profile_schema LIMIT 1');
+  await query('UPDATE nsc_profile_schema SET schema = $1', [JSON.stringify(NSC_TEST_SCHEMA)]);
+  try { await fn(); } finally {
+    await query('UPDATE nsc_profile_schema SET schema = $1', [JSON.stringify(rows[0].schema)]);
+  }
+}
 
-    const invalidPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-      body: JSON.stringify({ data: { rollenAusruestung: ['NichtErlaubt'] } }),
-    });
-    assert.equal(invalidPut.status, 400);
+async function makeCharacter(port, user) {
+  const res = await fetch(`http://localhost:${port}/characters`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: user.cookie },
+    body: JSON.stringify({ name: 'Wache', data: { fraction: 'Nordmark' } }),
+  });
+  return (await res.json()).id;
+}
 
-    const validPut = await fetch(`http://localhost:${port}/characters/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: nscUser.cookie },
-      body: JSON.stringify({ name: 'Wache Zwei' }),
+const putNsc = (port, cookie, id, data) => fetch(`http://localhost:${port}/characters/${id}/nsc-data`, {
+  method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+  body: JSON.stringify({ data }),
+});
+
+test('PUT /characters/:id/nsc-data validates against the NSC schema, writes only nsc_data, GET /characters returns nscData', async () => {
+  await withNscSchema(async () => {
+    await withTestServer(async (port) => {
+      const owner = await makeUserAndSession();
+      const id = await makeCharacter(port, owner);
+
+      assert.equal((await putNsc(port, owner.cookie, id, {})).status, 400); // kampf required
+      assert.equal((await putNsc(port, owner.cookie, id, { kampf: 1 })).status, 400); // wrong type
+
+      const ok = await putNsc(port, owner.cookie, id, { kampf: 'Schwert' });
+      assert.equal(ok.status, 200);
+      const body = await ok.json();
+      assert.deepEqual(body.nsc_data, { kampf: 'Schwert' });
+      assert.deepEqual(body.data, { fraction: 'Nordmark' });
+
+      const list = await (await fetch(`http://localhost:${port}/characters`, { headers: { Cookie: owner.cookie } })).json();
+      assert.deepEqual(list.find((c) => c.id === id).nscData, { kampf: 'Schwert' });
     });
-    assert.equal(validPut.status, 200);
-    assert.equal((await validPut.json()).name, 'Wache Zwei');
+  });
+});
+
+test('PUT nsc-data: owner cannot write staffOnly fields, staff can (with audit), strangers and anonymous are rejected', async () => {
+  await withNscSchema(async () => {
+    await withTestServer(async (port) => {
+      const owner = await makeUserAndSession();
+      const stranger = await makeUserAndSession();
+      const admin = await makeUserAndSession('admin');
+      const id = await makeCharacter(port, owner);
+
+      await putNsc(port, owner.cookie, id, { kampf: 'Schwert', notiz: 'selbst' });
+      let { rows } = await query('SELECT nsc_data FROM characters WHERE id = $1', [id]);
+      assert.deepEqual(rows[0].nsc_data, { kampf: 'Schwert' }); // staffOnly dropped for owner
+
+      assert.equal((await putNsc(port, stranger.cookie, id, { kampf: 'x' })).status, 403);
+      assert.equal((await fetch(`http://localhost:${port}/characters/${id}/nsc-data`, { method: 'PUT', body: '{}' })).status, 401);
+
+      assert.equal((await putNsc(port, admin.cookie, id, { kampf: 'Schwert', notiz: 'Orga' })).status, 200);
+      ({ rows } = await query('SELECT nsc_data FROM characters WHERE id = $1', [id]));
+      assert.deepEqual(rows[0].nsc_data, { kampf: 'Schwert', notiz: 'Orga' });
+      const audit = await query("SELECT details FROM audit_log WHERE action = 'character.staff_field_changed' AND details->>'characterId' = $1", [id]);
+      assert.equal(audit.rows.length, 1);
+      assert.equal(audit.rows[0].details.field, 'notiz');
+    });
+  });
+});
+
+test('nsc_data is never exposed to strangers (GET /characters/:id) or in the public event listing; owner and staff see it', async () => {
+  await withNscSchema(async () => {
+    await withTestServer(async (port) => {
+      const { setAppSettings } = await import('../../backend/appSettings/repository.js');
+      await setAppSettings({ characterBrowsingEnabled: true });
+      const owner = await makeUserAndSession();
+      const stranger = await makeUserAndSession();
+      const admin = await makeUserAndSession('admin');
+      const id = await makeCharacter(port, owner);
+      await putNsc(port, owner.cookie, id, { kampf: 'Geheim' });
+      const eventId = await makeEvent();
+      await query("INSERT INTO registrations (user_id, event_id, status, character_id) VALUES ($1, $2, 'confirmed', $3)", [owner.userId, eventId, id]);
+
+      const get = async (cookie) => (await fetch(`http://localhost:${port}/characters/${id}`, { headers: { Cookie: cookie } })).json();
+      assert.deepEqual((await get(owner.cookie)).nsc_data, { kampf: 'Geheim' });
+      assert.deepEqual((await get(admin.cookie)).nsc_data, { kampf: 'Geheim' });
+      assert.equal('nsc_data' in await get(stranger.cookie), false);
+
+      const pub = await (await fetch(`http://localhost:${port}/events/${eventId}/characters/public`, { headers: { Cookie: stranger.cookie } })).json();
+      assert.equal(pub.length, 1);
+      assert.equal(JSON.stringify(pub).includes('Geheim'), false);
+    });
   });
 });
 
@@ -466,7 +540,7 @@ test('an owner can read/update/delete a character belonging to their managed per
     const { id: managedId } = await createPersonRes.json();
 
     const { rows: charRows } = await query(
-      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Managed Char', '{}') RETURNING id",
+      "INSERT INTO characters (user_id, name, data) VALUES ($1, 'Managed Char', '{}') RETURNING id",
       [managedId]
     );
     const characterId = charRows[0].id;
@@ -497,7 +571,7 @@ test('a stranger cannot read/update/delete another account\'s managed person\'s 
     });
     const { id: managedId } = await createPersonRes.json();
     const { rows: charRows } = await query(
-      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Managed Char 2', '{}') RETURNING id",
+      "INSERT INTO characters (user_id, name, data) VALUES ($1, 'Managed Char 2', '{}') RETURNING id",
       [managedId]
     );
     const characterId = charRows[0].id;

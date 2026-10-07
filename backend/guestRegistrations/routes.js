@@ -51,8 +51,6 @@ async function guestCharacterSchema(characterClass) {
   return schema.filter((field) => !field.staffOnly);
 }
 
-const hasValue = (v) => v !== undefined && v !== null && v !== '' && v !== false && !(Array.isArray(v) && v.length === 0);
-
 function pickFields(schema, values) {
   const picked = {};
   for (const field of schema) {
@@ -119,7 +117,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   if (await lockedFor(req)) return COMING_SOON_ERROR;
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { firstName, lastName, nickname, priceGroup, waiverAccepted, accountData, registrationData, character } = body;
+  const { firstName, lastName, nickname, priceGroup, waiverAccepted, accountData, registrationData, character, nscData: bodyNscData } = body;
   const conRole = body.conRole ?? 'ticket';
   if (!['ticket', 'sc', 'nsc'].includes(conRole)) return { status: 400, body: { error: 'conRole must be ticket, sc or nsc' } };
   const characterName = typeof character?.name === 'string' ? character.name.trim() : '';
@@ -162,16 +160,16 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   const requestingUser = { id: userId, group: { key: GUEST_GROUP_KEY, canEditCharacters: false } };
   let createdCharacterId = null;
   try {
-    // SC: a character is required. NSC: only when the guest filled in the profile.
-    const characterData = pickFields(await guestCharacterSchema(conRole), character?.data);
-    if (conRole === 'sc' || (conRole === 'nsc' && Object.values(characterData).some(hasValue))) {
+    // SC: a character is required. NSC: the filled-in questionnaire goes along as nscData (no character).
+    if (conRole === 'sc') {
       // "Leerer" Charakter: only a placeholder (required fields are not enforced), filled in later.
-      const created = emptyCharacter && conRole === 'sc'
-        ? await createCharacter(userId, { characterClass: 'sc', name: characterName || 'Neuer Charakter', stub: true })
-        : await createCharacter(userId, { characterClass: conRole, name: characterName || nickname || firstName, data: characterData });
+      const created = emptyCharacter
+        ? await createCharacter(userId, { name: characterName || 'Neuer Charakter', stub: true })
+        : await createCharacter(userId, { name: characterName || nickname || firstName, data: pickFields(await guestCharacterSchema('sc'), character?.data) });
       createdCharacterId = created.id;
     }
-    await registerForEvent(userId, params.eventId, conRole, createdCharacterId, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { deadlineMails });
+    const nscData = conRole === 'nsc' ? pickFields(await guestCharacterSchema('nsc'), bodyNscData ?? character?.data) : undefined;
+    await registerForEvent(userId, params.eventId, conRole, createdCharacterId, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { deadlineMails, nscData });
   } catch (err) {
     // Only clean up the guest row if THIS request created it -- an existing
     // guest reusing their email for a second event must never be deleted

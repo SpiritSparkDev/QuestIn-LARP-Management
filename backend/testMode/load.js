@@ -141,14 +141,13 @@ export async function loadTestData() {
       const group = p.groupIndex !== null ? dataset.groups[p.groupIndex].name : null;
       const scData = fillSchema(scSchema, p.index + 11);
       if (group && scSchema.some((f) => f.key === 'gruppe')) scData.gruppe = group;
-      const sc = await createCharacter(userId, { characterClass: 'sc', name: p.characterName, data: scData });
-      let nscId = null;
+      const sc = await createCharacter(userId, { name: p.characterName, data: scData });
+      // NSC questionnaire values live on the character (re-usable at every event).
       if (p.hasNscCharacter) {
-        const nsc = await createCharacter(userId, { characterClass: 'nsc', name: p.nscCharacterName, data: fillSchema(nscSchema, p.index + 21) });
-        nscId = nsc.id;
+        await query('UPDATE characters SET nsc_data = $2 WHERE id = $1', [sc.id, JSON.stringify(fillSchema(nscSchema, p.index + 21))]);
       }
 
-      const characterId = p.role === 'sc' ? sc.id : p.role === 'nsc' ? nscId : null;
+      const characterId = p.role === 'sc' || p.role === 'nsc' ? sc.id : null;
       const tier = event.pricing.tiers[1];
       const listCents = tier.amounts[p.priceGroup];
       const regData = fillSchema(registrationSchema, p.index + 31);

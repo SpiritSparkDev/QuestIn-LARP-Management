@@ -182,11 +182,14 @@
     import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, otFieldValuesEqual, renderField, collectFieldValues, STATUS_LABELS } from '/js/formFields.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
     import { notify } from '/js/notifications.js';
+    import { renderNscFields, collectNscFields } from '/js/nscFields.js';
+    import { formatFieldValue } from '/js/formFields.js';
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary } from '/js/extrasPicker.js';
     initSidebarToggle();
 
     let accountSchema = [];
     let registrationSchema = [];
+    let nscSchema = [];
 
     const listBody = document.querySelector('#member-list tbody');
     const detailDialog = document.getElementById('detail-dialog');
@@ -593,8 +596,7 @@
     detailTabButtons.forEach((b) => b.addEventListener('click', () => showDetailTab(b.dataset.tab)));
 
     const CHARACTER_SECTIONS = [
-      { characterClass: 'sc', title: 'Spielercharaktere (SC)' },
-      { characterClass: 'nsc', title: 'Nichtspielercharaktere (NSC)' },
+      { characterClass: 'sc', title: 'Charaktere' },
     ];
 
     async function renderCharactersTab(member) {
@@ -611,7 +613,7 @@
       const eventsLine = (c) => (c.events.length ? escapeHtml(c.events.join(', ')) : 'noch keinem Event zugeordnet');
       if (!canOverrideCheckin) {
         detailCharacters.innerHTML = list.length
-          ? `<ul>${list.map((c) => `<li>${escapeHtml(c.name)}${c.class === 'nsc' ? ' <span class="tag">NSC</span>' : ''} <span class="sub">${eventsLine(c)}</span></li>`).join('')}</ul>`
+          ? `<ul>${list.map((c) => `<li>${escapeHtml(c.name)} <span class="sub">${eventsLine(c)}</span></li>`).join('')}</ul>`
           : '<p class="sub">Dieses Mitglied hat noch keine Charaktere.</p>';
         return;
       }
@@ -642,12 +644,12 @@
         </form>`;
 
       const createButtons = canCreateForOthers
-        ? `<div class="member-character-actions">${CHARACTER_SECTIONS.map(({ characterClass }) => `<button type="button" class="btn-secondary" data-new-character="${characterClass}">${characterClass === 'sc' ? 'SC anlegen' : 'NSC anlegen'}</button>`).join('')}</div><div id="new-character-wrap"></div>`
+        ? `<div class="member-character-actions">${CHARACTER_SECTIONS.map(({ characterClass }) => `<button type="button" class="btn-secondary" data-new-character="${characterClass}">Charakter anlegen</button>`).join('')}</div><div id="new-character-wrap"></div>`
         : '';
       const emptyNote = list.length === 0 ? '<p class="sub">Dieses Mitglied hat noch keine Charaktere.</p>' : '';
 
       detailCharacters.innerHTML = createButtons + emptyNote + CHARACTER_SECTIONS.map(({ characterClass, title }) => {
-        const ofClass = list.filter((c) => (c.class ?? 'sc') === characterClass);
+        const ofClass = list;
         if (ofClass.length === 0) return '';
         return `<h3>${title}</h3>${ofClass.map((c) => `
           <details class="member-character">
@@ -668,7 +670,7 @@
               form.closest('details').querySelector('summary strong').textContent = saved.name;
               notify('Charakter gespeichert.', 'success');
             } else {
-              await api.post('/characters', { ...payload, class: characterClass, userId: editingMemberId });
+              await api.post('/characters', { ...payload, userId: editingMemberId });
               notify('Charakter angelegt.', 'success');
               // Reload so the new character appears in its section, with its own form.
               await renderCharactersTab(await api.get(`/members/${editingMemberId}`));
@@ -683,7 +685,7 @@
       detailCharacters.querySelectorAll('[data-new-character]').forEach((button) => {
         button.addEventListener('click', () => {
           const wrap = document.getElementById('new-character-wrap');
-          wrap.innerHTML = `<div class="member-character member-character-new"><h3>Neuer ${button.dataset.newCharacter === 'sc' ? 'Spielercharakter' : 'NSC'}</h3>${characterForm(button.dataset.newCharacter, null)}</div>`;
+          wrap.innerHTML = `<div class="member-character member-character-new"><h3>Neuer Charakter</h3>${characterForm(button.dataset.newCharacter, null)}</div>`;
           const form = wrap.querySelector('form');
           wireSave(form);
           wrap.querySelector('[data-cancel-new]').addEventListener('click', () => { wrap.innerHTML = ''; });
@@ -701,6 +703,15 @@
     const REGISTER_ROLES = [['sc', 'Teilnehmer (SC)'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga']];
     const detailRegistrations = document.getElementById('detail-registrations');
 
+    // Compact read-only NSC questionnaire; editing goes through the role dialog in the check-in view.
+    function renderNscSummary(data) {
+      const rows = nscSchema
+        .map((f) => [f, formatFieldValue(f, data?.[f.key])])
+        .filter(([, v]) => v !== undefined)
+        .map(([f, v]) => `<li><strong>${escapeHtml(f.label ?? f.key)}:</strong> ${escapeHtml(String(v))}</li>`);
+      return rows.length ? `<ul class="sub nsc-summary">${rows.join('')}</ul>` : '';
+    }
+
     function renderRegistrationsTab(member) {
       const registered = member.registrations ?? [];
       const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Unbekanntes Event';
@@ -708,7 +719,8 @@
       const editableFields = registrationSchema.filter((f) => myAccountFields.includes(f.key));
       const registeredHtml = registered.length
         ? registered.map((r) => `<div class="member-registration" data-reg-event="${escapeHtml(r.eventId)}">
-            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Fester NSC: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.conRole === 'nsc' && r.nscWishes ? `<br><span class="sub" style="white-space:pre-wrap;">Springer-Wünsche: ${escapeHtml(r.nscWishes)}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
+            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Charakter: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
+            ${r.conRole === 'nsc' ? renderNscSummary(r.nscData) : ''}
             <div class="action-row">
               ${canOverrideCheckin ? `<label class="sub">Status <select data-reg-status="${escapeHtml(r.eventId)}" data-prev-status="${escapeHtml(r.status)}" aria-label="Status ändern">${STATUS_ORDER.map((st) => `<option value="${st}" ${st === r.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[st])}</option>`).join('')}</select></label>` : ''}
               ${editableFields.length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
@@ -729,6 +741,7 @@
             <select id="reg-role">${REGISTER_ROLES.map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}</select>
             <label for="reg-role">Rolle</label>
             <div id="reg-character-wrap"></div>
+            <div id="reg-nsc-fields"></div>
             <div id="reg-price-wrap"></div>
             <div id="reg-extras-wrap"></div>
             <div class="settings-actions"><button type="submit">Anmelden</button></div>
@@ -791,18 +804,19 @@
         const wanted = role === 'sc' ? 'sc' : role === 'nsc' ? 'nsc' : null;
         const characters = new Map();
         for (const c of member.characters ?? []) {
-          if (wanted === 'sc' && c.class !== 'sc') continue;
           // An SC can only ever be registered once, so one that already has an event is taken.
           const entry = characters.get(c.id) ?? { ...c, taken: false };
-          if (c.class === 'sc' && c.eventId) entry.taken = true;
+          if (wanted === 'sc' && c.eventId) entry.taken = true;
           characters.set(c.id, entry);
         }
         const free = [...characters.values()].filter((c) => !c.taken);
         document.getElementById('reg-character-wrap').innerHTML = wanted
-          ? `<select id="reg-character" ${role === 'sc' ? 'required' : ''}>${role === 'sc' ? (free.length ? '' : '<option value="">Kein freier SC vorhanden</option>') : '<option value="">– keiner –</option>'}${free.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}${role === 'nsc' && c.class === 'sc' ? ' (SC)' : ''}</option>`).join('')}</select>
-             <label for="reg-character">Charakter</label>
-             ${role === 'nsc' ? '<textarea id="reg-nsc-wishes" rows="2" maxlength="2000"></textarea><label for="reg-nsc-wishes">Springer-Wünsche (optional)</label>' : ''}`
+          ? `<select id="reg-character" ${role === 'sc' ? 'required' : ''}>${role === 'sc' ? (free.length ? '' : '<option value="">Kein freier SC vorhanden</option>') : '<option value="">Kein Charakter – Springer</option>'}${free.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('')}</select>
+             <label for="reg-character">Charakter</label>`
           : '';
+        const refreshNsc = () => renderNscFields(document.getElementById('reg-nsc-fields'), role === 'nsc' ? nscSchema : [], member.characters?.find((c) => c.id === document.getElementById('reg-character')?.value)?.nscData, canOverrideCheckin);
+        document.getElementById('reg-character')?.addEventListener('change', refreshNsc);
+        refreshNsc();
         const event = allEvents.find((e) => e.id === form.elements['reg-event'].value);
         const extrasWrap = document.getElementById('reg-extras-wrap');
         extrasWrap.innerHTML = renderExtrasPicker(event?.extras ?? []);
@@ -822,10 +836,10 @@
         const payload = {
           conRole: form.elements['reg-role'].value,
           characterId: form.elements['reg-character']?.value || undefined,
-          nscWishes: document.getElementById('reg-nsc-wishes')?.value,
           priceGroup: form.elements['reg-price']?.value || undefined,
           extras: collectExtras(document.getElementById('reg-extras-wrap')),
         };
+        if (payload.conRole === 'nsc') payload.nscData = collectNscFields(document.getElementById('reg-nsc-fields'), nscSchema, canOverrideCheckin);
         try {
           await api.post(`/events/${eventId}/registrations/${editingMemberId}`, payload);
           notify('Mitglied angemeldet.', 'success');
@@ -1038,6 +1052,7 @@
       myUserId = account.id;
       accountSchema = await api.get('/account-schema');
       registrationSchema = await api.get('/registration-schema');
+      nscSchema = await api.get('/nsc-schema').catch(() => []);
       buildFieldInputs(inviteFields);
       await loadEventOptions(inviteEventSelect);
       // The group select is only shown (and thus only ever sent) if the

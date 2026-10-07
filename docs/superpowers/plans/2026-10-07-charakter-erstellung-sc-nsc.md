@@ -1,6 +1,7 @@
 # Charaktererstellung SC/NSC zusammenlegen — Implementierungsplan
 
 > Ausführung: Subagent-Driven Development (sonnet, kein `isolation: worktree`), nach jeder Task `git status` im Haupt-Checkout prüfen.
+> **Teilweise überholt** durch `2026-10-07-nsc-als-rolle.md` (NSC ist jetzt eine Rolle, keine Charakterklasse; SC/NSC-Menü und Springer-Wünsche entfallen).
 
 **Anlass:** Feedback (Malphas/Holzeule, 2026-10-07): NSC-Charaktere lassen sich nur über den Anmeldeprozess anlegen, SC-Charaktere auch ohne Anmeldung. Das ist unintuitiv.
 

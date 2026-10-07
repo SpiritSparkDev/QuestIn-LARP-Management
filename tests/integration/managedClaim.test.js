@@ -49,7 +49,7 @@ test('a group owner can search and claim unmanaged guest accounts -- and nothing
     assert.equal(JSON.stringify(found).includes(`gast.${TAG}`), false);
 
     // IT names: the guest is also found by a character name.
-    await query("INSERT INTO characters (user_id, class, name) VALUES ($1, 'sc', $2)", [guest.userId, `Ritter${TAG}`]);
+    await query("INSERT INTO characters (user_id, name) VALUES ($1, $2)", [guest.userId, `Ritter${TAG}`]);
     assert.deepEqual((await (await search(`ritter${TAG}`)).json()).map((p) => p.id), [guest.userId]);
 
     // Part of the e-mail matches guests; full accounts are only found by name, as an invite.

@@ -17,16 +17,13 @@ router.post('/managed-persons/:id/characters', requireGroupManager(async ({ req,
 
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { class: characterClass = 'sc', name, data } = body;
-  if (characterClass !== 'sc' && characterClass !== 'nsc') {
-    return { status: 400, body: { error: 'class must be "sc" or "nsc"' } };
-  }
+  const { name, data } = body;
   if (!name) {
     return { status: 400, body: { error: 'name is required' } };
   }
 
   try {
-    const character = await createCharacter(person.id, { characterClass, name, data });
+    const character = await createCharacter(person.id, { name, data });
     return { status: 201, body: character };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {

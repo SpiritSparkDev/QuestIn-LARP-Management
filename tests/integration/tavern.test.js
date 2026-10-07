@@ -71,7 +71,7 @@ test('tavern: accounts are numbered per event, searchable by number, OT and IT n
     const guest = await makeUserAndSession('mitglied', ['Mara', 'Falk']);
     const { rows: ev } = await query("INSERT INTO events (name, event_date) VALUES ('Tavernen-Con', '2027-05-01') RETURNING id");
     const eventId = ev[0].id;
-    await query("INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Laciel Nachtwind', '{}')", [guest.userId]);
+    await query("INSERT INTO characters (user_id, name, data) VALUES ($1, 'Laciel Nachtwind', '{}')", [guest.userId]);
     await query("INSERT INTO registrations (user_id, event_id, con_role, status) VALUES ($1, $2, 'helfer', 'confirmed')", [guest.userId, eventId]);
 
     const candidates = await (await fetch(`${base}/tavern/participants?eventId=${eventId}&q=laciel`, { headers: json(admin.cookie) })).json();

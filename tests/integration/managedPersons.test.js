@@ -215,7 +215,7 @@ test('an owner can upload/list/delete a file on their managed person\'s characte
     });
     const { id: managedId } = await personRes.json();
     const { rows: charRows } = await query(
-      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Managed File Char', '{}') RETURNING id",
+      "INSERT INTO characters (user_id, name, data) VALUES ($1, 'Managed File Char', '{}') RETURNING id",
       [managedId]
     );
     const characterId = charRows[0].id;
@@ -366,7 +366,7 @@ test('POST /managed-persons/:id/convert sends an invitation, and redeeming it fu
     });
     const { id: managedId } = await personRes.json();
     const { rows: charRows } = await query(
-      "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Pre-Convert Char', '{}') RETURNING id",
+      "INSERT INTO characters (user_id, name, data) VALUES ($1, 'Pre-Convert Char', '{}') RETURNING id",
       [managedId]
     );
     const { rows: eventRows } = await query(
@@ -510,8 +510,8 @@ test('a managed person needs only a nickname or a character name, and its invita
     assert.equal(created.status, 201);
     const person = await created.json();
     assert.equal(person.nickname, 'ManagedTestChar');
-    const { rows: chars } = await query('SELECT name, class FROM characters WHERE user_id = $1', [person.id]);
-    assert.deepEqual(chars, [{ name: 'ManagedTestChar', class: 'sc' }]);
+    const { rows: chars } = await query('SELECT name FROM characters WHERE user_id = $1', [person.id]);
+    assert.deepEqual(chars, [{ name: 'ManagedTestChar' }]);
 
     const link = (await (await post(`/managed-persons/${person.id}/convert`)).json()).link;
     const token = new URL(link).searchParams.get('token');

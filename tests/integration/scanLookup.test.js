@@ -38,7 +38,7 @@ async function makeEvent(code) {
 // registrations_character_con_role_check rejects the row.
 async function makeCharacter(userId, name = 'Test Char') {
   const { rows } = await query(
-    "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', $2, '{}') RETURNING id",
+    "INSERT INTO characters (user_id, name, data) VALUES ($1, $2, '{}') RETURNING id",
     [userId, name]
   );
   return rows[0].id;

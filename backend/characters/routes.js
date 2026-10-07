@@ -4,7 +4,6 @@ import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import { createCharacter, userExists, getCharacter, listCharactersForUser, listCharactersForEvent, updateCharacter, deleteCharacter } from './repository.js';
 import { filterCharacterFields } from './visibility.js';
-import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { isGroupAncestorOf } from '../groupTree/repository.js';
@@ -15,10 +14,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 router.post('/characters', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { class: characterClass = 'sc', name, data, userId } = body;
-  if (characterClass !== 'sc' && characterClass !== 'nsc') {
-    return { status: 400, body: { error: 'class must be "sc" or "nsc"' } };
-  }
+  const { name, data, userId } = body;
   if (!name) {
     return { status: 400, body: { error: 'name is required' } };
   }
@@ -37,7 +33,7 @@ router.post('/characters', requireAuth(async ({ req, user }) => {
   }
 
   try {
-    const character = await createCharacter(ownerId, { characterClass, name, data });
+    const character = await createCharacter(ownerId, { name, data });
     return { status: 201, body: character };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {
@@ -78,15 +74,14 @@ router.get('/characters/:id', requireAuth(async ({ params, user }) => {
     return { status: 200, body: character };
   }
 
-  // Both classes now have exactly one, non-event-varying schema (sc's is
-  // global as of this change, nsc's already was) -- a stranger viewing by
-  // id sees whichever public fields that one schema marks, no per-event
-  // ambiguity to fall back from anymore.
-  const schema = character.class === 'nsc' ? await getNscProfileSchema() : await getScCharacterSchema();
-  return { status: 200, body: { ...character, data: filterCharacterFields(character, schema, user) } };
+  // nsc_data is never public.
+  const schema = await getScCharacterSchema();
+  const { nsc_data: _nscData, ...publicCharacter } = character;
+  return { status: 200, body: { ...publicCharacter, data: filterCharacterFields(character, schema, user) } };
 }));
 
-router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
+// `nsc`: same permission/validation path, but for the NSC questionnaire values (nsc_data).
+const putCharacter = (nsc) => requireAuth(async ({ req, params, user }) => {
   const character = await getCharacter(params.id);
   if (!character) return { status: 404, body: { error: 'character not found' } };
   const isOwner = character.user_id === user.id || await isManagedBy(character.user_id, user.id);
@@ -101,7 +96,7 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
     // Staff (canOverrideCheckinStatus) may write staffOnly fields on any
     // character -- including their own. Plain owners never can: the server
     // keeps the stored value for them (see updateCharacter).
-    const updated = await updateCharacter(params.id, character.user_id, body, { isElevated, actorId: user.id, groupFieldsOnly: isGroupAncestor });
+    const updated = await updateCharacter(params.id, character.user_id, nsc ? { data: body.data ?? {} } : body, { isElevated, actorId: user.id, groupFieldsOnly: isGroupAncestor, nsc });
     return { status: 200, body: updated };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {
@@ -109,7 +104,10 @@ router.put('/characters/:id', requireAuth(async ({ req, params, user }) => {
     }
     throw err;
   }
-}));
+});
+
+router.put('/characters/:id', putCharacter(false));
+router.put('/characters/:id/nsc-data', putCharacter(true));
 
 router.delete('/characters/:id', requireAuth(async ({ req, params, user }) => {
   const character = await getCharacter(params.id);

@@ -88,14 +88,20 @@ router.delete('/group-tree/children/:id', requireGroupManager(async ({ params, u
 // schema marks "Gruppenverwaltung" -- those are the only ones I may edit.
 router.get('/group-tree/persons/:userId/characters', requireGroupManager(async ({ params, user }) => {
   if (!(await isGroupAncestorOf(user.id, params.userId))) return { status: 404, body: { error: 'Person nicht gefunden.' } };
-  const schemas = { sc: await getScCharacterSchema(), nsc: await getNscProfileSchema() };
+  const [scSchema, nscSchema] = [await getScCharacterSchema(), await getNscProfileSchema()];
   const characters = await listCharactersForUser(params.userId);
   await logAudit({ actorId: user.id, action: 'group_tree.view_characters', subjectUserId: params.userId, details: {} });
+  // `fields`/`data`: the character sheet; `nscFields`/`nscData`: the NSC questionnaire (PUT /characters/:id/nsc-data).
+  const pick = (schema, values) => {
+    const fields = schema.filter((f) => f.groupManaged);
+    return [fields, Object.fromEntries(fields.map((f) => [f.key, values?.[f.key]]))];
+  };
   return {
     status: 200,
     body: characters.map((c) => {
-      const fields = (schemas[c.class] ?? []).filter((f) => f.groupManaged);
-      return { id: c.id, name: c.name, class: c.class, fields, data: Object.fromEntries(fields.map((f) => [f.key, c.data?.[f.key]])) };
-    }).filter((c) => c.fields.length > 0),
+      const [fields, data] = pick(scSchema, c.data);
+      const [nscFields, nscData] = pick(nscSchema, c.nscData);
+      return { id: c.id, name: c.name, fields, data, nscFields, nscData };
+    }).filter((c) => c.fields.length > 0 || c.nscFields.length > 0),
   };
 }));

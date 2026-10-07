@@ -45,7 +45,7 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, body.waiverAccepted, { nscWishes: body.nscWishes, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails, deadlineMails: body.deadlineMails === true });
+    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, body.waiverAccepted, { nscData: body.nscData, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails, deadlineMails: body.deadlineMails === true });
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
@@ -54,13 +54,14 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
     if (err.code === 'INVALID_CON_ROLE') return { status: 400, body: { error: err.message } };
     if (err.code === 'FORBIDDEN_CON_ROLE') return { status: 403, body: { error: err.message } };
     if (err.code === 'EVENT_NOT_ACTIVE') return { status: 403, body: { error: err.message } };
-    if (err.code === 'CHARACTER_REQUIRED' || err.code === 'CHARACTER_NOT_ALLOWED' || err.code === 'CHARACTER_CLASS_MISMATCH') {
+    if (err.code === 'CHARACTER_REQUIRED' || err.code === 'CHARACTER_NOT_ALLOWED') {
       return { status: 400, body: { error: err.message } };
     }
     if (err.code === 'INVALID_NSC_AVAILABILITY') return { status: 400, body: { error: err.message } };
     if (err.code === 'INVALID_FLAG') return { status: 400, body: { error: err.message } };
     if (err.code === 'INVALID_PRICE_GROUP' || err.code === 'INVALID_EXTRAS' || err.code === 'INVALID_LODGING' || err.code === 'INVALID_LODGING_DETAILS' || err.code === 'LODGING_DISABLED') return { status: 400, body: { error: err.message } };
     if (err.code === 'EXTRA_SOLD_OUT' || err.code === 'LODGING_FULL') return { status: 409, body: { error: err.message } };
+    if (err.code === 'INVALID_CHARACTER_DATA') return { status: 400, body: { error: 'invalid character data', details: err.details } };
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
     if (err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
@@ -78,15 +79,16 @@ router.post('/events/:id/registrations/:userId', requireAuth(async ({ req, param
   const { rows: userRows } = await query('SELECT 1 FROM users WHERE id = $1', [params.userId]).catch(() => ({ rows: [] }));
   if (userRows.length === 0) return { status: 404, body: { error: 'member not found' } };
   try {
-    const registration = await registerForEvent(params.userId, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, false, { bypassWaiver: true, nscWishes: body.nscWishes, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails });
+    const registration = await registerForEvent(params.userId, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, false, { bypassWaiver: true, nscData: body.nscData, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails });
     await logAudit({ actorId: user.id, action: 'registration.admin_create', details: { eventId: params.id, userId: params.userId, conRole: body.conRole } });
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
     if (err.code === 'ALREADY_REGISTERED' || err.code === 'CHARACTER_ALREADY_REGISTERED' || err.code === 'EXTRA_SOLD_OUT' || err.code === 'LODGING_FULL') return { status: 409, body: { error: err.message } };
-    if (['INVALID_CON_ROLE', 'CHARACTER_REQUIRED', 'CHARACTER_NOT_ALLOWED', 'CHARACTER_CLASS_MISMATCH', 'INVALID_NSC_AVAILABILITY', 'INVALID_FLAG', 'INVALID_PRICE_GROUP', 'INVALID_EXTRAS', 'INVALID_LODGING', 'INVALID_LODGING_DETAILS', 'LODGING_DISABLED'].includes(err.code)) {
+    if (['INVALID_CON_ROLE', 'CHARACTER_REQUIRED', 'CHARACTER_NOT_ALLOWED', 'INVALID_NSC_AVAILABILITY', 'INVALID_FLAG', 'INVALID_PRICE_GROUP', 'INVALID_EXTRAS', 'INVALID_LODGING', 'INVALID_LODGING_DETAILS', 'LODGING_DISABLED'].includes(err.code)) {
       return { status: 400, body: { error: err.message } };
     }
+    if (err.code === 'INVALID_CHARACTER_DATA') return { status: 400, body: { error: 'invalid character data', details: err.details } };
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
     throw err;
@@ -279,17 +281,18 @@ router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ re
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await setConRole(params.id, params.userId, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, user, body.nscWishes);
+    const registration = await setConRole(params.id, params.userId, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, user, body.nscData);
     return { status: 200, body: registration };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
     if (err.code === 'INVALID_CON_ROLE') return { status: 400, body: { error: err.message } };
     if (err.code === 'FORBIDDEN_CON_ROLE') return { status: 403, body: { error: err.message } };
-    if (err.code === 'CHARACTER_REQUIRED' || err.code === 'CHARACTER_NOT_ALLOWED' || err.code === 'CHARACTER_CLASS_MISMATCH') {
+    if (err.code === 'CHARACTER_REQUIRED' || err.code === 'CHARACTER_NOT_ALLOWED') {
       return { status: 400, body: { error: err.message } };
     }
     if (err.code === 'INVALID_NSC_AVAILABILITY') return { status: 400, body: { error: err.message } };
     if (err.code === 'INVALID_FLAG') return { status: 400, body: { error: err.message } };
+    if (err.code === 'INVALID_CHARACTER_DATA') return { status: 400, body: { error: 'invalid character data', details: err.details } };
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
     if (err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };

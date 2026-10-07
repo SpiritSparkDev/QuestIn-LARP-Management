@@ -12,7 +12,10 @@ import { sendRegistrationOtFieldsChangedEmail, sendWaitlistedEmail, sendWaitlist
 import { logger } from '../logger.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { buildPaymentReference } from '../payments/reference.js';
-import { sanitizeFieldValue } from '../richText.js';
+import { sanitizeFieldValue, sanitizeDocumentFields } from '../richText.js';
+import { validateCharacterData } from '../events/schemaValidation.js';
+import { getNscProfileSchema } from '../nscSchema/repository.js';
+import { updateCharacter } from '../characters/repository.js';
 
 // 'ticket' = a self-service guest ticket bought via the external ticket
 // widget (backend/guestRegistrations/routes.js) -- no character, distinct
@@ -39,14 +42,13 @@ async function canGrantStaffConRole(eventId, requestingUser) {
 }
 
 // Validates characterId against con_role: 'sc' must have one that exists,
-// belongs to userId, and is class='sc'; 'nsc' may optionally have one of
-// class='nsc' OR 'sc' (an SC character can come along as NSC); every other
+// belongs to userId; 'nsc' may optionally have one; every other
 // con_role must NOT have one.
 // For con_role 'sc', also enforces "at most one registration ever"
 // (design spec 2026-09-16, section 4.3) -- excludes the caller's own
 // (eventId, userId) row so re-saving an existing registration's con-role
-// doesn't flag itself as a conflict. con_role 'nsc' stays exempt (any class):
-// the character remains reusable across many events.
+// doesn't flag itself as a conflict. con_role 'nsc' stays exempt: the
+// character remains reusable across many events.
 // Returns the characterId to store (null when none applies).
 async function resolveCharacterId(userId, conRole, characterId, eventId, { allowMissingSc = false } = {}) {
   const isRequired = CHARACTER_REQUIRED_CON_ROLES.includes(conRole) && !allowMissingSc;
@@ -67,7 +69,7 @@ async function resolveCharacterId(userId, conRole, characterId, eventId, { allow
     }
     return null;
   }
-  const { rows } = await query('SELECT user_id, class FROM characters WHERE id = $1', [characterId]);
+  const { rows } = await query('SELECT user_id FROM characters WHERE id = $1', [characterId]);
   if (rows.length === 0) {
     const err = new Error('character not found');
     err.code = 'CHARACTER_NOT_FOUND';
@@ -79,15 +81,9 @@ async function resolveCharacterId(userId, conRole, characterId, eventId, { allow
     err.code = 'CHARACTER_FORBIDDEN';
     throw err;
   }
-  const allowedClasses = conRole === 'nsc' ? ['sc', 'nsc'] : ['sc'];
-  if (!allowedClasses.includes(character.class)) {
-    const err = new Error(`Rolle "${conRole}" erfordert einen Charakter der Klasse "${allowedClasses.join('" oder "')}".`);
-    err.code = 'CHARACTER_CLASS_MISMATCH';
-    throw err;
-  }
   if (conRole === 'sc') {
     const { rows: existing } = await query(
-      'SELECT 1 FROM registrations WHERE character_id = $1 AND NOT (event_id = $2 AND user_id = $3)',
+      "SELECT 1 FROM registrations WHERE character_id = $1 AND con_role = 'sc' AND NOT (event_id = $2 AND user_id = $3)",
       [characterId, eventId, userId]
     );
     if (existing.length > 0) {
@@ -99,20 +95,30 @@ async function resolveCharacterId(userId, conRole, characterId, eventId, { allow
   return characterId;
 }
 
-// Validates the "sc + also available as NSC" bolt-on: only meaningful when
-// con_role='sc'; nscCharacterId (if given) must be the caller's own
-// character of class 'nsc' or 'sc' but not the registration's own
-// characterId, with no "at most one" restriction (same as resolveCharacterId's
-// 'nsc' case).
-// Trimmed Springer wishes; only kept for con_role 'nsc' (else null). '' -> null.
-function resolveNscWishes(conRole, nscWishes) {
-  const text = typeof nscWishes === 'string' ? nscWishes.trim() : '';
-  if (text.length > 2000) {
-    const err = new Error('nscWishes darf höchstens 2000 Zeichen lang sein.');
-    err.code = 'INVALID_NSC_AVAILABILITY';
+// NSC questionnaire values: only kept for con_role 'nsc' (else undefined = nothing to
+// store). Sanitized + validated against the NSC schema like character data.
+async function resolveNscData(conRole, nscData) {
+  if (conRole !== 'nsc' || nscData === undefined || nscData === null) return undefined;
+  const schema = await getNscProfileSchema();
+  const data = sanitizeDocumentFields(schema, nscData);
+  const errors = validateCharacterData(schema, data);
+  if (errors.length > 0) {
+    const err = new Error('invalid character data');
+    err.code = 'INVALID_CHARACTER_DATA';
+    err.details = errors;
     throw err;
   }
-  return conRole === 'nsc' && text ? text : null;
+  return data;
+}
+
+// With a character the values live on the character (reusable at the next event);
+// staffOnly fields are only writable by a different staff member (updateCharacter).
+function writeNscDataToCharacter(characterId, ownerId, data, requestingUser) {
+  return updateCharacter(characterId, ownerId, { data }, {
+    nsc: true,
+    isElevated: Boolean(requestingUser?.group?.canOverrideCheckinStatus) && requestingUser.id !== ownerId,
+    actorId: requestingUser?.id ?? null,
+  });
 }
 
 // Returns { nscAvailable, nscCharacterId } to store.
@@ -134,7 +140,7 @@ async function resolveNscAvailability(userId, conRole, nscAvailable, nscCharacte
   if (!available) return { nscAvailable: false, nscCharacterId: null };
   if (!nscCharacterId) return { nscAvailable: true, nscCharacterId: null };
 
-  const { rows } = await query('SELECT user_id, class FROM characters WHERE id = $1', [nscCharacterId]);
+  const { rows } = await query('SELECT user_id FROM characters WHERE id = $1', [nscCharacterId]);
   if (rows.length === 0) {
     const err = new Error('character not found');
     err.code = 'CHARACTER_NOT_FOUND';
@@ -293,7 +299,7 @@ async function assertExtrasCapacity(client, event, extras, excludeUserId = null)
   }
 }
 
-export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, allowMissingCharacter = false, extras: requestedExtras, lodgingId: requestedLodgingId, lodgingDetails: requestedLodgingDetails, conPayer = false, pdfImport = false, deadlineMails = false, nscWishes } = {}) {
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, allowMissingCharacter = false, extras: requestedExtras, lodgingId: requestedLodgingId, lodgingDetails: requestedLodgingDetails, conPayer = false, pdfImport = false, deadlineMails = false, nscData } = {}) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -336,7 +342,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
 
   const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId, { allowMissingSc: allowMissingCharacter });
   const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId, resolvedCharacterId);
-  const resolvedNscWishes = resolveNscWishes(conRole, nscWishes);
+  const resolvedNscData = await resolveNscData(conRole, nscData);
   const resolvedFlags = resolveFlags(event.flags, flags);
   const resolvedPrice = resolvePriceGroup(event, priceGroup);
   const { extras: resolvedExtras, extrasCents } = resolveExtras(event, requestedExtras);
@@ -366,9 +372,9 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
       await assertLodgingCapacity(client, lodging.lodging);
       const amountDueCents = amountDueFor(resolvedPrice.priceListCents, extrasCents + lodging.lodgingCents);
       const { rows } = await client.query(
-        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details, con_payer, pdf_import, deadline_mail_optin, optout_token, nsc_wishes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
-         RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, nsc_wishes`,
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details, con_payer, pdf_import, deadline_mail_optin, optout_token, nsc_data)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb)
+         RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, waiver_version_accepted, waiver_accepted_at, extras, extras_cents`,
         [
           userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags,
           resolvedPrice.priceGroup, resolvedPrice.priceTier, resolvedPrice.priceListCents,
@@ -377,11 +383,13 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
           waiverAccepted === true ? new Date() : null,
           amountDueCents, JSON.stringify(resolvedExtras), extrasCents, lodging.lodging?.id ?? null, lodging.lodgingCents, lodging.details ? JSON.stringify(lodging.details) : null,
           conPayer === true || resolvedPrice.conPayer, pdfImport === true,
-          deadlineMails === true, deadlineMails === true ? crypto.randomBytes(24).toString('hex') : null, resolvedNscWishes,
+          deadlineMails === true, deadlineMails === true ? crypto.randomBytes(24).toString('hex') : null,
+          JSON.stringify(resolvedCharacterId || !resolvedNscData ? {} : resolvedNscData),
         ]
       );
       return rows[0];
     });
+    if (resolvedCharacterId && resolvedNscData) await writeNscDataToCharacter(resolvedCharacterId, userId, resolvedNscData, requestingUser);
     if (registration.status === 'waitlisted') {
       // Fire-and-forget (same convention as notifyRegistrationOtFieldsChanged
       // in routes.js): the try/catch below never throws, and awaiting it here
@@ -478,7 +486,7 @@ export async function updateRegistrationLodging(eventId, userId, lodgingId, { st
   });
 }
 
-export async function setConRole(eventId, userId, conRole, characterId, nscAvailable, nscCharacterId, flags, requestingUser, nscWishes) {
+export async function setConRole(eventId, userId, conRole, characterId, nscAvailable, nscCharacterId, flags, requestingUser, nscData) {
   if (!ALL_CON_ROLES.includes(conRole)) {
     const err = new Error(`conRole must be one of: ${ALL_CON_ROLES.join(', ')}`);
     err.code = 'INVALID_CON_ROLE';
@@ -511,7 +519,7 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
   const event = await getEvent(eventId);
   const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
   const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId, resolvedCharacterId);
-  const resolvedNscWishes = resolveNscWishes(conRole, nscWishes);
+  const resolvedNscData = await resolveNscData(conRole, nscData);
 
   // Unlike nscAvailable (legitimately role-coupled -- resolveNscAvailability
   // itself rejects it outside con_role='sc'), flags are explicitly
@@ -534,16 +542,17 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
 
   const { rows } = await query(
     `UPDATE registrations SET con_role = $3, character_id = $4, nsc_available = $5, nsc_character_id = $6, flags = $7,
-       nsc_wishes = CASE WHEN $3 <> 'nsc' THEN NULL WHEN $8::boolean THEN $9 ELSE nsc_wishes END
+       nsc_data = CASE WHEN $3 <> 'nsc' OR $4::uuid IS NOT NULL THEN '{}'::jsonb WHEN $8::boolean THEN $9::jsonb ELSE nsc_data END
      WHERE event_id = $1 AND user_id = $2
-     RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, nsc_wishes`,
-    [eventId, userId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags, nscWishes !== undefined, resolvedNscWishes]
+     RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at`,
+    [eventId, userId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags, resolvedNscData !== undefined, JSON.stringify(resolvedNscData ?? {})]
   );
   if (rows.length === 0) {
     const err = new Error('registration not found');
     err.code = 'REGISTRATION_NOT_FOUND';
     throw err;
   }
+  if (resolvedCharacterId && resolvedNscData) await writeNscDataToCharacter(resolvedCharacterId, userId, resolvedNscData, requestingUser);
   return rows[0];
 }
 
@@ -649,13 +658,14 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
   const otKeys = (viewer?.group?.accountFields ?? []).filter((key) => key !== 'group');
 
   const { rows: registrations } = await query(
-    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.nsc_wishes, r.flags, r.checked_in_at, r.checked_out_at,
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.nsc_data AS reg_nsc_data, rc.nsc_data AS char_nsc_data, r.flags, r.checked_in_at, r.checked_out_at,
             r.amount_due_cents, r.paid_at, r.con_payer, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, r.lodging_id, r.lodging_details, lodging.name AS lodging_name, latest_payment.method AS payment_method,
             latest_payment.refund_amount_cents, latest_payment.refunded_at,
             r.waiver_version_accepted, r.waiver_accepted_at,
             u.account_data_enc, r.registration_data_enc
      FROM registrations r
      JOIN users u ON u.id = r.user_id
+     LEFT JOIN characters rc ON rc.id = r.character_id
      LEFT JOIN event_lodgings lodging ON lodging.id = r.lodging_id
      LEFT JOIN LATERAL (
        SELECT method, refund_amount_cents, refunded_at FROM payments p
@@ -674,26 +684,24 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
     [eventId]
   );
 
-  // Characters a staff member could assign when changing someone's role:
-  // any NSC character, plus SC characters not already bound to another
-  // registration (the rule resolveCharacterId enforces for con_role 'sc';
-  // free SC characters are valid for con_role 'nsc' too, and `class` lets
-  // the client filter per target role).
+  // Characters a staff member could assign when changing someone's role: all of the
+  // person's characters. `freeForSc` = not bound to another event's SC registration
+  // (the rule resolveCharacterId enforces for con_role 'sc'); NSC may reuse any.
   const { rows: selectable } = await query(
-    `SELECT c.id, c.user_id, c.name, c.class
+    `SELECT c.id, c.user_id, c.name, c.nsc_data,
+            NOT EXISTS (
+              SELECT 1 FROM registrations r2
+              WHERE r2.character_id = c.id AND r2.con_role = 'sc' AND NOT (r2.event_id = $1 AND r2.user_id = c.user_id)
+            ) AS free_for_sc
      FROM characters c
      WHERE c.user_id IN (SELECT user_id FROM registrations WHERE event_id = $1)
-       AND (c.class = 'nsc' OR NOT EXISTS (
-         SELECT 1 FROM registrations r2
-         WHERE r2.character_id = c.id AND NOT (r2.event_id = $1 AND r2.user_id = c.user_id)
-       ))
      ORDER BY c.created_at`,
     [eventId]
   );
   const selectableByUser = new Map();
   for (const c of selectable) {
     if (!selectableByUser.has(c.user_id)) selectableByUser.set(c.user_id, []);
-    selectableByUser.get(c.user_id).push({ id: c.id, name: c.name, class: c.class });
+    selectableByUser.get(c.user_id).push({ id: c.id, name: c.name, freeForSc: c.free_for_sc, nscData: c.nsc_data });
   }
 
   const charactersByUser = new Map();
@@ -722,7 +730,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       conRole: r.con_role,
       nscAvailable: r.nsc_available,
       nscCharacterId: r.nsc_character_id,
-      nscWishes: r.nsc_wishes,
+      nscData: r.char_nsc_data ?? r.reg_nsc_data,
       flags: r.flags,
       checkedInAt: r.checked_in_at,
       checkedOutAt: r.checked_out_at,
@@ -812,7 +820,7 @@ export async function getScanLookup(eventId, userId) {
 
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
-    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.nsc_wishes, r.flags, r.checked_in_at, r.checked_out_at,
+    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.nsc_data AS reg_nsc_data, c.nsc_data AS char_nsc_data, r.flags, r.checked_in_at, r.checked_out_at,
             r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.waiver_version_accepted, r.waiver_accepted_at, r.extras, r.extras_cents, r.lodging_id, r.lodging_cents, r.lodging_details, lodging.name AS lodging_name,
             r.registration_data_enc, r.con_payer, c.name AS character_name, nc.name AS nsc_character_name
      FROM registrations r
@@ -835,7 +843,7 @@ export async function listRegistrationsForUser(userId) {
     nscAvailable: r.nsc_available,
     nscCharacterId: r.nsc_character_id,
     nscCharacterName: r.nsc_character_name,
-    nscWishes: r.nsc_wishes,
+    nscData: r.char_nsc_data ?? r.reg_nsc_data,
     flags: r.flags,
     checkedInAt: r.checked_in_at,
     checkedOutAt: r.checked_out_at,

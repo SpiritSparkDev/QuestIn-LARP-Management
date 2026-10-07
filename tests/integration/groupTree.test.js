@@ -49,7 +49,7 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       const d = await makeUser('Dora');
       const person = await makeUser('Kind', { isGuest: true, managedBy: b.userId });
       const { rows: charRows } = await query(
-        "INSERT INTO characters (user_id, class, name, data) VALUES ($1, 'sc', 'Heldin', $2) RETURNING id",
+        "INSERT INTO characters (user_id, name, data) VALUES ($1, 'Heldin', $2) RETURNING id",
         [person.userId, JSON.stringify({ wunsch: 'alt', volk: 'Elf' })]
       );
       const characterId = charRows[0].id;
@@ -99,12 +99,37 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       const visible = await (await call(a.cookie, 'GET', `/group-tree/persons/${person.userId}/characters`)).json();
       assert.deepEqual(visible[0].fields.map((f) => f.key), ['wunsch']);
       assert.deepEqual(visible[0].data, { wunsch: 'alt' });
+      assert.deepEqual(visible[0].nscFields, []);
       assert.equal((await call(c.cookie, 'GET', `/group-tree/persons/${person.userId}/characters`)).status, 404);
       const edit = await call(a.cookie, 'PUT', `/characters/${characterId}`, { name: 'Gehackt', data: { wunsch: 'neu', volk: 'Ork' } });
       assert.equal(edit.status, 200);
       const stored = (await query('SELECT name, data FROM characters WHERE id = $1', [characterId])).rows[0];
       assert.equal(stored.name, 'Heldin');
       assert.deepEqual(stored.data, { wunsch: 'neu', volk: 'Elf' });
+
+      // NSC questionnaire: same rule, via PUT /characters/:id/nsc-data and its own schema.
+      const { getNscProfileSchema, setNscProfileSchema } = await import('../../backend/nscSchema/repository.js');
+      const oldNsc = await getNscProfileSchema();
+    const hadNscRow = (await query('SELECT 1 FROM nsc_profile_schema LIMIT 1')).rows.length > 0;
+      await setNscProfileSchema([
+        { key: 'verwalter', label: 'Verwalter', type: 'text', required: false, groupManaged: true },
+        { key: 'intern', label: 'Intern', type: 'text', required: false },
+      ]);
+      try {
+        await query('UPDATE characters SET nsc_data = $2 WHERE id = $1', [characterId, JSON.stringify({ verwalter: 'a', intern: 'geheim' })]);
+        const nscView = (await (await call(a.cookie, 'GET', `/group-tree/persons/${person.userId}/characters`)).json())[0];
+        assert.deepEqual(nscView.nscFields.map((f) => f.key), ['verwalter']);
+        assert.deepEqual(nscView.nscData, { verwalter: 'a' });
+        const nscPut = await call(a.cookie, 'PUT', `/characters/${characterId}/nsc-data`, { data: { verwalter: 'b', intern: 'gehackt' } });
+        assert.equal(nscPut.status, 200, JSON.stringify(await nscPut.clone().json()));
+        const nscStored = (await query('SELECT nsc_data, data FROM characters WHERE id = $1', [characterId])).rows[0];
+        assert.deepEqual(nscStored.nsc_data, { verwalter: 'b', intern: 'geheim' });
+        assert.deepEqual(nscStored.data, { wunsch: 'neu', volk: 'Elf' });
+        assert.equal((await call(c.cookie, 'PUT', `/characters/${characterId}/nsc-data`, { data: { verwalter: 'x' } })).status, 403);
+      } finally {
+        if (hadNscRow) await setNscProfileSchema(oldNsc);
+      else await query('DELETE FROM nsc_profile_schema');
+      }
 
       // No cycles: Bernd cannot invite his own ancestor.
       await call(b.cookie, 'POST', '/group-tree/invitations', { email: a.email });

@@ -61,7 +61,7 @@ router.post('/managed-persons', requireGroupManager(async ({ req, user }) => {
       ownerId: user.id, groupId: user.group.id, email: email?.toLowerCase(), firstName, lastName,
       nickname: nickname || (firstName && lastName ? undefined : charName), ...otFields,
     });
-    if (charName) await createCharacter(person.id, { characterClass: 'sc', name: charName, stub: true });
+    if (charName) await createCharacter(person.id, { name: charName, stub: true });
     return { status: 201, body: person };
   } catch (err) {
     if (err.code === 'EMAIL_TAKEN') return { status: 409, body: { error: err.message } };

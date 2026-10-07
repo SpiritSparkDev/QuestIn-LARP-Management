@@ -140,9 +140,9 @@ test('guests can register as SC (character created) or NSC (character only if fi
     const sc = guestPayload({ conRole: 'sc', character: { name: 'Thorin Testschild', data: {} } });
     assert.equal((await post(sc)).status, 201);
     const { rows: scRows } = await query(
-      `SELECT r.con_role, c.name, c.class FROM registrations r JOIN users u ON u.id = r.user_id
+      `SELECT r.con_role, c.name FROM registrations r JOIN users u ON u.id = r.user_id
          LEFT JOIN characters c ON c.id = r.character_id WHERE u.email = $1`, [sc.email]);
-    assert.deepEqual(scRows[0], { con_role: 'sc', name: 'Thorin Testschild', class: 'sc' });
+    assert.deepEqual(scRows[0], { con_role: 'sc', name: 'Thorin Testschild' });
 
     const empty = guestPayload({ conRole: 'sc', character: { empty: true } });
     assert.equal((await post(empty)).status, 201);
@@ -150,11 +150,22 @@ test('guests can register as SC (character created) or NSC (character only if fi
       `SELECT c.name, c.data FROM registrations r JOIN users u ON u.id = r.user_id JOIN characters c ON c.id = r.character_id WHERE u.email = $1`, [empty.email]);
     assert.deepEqual(emptyRows[0], { name: 'Neuer Charakter', data: {} });
 
-    const nsc = guestPayload({ conRole: 'nsc' });
-    assert.equal((await post(nsc)).status, 201);
-    const { rows: nscRows } = await query(
-      `SELECT r.con_role, r.character_id FROM registrations r JOIN users u ON u.id = r.user_id WHERE u.email = $1`, [nsc.email]);
-    assert.deepEqual(nscRows[0], { con_role: 'nsc', character_id: null });
+    const { setNscProfileSchema, getNscProfileSchema } = await import('../../backend/nscSchema/repository.js');
+    const oldNscSchema = await getNscProfileSchema();
+    const hadNscRow = (await query('SELECT 1 FROM nsc_profile_schema LIMIT 1')).rows.length > 0;
+    await setNscProfileSchema([{ key: 'kampf', label: 'Kampf', type: 'text', required: false }]);
+    try {
+      const nsc = guestPayload({ conRole: 'nsc', character: { data: { kampf: 'gern', fremd: 'x' } } });
+      assert.equal((await post(nsc)).status, 201);
+      const { rows: nscRows } = await query(
+        `SELECT r.con_role, r.character_id, r.nsc_data FROM registrations r JOIN users u ON u.id = r.user_id WHERE u.email = $1`, [nsc.email]);
+      assert.deepEqual(nscRows[0], { con_role: 'nsc', character_id: null, nsc_data: { kampf: 'gern' } });
+      const { rows: chars } = await query('SELECT 1 FROM characters c JOIN users u ON u.id = c.user_id WHERE u.email = $1', [nsc.email]);
+      assert.equal(chars.length, 0, 'no character for an NSC guest');
+    } finally {
+      if (hadNscRow) await setNscProfileSchema(oldNscSchema);
+      else await query('DELETE FROM nsc_profile_schema');
+    }
   });
 });
 

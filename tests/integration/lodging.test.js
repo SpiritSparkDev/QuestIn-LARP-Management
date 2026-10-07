@@ -77,7 +77,7 @@ test('lodging add-on: setup, booking, sold-out, visibility, switching and locks'
     assert.deepEqual(carolView[0].occupants, []);
     assert.deepEqual((await (await getLodgings(admin.cookie)).json())[0].occupants.map((o) => o.name).sort(), ['Alice Test', 'Bob Test']);
     // Someone who belongs to a group shows up with the character (IT) name only.
-    const { rows: held } = await query("INSERT INTO characters (user_id, class, name) VALUES ($1, 'sc', 'Bobs Held') RETURNING id", [bob.userId]);
+    const { rows: held } = await query("INSERT INTO characters (user_id, name) VALUES ($1, 'Bobs Held') RETURNING id", [bob.userId]);
     await query('UPDATE registrations SET character_id = $2, con_role = $4 WHERE event_id = $1 AND user_id = $3', [eventId, held[0].id, bob.userId, 'sc']);
     await query('UPDATE users SET group_parent_id = $1 WHERE id = $2', [carol.userId, bob.userId]);
     assert.deepEqual((await (await getLodgings(carol.cookie)).json())[0].occupants.map((o) => o.name), ['Bobs Held']);

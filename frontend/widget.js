@@ -251,7 +251,7 @@
           ? { empty: true }
           : { name: value('characterName'), data: collectFields(form.querySelector('[data-fields=sc]'), scFields) };
       }
-      if (role === 'nsc') data.character = { data: collectFields(form.querySelector('[data-fields=nsc]'), nscFields) };
+      if (role === 'nsc') data.nscData = collectFields(form.querySelector('[data-fields=nsc]'), nscFields);
       try {
         const result = await call(`/public/events/${event.id}/guest-registration`, {
           method: 'POST',

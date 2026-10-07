@@ -84,8 +84,12 @@ async function buildExportText(userId) {
   lines.push('=== Charaktere ===');
   if (characters.length === 0) lines.push('(keine)');
   for (const c of characters) {
-    lines.push(`- ${c.name} (${c.class === 'nsc' ? 'NSC' : 'SC'})`);
-    lines.push(formatSchemaFields(c.class === 'nsc' ? nscSchema : scSchema, c.data ?? {}));
+    lines.push(`- ${c.name}`);
+    lines.push(formatSchemaFields(scSchema, c.data ?? {}));
+    if (Object.keys(c.nscData ?? {}).length > 0) {
+      lines.push('  NSC-Profil:');
+      lines.push(formatSchemaFields(nscSchema, c.nscData));
+    }
   }
   lines.push('');
 
@@ -96,6 +100,10 @@ async function buildExportText(userId) {
     if (r.priceGroup) lines.push(`  Teilnahmegruppe: ${r.priceGroup}${r.priceTier ? ` (${r.priceTier})` : ''}`);
     if (r.amountDueCents != null) lines.push(`  Betrag: ${formatCents(r.amountDueCents)} — ${r.paidAt ? `bezahlt am ${new Date(r.paidAt).toLocaleString('de-DE')}` : 'offen'}`);
     lines.push(formatSchemaFields(registrationSchema, r));
+    if (!r.characterId && Object.keys(r.nscData ?? {}).length > 0) {
+      lines.push('  NSC-Profil (Springer):');
+      lines.push(formatSchemaFields(nscSchema, r.nscData));
+    }
   }
   lines.push('');
 

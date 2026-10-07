@@ -66,16 +66,14 @@ async function saveAccountFields(userId, mapped) {
 }
 
 // Creates the character named in the PDF, if any. Returns its id or null.
-// NSC characters are optional on a registration, so an invalid one is
-// skipped; for SC the error is surfaced (a player needs a valid character).
+// An NSC's character is only a placeholder (stub); for SC invalid data is surfaced.
 async function createImportedCharacter(userId, conRole, mapped) {
   const { name, ...data } = mapped.character ?? {};
   if (!name || conRole === 'helfer') return null;
   try {
-    const character = await createCharacter(userId, { characterClass: conRole === 'nsc' ? 'nsc' : 'sc', name, data: conRole === 'nsc' ? {} : data });
+    const character = await createCharacter(userId, { name, data, stub: conRole === 'nsc' });
     return character.id;
   } catch (err) {
-    if (err.code === 'INVALID_CHARACTER_DATA' && conRole === 'nsc') return null;
     if (err.code === 'INVALID_CHARACTER_DATA') {
       throw adoptionError(`Charakterdaten ungültig: ${err.details.join(', ')}`, 'INVALID_CHARACTER_DATA');
     }

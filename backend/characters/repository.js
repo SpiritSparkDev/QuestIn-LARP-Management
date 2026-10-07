@@ -9,15 +9,11 @@ import { sanitizeDocumentFields } from '../richText.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 
-const SELECT_COLUMNS = 'id, user_id, class, name, data, created_at';
-
-async function schemaForClass(characterClass) {
-  return characterClass === 'nsc' ? getNscProfileSchema() : getScCharacterSchema();
-}
+const SELECT_COLUMNS = 'id, user_id, name, data, nsc_data, created_at';
 
 // `stub`: a placeholder character (name only) that is filled in later, so required fields aren't enforced yet.
-export async function createCharacter(userId, { characterClass = 'sc', name, data, stub = false }) {
-  const schema = await schemaForClass(characterClass);
+export async function createCharacter(userId, { name, data, stub = false }) {
+  const schema = await getScCharacterSchema();
   data = sanitizeDocumentFields(schema, data ?? {});
   const errors = stub ? [] : validateCharacterData(schema, data);
   if (errors.length > 0) {
@@ -27,10 +23,10 @@ export async function createCharacter(userId, { characterClass = 'sc', name, dat
     throw err;
   }
   const { rows } = await query(
-    `INSERT INTO characters (user_id, class, name, data)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO characters (user_id, name, data)
+     VALUES ($1, $2, $3)
      RETURNING ${SELECT_COLUMNS}`,
-    [userId, characterClass, name, JSON.stringify(data ?? {})]
+    [userId, name, JSON.stringify(data ?? {})]
   );
   return rows[0];
 }
@@ -45,15 +41,11 @@ export async function getCharacter(id) {
   return rows[0] ?? null;
 }
 
-// Each sc-class row gets at most one registrations match (enforced at the
-// application level in registrations/repository.js's resolveCharacterId,
-// not a DB constraint -- see the design spec section 4.3) -- the LATERAL
-// join only runs for class='sc' rows, so an nsc-class character (still
-// reusable across many registrations) is never multiplied into duplicate
-// list entries.
+// Each character gets at most one registrations match (LATERAL ... LIMIT 1), so a
+// character reused across many registrations is never duplicated in the list.
 export async function listCharactersForUser(userId) {
   const { rows } = await query(
-    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.created_at,
+    `SELECT c.id, c.user_id, c.name, c.data, c.nsc_data, c.created_at,
             reg.event_id AS registered_event_id, reg.con_role AS registered_con_role,
             ev.name AS registered_event_name
      FROM characters c
@@ -63,7 +55,7 @@ export async function listCharactersForUser(userId) {
        WHERE r.character_id = c.id
        ORDER BY r.event_id
        LIMIT 1
-     ) reg ON c.class = 'sc'
+     ) reg ON true
      LEFT JOIN events ev ON ev.id = reg.event_id
      WHERE c.user_id = $1
      ORDER BY c.created_at`,
@@ -72,9 +64,9 @@ export async function listCharactersForUser(userId) {
   return rows.map((row) => ({
     id: row.id,
     user_id: row.user_id,
-    class: row.class,
     name: row.name,
     data: row.data,
+    nscData: row.nsc_data,
     created_at: row.created_at,
     registeredFor: row.registered_event_id
       ? { eventId: row.registered_event_id, eventName: row.registered_event_name, conRole: row.registered_con_role }
@@ -86,10 +78,10 @@ export async function listCharactersForUser(userId) {
 // (not a direct column -- see design spec section 4.3).
 export async function listCharactersForEvent(eventId) {
   const { rows } = await query(
-    `SELECT c.id, c.user_id, c.class, c.name, c.data, c.created_at
+    `SELECT c.id, c.user_id, c.name, c.data, c.created_at
      FROM characters c
      JOIN registrations r ON r.character_id = c.id
-     WHERE r.event_id = $1 AND c.class = 'sc'
+     WHERE r.event_id = $1
      ORDER BY c.name`,
     [eventId]
   );
@@ -103,7 +95,9 @@ export async function listCharactersForEvent(eventId) {
 // permissions they happen to hold as a person (e.g. an admin editing their
 // own character). Only a genuinely different elevated staff member (e.g.
 // via the check-in dialog) may write them.
-export async function updateCharacter(id, userId, { name, data }, { isElevated = false, actorId = null, groupFieldsOnly = false } = {}) {
+export async function updateCharacter(id, userId, { name, data }, { isElevated = false, actorId = null, groupFieldsOnly = false, nsc = false } = {}) {
+  // `nsc`: edit the NSC questionnaire values (nsc_data, NSC schema) instead of the character sheet.
+  const column = nsc ? 'nsc_data' : 'data';
   const character = await getCharacter(id);
   if (!character || character.user_id !== userId) return null;
 
@@ -111,7 +105,8 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
   let staffFieldChanges = [];
   let groupFieldChanges = [];
   if (data !== undefined) {
-    const schema = await schemaForClass(character.class);
+    const schema = nsc ? await getNscProfileSchema() : await getScCharacterSchema();
+    const stored = character[column] ?? {};
     // A staffOnly field's value can never be changed by the owner
     // themselves -- their own edit form doesn't even render an input for
     // it (a disabled input never reaches FormData), so trust the SERVER's
@@ -121,7 +116,7 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
     // "Gruppenverwaltung" in the schema; everything else keeps its stored value.
     let source = data;
     if (groupFieldsOnly) {
-      source = { ...character.data };
+      source = { ...stored };
       for (const field of schema) {
         if (field.groupManaged && data && field.key in data) source[field.key] = data[field.key];
       }
@@ -129,7 +124,7 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
     const effectiveData = sanitizeDocumentFields(schema, isElevated ? source : { ...source });
     if (!isElevated) {
       for (const field of schema) {
-        if (field.staffOnly) effectiveData[field.key] = character.data?.[field.key];
+        if (field.staffOnly) effectiveData[field.key] = stored[field.key];
       }
     }
     const errors = validateCharacterData(schema, effectiveData);
@@ -143,14 +138,14 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
     if (groupFieldsOnly) {
       groupFieldChanges = schema
         .filter((field) => field.groupManaged)
-        .map((field) => ({ field: field.key, label: field.label ?? field.key, from: character.data?.[field.key] ?? null, to: effectiveData[field.key] ?? null }))
+        .map((field) => ({ field: field.key, label: field.label ?? field.key, from: stored[field.key] ?? null, to: effectiveData[field.key] ?? null }))
         .filter((change) => JSON.stringify(change.from) !== JSON.stringify(change.to));
     }
     // Every change to a staffOnly field made by staff is logged (field, old and new value).
     if (isElevated) {
       staffFieldChanges = schema
         .filter((field) => field.staffOnly)
-        .map((field) => ({ field: field.key, label: field.label ?? field.key, from: character.data?.[field.key] ?? null, to: effectiveData[field.key] ?? null }))
+        .map((field) => ({ field: field.key, label: field.label ?? field.key, from: stored[field.key] ?? null, to: effectiveData[field.key] ?? null }))
         .filter((change) => JSON.stringify(change.from) !== JSON.stringify(change.to));
     }
   }
@@ -158,7 +153,7 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
   const { rows } = await query(
     `UPDATE characters SET
        name = COALESCE($3, name),
-       data = COALESCE($4, data)
+       ${column} = COALESCE($4, ${column})
      WHERE id = $1 AND user_id = $2
      RETURNING ${SELECT_COLUMNS}`,
     [id, userId, groupFieldsOnly ? null : (name ?? null), newData !== undefined ? JSON.stringify(newData) : null]
