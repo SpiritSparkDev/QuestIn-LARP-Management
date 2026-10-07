@@ -87,7 +87,9 @@ test('unpaid reminders: up to the configured count, one mail per event, Con-Zahl
   await insert(a, { col: 'con_payer', val: 'false' });
   await insert(b, { col: 'con_payer', val: 'true' });
   await insert(c, { col: 'paid_at', val: 'now()' });
-  await query('INSERT INTO app_settings DEFAULT VALUES').catch(() => {});
+  // Single-row table without a unique constraint: a plain INSERT would add a second row
+  // and later tests would read a different row than they write.
+  if ((await query('SELECT 1 FROM app_settings LIMIT 1')).rows.length === 0) await query('INSERT INTO app_settings DEFAULT VALUES');
   await query("UPDATE app_settings SET unpaid_reminder_days = '{3,7}'");
 
   const sent = [];
