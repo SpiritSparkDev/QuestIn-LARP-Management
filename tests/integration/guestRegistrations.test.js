@@ -142,6 +142,12 @@ test('guests can register as SC (character created) or NSC (character only if fi
          LEFT JOIN characters c ON c.id = r.character_id WHERE u.email = $1`, [sc.email]);
     assert.deepEqual(scRows[0], { con_role: 'sc', name: 'Thorin Testschild', class: 'sc' });
 
+    const empty = guestPayload({ conRole: 'sc', character: { empty: true } });
+    assert.equal((await post(empty)).status, 201);
+    const { rows: emptyRows } = await query(
+      `SELECT c.name, c.data FROM registrations r JOIN users u ON u.id = r.user_id JOIN characters c ON c.id = r.character_id WHERE u.email = $1`, [empty.email]);
+    assert.deepEqual(emptyRows[0], { name: 'Neuer Charakter', data: {} });
+
     const nsc = guestPayload({ conRole: 'nsc' });
     assert.equal((await post(nsc)).status, 201);
     const { rows: nscRows } = await query(

@@ -126,7 +126,6 @@
   const ROLES = [
     { key: 'sc', title: 'Spielercharakter (SC)', text: 'Du reist mit eigenem Charakter an.' },
     { key: 'nsc', title: 'Nichtspieler (NSC)', text: 'Du unterstützt die Spielleitung, ob in einer Festrolle oder bei einer Quest.' },
-    { key: 'ticket', title: 'Nur Ticket', text: 'Du kommst ohne Charakter, z. B. als Besucher*in oder Begleitung.' },
   ];
   const euro = (cents) => `${(cents / 100).toFixed(2).replace('.', ',')} €`;
 
@@ -158,8 +157,11 @@
         ${field('nickname', 'Rufname')}${field('email', 'E-Mail', 'email', true)}`)}
       ${event.accountFields.length ? section('account', 'Persönliche Angaben', 'Diese Angaben bleiben verschlüsselt gespeichert und helfen uns bei Verpflegung, Sicherheit und Erster Hilfe.', `<div data-fields="account">${event.accountFields.map((f) => fieldHtml(f, 'account')).join('')}</div>`) : ''}
       ${section('sc', 'Dein Charakter', 'Wer wirst du auf dem Event sein?', `
-        ${field('characterName', 'Charaktername', 'text', true)}
-        <div data-fields="sc">${scFields.map((f) => fieldHtml(f, 'sc')).join('')}</div>`)}
+        <label class="check"><input type="checkbox" name="emptyCharacter"> Charakter später ausfüllen – ich melde zunächst einen leeren Charakter an.</label>
+        <div class="char-fields">
+          ${field('characterName', 'Charaktername', 'text', true)}
+          <div data-fields="sc">${scFields.map((f) => fieldHtml(f, 'sc')).join('')}</div>
+        </div>`)}
       ${nscFields.length ? section('nsc', 'Dein NSC-Profil', 'Optional – je mehr du uns verrätst, desto besser können wir dich einsetzen.', `<div data-fields="nsc">${nscFields.map((f) => fieldHtml(f, 'nsc')).join('')}</div>`) : ''}
       ${event.registrationFields.length ? section('registration', 'Zur Anmeldung', '', `<div data-fields="registration">${event.registrationFields.map((f) => fieldHtml(f, 'registration')).join('')}</div>`) : ''}
       ${section('confirm', 'Abschluss', 'Bitte prüfe deine Angaben.', `
@@ -186,6 +188,8 @@
     };
     let index = 0;
     const value = (name) => form.elements[name]?.value.trim() ?? '';
+    const emptyCharacter = () => roleOf() === 'sc' && Boolean(form.elements.emptyCharacter?.checked);
+    const syncEmptyCharacter = () => { form.querySelector('.char-fields').hidden = emptyCharacter(); };
 
     const fillSummary = () => {
       const role = ROLES.find((r) => r.key === roleOf());
@@ -195,7 +199,7 @@
         rows.push(['Teilnahmegruppe', `${g}${Number.isInteger(event.prices[g]) ? ` – ${euro(event.prices[g])}` : ''}`]);
       }
       rows.push(['Name', [value('firstName'), value('lastName')].join(' ')], ['E-Mail', value('email')]);
-      if (roleOf() === 'sc') rows.push(['Charakter', value('characterName')]);
+      if (roleOf() === 'sc') rows.push(['Charakter', emptyCharacter() ? 'leer – wird später ausgefüllt' : value('characterName')]);
       form.querySelector('.summary').innerHTML = rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
     };
 
@@ -214,6 +218,7 @@
     };
     const valid = () => {
       for (const el of activeSteps()[index].querySelectorAll('input, select, textarea')) {
+        if (el.closest('[hidden]')) continue;
         if (!el.checkValidity()) { el.reportValidity(); return false; }
       }
       return true;
@@ -221,6 +226,7 @@
     form.querySelector('[data-next]').addEventListener('click', () => { if (valid()) show(index + 1); });
     form.querySelector('[data-back]').addEventListener('click', () => show(index - 1));
     form.querySelectorAll('input[name=conRole]').forEach((r) => r.addEventListener('change', () => show(index)));
+    form.elements.emptyCharacter.addEventListener('change', syncEmptyCharacter);
     show(0);
 
     form.addEventListener('submit', async (e) => {
@@ -240,7 +246,11 @@
         registrationData: collectFields(form.querySelector('[data-fields=registration]'), event.registrationFields),
       };
       if (form.elements.priceGroup) data.priceGroup = form.elements.priceGroup.value;
-      if (role === 'sc') data.character = { name: value('characterName'), data: collectFields(form.querySelector('[data-fields=sc]'), scFields) };
+      if (role === 'sc') {
+        data.character = emptyCharacter()
+          ? { empty: true }
+          : { name: value('characterName'), data: collectFields(form.querySelector('[data-fields=sc]'), scFields) };
+      }
       if (role === 'nsc') data.character = { data: collectFields(form.querySelector('[data-fields=nsc]'), nscFields) };
       try {
         const result = await call(`/public/events/${event.id}/guest-registration`, {

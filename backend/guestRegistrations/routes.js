@@ -107,7 +107,8 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   const conRole = body.conRole ?? 'ticket';
   if (!['ticket', 'sc', 'nsc'].includes(conRole)) return { status: 400, body: { error: 'conRole must be ticket, sc or nsc' } };
   const characterName = typeof character?.name === 'string' ? character.name.trim() : '';
-  if (conRole === 'sc' && !characterName) return { status: 400, body: { error: 'Bitte gib einen Charakternamen an.' } };
+  const emptyCharacter = character?.empty === true;
+  if (conRole === 'sc' && !characterName && !emptyCharacter) return { status: 400, body: { error: 'Bitte gib einen Charakternamen an.' } };
   const conPayer = body.conPayer === true;
   const email = body.email?.toLowerCase();
   if (!email || !firstName || !lastName) {
@@ -148,7 +149,10 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
     // SC: a character is required. NSC: only when the guest filled in the profile.
     const characterData = pickFields(await guestCharacterSchema(conRole), character?.data);
     if (conRole === 'sc' || (conRole === 'nsc' && Object.values(characterData).some(hasValue))) {
-      const created = await createCharacter(userId, { characterClass: conRole, name: characterName || nickname || firstName, data: characterData });
+      // "Leerer" Charakter: only a placeholder (required fields are not enforced), filled in later.
+      const created = emptyCharacter && conRole === 'sc'
+        ? await createCharacter(userId, { characterClass: 'sc', name: characterName || 'Neuer Charakter', stub: true })
+        : await createCharacter(userId, { characterClass: conRole, name: characterName || nickname || firstName, data: characterData });
       createdCharacterId = created.id;
     }
     await registerForEvent(userId, params.eventId, conRole, createdCharacterId, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { conPayer });
