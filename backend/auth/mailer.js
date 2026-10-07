@@ -153,7 +153,7 @@ export async function sendGuestTicketEmail(to, { eventName, paymentToken, userId
     body: free
       ? `Deine Anmeldung für "${eventName}" ist eingegangen. Hier findest du dein Ticket: ${url}`
       : conPayer
-        ? `Deine Anmeldung für "${eventName}" ist eingegangen. Du bist als Con-Zahler angemeldet und bezahlst vor Ort beim Check-In. Dein Ticket (und auf Wunsch die Online-Zahlung) findest du hier: ${url}`
+        ? `Deine Anmeldung für "${eventName}" ist eingegangen. Du bist als Con-Zahler angemeldet und bezahlst vor Ort beim Check-In. Dein Ticket findest du hier: ${url}`
         : `Deine Anmeldung für "${eventName}" ist eingegangen. Falls die Bezahlung gerade nicht geklappt hat oder du sie später abschließen möchtest, geht es hier weiter – nach der Zahlung findest du dort auch dein Ticket: ${url}`,
   }), { userId, extra: { eventName, link: url, conPayer, free } });
   return deliver(transporter, from, to, rendered);
