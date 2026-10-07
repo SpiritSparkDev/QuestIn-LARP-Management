@@ -90,6 +90,16 @@ export const EMAIL_SLOTS = [
     extraFields: [{ key: 'eventName', label: 'Eventname' }],
   },
   {
+    key: 'guest_deadline',
+    label: 'Gast: Preisstufe endet bald (unbezahlt)',
+    supportsAccount: true,
+    extraFields: [
+      { key: 'eventName', label: 'Eventname' },
+      { key: 'deadline', label: 'Ende der Preisstufe (Datum)' },
+      { key: 'link', label: 'Link zu Zahlung und Ticket' },
+    ],
+  },
+  {
     key: 'unpaid_reminder_orga',
     label: 'Orga-Erinnerung: offene Zahlungen (PDF-Anmeldungen)',
     supportsAccount: false,

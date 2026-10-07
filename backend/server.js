@@ -32,6 +32,7 @@ import './nscSchema/routes.js';
 import './scSchema/routes.js';
 import './groupSchema/routes.js';
 import { runUnpaidReminders } from './registrations/unpaidReminders.js';
+import { runConPayerAutomation } from './registrations/conPayerAutomation.js';
 import './accountFieldSchema/routes.js';
 import './registrationFieldSchema/routes.js';
 import './smtpSettings/routes.js';
@@ -127,4 +128,6 @@ if (isMain) {
   setInterval(runCleanup, 6 * 60 * 60 * 1000).unref();
   setTimeout(runUnpaidReminders, 120_000).unref();
   setInterval(runUnpaidReminders, 6 * 60 * 60 * 1000).unref();
+  setTimeout(runConPayerAutomation, 180_000).unref();
+  setInterval(runConPayerAutomation, 6 * 60 * 60 * 1000).unref();
 }

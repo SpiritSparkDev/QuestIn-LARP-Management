@@ -17,6 +17,7 @@ await seedGroups();
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
 const { runUnpaidReminders } = await import('../../backend/registrations/unpaidReminders.js');
+const { runConPayerAutomation } = await import('../../backend/registrations/conPayerAutomation.js');
 
 const TAG = `conpayer-${crypto.randomUUID().slice(0, 6)}`;
 
@@ -140,6 +141,55 @@ test('Preisstufen can be marked Con-Zahler: validated, kept, and applied to the 
     assert.deepEqual(await conPayerOf(carl, normalEvent), { con_payer: false, price_tier: 'Vor Ort' });
     assert.deepEqual(await conPayerOf(dora, conPayerEvent), { con_payer: true, price_tier: 'Vor Ort' });
   });
+});
+
+test('automation: after the last deadline unpaid registrations become Con-Zahler (re-priced); guests are mailed a week before each deadline', async () => {
+  const account = await makeUser('mitglied', 'Konto');
+  const paid = await makeUser('mitglied', 'Bezahlt');
+  const guest = await makeUser('mitglied', 'Gast');
+  await query('UPDATE users SET is_guest = true WHERE id = $1', [guest.userId]);
+  const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
+  const tiers = (until) => [
+    { name: 'Früh', until, conPayer: false, amounts: { Erwachsene: 2000 } },
+    { name: 'Vor Ort', until: null, conPayer: true, amounts: { Erwachsene: 3500 } },
+  ];
+  const mkEvent = async (name, until) => (await query(
+    `INSERT INTO events (name, event_date, is_active, pricing) VALUES ($1, '2099-08-01', true, $2) RETURNING id`,
+    [`${TAG} ${name}`, JSON.stringify({ groups: ['Erwachsene'], tiers: tiers(until) })]
+  )).rows[0].id;
+  const reg = (eventId, user, extra = '') => query(
+    `INSERT INTO registrations (user_id, event_id, con_role, status, price_group, price_tier, price_list_cents, amount_due_cents, created_at ${extra ? ', ' + extra.col : ''})
+     VALUES ($1, $2, 'helfer', 'pending', 'Erwachsene', 'Früh', 2000, 2500, now() - interval '60 days' ${extra ? ', ' + extra.val : ''})`,
+    [user.userId, eventId]
+  );
+
+  // 1) The last dated tier ran out: unpaid -> Con-Zahler at the Con-Zahler price; paid stays untouched.
+  const expired = await mkEvent('Abgelaufen', day(-1));
+  await reg(expired, account);
+  await reg(expired, paid, { col: 'paid_at', val: 'now()' });
+  const sent = [];
+  const send = async (to, payload) => { sent.push({ to, ...payload }); };
+  await runConPayerAutomation({ send });
+  const row = async (eventId, user) => (await query('SELECT con_payer, price_tier, price_list_cents, amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, user.userId])).rows[0];
+  assert.deepEqual(await row(expired, account), { con_payer: true, price_tier: 'Vor Ort', price_list_cents: 3500, amount_due_cents: 4000 });
+  assert.deepEqual(await row(expired, paid), { con_payer: false, price_tier: 'Früh', price_list_cents: 2000, amount_due_cents: 2500 });
+
+  // 2) A deadline in 3 days: the guest gets one mail (not twice), the account holder none.
+  const soon = await mkEvent('Bald', day(3));
+  await reg(soon, guest, { col: 'payment_token', val: `'tok-${TAG}'` });
+  await reg(soon, account);
+  await runConPayerAutomation({ send });
+  await runConPayerAutomation({ send });
+  const mine = sent.filter((m) => m.eventName === `${TAG} Bald`);
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].conPayerNext, true);
+  assert.equal(mine[0].deadline, day(3));
+  assert.equal((await row(soon, guest)).con_payer, false);
+
+  // 3) The deadline passes: the guest is marked Con-Zahler in the database as well.
+  await query("UPDATE events SET pricing = $2 WHERE id = $1", [soon, JSON.stringify({ groups: ['Erwachsene'], tiers: tiers(day(-1)) })]);
+  await runConPayerAutomation({ send });
+  assert.equal((await row(soon, guest)).con_payer, true);
 });
 
 test.after(async () => {
