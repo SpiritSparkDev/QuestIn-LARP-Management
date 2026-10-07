@@ -36,6 +36,7 @@
         <h3>Angaben zur Anmeldung</h3>
         <div id="registration-fields"></div>
       </div>
+      <label><input type="checkbox" id="conPayer" name="conPayer"> Con-Zahler: Ich bezahle erst vor Ort beim Check-In. Das Ticket wird trotzdem ausgestellt und als „Con-Zahler“ gekennzeichnet.</label>
       <div id="waiver-wrap" style="display:none;">
         <div class="sub" id="waiver-text-display"></div>
         <label><input type="checkbox" id="waiverAccepted" name="waiverAccepted"> Ich habe die AGB und die Einverständniserklärung gelesen und stimme zu.</label>
@@ -111,6 +112,7 @@ if (!code) {
       const data = Object.fromEntries(formData);
       if (!data.priceGroup) delete data.priceGroup;
       data.waiverAccepted = formData.has('waiverAccepted');
+      data.conPayer = formData.has('conPayer');
       data.accountData = nullifyBlankNumberFields(event.accountFields, collectAccountFieldValues(accountContainer, event.accountFields));
       data.registrationData = nullifyBlankNumberFields(event.registrationFields, collectAccountFieldValues(registrationContainer, event.registrationFields));
       try {

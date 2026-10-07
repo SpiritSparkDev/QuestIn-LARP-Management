@@ -122,6 +122,7 @@
       ${fieldsSection('Persönliche Angaben', event.accountFields, 'account')}
       ${fieldsSection('Angaben zur Anmeldung', event.registrationFields, 'registration')}
       ${event.waiverHtml ? `<div class="waiver">${event.waiverHtml}</div><label class="check"><input type="checkbox" name="waiverAccepted" required> Ich habe die AGB und die Einverständniserklärung gelesen und stimme zu.</label>` : ''}
+      <label class="check"><input type="checkbox" name="conPayer"> Con-Zahler: Ich bezahle erst vor Ort beim Check-In. Das Ticket wird trotzdem ausgestellt und als „Con-Zahler“ gekennzeichnet.</label>
       <button type="submit">Ticket sichern</button>`;
     say('');
     form.hidden = false;
@@ -133,6 +134,7 @@
       say('');
       const data = Object.fromEntries(new FormData(form));
       data.waiverAccepted = Boolean(form.elements.waiverAccepted?.checked);
+      data.conPayer = Boolean(form.elements.conPayer?.checked);
       data.accountData = collectFields(form.querySelector('[data-fields=account]'), event.accountFields);
       data.registrationData = collectFields(form.querySelector('[data-fields=registration]'), event.registrationFields);
       try {

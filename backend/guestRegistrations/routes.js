@@ -84,6 +84,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { firstName, lastName, nickname, priceGroup, waiverAccepted, accountData, registrationData } = body;
+  const conPayer = body.conPayer === true;
   const email = body.email?.toLowerCase();
   if (!email || !firstName || !lastName) {
     return { status: 400, body: { error: 'email, firstName, and lastName are required' } };
@@ -119,7 +120,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
 
   const requestingUser = { id: userId, group: { key: GUEST_GROUP_KEY, canEditCharacters: false } };
   try {
-    await registerForEvent(userId, params.eventId, 'ticket', null, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted);
+    await registerForEvent(userId, params.eventId, 'ticket', null, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { conPayer });
   } catch (err) {
     // Only clean up the guest row if THIS request created it -- an existing
     // guest reusing their email for a second event must never be deleted
@@ -164,10 +165,12 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
 
   const { token } = await setGuestPaymentToken(params.eventId, userId, PAYMENT_TOKEN_TTL_MS);
   try {
-    await sendGuestTicketEmail(email, { eventName: event.name, paymentToken: token, userId });
+    await sendGuestTicketEmail(email, { eventName: event.name, paymentToken: token, userId, conPayer });
   } catch (err) {
     logger.error('failed to send guest ticket email', { error: err.message, eventId: params.eventId, userId });
   }
 
+  // Con-Zahler pay at the con: no redirect to the payment page, the ticket is theirs anyway.
+  if (conPayer) return { status: 201, body: { status: 'con_payer' } };
   return { status: 201, body: { status: 'registered', paymentUrl: `/guest-payment.html?token=${token}` } };
 }));

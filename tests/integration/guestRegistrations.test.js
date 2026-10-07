@@ -189,6 +189,27 @@ test('POST guest-registration on a priced event returns a paymentUrl and sets a 
   });
 });
 
+test('POST guest-registration as Con-Zahler skips the payment redirect but still holds the open amount', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent({
+      pricing: { groups: ['Erwachsene'], tiers: [{ name: 'Standard', until: null, amounts: { Erwachsene: 3000 } }] },
+    });
+    const payload = guestPayload({ priceGroup: 'Erwachsene', conPayer: true });
+    const res = await fetch(`http://localhost:${port}/public/events/${eventId}/guest-registration`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    assert.equal(res.status, 201);
+    const body = await res.json();
+    assert.equal(body.status, 'con_payer');
+    assert.equal(body.paymentUrl, undefined);
+    const { rows } = await query(
+      'SELECT con_payer, amount_due_cents, paid_at FROM registrations WHERE event_id = $1 AND user_id = (SELECT id FROM users WHERE email = $2)',
+      [eventId, payload.email]
+    );
+    assert.deepEqual(rows[0], { con_payer: true, amount_due_cents: 3000, paid_at: null });
+  });
+});
+
 test('POST guest-registration rejects a second submission with the same email for the same event', async () => {
   await withTestServer(async (port) => {
     const eventId = await makeEvent();
