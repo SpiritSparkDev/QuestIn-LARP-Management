@@ -6,6 +6,7 @@ import pg from 'pg';
 
 process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64);
 const BASE = (process.env.TEST_DATABASE_URL || 'postgres://app:app@localhost:5433/pakyrion_test').replace(/\/[^/]*$/, '');
+const tag = crypto.randomBytes(3).toString('hex');
 const SOURCE_URL = `${BASE}/pakyrion_test`;
 const TARGET_NAME = `pakyrion_offline_${crypto.randomBytes(4).toString('hex')}`;
 
@@ -33,13 +34,19 @@ const pkg = await import('../../backend/offlinePackage/snapshot.js');
 const container = await import('../../backend/offlinePackage/container.js');
 
 after(async () => {
+  const sq = source.query;
+  await sq('DELETE FROM instance_authority WHERE event_id = $1', [ids.event]);
+  await sq('DELETE FROM snapshot_log WHERE snapshot_id = $1', [ids.snapshot]);
+  await sq('DELETE FROM events WHERE id = $1', [ids.event]);
+  await sq('DELETE FROM users WHERE email LIKE $1', [`%-${tag}@example.com`]);
+  await sq('DELETE FROM groups WHERE key LIKE $1', [`off\_%\_${tag}`]);
+  await sq("DELETE FROM tavern_items WHERE name = 'Met'");
   await target.closePool();
   await pool.end();
   await admin.query(`DROP DATABASE ${TARGET_NAME} WITH (FORCE)`);
   await admin.end();
 });
 
-const tag = crypto.randomBytes(3).toString('hex');
 const ids = { event: crypto.randomUUID(), snapshot: crypto.randomUUID() };
 const takenAt = new Date('2027-08-30T10:00:00Z');
 let helper, player, account;

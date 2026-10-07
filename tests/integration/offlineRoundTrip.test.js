@@ -47,6 +47,7 @@ after(async () => {
   await online.query('DELETE FROM events WHERE id = $1', [ids.event]);
   await online.query("DELETE FROM audit_log WHERE action = 'roundtrip.test'");
   await online.query('DELETE FROM users WHERE id = ANY($1)', [ids.users]);
+  await online.query("DELETE FROM groups WHERE key LIKE 'rt\_helper\_%'");
   await online.closePool();
   await pool.end();
   await admin.query(`DROP DATABASE ${OFFLINE_NAME} WITH (FORCE)`);
