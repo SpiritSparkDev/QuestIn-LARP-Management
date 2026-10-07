@@ -77,6 +77,10 @@
         <select id="role-character-select"></select>
         <label for="role-character-select" id="role-character-label">Charakter</label>
       </div>
+      <div id="role-wishes-wrap">
+        <textarea id="role-wishes" rows="3" maxlength="2000"></textarea>
+        <label for="role-wishes">Springer-Wünsche</label>
+      </div>
       <div id="role-flags-wrap">
         <div id="role-flags" class="checkbox-group"></div>
         <label>Sonderrollen</label>
@@ -619,7 +623,10 @@ function renderConRoleCell(p) {
   const changeButton = canOverride && p.userId
     ? `<button type="button" class="btn-ghost btn-sm" data-change-role="${escapeHtml(p.userId)}">Rolle ändern</button>`
     : '';
-  return `<div><strong>${escapeHtml(label)}</strong>${badge}</div>${changeButton}`;
+  const nscInfo = p.conRole === 'nsc'
+    ? `<div class="sub" style="white-space:normal;">${p.characters?.[0]?.name ? `Fester NSC: ${escapeHtml(p.characters[0].name)}` : 'Springer'}${p.nscWishes ? `<br>Wünsche: ${escapeHtml(p.nscWishes)}` : ''}</div>`
+    : '';
+  return `<div><strong>${escapeHtml(label)}</strong>${badge}</div>${nscInfo}${changeButton}`;
 }
 
 const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', stripe_bank_transfer: 'Überweisung (Stripe)', bank_transfer: 'Überweisung' };
@@ -779,6 +786,8 @@ const roleDialog = document.getElementById('role-dialog');
 const roleSelect = document.getElementById('role-select');
 const roleCharacterWrap = document.getElementById('role-character-wrap');
 const roleCharacterSelect = document.getElementById('role-character-select');
+const roleWishesWrap = document.getElementById('role-wishes-wrap');
+const roleWishes = document.getElementById('role-wishes');
 const roleFlagsWrap = document.getElementById('role-flags-wrap');
 const roleFlags = document.getElementById('role-flags');
 let changingRoleUserId = null;
@@ -791,12 +800,14 @@ function updateRoleCharacterOptions() {
   const characterClass = role === 'sc' ? 'sc' : role === 'nsc' ? 'nsc' : null;
   roleCharacterWrap.style.display = characterClass ? '' : 'none';
   if (!characterClass) return;
-  const candidates = (p?.selectableCharacters ?? []).filter((c) => c.class === characterClass);
+  const candidates = (p?.selectableCharacters ?? []).filter((c) => characterClass === 'nsc' || c.class === 'sc');
   const currentId = p?.characters?.[0]?.id;
-  const blank = characterClass === 'nsc' ? '<option value="">Ohne Charakter</option>' : '';
+  const blank = characterClass === 'nsc' ? '<option value="">Springer (kein fester NSC)</option>' : '';
   roleCharacterSelect.innerHTML = blank + candidates
-    .map((c) => `<option value="${escapeHtml(c.id)}" ${c.id === currentId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
+    .map((c) => `<option value="${escapeHtml(c.id)}" ${c.id === currentId ? 'selected' : ''}>${escapeHtml(c.name)}${characterClass === 'nsc' && c.class === 'sc' ? ' (SC)' : ''}</option>`)
     .join('');
+  roleWishesWrap.style.display = characterClass === 'nsc' ? '' : 'none';
+  roleWishes.value = p?.conRole === 'nsc' ? (p.nscWishes ?? '') : '';
   if (candidates.length === 0 && characterClass === 'sc') {
     roleCharacterSelect.innerHTML = '<option value="">Kein SC-Charakter vorhanden</option>';
   }
@@ -832,6 +843,7 @@ document.getElementById('role-save').addEventListener('click', async () => {
   const payload = { conRole, flags };
   if (conRole === 'sc' || conRole === 'nsc') {
     payload.characterId = roleCharacterSelect.value || undefined;
+    if (conRole === 'nsc') payload.nscWishes = roleWishes.value;
     if (conRole === 'sc' && !payload.characterId) {
       notify('Für Teilnehmer (SC) wird ein Charakter benötigt.', 'error');
       return;

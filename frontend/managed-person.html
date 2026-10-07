@@ -43,7 +43,12 @@
           <div class="dashboard-layout">
             <div class="dashboard-main">
               <div class="action-row">
-                <button type="button" id="new-character-btn">Neuen Charakter anlegen</button>
+                <button type="button" class="create-card character-create-btn">
+                  <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
+                  <span class="create-card-title">Neuen Charakter anlegen</span>
+                  <span class="create-card-text">Spielercharakter oder Nichtspielercharakter.</span>
+                </button>
+                <button type="button" id="new-character-btn" hidden aria-hidden="true" tabindex="-1">Neuen Charakter anlegen</button>
               </div>
 
               <div id="sc-form-section" class="card" style="display:none;">
@@ -96,7 +101,12 @@
             <div class="dashboard-layout">
               <div class="dashboard-main">
                 <div class="action-row">
-                  <button type="button" id="new-nsc-character-btn" class="btn-ghost">Neuen NSC-Charakter anlegen</button>
+                  <button type="button" class="create-card character-create-btn">
+                  <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
+                  <span class="create-card-title">Neuen Charakter anlegen</span>
+                  <span class="create-card-text">Spielercharakter oder Nichtspielercharakter.</span>
+                </button>
+                <button type="button" id="new-nsc-character-btn" hidden aria-hidden="true" tabindex="-1">Neuen NSC-Charakter anlegen</button>
                 </div>
                 <div id="nsc-form-section" class="card" style="display:none;">
                   <h3 id="nsc-form-title">Neuen NSC-Charakter anlegen</h3>
@@ -158,8 +168,12 @@
                 <p id="no-character-hint" class="sub" style="display:none;">Noch kein Charakter angelegt – die Anmeldung geht trotzdem, der Charakter kann später ergänzt werden.</p>
               </div>
               <div id="nsc-role-panel" hidden>
+                <h3>Spielt die Person einen festen NSC?</h3>
                 <select id="nsc-character-select"></select>
-                <label for="nsc-character-select">NSC-Charakter (optional)</label>
+                <label for="nsc-character-select">Fester NSC (optional)</label>
+                <label for="nsc-wishes-input">Springer-Wünsche (optional)</label>
+                <textarea id="nsc-wishes-input" rows="3" maxlength="2000"></textarea>
+                <p class="sub">Welche Rollen/Einsätze liegen der Person, was lieber nicht?</p>
               </div>
 
               <div id="registration-price-group" class="price-group-card"></div>
@@ -191,6 +205,7 @@
     import { api } from "/js/api.js";
     import { applyBranding } from "/js/branding.js";
     import { hideLoading } from "/js/loading.js";
+    import { attachCreateMenu } from "/js/createMenu.js";
     applyBranding();
     import {
       escapeHtml,
@@ -495,8 +510,7 @@
     // selected in Anmeldung's step 2 -- only the tab matching that role is
     // offered, guiding "pick a role, then go create that kind of character".
     function updateCharacterTabVisibility() {
-      scTabButton.style.display = selectedRegistrationRole === "sc" ? "" : "none";
-      nscTabButton.style.display = (selectedRegistrationRole === "nsc" && nscSchemaAvailable) ? "" : "none";
+      nscTabButton.style.display = nscSchemaAvailable ? "" : "none";
     }
 
     function renderNscSchemaFields(data = {}) {
@@ -543,6 +557,20 @@
       resetNscForm();
       document.getElementById("nsc-form-section").style.display = "";
     });
+    // One "Neuen Charakter anlegen" entry (SC/NSC menu) in both character tabs.
+    for (const btn of document.querySelectorAll(".character-create-btn")) {
+      attachCreateMenu(btn, {
+        hasNsc: () => nscSchemaAvailable,
+        onSc: () => {
+          scTabButton.click();
+          document.getElementById("new-character-btn").click();
+        },
+        onNsc: () => {
+          nscTabButton.click();
+          document.getElementById("new-nsc-character-btn").click();
+        },
+      });
+    }
     document.getElementById("nsc-cancel-edit").addEventListener("click", () => {
       resetNscForm();
       document.getElementById("nsc-form-section").style.display = "none";
@@ -708,8 +736,8 @@
       characterSelect.style.display = hasNone ? "none" : "";
       document.getElementById("character-select-label").style.display = hasNone ? "none" : "";
 
-      const matchingNsc = characters.filter((c) => c.class === "nsc");
-      nscCharacterSelect.innerHTML = ['<option value="">Kein bestimmter NSC-Charakter</option>'].concat(matchingNsc.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`)).join("");
+      const nscFirst = characters.filter((c) => c.class === "nsc").concat(scCharacters);
+      nscCharacterSelect.innerHTML = ['<option value="">Nein – kommt als Springer</option>'].concat(nscFirst.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}${c.class === "sc" ? " (SC)" : ""}</option>`)).join("");
     }
 
     eventSelect.addEventListener("change", () => {
@@ -852,10 +880,11 @@
     document.getElementById("registration-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const eventId = eventSelect.value;
-      let conRole, characterId;
+      let conRole, characterId, nscWishes;
       if (isNscRoleSelected()) {
         conRole = "nsc";
         characterId = nscCharacterSelect.value || undefined;
+        nscWishes = document.getElementById("nsc-wishes-input").value;
       } else {
         characterId = characterSelect.value || undefined;
         conRole = "sc";
@@ -872,7 +901,7 @@
 
       try {
         await api.post(`/managed-persons/${managedPersonId}/events/${eventId}/register`, {
-          conRole, characterId,
+          conRole, characterId, nscWishes,
           flags: collectRegistrationFlags(),
           priceGroup: collectRegistrationPriceGroup(),
           extras: collectExtras(registrationExtrasContainer),

@@ -74,7 +74,7 @@
               <button type="button" id="dashboard-new-character-btn" class="create-card">
                 <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
                 <span class="create-card-title">Neuen Charakter anlegen</span>
-                <span class="create-card-text">Erschaffe einen Spielercharakter für dein nächstes Abenteuer.</span>
+                <span class="create-card-text">Spielercharakter oder Nichtspielercharakter.</span>
               </button>
               <button type="button" id="dashboard-characters-link" class="btn-ghost">Alle Charaktere verwalten</button>
               </div>
@@ -393,8 +393,9 @@
                       </div>
 
                       <div id="nsc-role-panel" hidden>
+                        <h3>Spielst du einen festen NSC?</h3>
                         <select id="nsc-character-select"></select>
-                        <label for="nsc-character-select">NSC-Charakter (optional)</label>
+                        <label for="nsc-character-select">Fester NSC (optional)</label>
                         <div class="create-card-wrap">
                           <button type="button" id="no-nsc-character-hint-btn" class="create-card">
                             <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">person_add</span></span>
@@ -402,6 +403,9 @@
                             <span class="create-card-text">Lege eine Figur an, die du als Nichtspielercharakter darstellst.</span>
                           </button>
                         </div>
+                        <label for="nsc-wishes-input">Springer-Wünsche (optional)</label>
+                        <textarea id="nsc-wishes-input" rows="3" maxlength="2000"></textarea>
+                        <p class="sub">Welche Rollen/Einsätze liegen dir, was lieber nicht?</p>
                       </div>
                     </div>
 
@@ -458,6 +462,12 @@
             <h2>Meine Charaktere</h2>
             <p id="browse-characters-link"><a href="/characters-browse.html">Charaktere anderer Spieler durchsuchen</a></p>
 
+            <button type="button" id="character-create-btn" class="create-card">
+              <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
+              <span class="create-card-title">Neuen Charakter anlegen</span>
+              <span class="create-card-text">Spielercharakter oder Nichtspielercharakter.</span>
+            </button>
+
             <div class="tabs" id="char-class-tabs">
               <button type="button" class="tab-btn active" data-tab="sc-tab">Charaktere</button>
               <button type="button" class="tab-btn" data-tab="nsc-tab" id="nsc-tab-btn"
@@ -468,11 +478,7 @@
               <div class="char-layout">
                 <div class="char-col-main">
                   <div class="action-row">
-                    <button type="button" id="new-character-btn" class="create-card">
-                      <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
-                      <span class="create-card-title">Neuen Charakter anlegen</span>
-                      <span class="create-card-text">Erschaffe einen Spielercharakter für dein nächstes Abenteuer.</span>
-                    </button>
+                    <button type="button" id="new-character-btn" hidden aria-hidden="true" tabindex="-1">Neuen Charakter anlegen</button>
                     <button type="button" id="copy-character-btn">Aus bestehendem Charakter
                       kopieren</button>
                   </div>
@@ -540,11 +546,7 @@
                 <div class="char-layout">
                   <div class="char-col-main">
                     <div class="action-row">
-                      <button type="button" id="new-nsc-character-btn" class="create-card">
-                      <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">person_add</span></span>
-                      <span class="create-card-title">Neuen NSC-Charakter anlegen</span>
-                      <span class="create-card-text">Lege eine Figur an, die du als Nichtspielercharakter darstellst.</span>
-                    </button>
+                      <button type="button" id="new-nsc-character-btn" hidden aria-hidden="true" tabindex="-1">Neuen NSC-Charakter anlegen</button>
                     </div>
                     <div id="nsc-character-list" class="char-grid"></div>
 
@@ -632,6 +634,7 @@
     import { api } from "/js/api.js";
     import { applyBranding } from "/js/branding.js";
     import { hideLoading } from "/js/loading.js";
+    import { attachCreateMenu } from "/js/createMenu.js";
     applyBranding();
     import {
       renderNavLinks,
@@ -2004,11 +2007,11 @@
         .join("");
       updateNoCharacterHintVisibility();
 
-      const matchingNsc = characters.filter((c) => c.class === "nsc");
-      nscCharacterSelect.innerHTML = ['<option value="">Kein bestimmter NSC-Charakter</option>']
+      const nscFirst = characters.filter((c) => c.class === "nsc").concat(scCharacters);
+      nscCharacterSelect.innerHTML = ['<option value="">Nein – ich komme als Springer</option>']
         .concat(
-          matchingNsc.map(
-            (c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`,
+          nscFirst.map(
+            (c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}${c.class === "sc" ? " (SC)" : ""}</option>`,
           ),
         )
         .join("");
@@ -2328,10 +2331,11 @@
       event.preventDefault();
       const eventId = eventSelect.value;
 
-      let conRole, characterId;
+      let conRole, characterId, nscWishes;
       if (isNscRoleSelected()) {
         conRole = "nsc";
         characterId = nscCharacterSelect.value || undefined;
+        nscWishes = document.getElementById("nsc-wishes-input").value;
       } else {
         characterId = characterSelect.value || undefined;
         if (!characterId) {
@@ -2355,6 +2359,7 @@
         await api.post(`/events/${eventId}/register`, {
           conRole,
           characterId,
+          nscWishes,
           flags: collectRegistrationFlags(),
           priceGroup: collectRegistrationPriceGroup(),
           extras: collectExtras(registrationExtrasContainer),
@@ -2378,10 +2383,6 @@
 
     const scFormSection = document.getElementById("sc-form-section");
     const newCharacterBtn = document.getElementById("new-character-btn");
-    document.getElementById("dashboard-new-character-btn").addEventListener("click", () => {
-      goToTab("charaktere");
-      newCharacterBtn.click();
-    });
     const scFilesPanel = document.getElementById("sc-files-panel");
     const scFilesBody = document.getElementById("sc-files-body");
 
@@ -2593,21 +2594,30 @@
     const nscCancelButton = document.getElementById("nsc-cancel-edit");
     const nscTabButton = document.getElementById("nsc-tab-btn");
 
-    // The NSC-Charaktere tab/section is only useful to someone who has
-    // actually said they're available as NSC somewhere -- shown once both
-    // the schema loaded successfully AND either the registration form's
-    // NSC role is currently selected, or at least one existing registration
-    // qualifies (con_role='nsc', or the old sc-bolt-on nsc_available=true,
-    // kept for previously saved registrations). Called after
-    // loadRegistrations() populates currentRegistrations, and again when
-    // the registration form's role tab changes.
+    // The NSC-Charaktere tab/section is available whenever the NSC schema
+    // loaded -- an NSC character needs no registration.
     function updateNscMenuVisibility() {
-      const wantsNsc =
-        nscSchemaAvailable &&
-        (isNscRoleSelected() ||
-          currentRegistrations.some((r) => r.conRole === "nsc" || r.nscAvailable));
-      nscSection.style.display = wantsNsc ? "" : "none";
-      nscTabButton.style.display = wantsNsc ? "" : "none";
+      nscSection.style.display = nscSchemaAvailable ? "" : "none";
+      nscTabButton.style.display = nscSchemaAvailable ? "" : "none";
+    }
+
+    // One "Neuen Charakter anlegen" entry (dashboard + Charaktere page): SC/NSC menu.
+    const createSc = () => {
+      goToTab("charaktere");
+      document.querySelector('#char-class-tabs [data-tab="sc-tab"]').click();
+      newCharacterBtn.click();
+    };
+    const createNsc = () => {
+      goToTab("charaktere");
+      nscTabButton.click();
+      newNscCharacterBtn.click();
+    };
+    for (const id of ["dashboard-new-character-btn", "character-create-btn"]) {
+      attachCreateMenu(document.getElementById(id), {
+        hasNsc: () => nscSchemaAvailable,
+        onSc: createSc,
+        onNsc: createNsc,
+      });
     }
 
     let editingCharacterId = null;

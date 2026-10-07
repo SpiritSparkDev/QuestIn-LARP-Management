@@ -85,14 +85,16 @@ export async function getMember(id) {
   );
   member.characters = characterRows.map((r) => ({ id: r.id, name: r.name, class: r.class, eventId: r.event_id, eventName: r.event_name }));
   const { rows: registrationRows } = await query(
-    `SELECT event_id, status, con_role, extras, waiver_version_accepted, waiver_accepted_at, registration_data_enc
-     FROM registrations WHERE user_id = $1`,
+    `SELECT r.event_id, r.status, r.con_role, r.extras, r.waiver_version_accepted, r.waiver_accepted_at, r.registration_data_enc, r.nsc_wishes, c.name AS character_name
+     FROM registrations r LEFT JOIN characters c ON c.id = r.character_id WHERE r.user_id = $1`,
     [id]
   );
   member.registrations = registrationRows.map((r) => ({
     eventId: r.event_id,
     status: r.status,
     conRole: r.con_role,
+    characterName: r.character_name,
+    nscWishes: r.nsc_wishes,
     extras: r.extras,
     waiverVersionAccepted: r.waiver_version_accepted,
     waiverAcceptedAt: r.waiver_accepted_at,

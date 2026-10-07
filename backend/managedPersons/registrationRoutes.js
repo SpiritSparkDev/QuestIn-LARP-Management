@@ -28,7 +28,7 @@ router.post('/managed-persons/:id/events/:eventId/register', requireGroupManager
   try {
     const registration = await registerForEvent(
       person.id, params.eventId, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId,
-      body.flags, body.priceGroup, body.otFields, requestingUser, body.waiverAccepted, { allowMissingCharacter: true, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails, deadlineMails: body.deadlineMails === true }
+      body.flags, body.priceGroup, body.otFields, requestingUser, body.waiverAccepted, { allowMissingCharacter: true, nscWishes: body.nscWishes, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails, deadlineMails: body.deadlineMails === true }
     );
     return { status: 201, body: registration };
   } catch (err) {

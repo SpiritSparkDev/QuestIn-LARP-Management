@@ -45,7 +45,7 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, body.waiverAccepted, { extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails, deadlineMails: body.deadlineMails === true });
+    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, body.waiverAccepted, { nscWishes: body.nscWishes, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails, deadlineMails: body.deadlineMails === true });
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
@@ -78,7 +78,7 @@ router.post('/events/:id/registrations/:userId', requireAuth(async ({ req, param
   const { rows: userRows } = await query('SELECT 1 FROM users WHERE id = $1', [params.userId]).catch(() => ({ rows: [] }));
   if (userRows.length === 0) return { status: 404, body: { error: 'member not found' } };
   try {
-    const registration = await registerForEvent(params.userId, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, false, { bypassWaiver: true, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails });
+    const registration = await registerForEvent(params.userId, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, false, { bypassWaiver: true, nscWishes: body.nscWishes, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails });
     await logAudit({ actorId: user.id, action: 'registration.admin_create', details: { eventId: params.id, userId: params.userId, conRole: body.conRole } });
     return { status: 201, body: registration };
   } catch (err) {
@@ -279,7 +279,7 @@ router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ re
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await setConRole(params.id, params.userId, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, user);
+    const registration = await setConRole(params.id, params.userId, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, user, body.nscWishes);
     return { status: 200, body: registration };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };

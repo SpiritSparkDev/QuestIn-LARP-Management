@@ -69,7 +69,7 @@ test('status must be one of the allowed values', async () => {
   );
 });
 
-test('registrations_character_con_role_check rejects an sc registration with no character_id', async () => {
+test('registrations_character_con_role_check allows an sc registration with no character_id ("Charakter folgt", migration 092)', async () => {
   const { query } = await import('../../backend/db.js');
   const { rows: userRows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'C', 'T', (SELECT id FROM groups WHERE key = 'mitglied'), true) RETURNING id",
@@ -78,12 +78,9 @@ test('registrations_character_con_role_check rejects an sc registration with no 
   const { rows: eventRows } = await query(
     "INSERT INTO events (name, event_date) VALUES ('Schema Con', '2027-01-01') RETURNING id"
   );
-  await assert.rejects(
-    query(
-      "INSERT INTO registrations (user_id, event_id, con_role) VALUES ($1, $2, 'sc')",
-      [userRows[0].id, eventRows[0].id]
-    ),
-    /registrations_character_con_role_check/
+  await query(
+    "INSERT INTO registrations (user_id, event_id, con_role) VALUES ($1, $2, 'sc')",
+    [userRows[0].id, eventRows[0].id]
   );
 });
 

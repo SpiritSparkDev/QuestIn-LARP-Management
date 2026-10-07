@@ -707,7 +707,7 @@
       const editableFields = registrationSchema.filter((f) => myAccountFields.includes(f.key));
       const registeredHtml = registered.length
         ? registered.map((r) => `<div class="member-registration" data-reg-event="${escapeHtml(r.eventId)}">
-            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
+            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Fester NSC: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.conRole === 'nsc' && r.nscWishes ? `<br><span class="sub" style="white-space:pre-wrap;">Springer-Wünsche: ${escapeHtml(r.nscWishes)}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
             <div class="action-row">
               ${canOverrideCheckin && r.status === 'pending' ? `<button type="button" class="btn-sm" data-reg-approve="${escapeHtml(r.eventId)}">Freigeben</button>` : ''}
               ${canOverrideCheckin && (r.status === 'pending' || r.status === 'confirmed') ? `<button type="button" class="btn-ghost btn-sm" data-reg-cancel="${escapeHtml(r.eventId)}">Absagen</button>` : ''}
@@ -788,16 +788,17 @@
         const wanted = role === 'sc' ? 'sc' : role === 'nsc' ? 'nsc' : null;
         const characters = new Map();
         for (const c of member.characters ?? []) {
-          if (c.class !== wanted) continue;
+          if (wanted === 'sc' && c.class !== 'sc') continue;
           // An SC can only ever be registered once, so one that already has an event is taken.
           const entry = characters.get(c.id) ?? { ...c, taken: false };
-          if (wanted === 'sc' && c.eventId) entry.taken = true;
+          if (c.class === 'sc' && c.eventId) entry.taken = true;
           characters.set(c.id, entry);
         }
         const free = [...characters.values()].filter((c) => !c.taken);
         document.getElementById('reg-character-wrap').innerHTML = wanted
-          ? `<select id="reg-character" ${role === 'sc' ? 'required' : ''}>${role === 'sc' ? (free.length ? '' : '<option value="">Kein freier SC vorhanden</option>') : '<option value="">– keiner –</option>'}${free.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('')}</select>
-             <label for="reg-character">Charakter</label>`
+          ? `<select id="reg-character" ${role === 'sc' ? 'required' : ''}>${role === 'sc' ? (free.length ? '' : '<option value="">Kein freier SC vorhanden</option>') : '<option value="">– keiner –</option>'}${free.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}${role === 'nsc' && c.class === 'sc' ? ' (SC)' : ''}</option>`).join('')}</select>
+             <label for="reg-character">Charakter</label>
+             ${role === 'nsc' ? '<textarea id="reg-nsc-wishes" rows="2" maxlength="2000"></textarea><label for="reg-nsc-wishes">Springer-Wünsche (optional)</label>' : ''}`
           : '';
         const event = allEvents.find((e) => e.id === form.elements['reg-event'].value);
         const extrasWrap = document.getElementById('reg-extras-wrap');
@@ -818,6 +819,7 @@
         const payload = {
           conRole: form.elements['reg-role'].value,
           characterId: form.elements['reg-character']?.value || undefined,
+          nscWishes: document.getElementById('reg-nsc-wishes')?.value,
           priceGroup: form.elements['reg-price']?.value || undefined,
           extras: collectExtras(document.getElementById('reg-extras-wrap')),
         };
