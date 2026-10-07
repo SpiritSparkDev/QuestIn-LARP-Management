@@ -110,35 +110,35 @@ test('unpaid reminders: up to the configured count, one mail per event, Con-Zahl
   assert.equal(admin.userId !== undefined, true);
 });
 
-test('Teilnahmegruppen can be marked Con-Zahler: validated, kept, and applied to the registration', async () => {
+test('Preisstufen can be marked Con-Zahler: validated, kept, and applied to the registration', async () => {
   await withTestServer(async (port) => {
     const base = `http://localhost:${port}`;
     const json = (cookie) => ({ 'Content-Type': 'application/json', Cookie: cookie });
-    const admin = await makeUser('admin', 'Gruppen');
+    const admin = await makeUser('admin', 'Stufen');
     const carl = await makeUser('mitglied', 'Carl');
     const dora = await makeUser('mitglied', 'Dora');
-    const pricing = (conPayerGroups) => ({
-      groups: ['Erwachsene', 'Helfer'],
-      conPayerGroups,
-      tiers: [{ name: 'Standard', until: null, amounts: { Erwachsene: 3000, Helfer: 0 } }],
+    // "Frühbucher" ran out long ago, so the registration falls into the open-ended tier.
+    const pricing = (lastTierConPayer) => ({
+      groups: ['Erwachsene'],
+      tiers: [
+        { name: 'Frühbucher', until: '2000-01-01', conPayer: false, amounts: { Erwachsene: 2000 } },
+        { name: 'Vor Ort', until: null, conPayer: lastTierConPayer, amounts: { Erwachsene: 3500 } },
+      ],
     });
-    const create = (conPayerGroups) => fetch(`${base}/events`, {
-      method: 'POST', headers: json(admin.cookie),
-      body: JSON.stringify({ name: `${TAG} Gruppen`, eventDate: '2099-08-01', pricing: pricing(conPayerGroups) }),
-    });
-    assert.equal((await create(['Unbekannt'])).status, 400);
-    const res = await create(['Helfer']);
-    assert.equal(res.status, 201);
-    const event = await res.json();
-    assert.deepEqual(event.pricing.conPayerGroups, ['Helfer']);
-    await query('UPDATE events SET is_active = true WHERE id = $1', [event.id]);
+    const create = (name, p) => fetch(`${base}/events`, { method: 'POST', headers: json(admin.cookie), body: JSON.stringify({ name: `${TAG} ${name}`, eventDate: '2099-08-01', pricing: p }) });
+    assert.equal((await create('Falsch', pricing('ja'))).status, 400);
 
-    const register = (user, priceGroup) => fetch(`${base}/events/${event.id}/register`, { method: 'POST', headers: json(user.cookie), body: JSON.stringify({ conRole: 'helfer', priceGroup }) });
-    assert.equal((await register(carl, 'Erwachsene')).status, 201);
-    assert.equal((await register(dora, 'Helfer')).status, 201);
-    const conPayerOf = async (user) => (await query('SELECT con_payer FROM registrations WHERE event_id = $1 AND user_id = $2', [event.id, user.userId])).rows[0].con_payer;
-    assert.equal(await conPayerOf(carl), false);
-    assert.equal(await conPayerOf(dora), true);
+    const conPayerEvent = await (await create('Vor Ort', pricing(true))).json();
+    const normalEvent = await (await create('Normal', pricing(false))).json();
+    assert.equal(conPayerEvent.pricing.tiers.find((t) => t.name === 'Vor Ort').conPayer, true);
+    await query('UPDATE events SET is_active = true WHERE id = ANY($1::uuid[])', [[conPayerEvent.id, normalEvent.id]]);
+
+    const register = (user, event) => fetch(`${base}/events/${event.id}/register`, { method: 'POST', headers: json(user.cookie), body: JSON.stringify({ conRole: 'helfer', priceGroup: 'Erwachsene' }) });
+    assert.equal((await register(carl, normalEvent)).status, 201);
+    assert.equal((await register(dora, conPayerEvent)).status, 201);
+    const conPayerOf = async (user, event) => (await query('SELECT con_payer, price_tier FROM registrations WHERE event_id = $1 AND user_id = $2', [event.id, user.userId])).rows[0];
+    assert.deepEqual(await conPayerOf(carl, normalEvent), { con_payer: false, price_tier: 'Vor Ort' });
+    assert.deepEqual(await conPayerOf(dora, conPayerEvent), { con_payer: true, price_tier: 'Vor Ort' });
   });
 });
 

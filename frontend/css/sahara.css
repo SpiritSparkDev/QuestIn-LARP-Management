@@ -4852,4 +4852,4 @@ th.is-sortable[data-dir="desc"]::after {
     padding: 0;
   }
 }
-.price-group-conpayer { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.price-tier-conpayer { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }

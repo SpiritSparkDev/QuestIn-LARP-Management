@@ -166,7 +166,7 @@ function resolveFlags(eventFlags, flags) {
 // admin just sets the amount manually afterwards.
 function resolvePriceGroup(event, priceGroup) {
   const groups = event.pricing?.groups ?? [];
-  if (groups.length === 0) return { priceGroup: null, priceTier: null, priceListCents: null };
+  if (groups.length === 0) return { priceGroup: null, priceTier: null, priceListCents: null, conPayer: false };
   if (!groups.includes(priceGroup)) {
     const err = new Error(`priceGroup must be one of: ${groups.join(', ')}`);
     err.code = 'INVALID_PRICE_GROUP';
@@ -177,6 +177,7 @@ function resolvePriceGroup(event, priceGroup) {
     priceGroup,
     priceTier: resolved?.tierName ?? null,
     priceListCents: resolved?.amountCents ?? null,
+    conPayer: resolved?.conPayer === true,
   };
 }
 
@@ -360,7 +361,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
           waiverAccepted === true ? appSettings.waiverVersion : null,
           waiverAccepted === true ? new Date() : null,
           amountDueCents, JSON.stringify(resolvedExtras), extrasCents, lodging.lodging?.id ?? null, lodging.lodgingCents, lodging.details ? JSON.stringify(lodging.details) : null,
-          conPayer === true || (event.pricing?.conPayerGroups ?? []).includes(resolvedPrice.priceGroup), pdfImport === true,
+          conPayer === true || resolvedPrice.conPayer, pdfImport === true,
         ]
       );
       return rows[0];

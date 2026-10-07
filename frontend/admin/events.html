@@ -131,14 +131,14 @@
 
         </div>
 <div class="tab-panel" id="ev-tab-preise" hidden>
-<h3 class="event-form-section">Preisstufen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
-        <p class="sub">Lege Teilnahmegruppen (z.B. Erwachsene, Kinder) und terminierte Preisstufen (z.B. Frühbucher) an. Bei der Anmeldung wird automatisch die erste noch gültige Stufe verwendet.</p>
+<h3 class="event-form-section">Preise <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
+        <p class="sub">Lege Teilnahmegruppen (z.B. Erwachsene, Kinder) und terminierte Preisstufen (z.B. Frühbucher) an. Bei der Anmeldung wird automatisch die erste noch gültige Preisstufe verwendet. Eine Preisstufe kann als „Con-Zahler“ markiert werden: Wer dann bucht, zahlt erst vor Ort.</p>
 
         <label>Teilnahmegruppen</label>
         <div id="price-groups"></div>
         <button type="button" id="add-price-group" class="btn-sm">+ Teilnahmegruppe hinzufügen</button>
 
-        <label style="margin-top:24px;">Preisstufen</label>
+        <label style="margin-top:24px;">Preisstufen (nach Datum)</label>
         <div id="price-tiers"></div>
         <button type="button" id="add-price-tier" class="btn-sm">+ Preisstufe hinzufügen</button>
 
@@ -196,8 +196,6 @@ const forceDeleteNotify = document.getElementById('force-delete-notify');
 const priceGroupsContainer = document.getElementById('price-groups');
 const priceTiersContainer = document.getElementById('price-tiers');
 let priceGroups = [];
-// Parallel to priceGroups: does this group pay at the con ("Con-Zahler")?
-let priceGroupConPayer = [];
 let priceTiers = [];
 
 function currentPriceGroups() {
@@ -209,7 +207,6 @@ function renderPriceGroups() {
     ? priceGroups.map((g, i) => `
       <div data-group-row="${i}" class="price-group-row">
         <input type="text" data-group-name value="${escapeHtml(g)}" placeholder="z.B. Erwachsene" style="max-width:240px;">
-        <label class="price-group-conpayer" title="Wer diese Teilnahmegruppe wählt, zahlt erst vor Ort. Das Ticket wird trotzdem ausgestellt."><input type="checkbox" data-group-conpayer ${priceGroupConPayer[i] ? 'checked' : ''}> Con-Zahler (zahlt vor Ort)</label>
         <button type="button" class="btn-sm btn-ghost" data-remove-group="${i}">Entfernen</button>
       </div>
     `).join('')
@@ -219,7 +216,6 @@ function renderPriceGroups() {
     const i = Number(row.dataset.groupRow);
     const input = row.querySelector('[data-group-name]');
     input.addEventListener('input', (e) => { priceGroups[i] = e.target.value; });
-    row.querySelector('[data-group-conpayer]').addEventListener('change', (e) => { priceGroupConPayer[i] = e.target.checked; });
     // Re-syncs the tier amount columns on blur (not on every keystroke,
     // which would rebuild this input mid-edit and drop focus).
     input.addEventListener('change', () => { syncTierAmountsToGroups(); renderPriceTiers(); });
@@ -227,7 +223,6 @@ function renderPriceGroups() {
   priceGroupsContainer.querySelectorAll('[data-remove-group]').forEach((button) => {
     button.addEventListener('click', () => {
       priceGroups.splice(Number(button.dataset.removeGroup), 1);
-      priceGroupConPayer.splice(Number(button.dataset.removeGroup), 1);
       syncTierAmountsToGroups();
       renderPriceGroups();
       renderPriceTiers();
@@ -237,7 +232,6 @@ function renderPriceGroups() {
 
 document.getElementById('add-price-group').addEventListener('click', () => {
   priceGroups.push('');
-  priceGroupConPayer.push(false);
   renderPriceGroups();
 });
 
@@ -259,6 +253,7 @@ function renderPriceTiers() {
     <div data-tier-row="${i}" class="price-tier-row">
       <div class="price-tier-field"><input type="text" data-tier-name value="${escapeHtml(tier.name)}" placeholder="Name, z.B. Frühbucher"><label>Preisstufe</label></div>
       <div class="price-tier-field"><input type="date" data-tier-until value="${escapeHtml(tier.until ?? '')}"><label>Gültig bis <span style="opacity:0.6;font-size:12px;">leer = letzte Stufe</span></label></div>
+      <label class="price-tier-conpayer" title="Wer in dieser Preisstufe bucht, zahlt erst vor Ort. Das Ticket wird trotzdem ausgestellt."><input type="checkbox" data-tier-conpayer ${tier.conPayer ? 'checked' : ''}> Con-Zahler (Zahlung vor Ort)</label>
       ${groups.map((g) => `
         <div class="price-tier-field price-tier-amount"><input type="number" min="0" step="0.01" data-tier-amount="${escapeHtml(g)}" value="${escapeHtml(tier.amounts[g] ?? '')}"><label>${escapeHtml(g)} (€)</label></div>
       `).join('')}
@@ -272,6 +267,7 @@ function renderPriceTiers() {
     const i = Number(row.dataset.tierRow);
     row.querySelector('[data-tier-name]').addEventListener('input', (e) => { priceTiers[i].name = e.target.value; });
     row.querySelector('[data-tier-until]').addEventListener('input', (e) => { priceTiers[i].until = e.target.value || null; });
+    row.querySelector('[data-tier-conpayer]').addEventListener('change', (e) => { priceTiers[i].conPayer = e.target.checked; });
     row.querySelectorAll('[data-tier-amount]').forEach((input) => {
       input.addEventListener('input', (e) => { priceTiers[i].amounts[e.target.dataset.tierAmount] = e.target.value; });
     });
@@ -287,7 +283,7 @@ function renderPriceTiers() {
 document.getElementById('add-price-tier').addEventListener('click', () => {
   const amounts = {};
   for (const g of currentPriceGroups()) amounts[g] = '';
-  priceTiers.push({ name: '', until: null, amounts });
+  priceTiers.push({ name: '', until: null, conPayer: false, amounts });
   renderPriceTiers();
 });
 
@@ -295,12 +291,12 @@ function collectPricing() {
   const groups = currentPriceGroups();
   return {
     groups,
-    conPayerGroups: priceGroups.filter((g, i) => g.trim() && priceGroupConPayer[i]).map((g) => g.trim()),
     tiers: priceTiers
       .filter((t) => t.name.trim())
       .map((t) => ({
         name: t.name.trim(),
         until: t.until || null,
+        conPayer: t.conPayer === true,
         amounts: Object.fromEntries(groups.map((g) => [g, Math.round(Number(t.amounts[g] || 0) * 100)])),
       })),
   };
@@ -666,10 +662,10 @@ function startEdit(eventData) {
   form.elements.mapsUrl.value = eventData.maps_url ?? '';
   form.elements.osmUrl.value = eventData.osm_url ?? '';
   priceGroups = [...(eventData.pricing?.groups ?? [])];
-  priceGroupConPayer = priceGroups.map((g) => (eventData.pricing?.conPayerGroups ?? []).includes(g));
   priceTiers = (eventData.pricing?.tiers ?? []).map((t) => ({
     name: t.name,
     until: t.until,
+    conPayer: t.conPayer === true,
     amounts: Object.fromEntries(Object.entries(t.amounts ?? {}).map(([g, cents]) => [g, (cents / 100).toString()])),
   }));
   extras = (eventData.extras ?? []).map((e) => ({

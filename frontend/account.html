@@ -1843,6 +1843,7 @@
       registrationPriceGroupContainer.innerHTML = field.options.length > 0
         ? renderAccountFieldInput(field, "", { idPrefix: "register-" })
         : "";
+      syncConPayerWithTier();
     }
 
     function collectRegistrationPriceGroup() {
@@ -1851,16 +1852,16 @@
     }
 
 
-    // A Teilnahmegruppe marked "Con-Zahler" by the orga makes the registration a Con-Zahler one.
-    function syncConPayerWithGroup() {
+    // A Preisstufe marked "Con-Zahler" by the orga makes the registration a Con-Zahler one.
+    function syncConPayerWithTier() {
       const event = events.find((e) => e.id === eventSelect.value);
-      const group = collectRegistrationPriceGroup();
+      const today = new Date().toISOString().slice(0, 10);
+      const tier = (event?.pricing?.tiers ?? []).find((t) => t.until == null || today <= t.until);
       const box = document.getElementById("registration-conpayer-checkbox");
-      const forced = Boolean(group) && (event?.pricing?.conPayerGroups ?? []).includes(group);
+      const forced = tier?.conPayer === true;
       if (forced) box.checked = true;
       box.disabled = forced;
     }
-    registrationPriceGroupContainer.addEventListener("change", syncConPayerWithGroup);
 
     // Bookable extras of the selected event (hut, vehicle pitch, ...).
     const registrationExtrasContainer = document.getElementById("registration-extras");

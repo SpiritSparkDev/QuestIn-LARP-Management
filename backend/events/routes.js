@@ -46,10 +46,6 @@ function validatePricing(pricing) {
   if (new Set(trimmedGroups).size !== trimmedGroups.length) {
     return 'pricing.groups must not contain duplicates';
   }
-  if (pricing.conPayerGroups !== undefined
-    && (!Array.isArray(pricing.conPayerGroups) || pricing.conPayerGroups.some((g) => !trimmedGroups.includes(g)))) {
-    return 'pricing.conPayerGroups must be a list of groups from pricing.groups';
-  }
   if (!Array.isArray(tiers)) return 'pricing.tiers must be an array';
   if (tiers.length > 0 && trimmedGroups.length === 0) {
     return 'pricing.tiers requires at least one group in pricing.groups';
@@ -61,6 +57,9 @@ function validatePricing(pricing) {
     if (!name) return 'each pricing tier needs a non-empty name';
     if (tierNames.has(name)) return 'pricing.tiers must not contain duplicate names';
     tierNames.add(name);
+    if (tier.conPayer !== undefined && typeof tier.conPayer !== 'boolean') {
+      return `pricing tier "${name}": conPayer must be a boolean`;
+    }
     if (tier.until !== null && tier.until !== undefined && !DATE_RE.test(tier.until)) {
       return `pricing tier "${name}": until must be null or a YYYY-MM-DD date`;
     }

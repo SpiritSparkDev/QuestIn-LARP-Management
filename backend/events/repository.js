@@ -49,15 +49,15 @@ function normalizePricing(pricing) {
     name: String(t.name ?? '').trim(),
     until: t.until ?? null,
     amounts: { ...t.amounts },
+    // "Con-Zahler" tier: whoever is priced by it pays at the con.
+    conPayer: t.conPayer === true,
   }));
   normalizedTiers.sort((a, b) => {
     const aUntil = a.until ?? '9999-99-99';
     const bUntil = b.until ?? '9999-99-99';
     return aUntil < bUntil ? -1 : aUntil > bUntil ? 1 : 0;
   });
-  // Groups whose people pay at the con ("Con-Zahler"): the registration is marked automatically.
-  const conPayerGroups = Array.isArray(pricing?.conPayerGroups) ? groups.filter((g) => pricing.conPayerGroups.includes(g)) : [];
-  return { groups, tiers: normalizedTiers, conPayerGroups };
+  return { groups, tiers: normalizedTiers };
 }
 
 // Keeps an extra's id when it has one (registrations refer to it), otherwise
@@ -187,7 +187,7 @@ export function resolvePriceForGroup(pricing, groupName, atDate = new Date()) {
   if (!tier) return null;
   const amountCents = tier.amounts?.[groupName];
   if (!Number.isInteger(amountCents)) return null;
-  return { tierName: tier.name, amountCents };
+  return { tierName: tier.name, amountCents, conPayer: tier.conPayer === true };
 }
 
 // "Event beenden": from now on Check-Out is possible; null reopens it.
