@@ -81,6 +81,8 @@ const form = document.getElementById('login-form');
     document.getElementById('guest-events').innerHTML = events.map((e) =>
       `<a class="guest-event" href="/ticket-widget.html?event=${encodeURIComponent(e.ref)}"><span><strong>${escapeHtml(e.name)}</strong><span class="sub">${escapeHtml(e.eventDate)}</span></span><span class="guest-event-go">Ticket sichern</span></a>`).join('');
     document.getElementById('guest-pane').hidden = false;
+    const { hasUploadedTicketBackground } = await api.get('/app-settings');
+    if (hasUploadedTicketBackground) document.getElementById('guest-events').style.setProperty('--ticket-bg-image', 'url("/app-settings/ticket-background")');
   } catch {
     // Gast-Tickets sind optional: ohne Liste bleibt nur der normale Login sichtbar.
   }

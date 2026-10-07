@@ -1781,6 +1781,20 @@ a.create-card { text-decoration: none; }
   border: 1px solid var(--outline-variant);
   border-radius: 10px;
   text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+/* The uploaded ticket background (--ticket-bg-image) as a faint watermark behind the card */
+.guest-event::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--ticket-bg-image, none);
+  background-size: cover;
+  background-position: center;
+  opacity: 0.2;
 }
 .guest-event:hover { border-color: var(--primary); }
 .guest-event .sub { display: block; }
