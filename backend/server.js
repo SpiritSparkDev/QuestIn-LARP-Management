@@ -48,6 +48,7 @@ import './pdfImport/routes.js';
 import './tavern/routes.js';
 import './testMode/routes.js';
 import './audit/routes.js';
+import { checkWriteGuard } from './instanceAuthority/guard.js';
 
 // Route modules import `router` from ./routes.js directly (importing it from
 // here would create an ESM cycle); this re-export is for the app entry point only.
@@ -89,7 +90,7 @@ async function handleRequest(req, res) {
   }
 
   try {
-    const result = await match.handler({ req, params: match.params, requestId });
+    const result = await checkWriteGuard(req.method, pathname) ?? await match.handler({ req, params: match.params, requestId });
     const status = result?.status ?? 200;
     if (result?.isBinary) {
       res.writeHead(status, result?.headers);
