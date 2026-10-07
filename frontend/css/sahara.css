@@ -4872,3 +4872,6 @@ th.is-sortable[data-dir="desc"]::after {
   }
 }
 .price-tier-conpayer { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; text-transform: none; letter-spacing: 0; }
+.price-group-rule { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; padding-left: 12px; border-left: 3px solid var(--outline-variant); font-size: 0.9rem; }
+.price-group-rule select, .price-group-rule input { width: auto; max-width: 220px; }
+.price-group-rule-label { color: var(--on-surface-variant); }

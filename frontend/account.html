@@ -653,6 +653,7 @@
       nullifyBlankNumberFields,
       otFieldValuesEqual,
     } from "/js/formFields.js";
+    import { suggestPriceGroup, describeRule } from "/js/priceGroupRules.js";
     import { renderRichText } from "/js/richText.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary, sameExtras, formatCents } from "/js/extrasPicker.js";
     import { renderFlagCards, collectFlagCards, bindFlagCards } from "/js/flagCards.js";
@@ -1843,6 +1844,9 @@
       registrationPriceGroupContainer.innerHTML = field.options.length > 0
         ? renderAccountFieldInput(field, "", { idPrefix: "register-" })
         : "";
+      // A new event: suggest again from scratch.
+      priceGroupTouched = false;
+      applyPriceGroupSuggestion();
     }
 
     function collectRegistrationPriceGroup() {
@@ -1850,6 +1854,29 @@
       return value || undefined;
     }
 
+
+
+    // Teilnahmegruppe pre-selection from OT fields (rules set by the orga in the price editor).
+    // Only while the person has not picked a group themself.
+    let priceGroupTouched = false;
+    function applyPriceGroupSuggestion() {
+      if (priceGroupTouched) return;
+      const event = events.find((e) => e.id === eventSelect.value);
+      if (!event?.pricing?.groupRules || Object.keys(event.pricing.groupRules).length === 0) return;
+      const schemas = { account: accountSchema, registration: registrationSchema };
+      const group = suggestPriceGroup(event.pricing, { account: collectAccountFieldValues(accountOtFieldsContainer, accountSchema), registration: collectOtFields() }, schemas, event.event_date);
+      const select = registrationPriceGroupContainer.querySelector("select");
+      registrationPriceGroupContainer.querySelector(".price-group-hint")?.remove();
+      if (!group || !select) return;
+      select.value = group;
+      const rule = event.pricing.groupRules[group];
+      const field = schemas[rule.source].find((f) => f.key === rule.field);
+      select.insertAdjacentHTML("afterend", `<p class="sub price-group-hint">Vorgewählt: ${escapeHtml(describeRule(rule, field))}. Du kannst die Gruppe ändern.</p>`);
+    }
+    registrationPriceGroupContainer.addEventListener("change", () => { priceGroupTouched = true; registrationPriceGroupContainer.querySelector(".price-group-hint")?.remove(); });
+    otFieldsContainer.addEventListener("input", applyPriceGroupSuggestion);
+    otFieldsContainer.addEventListener("change", applyPriceGroupSuggestion);
+    window.addEventListener("hashchange", applyPriceGroupSuggestion);
 
     // Bookable extras of the selected event (hut, vehicle pitch, ...).
     const registrationExtrasContainer = document.getElementById("registration-extras");

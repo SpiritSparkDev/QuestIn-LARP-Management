@@ -1,3 +1,4 @@
+import { ALL_RULE_OPS, isNumericOp } from '../../frontend/js/priceGroupRules.js';
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
@@ -34,6 +35,27 @@ function validateMapUrls({ mapsUrl, osmUrl }) {
 // editor in the frontend, so a malformed submission signals a bug rather
 // than stray whitespace, and gets rejected with a specific message instead
 // of silently dropped.
+// pricing.groupRules: optional automatic pre-selection of a Teilnahmegruppe from an OT field
+// (see frontend/js/priceGroupRules.js). One rule per group at most.
+function validateGroupRules(groupRules, groups) {
+  if (groupRules === undefined) return null;
+  if (typeof groupRules !== 'object' || groupRules === null || Array.isArray(groupRules)) return 'pricing.groupRules must be an object';
+  for (const [group, rule] of Object.entries(groupRules)) {
+    if (!groups.includes(group)) return `pricing.groupRules: unknown group "${group}"`;
+    if (typeof rule !== 'object' || rule === null) return `pricing.groupRules["${group}"] must be an object`;
+    if (!['account', 'registration'].includes(rule.source)) return `pricing.groupRules["${group}"]: source must be "account" or "registration"`;
+    if (typeof rule.field !== 'string' || !rule.field) return `pricing.groupRules["${group}"]: field is required`;
+    if (!ALL_RULE_OPS.includes(rule.op)) return `pricing.groupRules["${group}"]: unknown comparison`;
+    if (isNumericOp(rule.op)) {
+      if (!Number.isFinite(rule.value)) return `pricing.groupRules["${group}"]: value must be a number`;
+      if (rule.op === 'between' && (!Number.isFinite(rule.value2) || rule.value2 < rule.value)) return `pricing.groupRules["${group}"]: the upper bound must be a number >= the lower bound`;
+    } else if (rule.op !== 'filled' && typeof rule.value !== 'string' && typeof rule.value !== 'boolean') {
+      return `pricing.groupRules["${group}"]: value is required`;
+    }
+  }
+  return null;
+}
+
 function validatePricing(pricing) {
   if (typeof pricing !== 'object' || pricing === null || Array.isArray(pricing)) {
     return 'pricing must be an object';
@@ -46,6 +68,8 @@ function validatePricing(pricing) {
   if (new Set(trimmedGroups).size !== trimmedGroups.length) {
     return 'pricing.groups must not contain duplicates';
   }
+  const ruleError = validateGroupRules(pricing.groupRules, trimmedGroups);
+  if (ruleError) return ruleError;
   if (!Array.isArray(tiers)) return 'pricing.tiers must be an array';
   if (tiers.length > 0 && trimmedGroups.length === 0) {
     return 'pricing.tiers requires at least one group in pricing.groups';

@@ -57,7 +57,13 @@ function normalizePricing(pricing) {
     const bUntil = b.until ?? '9999-99-99';
     return aUntil < bUntil ? -1 : aUntil > bUntil ? 1 : 0;
   });
-  return { groups, tiers: normalizedTiers };
+  // Automatic Teilnahmegruppe suggestion per group (already validated in events/routes.js).
+  const groupRules = {};
+  for (const g of groups) {
+    const rule = pricing?.groupRules?.[g];
+    if (rule) groupRules[g] = { source: rule.source, field: rule.field, op: rule.op, ...(rule.value !== undefined && { value: rule.value }), ...(rule.value2 !== undefined && { value2: rule.value2 }) };
+  }
+  return { groups, tiers: normalizedTiers, groupRules };
 }
 
 // Keeps an extra's id when it has one (registrations refer to it), otherwise
