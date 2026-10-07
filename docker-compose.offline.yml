@@ -1,0 +1,62 @@
+# Offline-Instanz fuer den Con (Check-in + Taverne ohne Internet).
+# Immer explizit starten:  docker compose -f docker-compose.offline.yml up -d
+# Anleitung: docs/betrieb-offline.md
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pakyrion
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD setzen}
+    volumes:
+      - offline-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d pakyrion"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    environment:
+      APP_MODE: offline
+      DATABASE_URL: postgres://app:${POSTGRES_PASSWORD}@db:5432/pakyrion
+      UPLOADS_DIR: /app/uploads
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Gleicher Key wie online (Voll-Dump) bzw. eigener Key (reduzierter Snapshot).
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY setzen}
+      APP_BASE_URL: https://${CON_HOSTNAME:-con.local}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Kein Host-Port: erreichbar nur ueber den TLS-Proxy.
+    expose:
+      - "3000"
+    volumes:
+      - offline-uploads-data:/app/uploads
+    restart: unless-stopped
+    # Kein seed-admin/seed-*: Daten kommen aus dem Import (npm run offline:import).
+    command: sh -c "npm run migrate && npm start"
+
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      CON_HOSTNAME: ${CON_HOSTNAME:-con.local}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile.offline:/etc/caddy/Caddyfile:ro
+      - offline-caddy-data:/data
+      - offline-caddy-config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  offline-db-data:
+  offline-uploads-data:
+  offline-caddy-data:
+  offline-caddy-config:
