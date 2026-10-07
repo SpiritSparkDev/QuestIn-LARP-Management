@@ -34,6 +34,7 @@ function tokenTtlMs(event) {
   return Math.max(PAYMENT_TOKEN_TTL_MS, untilEvent);
 }
 const GUEST_GROUP_KEY = 'mitglied';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COMING_SOON_ERROR = { status: 409, body: { error: 'Die Anmeldung ist noch gesperrt und startet bald.' } };
 
 // The account (personal-data) fields a guest is asked for: the same schema a
@@ -61,8 +62,9 @@ function pickFields(schema, values) {
 // Open events a guest can book (login page: "Ohne Konto").
 router.get('/public/events', async () => {
   if ((await getAppSettings()).comingSoonEnabled) return COMING_SOON_ERROR;
-  const events = (await listEvents()).filter((e) => e.is_active && e.code);
-  return { status: 200, body: events.map((e) => ({ code: e.code, name: e.name, eventDate: e.event_date })) };
+  // `ref` is what the widget page takes as ?event=: the QR-Kennung if there is one, else the event id.
+  const events = (await listEvents()).filter((e) => e.is_active);
+  return { status: 200, body: events.map((e) => ({ ref: e.code || e.id, name: e.name, eventDate: e.event_date })) };
 });
 
 router.get('/public/events/:code', async ({ params }) => {
@@ -72,7 +74,8 @@ router.get('/public/events/:code', async ({ params }) => {
   // Router.match in backend/router.js), so a code containing "/" -- the
   // exact format the admin UI suggests, e.g. "P17/2027" -- arrives here as
   // literal "P17%2F2027" unless decoded first.
-  const event = await getEventByCode(decodeURIComponent(params.code));
+  const ref = decodeURIComponent(params.code);
+  const event = (await getEventByCode(ref)) ?? (UUID.test(ref) ? await getEvent(ref) : null);
   if (!event) return { status: 404, body: { error: 'event not found' } };
   if (!event.is_active) {
     return { status: 409, body: { error: 'Für dieses Event ist aktuell keine Anmeldung möglich.' } };

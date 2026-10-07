@@ -79,7 +79,7 @@ const form = document.getElementById('login-form');
     const events = await api.get('/public/events');
     if (events.length === 0) return;
     document.getElementById('guest-events').innerHTML = events.map((e) =>
-      `<a class="guest-event" href="/ticket-widget.html?event=${encodeURIComponent(e.code)}"><span><strong>${escapeHtml(e.name)}</strong><span class="sub">${escapeHtml(e.eventDate)}</span></span><span class="guest-event-go">Ticket sichern</span></a>`).join('');
+      `<a class="guest-event" href="/ticket-widget.html?event=${encodeURIComponent(e.ref)}"><span><strong>${escapeHtml(e.name)}</strong><span class="sub">${escapeHtml(e.eventDate)}</span></span><span class="guest-event-go">Ticket sichern</span></a>`).join('');
     document.getElementById('guest-pane').hidden = false;
   } catch {
     // Gast-Tickets sind optional: ohne Liste bleibt nur der normale Login sichtbar.

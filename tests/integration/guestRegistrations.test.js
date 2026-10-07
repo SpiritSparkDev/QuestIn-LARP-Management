@@ -77,20 +77,22 @@ test('public event endpoints are open to other origins (embeddable widget) and s
   });
 });
 
-test('GET /public/events lists only active events that have a code', async () => {
+test('GET /public/events lists active events (code or id as ref) and the ref opens the event', async () => {
   await withTestServer(async (port) => {
     const open = `LIST-${crypto.randomUUID().slice(0, 8)}`;
     const closed = `LIST-${crypto.randomUUID().slice(0, 8)}`;
     await makeEvent({ code: open });
     await makeEvent({ code: closed, isActive: false });
-    await makeEvent({ code: null });
+    const noCodeId = await makeEvent({ code: null });
 
     const res = await fetch(`http://localhost:${port}/public/events`);
     assert.equal(res.status, 200);
-    const codes = (await res.json()).map((e) => e.code);
-    assert.ok(codes.includes(open));
-    assert.ok(!codes.includes(closed));
-    assert.ok(!codes.includes(null));
+    const refs = (await res.json()).map((e) => e.ref);
+    assert.ok(refs.includes(open));
+    assert.ok(!refs.includes(closed));
+    // An event without QR-Kennung is listed by its id and can be opened with it.
+    assert.ok(refs.includes(noCodeId));
+    assert.equal((await fetch(`http://localhost:${port}/public/events/${noCodeId}`)).status, 200);
   });
 });
 
