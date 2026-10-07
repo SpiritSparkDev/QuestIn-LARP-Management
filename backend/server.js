@@ -14,6 +14,7 @@ import './auth/groupInvite.js';
 import './accounts/routes.js';
 import './accounts/export.js';
 import './events/routes.js';
+import './mailings/routes.js';
 import './privacy/routes.js';
 import { runDueAutoDeletions } from './privacy/repository.js';
 import './characters/routes.js';

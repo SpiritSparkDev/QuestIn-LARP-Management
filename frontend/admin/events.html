@@ -60,6 +60,7 @@
   <button type="button" class="tab-btn" data-tab="ev-tab-preise">Preise &amp; Extras</button>
   <button type="button" class="tab-btn" data-tab="ev-tab-widget">Direktanmeldungs-Widget</button>
   <button type="button" class="tab-btn" data-tab="ev-tab-privacy">Datenschutz</button>
+  <button type="button" class="tab-btn" data-tab="ev-tab-mailing">Rundmail</button>
 </div>
 <div class="tab-panel" id="ev-tab-basis">
 <h3 class="event-form-section">Grunddaten</h3>
@@ -148,6 +149,10 @@
         <button type="button" id="add-extra" class="btn-sm">+ Extra hinzufügen</button>
 
         </div>
+<div class="tab-panel" id="ev-tab-mailing" hidden>
+<h3 class="event-form-section">Rundmail</h3>
+<div id="mailing-root"></div>
+</div>
 <div class="tab-panel" id="ev-tab-privacy" hidden>
 <h3 class="event-form-section">Datenschutz &amp; Löschung <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Ordne Felder aus den Feldschemas einer Datenart zu und lege je Datenart fest, wann (Tage nach „Event beenden“) und wie gelöscht wird: automatisch, oder erst nach Benachrichtigung und deiner Bestätigung. Anmeldungsfelder werden immer gelöscht; Konto- und Charakterfelder nur bei Teilnehmenden, die der Speicherung für weitere Events nicht zugestimmt haben.</p>
@@ -177,6 +182,7 @@ import { escapeHtml } from '/js/formFields.js';
 import { opsForType, supportsRules, isNumericOp } from '/js/priceGroupRules.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 import { notify } from '/js/notifications.js';
+import { renderMailingPanel, initEventMailing } from '/js/eventMailing.js';
 initSidebarToggle();
 
 document.querySelectorAll('#event-tabs .tab-btn').forEach((btn, _, all) => btn.addEventListener('click', () => all.forEach((b) => { b.classList.toggle('active', b === btn); document.getElementById(b.dataset.tab).hidden = b !== btn; })));
@@ -647,6 +653,10 @@ document.getElementById('force-delete-confirm').addEventListener('click', async 
 });
 
 let editingEventId = null;
+const mailingRoot = document.getElementById('mailing-root');
+mailingRoot.innerHTML = renderMailingPanel();
+const mailing = initEventMailing(mailingRoot);
+mailing.setEvent(null);
 
 function showForm() {
   document.querySelector('#event-tabs .tab-btn').click();
@@ -739,6 +749,7 @@ async function loadEvents() {
 
 function startEdit(eventData) {
   editingEventId = eventData.id;
+  mailing.setEvent(eventData.id);
   formTitle.textContent = `Event bearbeiten: ${eventData.name}`;
   form.elements.name.value = eventData.name;
   form.elements.eventDate.value = eventData.event_date;
@@ -779,6 +790,7 @@ function startEdit(eventData) {
 
 function resetForm() {
   editingEventId = null;
+  mailing.setEvent(null);
   formTitle.textContent = 'Neues Event anlegen';
   form.reset();
   priceGroups = [];

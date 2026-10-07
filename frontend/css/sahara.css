@@ -4875,3 +4875,45 @@ th.is-sortable[data-dir="desc"]::after {
 .price-group-rule { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; padding-left: 12px; border-left: 3px solid var(--outline-variant); font-size: 0.9rem; }
 .price-group-rule select, .price-group-rule input { width: auto; max-width: 220px; }
 .price-group-rule-label { color: var(--on-surface-variant); }
+
+/* ---------- Event mailing (Rundmail) ---------- */
+.mail-editor {
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: var(--surface-container-lowest);
+  overflow: hidden;
+}
+.mail-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-bottom: 1px solid var(--outline-variant);
+  background: var(--surface-container-low);
+}
+.mail-wysiwyg {
+  min-height: 220px;
+  max-height: 520px;
+  overflow: auto;
+  padding: 14px 16px;
+}
+.mail-wysiwyg:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.mail-wysiwyg img { max-width: 100%; height: auto; }
+textarea.mail-source {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+}
+.mailing-filter { margin: 8px 0 14px; padding: 10px 14px; border: 1px solid var(--outline-variant); border-radius: 8px; }
+.mailing-filter summary { cursor: pointer; font-weight: 600; }
+.mailing-filter fieldset { border: 0; margin: 10px 0 0; padding: 0; }
+.mailing-filter legend { padding: 0; font-size: 13px; color: var(--on-surface-variant); }
+.check-chip { display: inline-flex; align-items: center; gap: 6px; margin: 4px 14px 4px 0; font-size: 14px; }
+.mailing-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 6px; }
+.mailing-history { list-style: none; margin: 0; padding: 0; }
+.mailing-history li { padding: 10px 0; border-bottom: 1px solid var(--outline-variant); }
+.mailing-history .sub { display: block; }
