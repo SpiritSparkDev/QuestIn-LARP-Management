@@ -48,6 +48,8 @@ import './pdfImport/routes.js';
 import './tavern/routes.js';
 import './testMode/routes.js';
 import './audit/routes.js';
+import './appModeRoutes.js';
+import { isOffline, warnIfWrongDatabase } from './appMode.js';
 import { checkWriteGuard } from './instanceAuthority/guard.js';
 
 // Route modules import `router` from ./routes.js directly (importing it from
@@ -119,17 +121,22 @@ export function createServer() {
   return http.createServer(handleRequest);
 }
 
+// Offline: no jobs at all -- reminders/automation would mail or delete in parallel to the online instance.
+export function startBackgroundJobs() {
+  if (isOffline()) return [];
+  const runCleanup = () => runDueAutoDeletions().catch((err) => logger.error('privacy cleanup failed', { error: err.message }));
+  const every = 6 * 60 * 60 * 1000;
+  return [
+    [runCleanup, 60_000], [runUnpaidReminders, 120_000], [runConPayerAutomation, 180_000],
+  ].flatMap(([job, delay]) => [setTimeout(job, delay).unref(), setInterval(job, every).unref()]);
+}
+
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMain) {
   const port = process.env.PORT || 3000;
   createServer().listen(port, () => {
     logger.info('server started', { port });
   });
-  const runCleanup = () => runDueAutoDeletions().catch((err) => logger.error('privacy cleanup failed', { error: err.message }));
-  setTimeout(runCleanup, 60_000).unref();
-  setInterval(runCleanup, 6 * 60 * 60 * 1000).unref();
-  setTimeout(runUnpaidReminders, 120_000).unref();
-  setInterval(runUnpaidReminders, 6 * 60 * 60 * 1000).unref();
-  setTimeout(runConPayerAutomation, 180_000).unref();
-  setInterval(runConPayerAutomation, 6 * 60 * 60 * 1000).unref();
+  startBackgroundJobs();
+  warnIfWrongDatabase();
 }

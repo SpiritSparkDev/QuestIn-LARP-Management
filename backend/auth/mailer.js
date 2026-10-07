@@ -3,6 +3,7 @@ import { getSmtpSettingsForSending } from '../smtpSettings/repository.js';
 import { getAppSettings, DEFAULT_BASE_URL } from '../appSettings/repository.js';
 import { logger } from '../logger.js';
 import { renderSlotEmail } from '../emailTemplates/send.js';
+import { isOffline, outboxTransport } from '../appMode.js';
 
 // Delivers whatever renderSlotEmail resolved to (an admin-assigned template
 // or the slot's hardcoded fallback text) -- isHtml picks sendMail's html vs
@@ -34,6 +35,7 @@ async function resolveSmtpConfig() {
 
 export async function getTransporterAndFrom() {
   const { host, port, username, password, from } = await resolveSmtpConfig();
+  if (isOffline()) return { transporter: outboxTransport, from };
   const transporter = host
     ? nodemailer.createTransport({
         host,
