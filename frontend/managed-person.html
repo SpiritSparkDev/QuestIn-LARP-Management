@@ -206,6 +206,7 @@
       otFieldValuesEqual,
     } from "/js/formFields.js";
     import { suggestPriceGroup, describeRules, PARTICIPATION_FIELDS } from "/js/priceGroupRules.js";
+    import { renderPriceTable } from "/js/priceTable.js";
     import { renderRichText } from "/js/richText.js";
     import { renderFlagCards, collectFlagCards, bindFlagCards } from "/js/flagCards.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal } from "/js/extrasPicker.js";
@@ -605,12 +606,23 @@
       // A new event: suggest again from scratch.
       priceGroupTouched = false;
       applyPriceGroupSuggestion();
+      renderPriceGroupTable();
     }
     function collectRegistrationPriceGroup() {
       const value = collectAccountFieldValues(registrationPriceGroupContainer, [priceGroupFieldFor(events.find((e) => e.id === eventSelect.value))]).priceGroup;
       return value || undefined;
     }
 
+
+    // The staggered prices of the chosen Teilnahmegruppe, right below the dropdown.
+    function renderPriceGroupTable() {
+      const event = events.find((e) => e.id === eventSelect.value);
+      const select = registrationPriceGroupContainer.querySelector("select");
+      registrationPriceGroupContainer.querySelector(".price-table-wrap")?.remove();
+      if (!event || !select) return;
+      registrationPriceGroupContainer.insertAdjacentHTML("beforeend", renderPriceTable(event.pricing, select.value));
+    }
+    registrationPriceGroupContainer.addEventListener("change", renderPriceGroupTable);
 
     // Teilnahmegruppe pre-selection from OT fields (rules set by the orga in the price editor).
     // Only while the person has not picked a group themself.
@@ -626,6 +638,7 @@
       registrationPriceGroupContainer.querySelector(".price-group-hint")?.remove();
       if (!group || !select) return;
       select.value = group;
+      setTimeout(renderPriceGroupTable, 0);
       select.insertAdjacentHTML("afterend", `<p class="sub price-group-hint">Vorgewählt: ${escapeHtml(describeRules(event.pricing.groupRules[group], schemas))}. Du kannst die Gruppe ändern.</p>`);
     }
     registrationPriceGroupContainer.addEventListener("change", () => { priceGroupTouched = true; registrationPriceGroupContainer.querySelector(".price-group-hint")?.remove(); });
@@ -744,6 +757,7 @@
       container.innerHTML = currentRegistrations.map((r) => `<div class="card form-pad" data-reg-for="${r.eventId}">
       <h3>${escapeHtml(r.eventName)}</h3>
       <p>${escapeHtml(labelForRegisteredAs(r))} &ndash; <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(statusLabel(r.status, r.conPayer))}</span></p>
+      ${renderPriceTable(events.find((e) => e.id === r.eventId)?.pricing, r.priceGroup, { highlight: r.priceTier })}
       <div class="action-row">
         <button type="button" data-reg-edit="${r.eventId}" class="btn-ghost">Bearbeiten</button>
         ${(r.status === "pending" || r.status === "waitlisted") ? `<button type="button" data-reg-unregister="${r.eventId}" class="btn-secondary">Abmelden</button>` : ""}

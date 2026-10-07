@@ -441,6 +441,7 @@
                   <span class="status-pill" id="active-registration-status"></span>
                   <span class="tag" id="active-registration-nsc-badge" style="display:none;"></span>
                 </p>
+                <div id="active-registration-price-table"></div>
                 <button type="button" id="active-registration-edit-btn">Bearbeiten</button>
                 <button type="button" id="active-registration-lodging-btn" class="btn-secondary" style="display:none;">Unterkunft wählen</button>
                 <button type="button" id="active-registration-unregister-btn" class="btn-secondary" style="display:none;">Abmelden</button>
@@ -654,6 +655,7 @@
       otFieldValuesEqual,
     } from "/js/formFields.js";
     import { suggestPriceGroup, describeRules, PARTICIPATION_FIELDS } from "/js/priceGroupRules.js";
+    import { renderPriceTable } from "/js/priceTable.js";
     import { renderRichText } from "/js/richText.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary, sameExtras, formatCents } from "/js/extrasPicker.js";
     import { renderFlagCards, collectFlagCards, bindFlagCards } from "/js/flagCards.js";
@@ -1847,6 +1849,7 @@
       // A new event: suggest again from scratch.
       priceGroupTouched = false;
       applyPriceGroupSuggestion();
+      renderPriceGroupTable();
     }
 
     function collectRegistrationPriceGroup() {
@@ -1855,6 +1858,16 @@
     }
 
 
+
+    // The staggered prices of the chosen Teilnahmegruppe, right below the dropdown.
+    function renderPriceGroupTable() {
+      const event = events.find((e) => e.id === eventSelect.value);
+      const select = registrationPriceGroupContainer.querySelector("select");
+      registrationPriceGroupContainer.querySelector(".price-table-wrap")?.remove();
+      if (!event || !select) return;
+      registrationPriceGroupContainer.insertAdjacentHTML("beforeend", renderPriceTable(event.pricing, select.value));
+    }
+    registrationPriceGroupContainer.addEventListener("change", renderPriceGroupTable);
 
     // Teilnahmegruppe pre-selection from OT fields (rules set by the orga in the price editor).
     // Only while the person has not picked a group themself.
@@ -1870,6 +1883,7 @@
       registrationPriceGroupContainer.querySelector(".price-group-hint")?.remove();
       if (!group || !select) return;
       select.value = group;
+      setTimeout(renderPriceGroupTable, 0);
       select.insertAdjacentHTML("afterend", `<p class="sub price-group-hint">Vorgewählt: ${escapeHtml(describeRules(event.pricing.groupRules[group], schemas))}. Du kannst die Gruppe ändern.</p>`);
     }
     registrationPriceGroupContainer.addEventListener("change", () => { priceGroupTouched = true; registrationPriceGroupContainer.querySelector(".price-group-hint")?.remove(); });
@@ -2250,6 +2264,7 @@
         nscBadge.style.display = "none";
       }
 
+      document.getElementById("active-registration-price-table").innerHTML = renderPriceTable(activeEvent.pricing, registration.priceGroup, { highlight: registration.priceTier });
       document.getElementById("active-registration-edit-btn").onclick = () =>
         openEditOtDialog(activeEvent.id);
       const unregisterBtn = document.getElementById("active-registration-unregister-btn");
