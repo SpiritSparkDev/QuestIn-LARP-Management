@@ -30,7 +30,7 @@ test('GET /app-settings requires no authentication and returns nulls when unset'
     const res = await fetch(`http://localhost:${port}/app-settings`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, pdfExportEnabled: false, tavernEnabled: false, lodgingEnabled: false, backgroundPreset: 'grunge', backgroundOpacity: 20, hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
+    assert.deepEqual(body, { logoUrl: null, appTitle: null, eventName: null, quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, pdfExportEnabled: false, tavernEnabled: false, lodgingEnabled: false, backgroundPreset: 'grunge', backgroundOpacity: 20, unpaidReminderDays: [], hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
   });
 });
 
@@ -54,6 +54,16 @@ test('backgroundPreset: valid presets are saved, unknown ones and "custom" witho
     assert.equal((await (await put({ backgroundPreset: 'custom' })).json()).backgroundPreset, 'custom');
     const removed = await fetch(`http://localhost:${port}/app-settings/background-image`, { method: 'DELETE', headers });
     assert.equal((await removed.json()).backgroundPreset, 'grunge');
+  });
+});
+
+test('unpaidReminderDays accepts up to 3 whole days and rejects everything else', async () => {
+  await withTestServer(async (port) => {
+    const cookie = await makeUserAndSession('admin');
+    const put = (body) => fetch(`http://localhost:${port}/app-settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body) });
+    for (const bad of [[0], [1, 2, 3, 4], ['3'], [1.5], [400], 5]) assert.equal((await put({ unpaidReminderDays: bad })).status, 400);
+    assert.deepEqual((await (await put({ unpaidReminderDays: [3, 7, 14] })).json()).unpaidReminderDays, [3, 7, 14]);
+    assert.deepEqual((await (await put({ unpaidReminderDays: [] })).json()).unpaidReminderDays, []);
   });
 });
 
@@ -83,7 +93,7 @@ test('PUT /app-settings saves and GET reflects it back, then update overwrites',
 
     const getRes = await fetch(`http://localhost:${port}/app-settings`);
     const getBody = await getRes.json();
-    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, pdfExportEnabled: false, tavernEnabled: false, lodgingEnabled: false, backgroundPreset: 'grunge', backgroundOpacity: 20, hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
+    assert.deepEqual(getBody, { logoUrl: 'https://example.com/logo.png', appTitle: 'P17 Check-In', eventName: 'P17/2027', quotaMbPerCharacter: 100, invitationTtlDays: 3, characterBrowsingEnabled: false, waitlistAutoPromote: true, waiverText: '', waiverVersion: 1, baseUrl: null, effectiveBaseUrl: 'http://localhost:3000', comingSoonEnabled: false, comingSoonMessage: '', comingSoonUntil: null, themeMode: 'light', colorScheme: 'sahara', customColors: null, pdfImportEnabled: false, pdfExportEnabled: false, tavernEnabled: false, lodgingEnabled: false, backgroundPreset: 'grunge', backgroundOpacity: 20, unpaidReminderDays: [], hasUploadedLogo: false, hasUploadedTicketBackground: false, hasUploadedBackgroundImage: false });
 
     // Second PUT overwrites the same row rather than inserting a new one.
     await fetch(`http://localhost:${port}/app-settings`, {
