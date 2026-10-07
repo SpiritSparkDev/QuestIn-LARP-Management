@@ -102,7 +102,7 @@ router.get('/public/events/:code', async ({ req, params }) => {
   return {
     status: 200,
     body: {
-      id: event.id, name: event.name, eventDate: event.event_date, priceGroups: groups, prices,
+      id: event.id, name: event.name, eventDate: event.event_date, lowSeats: event.low_seats, priceGroups: groups, prices,
       accountFields: await guestAccountSchema(),
       registrationFields: await getRegistrationFieldSchema(),
       scFields: await guestCharacterSchema('sc'),

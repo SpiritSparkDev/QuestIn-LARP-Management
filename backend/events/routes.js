@@ -141,16 +141,28 @@ function validateFlagExtras({ flagDetails, flagRenames }) {
   return null;
 }
 
+function validateLimits({ capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom }) {
+  const bad = (v) => v !== undefined && v !== null && (!Number.isInteger(v) || v < 1);
+  if (bad(hardCapacity)) return 'hardCapacity must be a positive integer or null';
+  if (bad(lowSeatsFrom)) return 'lowSeatsFrom must be a positive integer or null';
+  if (lowSeatsNotice !== undefined && typeof lowSeatsNotice !== 'boolean') return 'lowSeatsNotice must be a boolean';
+  if (hardCapacity != null && capacity == null) return 'hardCapacity requires capacity';
+  if (hardCapacity != null && hardCapacity < capacity) return 'hardCapacity must be >= capacity';
+  return null;
+}
+
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, endDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
+  const { name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
   if (capacity !== undefined && capacity !== null && (!Number.isInteger(capacity) || capacity < 1)) {
     return { status: 400, body: { error: 'capacity must be a positive integer or null' } };
   }
+  const limitError = validateLimits({ capacity: capacity ?? null, hardCapacity: hardCapacity ?? null, lowSeatsNotice, lowSeatsFrom });
+  if (limitError) return { status: 400, body: { error: limitError } };
   if (flags !== undefined && (!Array.isArray(flags) || flags.some((f) => typeof f !== 'string'))) {
     return { status: 400, body: { error: 'flags must be an array of strings' } };
   }
@@ -168,7 +180,7 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   if (endDateError) return { status: 400, body: { error: endDateError } };
   const urlError = validateMapUrls({ mapsUrl, osmUrl });
   if (urlError) return { status: 400, body: { error: urlError } };
-  const event = await createEvent({ name, eventDate, endDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
+  const event = await createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
   return { status: 201, body: event };
 })));
 
@@ -211,6 +223,12 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   if (privacyError) return { status: 400, body: { error: privacyError } };
   const before = await getEvent(params.id);
   if (!before) return { status: 404, body: { error: 'event not found' } };
+  const limitError = validateLimits({
+    capacity: body.capacity !== undefined ? body.capacity : before.capacity,
+    hardCapacity: body.hardCapacity !== undefined ? body.hardCapacity : before.hard_capacity,
+    lowSeatsNotice: body.lowSeatsNotice, lowSeatsFrom: body.lowSeatsFrom,
+  });
+  if (limitError) return { status: 400, body: { error: limitError } };
   // An extra that is already booked can't disappear -- registrations refer to it.
   if (body.extras !== undefined) {
     const keptIds = new Set(body.extras.map((e) => e.id).filter(Boolean));
@@ -223,7 +241,8 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   const event = await updateEvent(params.id, body);
 
   const effective = (c) => (c === null ? Infinity : c);
-  if (effective(event.capacity) > effective(before.capacity)) {
+  const limitOf = (e) => effective(e.hard_capacity ?? e.capacity);
+  if (limitOf(event) > limitOf(before)) {
     await maybePromoteFromWaitlist(params.id);
   }
   return { status: 200, body: await getEvent(params.id) };

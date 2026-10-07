@@ -147,7 +147,7 @@
     const section = (id, title, intro, body) =>
       `<section data-step="${id}" data-title="${esc(title)}" hidden><h4>${esc(title)}</h4>${intro ? `<p class="intro">${intro}</p>` : ''}${body}</section>`;
     form.innerHTML = `
-      <header><h3>${esc(event.name)}</h3><p class="date">${esc(event.eventDate)}</p></header>
+      <header><h3>${esc(event.name)}</h3><p class="date">${esc(event.eventDate)}</p>${event.lowSeats ? '<p class="date"><strong>Nur noch wenige Plätze verfügbar</strong></p>' : ''}</header>
       <ol class="progress" aria-label="Fortschritt"></ol>
       ${section('role', 'Teilnahme', 'Wie nimmst du am Event teil?', `
         <div class="roles">${ROLES.map((r, i) => `<label class="role"><input type="radio" name="conRole" value="${r.key}"${i === 0 ? ' checked' : ''}><strong>${esc(r.title)}</strong><span>${esc(r.text)}</span></label>`).join('')}</div>

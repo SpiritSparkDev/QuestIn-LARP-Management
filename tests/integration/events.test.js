@@ -537,3 +537,45 @@ test('event end date: stored, cleared, and rejected when before the start', asyn
     assert.equal((await call('POST', '/events', { name: 'Falsch', eventDate: '2027-08-05', endDate: '2027-08-01' })).status, 400);
   });
 });
+
+test('hardCapacity and low-seats settings validate and round-trip; lowSeats flag follows the threshold', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
+    const post = (body) => fetch(`http://localhost:${port}/events`, { method: 'POST', headers, body: JSON.stringify({ name: 'Limit-Con', eventDate: '2027-09-01', ...body }) });
+    assert.equal((await post({ hardCapacity: 10 })).status, 400);
+    assert.equal((await post({ capacity: 10, hardCapacity: 9 })).status, 400);
+    assert.equal((await post({ capacity: 10, lowSeatsFrom: 0 })).status, 400);
+    const res = await post({ capacity: 2, hardCapacity: 4, lowSeatsNotice: true });
+    assert.equal(res.status, 201);
+    const ev = await res.json();
+    assert.equal(ev.hard_capacity, 4);
+    assert.equal(ev.low_seats_notice, true);
+    assert.equal(ev.low_seats, false);
+
+    const put = (body) => fetch(`http://localhost:${port}/events/${ev.id}`, { method: 'PUT', headers, body: JSON.stringify(body) });
+    assert.equal((await put({ capacity: 5 })).status, 400);
+    assert.equal((await put({ capacity: null, clearCapacity: true })).status, 400);
+
+    const addReg = async () => {
+      const u = await makeUserAndSession();
+      await query("INSERT INTO registrations (event_id, user_id, status) VALUES ($1, $2, 'pending')", [ev.id, u.userId]);
+    };
+    const lowSeats = async () => (await (await fetch(`http://localhost:${port}/events/${ev.id}`, { headers })).json()).low_seats;
+    await addReg();
+    assert.equal(await lowSeats(), false);
+    await addReg(); // 2 = capacity -> hint on
+    assert.equal(await lowSeats(), true);
+    await addReg();
+    assert.equal(await lowSeats(), true);
+    await addReg(); // 4 = hard limit -> off
+    assert.equal(await lowSeats(), false);
+
+    await put({ hardCapacity: 6, lowSeatsFrom: 5 });
+    assert.equal(await lowSeats(), false);
+    await addReg();
+    assert.equal(await lowSeats(), true);
+    await put({ lowSeatsNotice: false });
+    assert.equal(await lowSeats(), false);
+  });
+});

@@ -357,6 +357,7 @@
                     <div class="section-head">
                       <h3>1. Veranstaltung</h3>
                       <span class="badge" id="event-status-badge"></span>
+                      <span class="badge" id="event-low-seats-badge" hidden>Nur noch wenige Plätze verfügbar</span>
                     </div>
                     <select id="event-select" required></select>
                     <label for="event-select" id="event-select-label">Event</label>
@@ -1927,6 +1928,7 @@
     const eventStatusBadge = document.getElementById("event-status-badge");
     function updateEventStatusBadge() {
       const event = events.find((e) => e.id === eventSelect.value);
+      document.getElementById("event-low-seats-badge").hidden = !(event?.is_active && event.low_seats);
       if (!event) {
         eventStatusBadge.textContent = "";
         eventStatusBadge.className = "badge";
