@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ageAt, ruleMatches, suggestPriceGroup, describeRule, opsForType } from '../../frontend/js/priceGroupRules.js';
+import { ageAt, ruleMatches, suggestPriceGroup, describeRule, describeRules, opsForType, rulesOf, PARTICIPATION_FIELDS } from '../../frontend/js/priceGroupRules.js';
 
 const birth = { key: 'birthdate', label: 'Geburtsdatum', type: 'date' };
 
@@ -43,4 +43,25 @@ test('describeRule and opsForType', () => {
   assert.equal(describeRule({ op: 'between', value: 6, value2: 11 }, birth), 'Alter (Geburtsdatum) in Jahren zwischen 6 und 11');
   assert.ok(opsForType('number').length >= 5);
   assert.deepEqual(opsForType('document'), []);
+});
+
+test('up to three rules per group must ALL apply; SC/NSC is a rule source', () => {
+  const pricing = {
+    groups: ['NSC', 'Kinder', 'Spieler'],
+    groupRules: {
+      NSC: [{ source: 'participation', field: 'conRole', op: 'eq', value: 'NSC' }],
+      Kinder: [
+        { source: 'account', field: 'birthdate', op: 'between', value: 6, value2: 11 },
+        { source: 'participation', field: 'conRole', op: 'eq', value: 'SC' },
+      ],
+      Spieler: { source: 'account', field: 'birthdate', op: 'gte', value: 12 },
+    },
+  };
+  const schemas = { account: [birth], registration: [], participation: PARTICIPATION_FIELDS };
+  const pick = (born, role) => suggestPriceGroup(pricing, { account: { birthdate: born }, participation: { conRole: role } }, schemas, '2027-08-24');
+  assert.equal(pick('2018-05-05', 'SC'), 'Kinder');
+  assert.equal(pick('2018-05-05', 'NSC'), 'NSC');
+  assert.equal(pick('1990-05-05', 'SC'), 'Spieler');
+  assert.deepEqual(rulesOf(pricing.groupRules.Spieler).length, 1);
+  assert.equal(describeRules(pricing.groupRules.Kinder, schemas), 'Alter (Geburtsdatum) in Jahren zwischen 6 und 11 und Teilnahme als ist SC');
 });

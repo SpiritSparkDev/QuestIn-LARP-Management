@@ -179,7 +179,7 @@ import { applyBranding } from '/js/branding.js';
 import { hideLoading } from '/js/loading.js';
 applyBranding();
 import { escapeHtml } from '/js/formFields.js';
-import { opsForType, supportsRules, isNumericOp } from '/js/priceGroupRules.js';
+import { opsForType, supportsRules, isNumericOp, rulesOf, PARTICIPATION_FIELDS, MAX_RULES_PER_GROUP } from '/js/priceGroupRules.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 import { notify } from '/js/notifications.js';
 import { renderMailingPanel, initEventMailing } from '/js/eventMailing.js';
@@ -203,11 +203,11 @@ const forceDeleteNotify = document.getElementById('force-delete-notify');
 const priceGroupsContainer = document.getElementById('price-groups');
 const priceTiersContainer = document.getElementById('price-tiers');
 let priceGroups = [];
-// Parallel to priceGroups: the automatic-selection rule of each group as edited in the form
-// ({ key: 'account:birthdate', op, value, value2 }), or null.
+// Parallel to priceGroups: the automatic-selection rules of each group (up to three, all must apply)
+// as edited in the form: [{ key: 'account:birthdate', op, value, value2 }, ...].
 let priceGroupRules = [];
 // OT fields a rule can look at (only types with a sensible comparison).
-let ruleFieldSchemas = { account: [], registration: [] };
+let ruleFieldSchemas = { account: [], registration: [], participation: PARTICIPATION_FIELDS };
 let priceTiers = [];
 
 function currentPriceGroups() {
@@ -220,10 +220,10 @@ const ruleField = (key) => {
   return field ? { source, field } : null;
 };
 
-function renderRuleControls(i) {
-  const rule = priceGroupRules[i];
-  const optionsFor = (source, label) => `<optgroup label="${label}">${ruleFieldSchemas[source].map((f) => `<option value="${source}:${escapeHtml(f.key)}" ${rule?.key === `${source}:${f.key}` ? 'selected' : ''}>${escapeHtml(f.label ?? f.key)}${f.type === 'date' ? ' (Alter)' : ''}</option>`).join('')}</optgroup>`;
-  const resolved = ruleField(rule?.key);
+function renderRuleRow(i, r) {
+  const rule = priceGroupRules[i][r];
+  const optionsFor = (source, label) => `<optgroup label="${label}">${ruleFieldSchemas[source].map((f) => `<option value="${source}:${escapeHtml(f.key)}" ${rule.key === `${source}:${f.key}` ? 'selected' : ''}>${escapeHtml(f.label ?? f.key)}${f.type === 'date' ? ' (Alter)' : ''}</option>`).join('')}</optgroup>`;
+  const resolved = ruleField(rule.key);
   let detail = '';
   if (resolved) {
     const { field } = resolved;
@@ -231,24 +231,32 @@ function renderRuleControls(i) {
     detail += `<select data-rule-op>${ops.map(([op, label]) => `<option value="${op}" ${rule.op === op ? 'selected' : ''}>${label}</option>`).join('')}</select>`;
     if (rule.op === 'filled') {
       // nothing to enter
-    } else if (field.type === 'select') {
-      detail += `<select data-rule-value>${(field.options ?? []).map((o) => `<option ${rule.value === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}</select>`;
-    } else if (field.type === 'multiselect') {
+    } else if (field.type === 'select' || field.type === 'multiselect') {
       detail += `<select data-rule-value>${(field.options ?? []).map((o) => `<option ${rule.value === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}</select>`;
     } else if (field.type === 'boolean') {
       detail += `<select data-rule-value><option value="true" ${rule.value !== 'false' ? 'selected' : ''}>Ja</option><option value="false" ${rule.value === 'false' ? 'selected' : ''}>Nein</option></select>`;
     } else if (isNumericOp(rule.op)) {
-      const unit = field.type === 'date' ? ' Jahre' : '';
       detail += `<input type="number" data-rule-value value="${escapeHtml(rule.value ?? '')}" style="max-width:90px;">`;
       if (rule.op === 'between') detail += `<span>und</span><input type="number" data-rule-value2 value="${escapeHtml(rule.value2 ?? '')}" style="max-width:90px;">`;
-      if (unit) detail += `<span class="sub">${unit}</span>`;
+      if (field.type === 'date') detail += '<span class="sub">Jahre</span>';
     } else {
       detail += `<input type="text" data-rule-value value="${escapeHtml(rule.value ?? '')}">`;
     }
   }
-  return `<span class="price-group-rule-label">Automatisch vorwählen, wenn</span>
-    <select data-rule-field><option value="">– keine Regel –</option>${optionsFor('account', 'Konto')}${optionsFor('registration', 'Anmeldung')}</select>
-    ${detail}`;
+  return `<div class="price-group-rule-row" data-rule-row="${r}">
+    <span class="price-group-rule-label">${r === 0 ? 'Automatisch vorwählen, wenn' : 'und'}</span>
+    <select data-rule-field><option value="">– Feld wählen –</option>${optionsFor('participation', 'Teilnahme')}${optionsFor('account', 'Konto')}${optionsFor('registration', 'Anmeldung')}</select>
+    ${detail}
+    <button type="button" class="btn-sm btn-ghost" data-rule-remove title="Bedingung entfernen">×</button>
+  </div>`;
+}
+
+function renderRuleControls(i) {
+  const rules = priceGroupRules[i];
+  const add = rules.length < MAX_RULES_PER_GROUP
+    ? `<button type="button" class="btn-sm btn-ghost" data-rule-add>${rules.length === 0 ? '+ Automatisch vorwählen …' : '+ weitere Bedingung'}</button>`
+    : '';
+  return rules.map((_, r) => renderRuleRow(i, r)).join('') + add;
 }
 
 function renderPriceGroups() {
@@ -284,37 +292,51 @@ function renderPriceGroups() {
 
 function wireRuleBox(box, i) {
   const redraw = () => { box.innerHTML = renderRuleControls(i); wireRuleBox(box, i); };
-  box.querySelector('[data-rule-field]').addEventListener('change', (e) => {
-    const resolved = ruleField(e.target.value);
-    priceGroupRules[i] = resolved ? { key: e.target.value, op: opsForType(resolved.field.type)[0][0], value: resolved.field.type === 'boolean' ? 'true' : (resolved.field.options?.[0] ?? ''), value2: '' } : null;
+  box.querySelector('[data-rule-add]')?.addEventListener('click', () => {
+    priceGroupRules[i].push({ key: '', op: '', value: '', value2: '' });
     redraw();
   });
-  box.querySelector('[data-rule-op]')?.addEventListener('change', (e) => { priceGroupRules[i].op = e.target.value; redraw(); });
-  box.querySelector('[data-rule-value]')?.addEventListener('input', (e) => { priceGroupRules[i].value = e.target.value; });
-  box.querySelector('[data-rule-value]')?.addEventListener('change', (e) => { priceGroupRules[i].value = e.target.value; });
-  box.querySelector('[data-rule-value2]')?.addEventListener('input', (e) => { priceGroupRules[i].value2 = e.target.value; });
+  box.querySelectorAll('[data-rule-row]').forEach((row) => {
+    const r = Number(row.dataset.ruleRow);
+    const rule = priceGroupRules[i][r];
+    row.querySelector('[data-rule-field]').addEventListener('change', (e) => {
+      const resolved = ruleField(e.target.value);
+      priceGroupRules[i][r] = resolved
+        ? { key: e.target.value, op: opsForType(resolved.field.type)[0][0], value: resolved.field.type === 'boolean' ? 'true' : (resolved.field.options?.[0] ?? ''), value2: '' }
+        : { key: '', op: '', value: '', value2: '' };
+      redraw();
+    });
+    row.querySelector('[data-rule-op]')?.addEventListener('change', (e) => { rule.op = e.target.value; redraw(); });
+    row.querySelector('[data-rule-value]')?.addEventListener('input', (e) => { rule.value = e.target.value; });
+    row.querySelector('[data-rule-value]')?.addEventListener('change', (e) => { rule.value = e.target.value; });
+    row.querySelector('[data-rule-value2]')?.addEventListener('input', (e) => { rule.value2 = e.target.value; });
+    row.querySelector('[data-rule-remove]').addEventListener('click', () => { priceGroupRules[i].splice(r, 1); redraw(); });
+  });
 }
 
 // What the form edited -> what the server stores (numbers as numbers, boolean as boolean).
 function collectGroupRules() {
   const rules = {};
   priceGroups.forEach((name, i) => {
-    const rule = priceGroupRules[i];
-    const resolved = ruleField(rule?.key);
-    if (!name.trim() || !resolved) return;
-    const [source, ...rest] = rule.key.split(':');
-    const out = { source, field: rest.join(':'), op: rule.op };
-    if (rule.op === 'between') { out.value = Number(rule.value); out.value2 = Number(rule.value2); }
-    else if (isNumericOp(rule.op)) out.value = Number(rule.value);
-    else if (rule.op !== 'filled') out.value = resolved.field.type === 'boolean' ? rule.value !== 'false' : String(rule.value ?? '');
-    rules[name.trim()] = out;
+    if (!name.trim()) return;
+    const list = priceGroupRules[i].map((rule) => {
+      const resolved = ruleField(rule.key);
+      if (!resolved) return null;
+      const [source, ...rest] = rule.key.split(':');
+      const out = { source, field: rest.join(':'), op: rule.op };
+      if (rule.op === 'between') { out.value = Number(rule.value); out.value2 = Number(rule.value2); }
+      else if (isNumericOp(rule.op) && resolved.field.type !== 'select') out.value = Number(rule.value);
+      else if (rule.op !== 'filled') out.value = resolved.field.type === 'boolean' ? rule.value !== 'false' : String(rule.value ?? '');
+      return out;
+    }).filter(Boolean);
+    if (list.length > 0) rules[name.trim()] = list;
   });
   return rules;
 }
 
 document.getElementById('add-price-group').addEventListener('click', () => {
   priceGroups.push('');
-  priceGroupRules.push(null);
+  priceGroupRules.push([]);
   renderPriceGroups();
 });
 
@@ -396,6 +418,7 @@ renderPriceTiers();
 // The rule editor needs the OT field definitions (Konto + Anmeldung).
 Promise.all([api.get('/account-schema'), api.get('/registration-schema')]).then(([account, registration]) => {
   ruleFieldSchemas = {
+    participation: PARTICIPATION_FIELDS,
     account: account.filter((f) => f.key !== 'group' && supportsRules(f.type)),
     registration: registration.filter((f) => supportsRules(f.type)),
   };
@@ -764,10 +787,9 @@ function startEdit(eventData) {
   form.elements.mapsUrl.value = eventData.maps_url ?? '';
   form.elements.osmUrl.value = eventData.osm_url ?? '';
   priceGroups = [...(eventData.pricing?.groups ?? [])];
-  priceGroupRules = priceGroups.map((g) => {
-    const r = eventData.pricing?.groupRules?.[g];
-    return r ? { key: `${r.source}:${r.field}`, op: r.op, value: r.value === undefined ? '' : String(r.value), value2: r.value2 === undefined ? '' : String(r.value2) } : null;
-  });
+  priceGroupRules = priceGroups.map((g) => rulesOf(eventData.pricing?.groupRules?.[g]).map((r) => (
+    { key: `${r.source}:${r.field}`, op: r.op, value: r.value === undefined ? '' : String(r.value), value2: r.value2 === undefined ? '' : String(r.value2) }
+  )));
   priceTiers = (eventData.pricing?.tiers ?? []).map((t) => ({
     name: t.name,
     until: t.until,

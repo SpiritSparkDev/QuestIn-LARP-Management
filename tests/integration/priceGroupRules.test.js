@@ -40,6 +40,7 @@ test('pricing.groupRules: validated, stored per group, dropped for removed group
       { Kinder: { source: 'account', field: 'birthdate', op: 'gte', value: 'zwölf' } },
       { Kinder: { source: 'account', field: 'birthdate', op: 'between', value: 12, value2: 6 } },
       { Kinder: { source: 'account', field: '', op: 'filled' } },
+      { Kinder: Array.from({ length: 4 }, () => ({ source: 'account', field: 'birthdate', op: 'gte', value: 1 })) },
     ]) {
       assert.equal((await create({ ...base, groupRules })).status, 400, JSON.stringify(groupRules));
     }
@@ -47,14 +48,20 @@ test('pricing.groupRules: validated, stored per group, dropped for removed group
     const res = await create({
       ...base,
       groupRules: {
-        Kinder: { source: 'account', field: 'birthdate', op: 'between', value: 6, value2: 11 },
+        Kinder: [
+          { source: 'account', field: 'birthdate', op: 'between', value: 6, value2: 11 },
+          { source: 'participation', field: 'conRole', op: 'eq', value: 'SC' },
+        ],
         Spieler: { source: 'account', field: 'birthdate', op: 'gte', value: 12 },
       },
     });
     assert.equal(res.status, 201);
     const event = await res.json();
-    assert.deepEqual(event.pricing.groupRules.Kinder, { source: 'account', field: 'birthdate', op: 'between', value: 6, value2: 11 });
-    assert.equal(event.pricing.groupRules.Spieler.op, 'gte');
+    assert.deepEqual(event.pricing.groupRules.Kinder, [
+      { source: 'account', field: 'birthdate', op: 'between', value: 6, value2: 11 },
+      { source: 'participation', field: 'conRole', op: 'eq', value: 'SC' },
+    ]);
+    assert.equal(event.pricing.groupRules.Spieler[0].op, 'gte');
 
     // A group without a rule stays without one; rules of groups that no longer exist are dropped.
     const update = await fetch(`http://localhost:${port}/events/${event.id}`, {

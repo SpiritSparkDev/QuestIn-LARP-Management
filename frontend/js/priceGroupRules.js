@@ -1,8 +1,9 @@
 // Automatic pre-selection of the Teilnahmegruppe from account/registration (OT) fields.
-// The admin attaches ONE rule per group (pricing.groupRules[groupName]):
-//   { source: 'account' | 'registration', field: <schema key>, op, value, value2? }
-// The registration form pre-selects the first group (in list order) whose rule
-// matches what the person has entered. It is only a suggestion -- the person can
+// The admin attaches up to three rules per group (pricing.groupRules[groupName] = [rule, ...]),
+// all of which must apply:
+//   { source: 'account' | 'registration' | 'participation', field: <schema key>, op, value, value2? }
+// 'participation' holds what the person books (SC or NSC). The registration form pre-selects
+// the first group (in list order) whose rules all match what the person has entered. It is only a suggestion -- the person can
 // still pick another group.
 
 const COMPARE = [
@@ -26,6 +27,13 @@ const OPS_BY_TYPE = {
   multiselect: [['has', 'enthält']],
   boolean: [['eq', 'ist']],
 };
+
+// "Teilnahme als": not an OT field but part of the booking itself.
+export const PARTICIPATION_FIELDS = [{ key: 'conRole', label: 'Teilnahme als', type: 'select', options: ['SC', 'NSC'] }];
+export const RULE_SOURCES = ['account', 'registration', 'participation'];
+export const MAX_RULES_PER_GROUP = 3;
+// The stored shape is a list; a single rule object (older data) counts as a list of one.
+export const rulesOf = (stored) => (Array.isArray(stored) ? stored : stored ? [stored] : []);
 
 export const ALL_RULE_OPS = [...new Set(Object.values(OPS_BY_TYPE).flat().map(([op]) => op))];
 export const opsForType = (type) => OPS_BY_TYPE[type] ?? [];
@@ -88,10 +96,13 @@ export function ruleMatches(rule, field, raw, eventDate) {
 // ('account', 'registration'): the entered values and the field definitions.
 export function suggestPriceGroup(pricing, values, schemas, eventDate) {
   for (const group of pricing?.groups ?? []) {
-    const rule = pricing.groupRules?.[group];
-    if (!rule) continue;
-    const field = (schemas?.[rule.source] ?? []).find((f) => f.key === rule.field);
-    if (field && ruleMatches(rule, field, values?.[rule.source]?.[rule.field], eventDate)) return group;
+    const rules = rulesOf(pricing.groupRules?.[group]);
+    if (rules.length === 0) continue;
+    const allMatch = rules.every((rule) => {
+      const field = (schemas?.[rule.source] ?? []).find((f) => f.key === rule.field);
+      return field && ruleMatches(rule, field, values?.[rule.source]?.[rule.field], eventDate);
+    });
+    if (allMatch) return group;
   }
   return null;
 }
@@ -105,4 +116,12 @@ export function describeRule(rule, field) {
   if (rule.op === 'filled') return `${label} ${op}`;
   if (rule.op === 'between') return `${subject} ${op} ${rule.value} und ${rule.value2}`;
   return `${subject} ${op} ${rule.value === true ? 'Ja' : rule.value === false ? 'Nein' : rule.value}`;
+}
+
+// All rules of a group in one sentence: "Alter (Geburtsdatum) in Jahren mindestens 12 und Teilnahme als ist SC".
+export function describeRules(rules, schemas) {
+  return rulesOf(rules)
+    .map((rule) => describeRule(rule, (schemas?.[rule.source] ?? []).find((f) => f.key === rule.field)))
+    .filter(Boolean)
+    .join(' und ');
 }

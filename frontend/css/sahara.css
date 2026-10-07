@@ -4872,7 +4872,9 @@ th.is-sortable[data-dir="desc"]::after {
   }
 }
 .price-tier-conpayer { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; text-transform: none; letter-spacing: 0; }
-.price-group-rule { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; padding-left: 12px; border-left: 3px solid var(--outline-variant); font-size: 0.9rem; }
+.price-group-rule { flex: 1 1 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 2px 0 10px; padding-left: 12px; border-left: 3px solid var(--outline-variant); font-size: 0.9rem; }
+.price-group-rule-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.price-group-rule-label { min-width: 170px; }
 .price-group-rule select, .price-group-rule input { width: auto; max-width: 220px; }
 .price-group-rule-label { color: var(--on-surface-variant); }
 
@@ -4917,3 +4919,8 @@ textarea.mail-source {
 .mailing-history { list-style: none; margin: 0; padding: 0; }
 .mailing-history li { padding: 10px 0; border-bottom: 1px solid var(--outline-variant); }
 .mailing-history .sub { display: block; }
+.price-group-card { margin: 18px 0; padding: 16px 18px; border: 2px solid var(--primary); border-radius: 12px; background: var(--primary-container, var(--surface-container-low)); }
+.price-group-card:empty { display: none; }
+.price-group-card h3 { margin: 0 0 4px; }
+.price-group-card select { font-size: 1.1rem; font-weight: 600; padding: 14px 12px; border-width: 2px; }
+.price-group-card .price-group-hint { margin: 6px 0 0; color: var(--primary-deep, var(--primary)); font-weight: 600; }

@@ -1,3 +1,4 @@
+import { rulesOf, MAX_RULES_PER_GROUP } from '../../frontend/js/priceGroupRules.js';
 import crypto from 'node:crypto';
 import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
@@ -60,8 +61,9 @@ function normalizePricing(pricing) {
   // Automatic Teilnahmegruppe suggestion per group (already validated in events/routes.js).
   const groupRules = {};
   for (const g of groups) {
-    const rule = pricing?.groupRules?.[g];
-    if (rule) groupRules[g] = { source: rule.source, field: rule.field, op: rule.op, ...(rule.value !== undefined && { value: rule.value }), ...(rule.value2 !== undefined && { value2: rule.value2 }) };
+    const rules = rulesOf(pricing?.groupRules?.[g]).slice(0, MAX_RULES_PER_GROUP)
+      .map((rule) => ({ source: rule.source, field: rule.field, op: rule.op, ...(rule.value !== undefined && { value: rule.value }), ...(rule.value2 !== undefined && { value2: rule.value2 }) }));
+    if (rules.length > 0) groupRules[g] = rules;
   }
   return { groups, tiers: normalizedTiers, groupRules };
 }

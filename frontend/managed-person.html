@@ -162,7 +162,7 @@
                 <label for="nsc-character-select">NSC-Charakter (optional)</label>
               </div>
 
-              <div id="registration-price-group"></div>
+              <div id="registration-price-group" class="price-group-card"></div>
               <div id="registration-extras"></div>
               <div id="registration-lodging"></div>
               <div id="registration-flags"></div>
@@ -205,7 +205,7 @@
       renderEventOptions,
       otFieldValuesEqual,
     } from "/js/formFields.js";
-    import { suggestPriceGroup, describeRule } from "/js/priceGroupRules.js";
+    import { suggestPriceGroup, describeRules, PARTICIPATION_FIELDS } from "/js/priceGroupRules.js";
     import { renderRichText } from "/js/richText.js";
     import { renderFlagCards, collectFlagCards, bindFlagCards } from "/js/flagCards.js";
     import { renderExtrasPicker, collectExtras, wireExtrasTotal } from "/js/extrasPicker.js";
@@ -596,12 +596,12 @@
     }
     function priceGroupFieldFor(event) {
       const groups = event?.pricing?.groups ?? [];
-      return { key: "priceGroup", label: "Teilnahmegruppe", type: "select", options: groups, required: groups.length > 0 };
+      return { key: "priceGroup", label: "Teilnahmegruppe wählen", type: "select", options: groups, required: groups.length > 0 };
     }
     function renderRegistrationPriceGroup() {
       const event = events.find((e) => e.id === eventSelect.value);
       const field = priceGroupFieldFor(event);
-      registrationPriceGroupContainer.innerHTML = field.options.length > 0 ? renderAccountFieldInput(field, "", { idPrefix: "register-" }) : "";
+      registrationPriceGroupContainer.innerHTML = field.options.length > 0 ? `<h3>Teilnahmegruppe</h3><p class="sub">Danach richtet sich der Preis des Tickets. Bitte wähle die passende Gruppe.</p>${renderAccountFieldInput(field, "", { idPrefix: "register-" })}` : "";
       // A new event: suggest again from scratch.
       priceGroupTouched = false;
       applyPriceGroupSuggestion();
@@ -619,20 +619,21 @@
       if (priceGroupTouched) return;
       const event = events.find((e) => e.id === eventSelect.value);
       if (!event?.pricing?.groupRules || Object.keys(event.pricing.groupRules).length === 0) return;
-      const schemas = { account: accountSchema, registration: registrationSchema };
-      const group = suggestPriceGroup(event.pricing, { account: collectAccountFieldValues(dataOtFieldsContainer, accountSchema), registration: collectOtFields() }, schemas, event.event_date);
+      const schemas = { account: accountSchema, registration: registrationSchema, participation: PARTICIPATION_FIELDS };
+      const values = { account: collectAccountFieldValues(dataOtFieldsContainer, accountSchema), registration: collectOtFields(), participation: { conRole: isNscRoleSelected() ? "NSC" : "SC" } };
+      const group = suggestPriceGroup(event.pricing, values, schemas, event.event_date);
       const select = registrationPriceGroupContainer.querySelector("select");
       registrationPriceGroupContainer.querySelector(".price-group-hint")?.remove();
       if (!group || !select) return;
       select.value = group;
-      const rule = event.pricing.groupRules[group];
-      const field = schemas[rule.source].find((f) => f.key === rule.field);
-      select.insertAdjacentHTML("afterend", `<p class="sub price-group-hint">Vorgewählt: ${escapeHtml(describeRule(rule, field))}. Du kannst die Gruppe ändern.</p>`);
+      select.insertAdjacentHTML("afterend", `<p class="sub price-group-hint">Vorgewählt: ${escapeHtml(describeRules(event.pricing.groupRules[group], schemas))}. Du kannst die Gruppe ändern.</p>`);
     }
     registrationPriceGroupContainer.addEventListener("change", () => { priceGroupTouched = true; registrationPriceGroupContainer.querySelector(".price-group-hint")?.remove(); });
     otFieldsContainer.addEventListener("input", applyPriceGroupSuggestion);
     otFieldsContainer.addEventListener("change", applyPriceGroupSuggestion);
     window.addEventListener("hashchange", applyPriceGroupSuggestion);
+    // SC/NSC is part of the rules: look again after the role cards have switched.
+    document.querySelectorAll("#registration-role-tabs .role-card").forEach((btn) => btn.addEventListener("click", () => setTimeout(applyPriceGroupSuggestion, 0)));
     const registrationExtrasContainer = document.getElementById("registration-extras");
     function renderRegistrationExtras() {
       const extras = events.find((e) => e.id === eventSelect.value)?.extras ?? [];

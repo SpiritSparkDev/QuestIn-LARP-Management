@@ -1,4 +1,4 @@
-import { ALL_RULE_OPS, isNumericOp } from '../../frontend/js/priceGroupRules.js';
+import { ALL_RULE_OPS, isNumericOp, rulesOf, RULE_SOURCES, MAX_RULES_PER_GROUP } from '../../frontend/js/priceGroupRules.js';
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu } from '../middleware/authorize.js';
@@ -40,17 +40,22 @@ function validateMapUrls({ mapsUrl, osmUrl }) {
 function validateGroupRules(groupRules, groups) {
   if (groupRules === undefined) return null;
   if (typeof groupRules !== 'object' || groupRules === null || Array.isArray(groupRules)) return 'pricing.groupRules must be an object';
-  for (const [group, rule] of Object.entries(groupRules)) {
+  for (const [group, stored] of Object.entries(groupRules)) {
     if (!groups.includes(group)) return `pricing.groupRules: unknown group "${group}"`;
-    if (typeof rule !== 'object' || rule === null) return `pricing.groupRules["${group}"] must be an object`;
-    if (!['account', 'registration'].includes(rule.source)) return `pricing.groupRules["${group}"]: source must be "account" or "registration"`;
-    if (typeof rule.field !== 'string' || !rule.field) return `pricing.groupRules["${group}"]: field is required`;
-    if (!ALL_RULE_OPS.includes(rule.op)) return `pricing.groupRules["${group}"]: unknown comparison`;
-    if (isNumericOp(rule.op)) {
-      if (!Number.isFinite(rule.value)) return `pricing.groupRules["${group}"]: value must be a number`;
-      if (rule.op === 'between' && (!Number.isFinite(rule.value2) || rule.value2 < rule.value)) return `pricing.groupRules["${group}"]: the upper bound must be a number >= the lower bound`;
-    } else if (rule.op !== 'filled' && typeof rule.value !== 'string' && typeof rule.value !== 'boolean') {
-      return `pricing.groupRules["${group}"]: value is required`;
+    const rules = rulesOf(stored);
+    if (rules.length > MAX_RULES_PER_GROUP) return `pricing.groupRules["${group}"]: at most ${MAX_RULES_PER_GROUP} rules per group`;
+    for (const rule of rules) {
+      if (typeof rule !== 'object' || rule === null) return `pricing.groupRules["${group}"] must contain objects`;
+      if (!RULE_SOURCES.includes(rule.source)) return `pricing.groupRules["${group}"]: source must be one of ${RULE_SOURCES.join(', ')}`;
+      if (typeof rule.field !== 'string' || !rule.field) return `pricing.groupRules["${group}"]: field is required`;
+      if (!ALL_RULE_OPS.includes(rule.op)) return `pricing.groupRules["${group}"]: unknown comparison`;
+      // "eq" fits numbers as well as text/options/booleans, so it is checked by the generic branch.
+      if (isNumericOp(rule.op) && rule.op !== 'eq') {
+        if (!Number.isFinite(rule.value)) return `pricing.groupRules["${group}"]: value must be a number`;
+        if (rule.op === 'between' && (!Number.isFinite(rule.value2) || rule.value2 < rule.value)) return `pricing.groupRules["${group}"]: the upper bound must be a number >= the lower bound`;
+      } else if (rule.op !== 'filled' && typeof rule.value !== 'string' && typeof rule.value !== 'boolean' && !Number.isFinite(rule.value)) {
+        return `pricing.groupRules["${group}"]: value is required`;
+      }
     }
   }
   return null;
