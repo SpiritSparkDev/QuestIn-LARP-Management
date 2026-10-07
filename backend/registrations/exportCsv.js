@@ -1,11 +1,17 @@
 import { toCsv } from '../csv.js';
 import { isSensitiveField } from '../members/exportCsv.js';
 
-const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga', ticket: 'Gast-Ticket' };
+const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga', ticket: 'Direktanmeldung' };
 const STATUS_LABELS = {
   notified: 'Benachrichtigt', pending: 'Angemeldet, noch nicht bezahlt', confirmed: 'Bestätigt', checked_in: 'Eingecheckt',
   checked_out: 'Ausgecheckt', cancelled: 'Abgesagt', waitlisted: 'Warteliste',
 };
+// "Angemeldet, Con-Zahler": registered, will pay at the con (not approved/paid yet).
+function statusLabel(status, conPayer) {
+  if (!conPayer) return STATUS_LABELS[status] ?? status;
+  if (status === 'pending') return 'Angemeldet, Con-Zahler';
+  return ['confirmed', 'checked_in', 'checked_out'].includes(status) ? `${STATUS_LABELS[status]}, Con-Zahler` : (STATUS_LABELS[status] ?? status);
+}
 const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', bank_transfer: 'Überweisung', stripe_bank_transfer: 'Überweisung (Stripe)' };
 
 const euros = (cents) => (cents == null ? '' : (cents / 100).toFixed(2).replace('.', ','));
@@ -20,7 +26,8 @@ export function buildParticipantsCsv(participants, { otFields, viewer }) {
     { label: 'Charaktere', value: (p) => (p.characters ?? []).map((c) => c.name).join(', ') },
     { label: 'Rolle', value: (p) => CON_ROLE_LABELS[p.conRole] ?? p.conRole },
     { label: 'Sonderrollen', value: (p) => (p.flags ?? []).join(', ') },
-    { label: 'Status', value: (p) => STATUS_LABELS[p.status] ?? p.status },
+    { label: 'Status', value: (p) => statusLabel(p.status, p.conPayer) },
+    { label: 'Con-Zahler', value: (p) => (p.conPayer ? 'Ja' : 'Nein') },
     { label: 'Teilnahmegruppe', value: (p) => p.priceGroup },
     { label: 'Extras', value: (p) => p.extrasText ?? '' },
     { label: 'Unterkunft', value: (p) => p.lodgingName ?? '' },

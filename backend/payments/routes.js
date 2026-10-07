@@ -92,10 +92,11 @@ router.post('/events/:eventId/registrations/:userId/checkout-session', requireAu
   if (!CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
 
   const { rows } = await query(
-    'SELECT amount_due_cents, paid_at FROM registrations WHERE event_id = $1 AND user_id = $2',
+    'SELECT amount_due_cents, paid_at, con_payer FROM registrations WHERE event_id = $1 AND user_id = $2',
     [params.eventId, params.userId]
   );
   if (rows.length === 0) return { status: 404, body: { error: 'registration not found' } };
+  if (rows[0].con_payer) return { status: 409, body: { error: 'Als Con-Zahler bezahlst du vor Ort beim Check-In.' } };
   if (rows[0].amount_due_cents == null) return { status: 400, body: { error: 'Für diese Anmeldung ist kein Betrag hinterlegt.' } };
   if (rows[0].paid_at) return { status: 409, body: { error: 'Bereits bezahlt.' } };
 
@@ -166,6 +167,7 @@ router.post('/public/registrations/:token/checkout-session', async ({ req, param
   if (new Date(registration.paymentTokenExpiresAt) < new Date()) {
     return { status: 410, body: { error: 'Dieser Zahlungslink ist abgelaufen.' } };
   }
+  if (registration.conPayer) return { status: 409, body: { error: 'Als Con-Zahler bezahlst du vor Ort beim Check-In.' } };
   if (registration.amountDueCents == null) return { status: 400, body: { error: 'Für diese Anmeldung ist kein Betrag hinterlegt.' } };
   if (registration.paidAt) return { status: 409, body: { error: 'Bereits bezahlt.' } };
 

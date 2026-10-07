@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erinnerungen abbestellen – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
+  <div class="folio folio--narrow">
+    <h1 class="text-center">Erinnerungen abbestellen</h1>
+    <p id="message">Bitte warten …</p>
+  </div>
+</div>
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+applyBranding();
+
+const message = document.getElementById('message');
+const token = new URLSearchParams(window.location.search).get('token');
+if (!token) {
+  message.textContent = 'Kein Link angegeben.';
+  message.className = 'error';
+} else {
+  try {
+    await api.post(`/public/deadline-optout/${encodeURIComponent(token)}`, {});
+    message.textContent = 'Du bekommst keine Erinnerungen zu den Preisfristen mehr.';
+    message.className = 'success';
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = 'error';
+  }
+}
+</script>
+</body>
+</html>

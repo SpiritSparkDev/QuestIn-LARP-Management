@@ -45,7 +45,7 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   try {
-    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, body.waiverAccepted, { extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails, conPayer: body.conPayer === true });
+    const registration = await registerForEvent(user.id, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, body.waiverAccepted, { extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails, deadlineMails: body.deadlineMails === true });
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
@@ -261,11 +261,10 @@ router.put('/events/:id/checkin/:userId', requireAuth(requireMenu('checkin')(asy
   }
 })));
 
-// Mark (or unmark) a registration as "Con-Zahler": the person, their manager or staff.
+// Mark (or unmark) a registration as "Con-Zahler": staff only. Participants don't decide this
+// themselves -- it follows from the Preisstufe (and the automation after the last deadline).
 router.put('/events/:id/registrations/:userId/con-payer', requireAuth(async ({ req, params, user }) => {
-  const isStaff = ['admin', 'moderator'].includes(user.group.key);
-  const allowed = params.userId === user.id || isStaff || await canRegisterFor(params.userId, user.id);
-  if (!allowed) return { status: 403, body: { error: 'forbidden' } };
+  if (!['admin', 'moderator'].includes(user.group.key)) return { status: 403, body: { error: 'forbidden' } };
   const body = await readJsonBody(req);
   if (body === null || typeof body.conPayer !== 'boolean') return { status: 400, body: { error: 'conPayer (boolean) is required' } };
   try {
@@ -361,3 +360,13 @@ router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ r
   }
   return { status: 200, body: registration };
 }));
+
+// One-click opt-out from the deadline reminder mails (the link in every mail).
+router.post('/public/deadline-optout/:token', async ({ params }) => {
+  const { rowCount } = await query(
+    'UPDATE registrations SET deadline_mail_optin = false WHERE optout_token = $1',
+    [params.token]
+  );
+  if (rowCount === 0) return { status: 404, body: { error: 'Ungültiger Link.' } };
+  return { status: 200, body: { optedOut: true } };
+});

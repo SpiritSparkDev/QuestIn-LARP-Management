@@ -413,7 +413,7 @@
                     <h3>3. Weitere Angaben zu dieser Anmeldung</h3>
                     <div id="ot-fields" class="field-grid"></div>
 
-                    <label id="registration-conpayer-row"><input type="checkbox" id="registration-conpayer-checkbox"> <strong>Con-Zahler:</strong> Ich bezahle erst vor Ort. Das Ticket wird trotzdem ausgestellt und als „Con-Zahler“ gekennzeichnet.</label>
+                    <label id="registration-deadline-row"><input type="checkbox" id="registration-deadline-checkbox"> Erinnere mich eine Woche vor jedem Fristablauf der Preisstufen per E-Mail. Jede Mail enthält einen Abmelde-Link.</label>
                     <div id="registration-waiver" style="display:none;">
                       <h3>4. AGB &amp; Einverständniserklärung</h3>
                       <div class="sub" id="registration-waiver-text"></div>
@@ -443,7 +443,6 @@
                 </p>
                 <button type="button" id="active-registration-edit-btn">Bearbeiten</button>
                 <button type="button" id="active-registration-lodging-btn" class="btn-secondary" style="display:none;">Unterkunft wählen</button>
-                <button type="button" id="active-registration-conpayer-btn" class="btn-secondary" style="display:none;"></button>
                 <button type="button" id="active-registration-unregister-btn" class="btn-secondary" style="display:none;">Abmelden</button>
               </div>
 
@@ -646,6 +645,7 @@
       collectFieldValues,
       attachLiveValidation,
       STATUS_LABELS,
+      statusLabel,
       renderEventOptions,
       renderAccountFieldInput,
       collectAccountFieldValues,
@@ -801,7 +801,7 @@
         (r) => r.eventId === activeEvent.id,
       );
       const statusPill = registration
-        ? `<span class="status-pill status-${escapeHtml(registration.status)}">${escapeHtml(STATUS_LABELS[registration.status] ?? registration.status)}</span>`
+        ? `<span class="status-pill status-${escapeHtml(registration.status)}">${escapeHtml(statusLabel(registration.status, registration.conPayer))}</span>`
         : "";
       const codeBox = activeEvent.code
         ? `<span class="event-code">Veranstaltung: ${escapeHtml(activeEvent.code)}</span>`
@@ -1843,7 +1843,6 @@
       registrationPriceGroupContainer.innerHTML = field.options.length > 0
         ? renderAccountFieldInput(field, "", { idPrefix: "register-" })
         : "";
-      syncConPayerWithTier();
     }
 
     function collectRegistrationPriceGroup() {
@@ -1851,17 +1850,6 @@
       return value || undefined;
     }
 
-
-    // A Preisstufe marked "Con-Zahler" by the orga makes the registration a Con-Zahler one.
-    function syncConPayerWithTier() {
-      const event = events.find((e) => e.id === eventSelect.value);
-      const today = new Date().toISOString().slice(0, 10);
-      const tier = (event?.pricing?.tiers ?? []).find((t) => t.until == null || today <= t.until);
-      const box = document.getElementById("registration-conpayer-checkbox");
-      const forced = tier?.conPayer === true;
-      if (forced) box.checked = true;
-      box.disabled = forced;
-    }
 
     // Bookable extras of the selected event (hut, vehicle pitch, ...).
     const registrationExtrasContainer = document.getElementById("registration-extras");
@@ -2219,9 +2207,9 @@
         }
       }
 
-      const statusLabel = STATUS_LABELS[registration.status] ?? registration.status;
+      const statusText = statusLabel(registration.status, registration.conPayer);
       const statusEl = document.getElementById("active-registration-status");
-      statusEl.textContent = statusLabel;
+      statusEl.textContent = statusText;
       statusEl.className = `status-pill status-${registration.status}`;
 
       const nscBadge = document.getElementById("active-registration-nsc-badge");
@@ -2236,21 +2224,6 @@
 
       document.getElementById("active-registration-edit-btn").onclick = () =>
         openEditOtDialog(activeEvent.id);
-      const conPayerBtn = document.getElementById("active-registration-conpayer-btn");
-      if (!registration.paidAt && ["pending", "confirmed", "waitlisted"].includes(registration.status)) {
-        conPayerBtn.textContent = registration.conPayer ? "Con-Zahler aufheben" : "Als Con-Zahler markieren";
-        conPayerBtn.style.display = "";
-        conPayerBtn.onclick = async () => {
-          try {
-            await api.put(`/events/${activeEvent.id}/registrations/${currentUserId}/con-payer`, { conPayer: !registration.conPayer });
-            await loadRegistrations();
-          } catch (err) {
-            notify(err.message, "error");
-          }
-        };
-      } else {
-        conPayerBtn.style.display = "none";
-      }
       const unregisterBtn = document.getElementById("active-registration-unregister-btn");
       if (registration.status === "pending" || registration.status === "waitlisted") {
         unregisterBtn.style.display = "";
@@ -2346,7 +2319,7 @@
           lodgingDetails: lodgingChoice.lodgingDetails,
           otFields: collectOtFields(),
           waiverAccepted: registrationWaiverCheckbox.checked,
-          conPayer: document.getElementById("registration-conpayer-checkbox").checked,
+          deadlineMails: document.getElementById("registration-deadline-checkbox").checked,
         });
         window.location.href = `/registration-confirmation.html?event=${eventId}`;
         return;

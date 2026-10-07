@@ -41,18 +41,19 @@ test('Con-Zahler: ticket flag, toggling, and check-in asks for / books the payme
     const eventId = ev[0].id;
     const register = (user, body) => fetch(`${base}/events/${eventId}/register`, { method: 'POST', headers: json(user.cookie), body: JSON.stringify({ conRole: 'helfer', ...body }) });
 
+    // Participants can't make themselves Con-Zahler (a sent flag is ignored).
     assert.equal((await register(alice, { conPayer: true })).status, 201);
     assert.equal((await register(bob, {})).status, 201);
     const mine = async (user) => (await (await fetch(`${base}/registrations`, { headers: json(user.cookie) })).json())[0];
-    assert.equal((await mine(alice)).conPayer, true);
-    assert.equal((await mine(bob)).conPayer, false);
+    assert.equal((await mine(alice)).conPayer, false);
 
-    // Toggle: the person themself, not somebody else.
+    // Only staff toggles it.
     const put = (user, target, conPayer) => fetch(`${base}/events/${eventId}/registrations/${target.userId}/con-payer`, { method: 'PUT', headers: json(user.cookie), body: JSON.stringify({ conPayer }) });
-    assert.equal((await put(alice, bob, true)).status, 403);
-    assert.equal((await put(bob, bob, true)).status, 200);
-    assert.equal((await mine(bob)).conPayer, true);
-    assert.equal((await put(bob, bob, 'yes')).status, 400);
+    assert.equal((await put(alice, alice, true)).status, 403);
+    assert.equal((await put(admin, alice, 'yes')).status, 400);
+    assert.equal((await put(admin, alice, true)).status, 200);
+    assert.equal((await put(admin, bob, true)).status, 200);
+    assert.equal((await mine(alice)).conPayer, true);
 
     // A pending Con-Zahler can be checked in (approved on the spot); the confirmed payment is booked.
     await query('UPDATE registrations SET amount_due_cents = 4000 WHERE event_id = $1', [eventId]);
@@ -66,7 +67,7 @@ test('Con-Zahler: ticket flag, toggling, and check-in asks for / books the payme
     assert.equal((await query('SELECT count(*)::int AS n FROM payments WHERE event_id = $1 AND user_id = $2', [eventId, alice.userId])).rows[0].n, 1);
 
     // Paid Con-Zahler can't be toggled any more; a normal pending person still can't check in.
-    assert.equal((await put(alice, alice, false)).status, 409);
+    assert.equal((await put(admin, alice, false)).status, 409);
     await query("UPDATE registrations SET con_payer = false WHERE event_id = $1 AND user_id = $2", [eventId, bob.userId]);
     assert.equal((await checkin(bob.userId, {})).status, 409);
   });
@@ -162,6 +163,7 @@ test('automation: after the last deadline unpaid registrations become Con-Zahler
      VALUES ($1, $2, 'helfer', 'pending', 'Erwachsene', 'Früh', 2000, 2500, now() - interval '60 days' ${extra ? ', ' + extra.val : ''})`,
     [user.userId, eventId]
   );
+  const optIn = (eventId, user, token) => query('UPDATE registrations SET deadline_mail_optin = true, optout_token = $3 WHERE event_id = $1 AND user_id = $2', [eventId, user.userId, token]);
 
   // 1) The last dated tier ran out: unpaid -> Con-Zahler at the Con-Zahler price; paid stays untouched.
   const expired = await mkEvent('Abgelaufen', day(-1));
@@ -174,17 +176,29 @@ test('automation: after the last deadline unpaid registrations become Con-Zahler
   assert.deepEqual(await row(expired, account), { con_payer: true, price_tier: 'Vor Ort', price_list_cents: 3500, amount_due_cents: 4000 });
   assert.deepEqual(await row(expired, paid), { con_payer: false, price_tier: 'Früh', price_list_cents: 2000, amount_due_cents: 2500 });
 
-  // 2) A deadline in 3 days: the guest gets one mail (not twice), the account holder none.
+  // 2) A deadline in 3 days: only those who opted in get a mail (once per deadline), each with an opt-out link.
   const soon = await mkEvent('Bald', day(3));
   await reg(soon, guest, { col: 'payment_token', val: `'tok-${TAG}'` });
   await reg(soon, account);
+  await reg(soon, paid);
+  await optIn(soon, guest, `out-guest-${TAG}`);
+  await optIn(soon, account, `out-account-${TAG}`);
   await runConPayerAutomation({ send });
   await runConPayerAutomation({ send });
   const mine = sent.filter((m) => m.eventName === `${TAG} Bald`);
-  assert.equal(mine.length, 1);
-  assert.equal(mine[0].conPayerNext, true);
-  assert.equal(mine[0].deadline, day(3));
+  assert.equal(mine.length, 2);
+  assert.ok(mine.every((m) => m.conPayerNext === true && m.deadline === day(3) && m.optoutUrl.includes('/deadline-optout.html?token=out-')));
+  assert.ok(mine.some((m) => m.url.includes('/guest-payment.html?token=')));
+  assert.ok(mine.some((m) => m.url.includes('/account.html')));
   assert.equal((await row(soon, guest)).con_payer, false);
+
+  // Opt-out: the link works without login and the person is dropped from the list.
+  await withTestServer(async (port) => {
+    const res = await fetch(`http://localhost:${port}/public/deadline-optout/out-account-${TAG}`, { method: 'POST' });
+    assert.equal(res.status, 200);
+    assert.equal((await fetch(`http://localhost:${port}/public/deadline-optout/unknown`, { method: 'POST' })).status, 404);
+  });
+  assert.equal((await query('SELECT deadline_mail_optin FROM registrations WHERE event_id = $1 AND user_id = $2', [soon, account.userId])).rows[0].deadline_mail_optin, false);
 
   // 3) The deadline passes: the guest is marked Con-Zahler in the database as well.
   await query("UPDATE events SET pricing = $2 WHERE id = $1", [soon, JSON.stringify({ groups: ['Erwachsene'], tiers: tiers(day(-1)) })]);

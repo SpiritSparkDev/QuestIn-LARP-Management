@@ -14,7 +14,7 @@ const REGISTRATION_LABELS = {
 function memberKind(m) {
   if (m.status === 'invited') return 'Eingeladen';
   if (m.managedBy) return 'Verwaltete Person';
-  return m.isGuest ? 'Gast' : 'Vollkonto';
+  return m.isGuest ? 'Direktanmeldung' : 'Vollkonto';
 }
 
 // Builds the member-list CSV. `viewer` decides which account (OT) fields
@@ -31,7 +31,7 @@ export function buildMembersCsv(members, { accountSchema, viewer, event, events 
     { label: 'Rufname', value: (m) => m.nickname },
     { label: 'Anzeigename', value: (m) => m.name },
     { label: 'E-Mail', value: (m) => m.email },
-    { label: 'Gruppe', value: (m) => m.group?.name },
+    { label: 'Rolle', value: (m) => m.group?.name },
     { label: 'Status', value: (m) => STATUS_LABELS[m.status] ?? m.status },
     { label: 'Kontoart', value: memberKind },
     { label: 'Verwaltet von', value: (m) => m.managedBy?.name },
@@ -41,7 +41,10 @@ export function buildMembersCsv(members, { accountSchema, viewer, event, events 
     label: `Anmeldung: ${ev.name}`,
     value: (m) => {
       const reg = (m.registrations ?? []).find((r) => r.eventId === ev.id);
-      return reg ? (REGISTRATION_LABELS[reg.status] ?? reg.status) : 'Nicht angemeldet';
+      if (!reg) return 'Nicht angemeldet';
+      const label = REGISTRATION_LABELS[reg.status] ?? reg.status;
+      if (!reg.conPayer) return label;
+      return reg.status === 'pending' ? 'Angemeldet, Con-Zahler' : `${label}, Con-Zahler`;
     },
   });
   const registeredEventIds = new Set(members.flatMap((m) => (m.registrations ?? []).map((r) => r.eventId)));

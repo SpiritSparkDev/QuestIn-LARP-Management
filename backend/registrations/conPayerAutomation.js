@@ -11,8 +11,9 @@ const OPEN = ['pending', 'confirmed'];
 //     every still unpaid registration of that event becomes a Con-Zahler
 //     registration (accounts and guests alike): marked, re-priced to the
 //     Con-Zahler tier, and the ticket is then issued as Con-Zahler ticket.
-//  2. Guests without an account get one mail a week before each deadline
-//     (if they gave an e-mail address), so they can still pay the lower price.
+//  2. Whoever ticked "remind me" at the registration (opt-in; accounts and guests)
+//     gets one mail a week before each deadline, so they can still pay the lower
+//     price. Every mail carries an opt-out link.
 // Never throws.
 export async function runConPayerAutomation({ now = new Date(), send = sendGuestDeadlineEmail } = {}) {
   try {
@@ -50,11 +51,15 @@ async function convertToConPayers(now) {
 
 async function sendGuestDeadlineMails(now, send) {
   const { rows } = await query(
-    `SELECT r.event_id, r.user_id, r.price_group, r.created_at, r.payment_token, u.email, e.name AS event_name, e.pricing
+    // A managed person without an address of their own is mailed at their manager's.
+    `SELECT r.event_id, r.user_id, r.price_group, r.created_at, r.payment_token, r.optout_token, u.is_guest,
+            COALESCE(u.email, m.email) AS email, e.name AS event_name, e.pricing
      FROM registrations r JOIN events e ON e.id = r.event_id JOIN users u ON u.id = r.user_id
-     WHERE u.is_guest AND u.email IS NOT NULL AND u.email NOT LIKE '%@test.invalid'
+     LEFT JOIN users m ON m.id = u.managed_by_user_id
+     WHERE r.deadline_mail_optin AND r.optout_token IS NOT NULL
+       AND COALESCE(u.email, m.email) IS NOT NULL AND COALESCE(u.email, m.email) NOT LIKE '%@test.invalid'
        AND r.paid_at IS NULL AND NOT r.con_payer AND r.status = ANY($1::text[])
-       AND r.payment_token IS NOT NULL AND r.price_group IS NOT NULL AND e.event_date >= CURRENT_DATE`,
+       AND r.price_group IS NOT NULL AND e.event_date >= CURRENT_DATE`,
     [OPEN]
   );
   const today = now.toISOString().slice(0, 10);
@@ -80,7 +85,9 @@ async function sendGuestDeadlineMails(now, send) {
       await send(r.email, {
         eventName: r.event_name,
         deadline: active.until,
-        url: `${base}/guest-payment.html?token=${r.payment_token}`,
+        // Guests have no login: their link leads to payment and ticket.
+        url: r.is_guest && r.payment_token ? `${base}/guest-payment.html?token=${r.payment_token}` : `${base}/account.html#anmelden`,
+        optoutUrl: `${base}/deadline-optout.html?token=${r.optout_token}`,
         conPayerNext: next?.conPayer === true,
         userId: r.user_id,
       }, transport);

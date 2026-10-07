@@ -7,6 +7,14 @@ export const STATUS_LABELS = {
   waitlisted: 'Warteliste',
 };
 
+// Status shown to people: a Con-Zahler who is registered but not approved yet reads "Angemeldet, Con-Zahler".
+export function statusLabel(status, conPayer = false) {
+  const label = STATUS_LABELS[status] ?? status;
+  if (!conPayer) return label;
+  if (status === 'pending') return 'Angemeldet, Con-Zahler';
+  return ['confirmed', 'checked_in', 'checked_out'].includes(status) ? `${label}, Con-Zahler` : label;
+}
+
 // Renders one OT (account/registration) field from a schema-shaped field
 // definition ({key, label, type, options}) -- same field shape as IT
 // (character) schema fields. `sealedBadge`, if given, is raw HTML appended

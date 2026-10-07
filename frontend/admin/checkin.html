@@ -124,7 +124,7 @@ import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
 import { hideLoading } from '/js/loading.js';
 applyBranding();
-import { escapeHtml, formatFieldValue, STATUS_LABELS, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, otFieldValuesEqual, renderField, collectFieldValues } from '/js/formFields.js';
+import { escapeHtml, formatFieldValue, STATUS_LABELS, statusLabel, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, otFieldValuesEqual, renderField, collectFieldValues } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 initSidebarToggle();
 import { parseScanCode } from '/js/qrCode.js';
@@ -209,7 +209,7 @@ function allColumns() {
     { id: 'extras', label: 'Extras', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.extrasText ?? '') },
     { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
     { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-stack', render: renderPaymentStatusCell },
-    { id: 'status', label: 'Status', track: '130px', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(STATUS_LABELS[p.status] ?? p.status)}</span>` },
+    { id: 'status', label: 'Status', track: '130px', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(statusLabel(p.status, p.conPayer))}</span>` },
     { id: 'actions', label: 'Aktionen', locked: true, track: eventEnded() ? 'minmax(210px, 1.3fr)' : 'minmax(110px, 0.7fr)', cls: 'cell-actions', render: (p) => renderCheckinCell(p) + renderCheckoutCell(p) },
     ...(canOverride ? [{ id: 'override', label: 'Override', track: '150px', render: renderOverrideCell }] : []),
   ];
@@ -495,7 +495,7 @@ function openScanDialog(eventId, lookup) {
   document.getElementById('scan-name').textContent = lookup.name;
   const scanFlagsSuffix = (lookup.flags ?? []).length > 0 ? ` (${lookup.flags.join(', ')})` : '';
   document.getElementById('scan-group').textContent = `Kategorie: ${CON_ROLE_LABELS[lookup.conRole] ?? lookup.conRole}${scanFlagsSuffix}${lookup.nscAvailable ? ' (auch NSC-bereit)' : ''}`;
-  document.getElementById('scan-status-line').textContent = `Status: ${STATUS_LABELS[lookup.status] ?? lookup.status}`;
+  document.getElementById('scan-status-line').textContent = `Status: ${statusLabel(lookup.status, lookup.conPayer)}`;
   document.getElementById('scan-characters').textContent = lookup.characters.length > 0
     ? `Charaktere: ${lookup.characters.map((c) => c.name).join(', ')}`
     : '';
@@ -653,7 +653,8 @@ function renderPaymentStatusCell(p) {
     }
     return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <button type="button" class="btn-ghost btn-sm" data-refund="${escapeHtml(p.userId)}">Erstatten</button> <button type="button" class="btn-ghost btn-sm" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
   }
-  return `<span class="status-pill status-pending">Offen</span> <button type="button" class="btn-ghost btn-sm" data-mark-paid="${escapeHtml(p.userId)}">Als bezahlt markieren</button>`;
+  const openLabel = p.conPayer ? 'Zahlt vor Ort' : 'Offen';
+  return `<span class="status-pill status-pending">${openLabel}</span> <button type="button" class="btn-ghost btn-sm" data-mark-paid="${escapeHtml(p.userId)}">Als bezahlt markieren</button>`;
 }
 
 searchInput.addEventListener('input', () => {
@@ -671,8 +672,7 @@ searchInput.addEventListener('input', () => {
 function renderCheckinCell(p) {
   if (p.status === 'notified') return '';
   const ready = p.status === 'confirmed' || (p.status === 'pending' && p.conPayer);
-  const tag = p.conPayer && !p.paidAt ? ' <span class="tag">Con-Zahler</span>' : '';
-  return `<button type="button" class="btn btn-sm" data-checkin="${p.userId}" ${ready ? '' : 'disabled'}>Check-In</button>${tag}`;
+  return `<button type="button" class="btn btn-sm" data-checkin="${p.userId}" ${ready ? '' : 'disabled'}>Check-In</button>`;
 }
 
 function renderCheckoutCell(p) {

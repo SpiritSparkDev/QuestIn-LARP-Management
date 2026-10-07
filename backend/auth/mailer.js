@@ -183,14 +183,14 @@ export async function sendUnpaidReminderOrgaEmail(to, { eventName, reminderNumbe
   return deliver(transporter, from, to, rendered);
 }
 
-export async function sendGuestDeadlineEmail(to, { eventName, deadline, url, conPayerNext, userId }, { transporter, from }) {
+export async function sendGuestDeadlineEmail(to, { eventName, deadline, url, optoutUrl, conPayerNext, userId }, { transporter, from }) {
   const date = new Date(`${deadline}T00:00:00Z`).toLocaleDateString('de-DE', { timeZone: 'UTC' });
   const after = conPayerNext
     ? 'Danach wirst du automatisch als Con-Zahler geführt: Das Ticket bleibt gültig, der Preis ist höher und wird vor Ort beim Check-In bezahlt.'
     : 'Danach gilt der nächste, höhere Preis.';
   const rendered = await renderSlotEmail('guest_deadline', () => ({
     subject: `Preisstufe endet am ${date}: ${eventName}`,
-    body: `Für "${eventName}" endet am ${date} die aktuelle Preisstufe. Du hast noch nicht bezahlt. ${after} Jetzt zahlen oder Ticket ansehen: ${url}`,
-  }), { userId, extra: { eventName, deadline: date, link: url, conPayerNext } });
+    body: `Für "${eventName}" endet am ${date} die aktuelle Preisstufe. Du hast noch nicht bezahlt. ${after} Jetzt zahlen oder Ticket ansehen: ${url}\n\nKeine Erinnerungen mehr erhalten: ${optoutUrl}`,
+  }), { userId, extra: { eventName, deadline: date, link: url, optoutLink: optoutUrl, conPayerNext } });
   return deliver(transporter, from, to, rendered);
 }

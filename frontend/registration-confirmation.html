@@ -47,7 +47,7 @@
     import { applyBranding } from "/js/branding.js";
     import { hideLoading } from "/js/loading.js";
     applyBranding();
-    import { escapeHtml, STATUS_LABELS } from "/js/formFields.js";
+    import { escapeHtml, statusLabel } from "/js/formFields.js";
 
     const params = new URLSearchParams(window.location.search);
     const eventId = params.get("event");
@@ -105,7 +105,7 @@
         row("Event", registration.eventName ?? event?.name) +
         row("Datum", registration.eventDate ? String(registration.eventDate).slice(0, 10) : "") +
         row("Rolle", CON_ROLE_LABELS[registration.conRole] ?? registration.conRole) +
-        row("Status", STATUS_LABELS[registration.status] ?? registration.status) +
+        row("Status", statusLabel(registration.status, registration.conPayer)) +
         (registration.priceGroup ? row("Teilnahmegruppe", registration.priceGroup) : "") +
         (flags.length ? row("Sonderrollen", flags.join(", ")) : "") +
         fieldRows(accountSchema, holder) +

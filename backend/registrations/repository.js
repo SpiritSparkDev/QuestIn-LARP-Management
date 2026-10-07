@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { query, withTransaction } from '../db.js';
 import { getEvent, resolvePriceForGroup } from '../events/repository.js';
 import { applyTransition } from './statusMachine.js';
@@ -279,7 +280,7 @@ async function assertExtrasCapacity(client, event, extras, excludeUserId = null)
   }
 }
 
-export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, allowMissingCharacter = false, extras: requestedExtras, lodgingId: requestedLodgingId, lodgingDetails: requestedLodgingDetails, conPayer = false, pdfImport = false } = {}) {
+export async function registerForEvent(userId, eventId, conRole, characterId, nscAvailable, nscCharacterId, flags, priceGroup, otFields, requestingUser, waiverAccepted, { bypassWaiver = false, allowMissingCharacter = false, extras: requestedExtras, lodgingId: requestedLodgingId, lodgingDetails: requestedLodgingDetails, conPayer = false, pdfImport = false, deadlineMails = false } = {}) {
   const event = await getEvent(eventId);
   if (!event) {
     const err = new Error('event not found');
@@ -351,8 +352,8 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
       await assertLodgingCapacity(client, lodging.lodging);
       const amountDueCents = amountDueFor(resolvedPrice.priceListCents, extrasCents + lodging.lodgingCents);
       const { rows } = await client.query(
-        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details, con_payer, pdf_import)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20, $21, $22)
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details, con_payer, pdf_import, deadline_mail_optin, optout_token)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20, $21, $22, $23, $24)
          RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, waiver_version_accepted, waiver_accepted_at, extras, extras_cents`,
         [
           userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags,
@@ -362,6 +363,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
           waiverAccepted === true ? new Date() : null,
           amountDueCents, JSON.stringify(resolvedExtras), extrasCents, lodging.lodging?.id ?? null, lodging.lodgingCents, lodging.details ? JSON.stringify(lodging.details) : null,
           conPayer === true || resolvedPrice.conPayer, pdfImport === true,
+          deadlineMails === true, deadlineMails === true ? crypto.randomBytes(24).toString('hex') : null,
         ]
       );
       return rows[0];

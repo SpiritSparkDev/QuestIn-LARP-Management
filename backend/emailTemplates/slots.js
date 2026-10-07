@@ -19,7 +19,7 @@ export const EMAIL_SLOTS = [
   },
   {
     key: 'invitation',
-    label: 'Einladung (neues Konto / Gast-Umwandlung)',
+    label: 'Einladung (neues Konto / Umwandlung einer Direktanmeldung)',
     supportsAccount: true,
     extraFields: [{ key: 'link', label: 'Link zum Passwort setzen' }],
   },
@@ -76,7 +76,7 @@ export const EMAIL_SLOTS = [
   },
   {
     key: 'guest_ticket',
-    label: 'Gast-Ticket bestätigt',
+    label: 'Direktanmeldung bestätigt',
     supportsAccount: true,
     extraFields: [
       { key: 'eventName', label: 'Eventname' },
@@ -91,12 +91,13 @@ export const EMAIL_SLOTS = [
   },
   {
     key: 'guest_deadline',
-    label: 'Gast: Preisstufe endet bald (unbezahlt)',
+    label: 'Erinnerung: Preisstufe endet bald (Opt-in)',
     supportsAccount: true,
     extraFields: [
       { key: 'eventName', label: 'Eventname' },
       { key: 'deadline', label: 'Ende der Preisstufe (Datum)' },
       { key: 'link', label: 'Link zu Zahlung und Ticket' },
+      { key: 'optoutLink', label: 'Abmelde-Link (Pflicht in jeder Mail)' },
     ],
   },
   {

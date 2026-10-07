@@ -229,12 +229,13 @@ test('POST guest-registration on a priced event returns a paymentUrl and sets a 
   });
 });
 
-test('POST guest-registration as Con-Zahler skips the payment redirect but still holds the open amount', async () => {
+test('POST guest-registration in a Con-Zahler Preisstufe skips the payment redirect but still holds the open amount', async () => {
   await withTestServer(async (port) => {
     const eventId = await makeEvent({
-      pricing: { groups: ['Erwachsene'], tiers: [{ name: 'Standard', until: null, amounts: { Erwachsene: 3000 } }] },
+      pricing: { groups: ['Erwachsene'], tiers: [{ name: 'Standard', until: null, conPayer: true, amounts: { Erwachsene: 3000 } }] },
     });
-    const payload = guestPayload({ priceGroup: 'Erwachsene', conPayer: true });
+    // A conPayer flag sent by the guest is irrelevant: the Preisstufe decides.
+    const payload = guestPayload({ priceGroup: 'Erwachsene', conPayer: false });
     const res = await fetch(`http://localhost:${port}/public/events/${eventId}/guest-registration`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     });
@@ -257,9 +258,13 @@ test('guest ticket link: ticket only when paid, free or Con-Zahler; the QR code 
       code,
       pricing: { groups: ['Erwachsene'], tiers: [{ name: 'Standard', until: null, amounts: { Erwachsene: 3000 } }] },
     });
-    const register = async (extra) => {
+    const conPayerEventId = await makeEvent({
+      code: `${code}C`,
+      pricing: { groups: ['Erwachsene'], tiers: [{ name: 'Standard', until: null, conPayer: true, amounts: { Erwachsene: 3000 } }] },
+    });
+    const register = async (extra, id = eventId) => {
       const payload = guestPayload({ priceGroup: 'Erwachsene', ...extra });
-      const res = await fetch(`http://localhost:${port}/public/events/${eventId}/guest-registration`, {
+      const res = await fetch(`http://localhost:${port}/public/events/${id}/guest-registration`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const body = await res.json();
@@ -270,10 +275,10 @@ test('guest ticket link: ticket only when paid, free or Con-Zahler; the QR code 
     const unpaid = await register({});
     assert.equal(unpaid.info.ticket, null);
 
-    const conPayer = await register({ conPayer: true });
+    const conPayer = await register({}, conPayerEventId);
     assert.equal(conPayer.info.ticket.conPayer, true);
     const { rows } = await query('SELECT id FROM users WHERE email = $1', [conPayer.payload.email]);
-    assert.equal(conPayer.info.ticket.scanCode, `${code}-mitglied-${rows[0].id}`);
+    assert.equal(conPayer.info.ticket.scanCode, `${code}C-mitglied-${rows[0].id}`);
 
     await query("UPDATE registrations SET paid_at = now() WHERE payment_token = $1", [unpaid.token]);
     const paid = await (await fetch(`http://localhost:${port}/public/registrations/${unpaid.token}`)).json();

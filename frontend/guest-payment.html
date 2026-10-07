@@ -119,8 +119,6 @@ if (!token) {
       showTicket(registration);
       if (registration.ticket.conPayer) {
         messageEl.textContent = 'Con-Zahler: Du zahlst vor Ort beim Check-In. Dein Ticket ist trotzdem gültig.';
-        retryButton.textContent = 'Lieber schon jetzt online zahlen';
-        if (open) retryButton.style.display = '';
       } else {
         messageEl.textContent = payment === 'success' ? 'Zahlung erfolgreich!' : '';
         messageEl.className = 'success';

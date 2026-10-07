@@ -125,7 +125,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   const characterName = typeof character?.name === 'string' ? character.name.trim() : '';
   const emptyCharacter = character?.empty === true;
   if (conRole === 'sc' && !characterName && !emptyCharacter) return { status: 400, body: { error: 'Bitte gib einen Charakternamen an.' } };
-  const wantsConPayer = body.conPayer === true;
+  const deadlineMails = body.deadlineMails === true;
   const email = body.email?.toLowerCase();
   if (!email || !firstName || !lastName) {
     return { status: 400, body: { error: 'email, firstName, and lastName are required' } };
@@ -171,7 +171,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
         : await createCharacter(userId, { characterClass: conRole, name: characterName || nickname || firstName, data: characterData });
       createdCharacterId = created.id;
     }
-    await registerForEvent(userId, params.eventId, conRole, createdCharacterId, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { conPayer: wantsConPayer });
+    await registerForEvent(userId, params.eventId, conRole, createdCharacterId, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { deadlineMails });
   } catch (err) {
     // Only clean up the guest row if THIS request created it -- an existing
     // guest reusing their email for a second event must never be deleted
@@ -214,7 +214,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
     [params.eventId, userId]
   );
   const amountDueCents = amountRows[0]?.amount_due_cents ?? null;
-  // Also true when the chosen Teilnahmegruppe is a Con-Zahler group.
+  // True when the Preisstufe (or the automation) made this a Con-Zahler registration.
   const conPayer = amountRows[0]?.con_payer === true;
 
   const { token } = await setGuestPaymentToken(params.eventId, userId, tokenTtlMs(event));
