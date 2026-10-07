@@ -195,6 +195,7 @@
     import { notify } from '/js/notifications.js';
     import { renderNscFields, collectNscFields } from '/js/nscFields.js';
     import { formatFieldValue } from '/js/formFields.js';
+    import { renderFlagCards, collectFlagCards, bindFlagCards } from '/js/flagCards.js';
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary } from '/js/extrasPicker.js';
     initSidebarToggle();
 
@@ -530,7 +531,7 @@
     // Roles of the member's non-cancelled registrations -- of the chosen event only, if one is chosen.
     function participationLabels(m) {
       const regs = (m.registrations ?? []).filter((r) => r.status !== 'cancelled' && (!prefs.event || r.eventId === prefs.event));
-      return [...new Set(regs.map((r) => CON_ROLE_LABELS[r.conRole] ?? r.conRole))];
+      return [...new Set(regs.flatMap((r) => [CON_ROLE_LABELS[r.conRole] ?? r.conRole, ...(r.flags ?? [])]))];
     }
 
     // NSC overview of the members currently shown: one row per NSC registration,
@@ -771,16 +772,18 @@
       const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Unbekanntes Event';
       const roleLabel = (key) => REGISTER_ROLES.find(([k]) => k === key)?.[1] ?? key;
       const editableFields = registrationSchema.filter((f) => myAccountFields.includes(f.key));
+      const eventFlagsOf = (id) => allEvents.find((e) => e.id === id)?.flags ?? [];
       const registeredHtml = registered.length
         ? registered.map((r) => `<div class="member-registration" data-reg-event="${escapeHtml(r.eventId)}">
-            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Charakter: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
+            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${(r.flags ?? []).length ? ` <span class="sub">Sonderrollen: ${escapeHtml(r.flags.join(', '))}</span>` : ''}${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Charakter: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
             ${r.conRole === 'nsc' ? renderNscSummary(r.nscData) : ''}
             <div class="action-row">
               ${canOverrideCheckin ? `<label class="sub">Status <select data-reg-status="${escapeHtml(r.eventId)}" data-prev-status="${escapeHtml(r.status)}" aria-label="Status ändern">${STATUS_ORDER.map((st) => `<option value="${st}" ${st === r.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[st])}</option>`).join('')}</select></label>` : ''}
-              ${editableFields.length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
+              ${editableFields.length || eventFlagsOf(r.eventId).length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
             </div>
             <div class="member-registration-edit" data-reg-edit-panel="${escapeHtml(r.eventId)}" hidden>
               <p class="sub">${r.waiverAcceptedAt ? `Einverständnis erteilt am ${escapeHtml(new Date(r.waiverAcceptedAt).toLocaleString('de-DE'))} (Version ${escapeHtml(r.waiverVersionAccepted)})` : 'Kein Einverständnis hinterlegt.'}</p>
+              ${renderFlagCards(allEvents.find((e) => e.id === r.eventId), r.flags ?? [])}
               ${editableFields.map((field) => renderAccountFieldInput(field, r.fields?.[field.key], { idPrefix: `reg-${r.eventId}-` })).join('')}
               <div class="settings-actions"><button type="button" data-reg-save="${escapeHtml(r.eventId)}">Anmeldedaten speichern</button></div>
             </div>
@@ -826,6 +829,7 @@
         const panel = detailRegistrations.querySelector(`[data-reg-edit-panel="${b.dataset.regEdit}"]`);
         panel.hidden = !panel.hidden;
       }));
+      bindFlagCards(detailRegistrations);
       detailRegistrations.querySelectorAll('[data-reg-save]').forEach((b) => b.addEventListener('click', async () => {
         const eventId = b.dataset.regSave;
         const registration = registered.find((r) => r.eventId === eventId);
@@ -836,6 +840,13 @@
         for (const field of editableFields) {
           const original = registration?.fields?.[field.key] ?? (field.type === 'boolean' ? false : '');
           if (!otFieldValuesEqual(field, original, collected[field.key])) payload[field.key] = collected[field.key];
+        }
+        // Only flags the event still defines have a checkbox; keep orphaned ones untouched.
+        const eventFlags = eventFlagsOf(eventId);
+        const oldFlags = (registration?.flags ?? []).filter((f) => eventFlags.includes(f));
+        const newFlags = collectFlagCards(panel);
+        if (oldFlags.length !== newFlags.length || oldFlags.some((f) => !newFlags.includes(f))) {
+          payload.flags = [...(registration?.flags ?? []).filter((f) => !eventFlags.includes(f)), ...newFlags];
         }
         if (Object.keys(payload).length === 0) {
           panel.hidden = true;

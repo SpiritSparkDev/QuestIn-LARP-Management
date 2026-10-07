@@ -1,4 +1,14 @@
 import { query } from '../db.js';
+import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
+import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
+
+// The admin group may edit every field (also ones added after its list was last saved);
+// every other group gets exactly its stored list.
+export async function effectiveAccountFields(groupKey, stored) {
+  if (groupKey !== 'admin') return stored;
+  const [account, registration] = await Promise.all([getAccountFieldSchema(), getRegistrationFieldSchema()]);
+  return ['group', ...account.map((f) => f.key), ...registration.map((f) => f.key)];
+}
 
 const SELECT_COLUMNS = 'id, key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive, is_protected';
 

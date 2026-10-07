@@ -52,13 +52,13 @@ export async function listMembers(includeDeactivated = false) {
   // Each member's event registrations (event + status only), so the list can
   // be filtered by registration without a request per member.
   const { rows: registrationRows } = await query(
-    'SELECT user_id, event_id, status, con_payer, con_role FROM registrations WHERE user_id = ANY($1::uuid[])',
+    'SELECT user_id, event_id, status, con_payer, con_role, flags FROM registrations WHERE user_id = ANY($1::uuid[])',
     [members.map((m) => m.id)]
   );
   const byUser = new Map();
   for (const r of registrationRows) {
     if (!byUser.has(r.user_id)) byUser.set(r.user_id, []);
-    byUser.get(r.user_id).push({ eventId: r.event_id, status: r.status, conPayer: r.con_payer, conRole: r.con_role });
+    byUser.get(r.user_id).push({ eventId: r.event_id, status: r.status, conPayer: r.con_payer, conRole: r.con_role, flags: r.flags });
   }
   return members.map((m) => ({ ...m, registrations: byUser.get(m.id) ?? [] }));
 }
@@ -85,7 +85,7 @@ export async function getMember(id) {
   );
   member.characters = characterRows.map((r) => ({ id: r.id, name: r.name, nscData: r.nsc_data, eventId: r.event_id, eventName: r.event_name }));
   const { rows: registrationRows } = await query(
-    `SELECT r.event_id, r.status, r.con_role, r.extras, r.waiver_version_accepted, r.waiver_accepted_at, r.registration_data_enc, r.nsc_data AS reg_nsc_data, c.nsc_data AS char_nsc_data, c.name AS character_name
+    `SELECT r.event_id, r.status, r.con_role, r.flags, r.extras, r.waiver_version_accepted, r.waiver_accepted_at, r.registration_data_enc, r.nsc_data AS reg_nsc_data, c.nsc_data AS char_nsc_data, c.name AS character_name
      FROM registrations r LEFT JOIN characters c ON c.id = r.character_id WHERE r.user_id = $1`,
     [id]
   );
@@ -93,6 +93,7 @@ export async function getMember(id) {
     eventId: r.event_id,
     status: r.status,
     conRole: r.con_role,
+    flags: r.flags ?? [],
     characterName: r.character_name,
     nscData: r.char_nsc_data ?? r.reg_nsc_data,
     extras: r.extras,
