@@ -4942,3 +4942,55 @@ textarea.mail-source {
 .price-table .price-table-tag { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 999px; background: var(--primary-container); font-size: 0.72rem; font-weight: 600; }
 .price-table .is-current { background: var(--primary-container); box-shadow: inset 0 -3px 0 var(--primary); }
 
+
+/* ---------- Offline mode chip + Datenabgleich ---------- */
+.mode-chip {
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  z-index: 55;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  color: #fff;
+  background: #2e7d32;
+  cursor: default;
+}
+.mode-chip[href] { cursor: pointer; }
+.mode-chip .material-symbols-outlined { font-size: 18px; }
+.has-testmode-banner .mode-chip { top: 42px; }
+.mode-chip-inline { position: static; flex-shrink: 0; }
+.standalone-bar a.mode-chip { color: #fff; }
+.mode-chip-offline { background: #c62828; }
+.mode-chip-pending,
+.standalone-bar a.mode-chip-pending { background: #f9c74f; color: #3a2b00; }
+.mode-chip-conflicts { background: #c62828; animation: mode-pulse 1.4s ease-in-out infinite; }
+@keyframes mode-pulse { 50% { box-shadow: 0 0 0 6px rgba(198, 40, 40, 0.3); } }
+@media (prefers-reduced-motion: reduce) { .mode-chip-conflicts { animation: none; } }
+@media (max-width: 900px) { .mode-chip:not(.mode-chip-inline) { top: 8px; right: 8px; max-width: calc(100vw - 72px); } }
+dialog.mode-dialog { width: min(92vw, 520px); }
+dialog.mode-dialog label { display: block; margin: 10px 0; }
+dialog.mode-dialog input[type="password"], dialog.mode-dialog input[type="url"], dialog.mode-dialog select { width: 100%; box-sizing: border-box; }
+.mode-error { color: var(--error); font-weight: 600; }
+
+.sync-banner { padding: 12px 16px; margin-bottom: 16px; border-radius: 8px; background: var(--gold-container); color: var(--on-gold-container); border: 1px solid var(--outline-variant); }
+.sync-banner .dialog-actions { margin-top: 10px; }
+.sync-conflict { padding: 16px; border-bottom: 1px solid var(--outline-variant); }
+.sync-conflict:last-child { border-bottom: 0; }
+.sync-conflict h3 { margin: 0 0 8px; }
+.sync-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 700px) { .sync-sides { grid-template-columns: 1fr; } }
+.sync-side { background: var(--surface-container-low); border-radius: 8px; padding: 10px; overflow-x: auto; }
+.sync-side h4 { margin: 0 0 6px; }
+.sync-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font-size: 13px; }
+.sync-kv dt { color: var(--on-surface-variant); }
+.sync-kv dd { margin: 0; word-break: break-word; }
+.sync-kv .differs { background: #fff2a8; color: #3a2b00; font-weight: 700; border-radius: 3px; padding: 0 3px; }
+.sync-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.sync-actions input[type="text"] { flex: 1; min-width: 160px; }

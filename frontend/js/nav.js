@@ -2,6 +2,7 @@ import { escapeHtml } from './formFields.js';
 import { APP_VERSION } from './version.js';
 import { initResponsiveTables } from './responsiveTables.js';
 import { api } from './api.js';
+import { updateModeChip } from './offlineSwitch.js';
 
 // Every page that renders the sidebar also gets the narrow-screen table
 // labelling -- nav.js is the one module they all share.
@@ -32,6 +33,7 @@ const ADMIN_ONLY_LINKS = [
   { label: 'Rollen', href: '/admin/groups.html', icon: 'groups' },
   { label: 'Charakterschema', href: '/admin/character-schema.html', icon: 'badge' },
   { label: 'E-Mail-Vorlagen', href: '/admin/email-templates.html', icon: 'mail' },
+  { label: 'Datenabgleich', href: '/admin/sync.html', icon: 'sync_alt' },
   { label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' },
   { label: 'Protokoll', href: '/admin/audit.html', icon: 'history' },
 ];
@@ -157,6 +159,7 @@ document.addEventListener('click', (event) => {
 
 export function renderNavLinks(account, currentPath, { accountIncomplete = false } = {}) {
   showTestModeBanner(account);
+  updateModeChip(account);
   // Add-on entries (item.flag) also need the add-on switched on; admins see
   // every enabled add-on without needing its menu key.
   const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]) && (!item.groupMenu || (groupMenuEnabled() || account.groupMemberOnly)));
