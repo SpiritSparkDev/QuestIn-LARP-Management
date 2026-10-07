@@ -7,136 +7,30 @@
 <link rel="stylesheet" href="/css/fonts.css">
 <link rel="stylesheet" href="/css/sahara.css">
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+<style>
+  /* The registration itself is the embeddable widget (widget.js) -- here it just wears the app's colours. */
+  #ticket-widget { --pk-accent: var(--primary); --pk-radius: 8px; }
+</style>
 </head>
 <body>
 <div class="shell">
   <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
-  <div class="folio folio--narrow">
-    <h1 class="text-center" id="event-title">Ticket sichern</h1>
-    <p class="sub text-center" id="event-date"></p>
-    <p id="message"></p>
-    <form id="ticket-form" style="display:none;">
-      <input id="firstName" name="firstName" type="text" required>
-      <label for="firstName">Vorname</label>
-      <input id="lastName" name="lastName" type="text" required>
-      <label for="lastName">Nachname</label>
-      <input id="nickname" name="nickname" type="text">
-      <label for="nickname">Rufname</label>
-      <input id="email" name="email" type="email" required>
-      <label for="email">E-Mail</label>
-      <div id="price-group-wrap" style="display:none;">
-        <select id="priceGroup" name="priceGroup"></select>
-        <label for="priceGroup">Teilnahmegruppe</label>
-      </div>
-      <div id="account-fields-wrap" style="display:none;">
-        <h3>Persönliche Angaben</h3>
-        <div id="account-fields"></div>
-      </div>
-      <div id="registration-fields-wrap" style="display:none;">
-        <h3>Angaben zur Anmeldung</h3>
-        <div id="registration-fields"></div>
-      </div>
-      <label><input type="checkbox" id="conPayer" name="conPayer"> Con-Zahler: Ich bezahle erst vor Ort beim Check-In. Das Ticket wird trotzdem ausgestellt und als „Con-Zahler“ gekennzeichnet.</label>
-      <div id="waiver-wrap" style="display:none;">
-        <div class="sub" id="waiver-text-display"></div>
-        <label><input type="checkbox" id="waiverAccepted" name="waiverAccepted"> Ich habe die AGB und die Einverständniserklärung gelesen und stimme zu.</label>
-      </div>
-      <button type="submit">Ticket sichern</button>
-    </form>
+  <div class="folio folio--narrow" style="max-width:600px;">
+    <h1 class="text-center">Ticket sichern</h1>
+    <div id="ticket-widget"></div>
   </div>
 </div>
 <script type="module">
-import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
-import { escapeHtml, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, attachLiveValidation } from '/js/formFields.js';
-import { renderRichText } from '/js/richText.js';
 applyBranding();
-import { notify } from '/js/notifications.js';
 
 const code = new URLSearchParams(window.location.search).get('event');
-const messageEl = document.getElementById('message');
-const form = document.getElementById('ticket-form');
-const priceGroupWrap = document.getElementById('price-group-wrap');
-const priceGroupSelect = document.getElementById('priceGroup');
-const waiverWrap = document.getElementById('waiver-wrap');
-const waiverTextDisplay = document.getElementById('waiver-text-display');
-const waiverCheckbox = document.getElementById('waiverAccepted');
-
-if (!code) {
-  messageEl.textContent = 'Kein Event angegeben.';
-  messageEl.className = 'error';
-} else {
-  let event;
-  try {
-    event = await api.get(`/public/events/${encodeURIComponent(code)}`);
-  } catch (err) {
-    messageEl.textContent = err.status === 404 ? 'Dieses Event wurde nicht gefunden.' : err.message;
-    messageEl.className = 'error';
-  }
-  if (event) {
-    document.getElementById('event-title').textContent = event.name;
-    document.getElementById('event-date').textContent = event.eventDate;
-    if (event.priceGroups.length > 0) {
-      priceGroupWrap.style.display = '';
-      priceGroupSelect.innerHTML = event.priceGroups.map((g) => {
-        const priceCents = event.prices[g];
-        const priceLabel = Number.isInteger(priceCents) ? ` (${(priceCents / 100).toFixed(2)} €)` : '';
-        return `<option value="${escapeHtml(g)}">${escapeHtml(g)}${priceLabel}</option>`;
-      }).join('');
-    }
-    const accountContainer = document.getElementById('account-fields');
-    const registrationContainer = document.getElementById('registration-fields');
-    const renderFields = (container, wrap, fields, idPrefix) => {
-      if (fields.length === 0) return;
-      container.innerHTML = fields.map((f) => renderAccountFieldInput(f, undefined, { idPrefix })).join('');
-      wrap.style.display = '';
-    };
-    renderFields(accountContainer, document.getElementById('account-fields-wrap'), event.accountFields, 'guest-account-');
-    renderFields(registrationContainer, document.getElementById('registration-fields-wrap'), event.registrationFields, 'guest-reg-');
-
-    const { waiverText } = await api.get('/app-settings');
-    if (waiverText) {
-      waiverTextDisplay.innerHTML = renderRichText(waiverText);
-      waiverWrap.style.display = '';
-      waiverCheckbox.required = true;
-    }
-
-    attachLiveValidation(form);
-    form.style.display = '';
-
-    form.addEventListener('submit', async (evt) => {
-      evt.preventDefault();
-      const submitButton = form.querySelector('button[type="submit"]');
-      submitButton.disabled = true;
-      const formData = new FormData(form);
-      const data = Object.fromEntries(formData);
-      if (!data.priceGroup) delete data.priceGroup;
-      data.waiverAccepted = formData.has('waiverAccepted');
-      data.conPayer = formData.has('conPayer');
-      data.accountData = nullifyBlankNumberFields(event.accountFields, collectAccountFieldValues(accountContainer, event.accountFields));
-      data.registrationData = nullifyBlankNumberFields(event.registrationFields, collectAccountFieldValues(registrationContainer, event.registrationFields));
-      try {
-        const result = await api.post(`/public/events/${event.id}/guest-registration`, data);
-        if (result.paymentUrl) {
-          window.location.href = result.paymentUrl;
-        } else {
-          form.style.display = 'none';
-          messageEl.textContent = 'Dein Ticket ist gesichert! Du erhältst eine Bestätigung per E-Mail.';
-          messageEl.className = 'success';
-          if (result.ticketUrl) {
-            const link = document.createElement('a');
-            link.href = result.ticketUrl;
-            link.textContent = ' Ticket anzeigen';
-            messageEl.append(link);
-          }
-        }
-      } catch (err) {
-        notify(err.message, 'error');
-        submitButton.disabled = false;
-      }
-    });
-  }
-}
+const mount = document.getElementById('ticket-widget');
+if (code) mount.dataset.event = code;
+mount.dataset.pakyrion = 'ticket';
+const script = document.createElement('script');
+script.src = '/widget.js';
+document.body.append(script);
 </script>
 </body>
 </html>
