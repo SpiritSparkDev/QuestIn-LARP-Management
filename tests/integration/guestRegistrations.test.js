@@ -436,6 +436,19 @@ test('ticket widget endpoints are blocked while coming-soon is enabled', async (
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(guestPayload()),
       });
       assert.equal(reg.status, 409);
+
+      // The list stays visible (login page), and an admin can still run the whole flow to test it.
+      assert.equal((await fetch(`http://localhost:${port}/public/events`)).status, 200);
+      const { rows: adminRows } = await query(
+        "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Lock', 'Admin', (SELECT id FROM groups WHERE key = 'admin'), true) RETURNING id",
+        [`guest-reg-admin-${crypto.randomUUID()}@example.com`]);
+      const { createSession } = await import('../../backend/auth/sessions.js');
+      const cookie = `session=${(await createSession(adminRows[0].id)).token}`;
+      assert.equal((await fetch(`http://localhost:${port}/public/events/${eventCode}`, { headers: { Cookie: cookie } })).status, 200);
+      const adminReg = await fetch(`http://localhost:${port}/public/events/${eventId}/guest-registration`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(guestPayload()),
+      });
+      assert.equal(adminReg.status, 201);
     });
   } finally {
     await query('DELETE FROM app_settings');

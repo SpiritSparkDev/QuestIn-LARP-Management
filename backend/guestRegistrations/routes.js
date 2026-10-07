@@ -23,6 +23,8 @@ import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { createCharacter } from '../characters/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
+import { parseCookies, SESSION_COOKIE_NAME } from '../auth/cookies.js';
+import { getSession } from '../auth/sessions.js';
 
 const GUEST_REGISTER_RATE_LIMIT = { keyPrefix: 'guest-register', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 const PAYMENT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -59,17 +61,28 @@ function pickFields(schema, values) {
   return picked;
 }
 
+// While the "coming soon" lock is on, only a logged-in admin may use the guest
+// flow -- so it can be tried out end to end before the launch.
+async function lockedFor(req) {
+  if (!(await getAppSettings()).comingSoonEnabled) return false;
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE_NAME];
+  const session = token ? await getSession(token) : null;
+  if (!session) return true;
+  const { rows } = await query('SELECT groups.key FROM users JOIN groups ON groups.id = users.group_id WHERE users.id = $1', [session.userId]);
+  return rows[0]?.key !== 'admin';
+}
+
 // Open events a guest can book (login page: "Ohne Konto").
+// Listed even during the lock, so the login page can already show the guest option.
 router.get('/public/events', async () => {
-  if ((await getAppSettings()).comingSoonEnabled) return COMING_SOON_ERROR;
   // `ref` is what the widget page takes as ?event=: the QR-Kennung if there is one, else the event id.
   const events = (await listEvents()).filter((e) => e.is_active);
   return { status: 200, body: events.map((e) => ({ ref: e.code || e.id, name: e.name, eventDate: e.event_date })) };
 });
 
-router.get('/public/events/:code', async ({ params }) => {
-  const { comingSoonEnabled, waiverText } = await getAppSettings();
-  if (comingSoonEnabled) return COMING_SOON_ERROR;
+router.get('/public/events/:code', async ({ req, params }) => {
+  if (await lockedFor(req)) return COMING_SOON_ERROR;
+  const { waiverText } = await getAppSettings();
   // The router matches raw, still-percent-encoded path segments (see
   // Router.match in backend/router.js), so a code containing "/" -- the
   // exact format the admin UI suggests, e.g. "P17/2027" -- arrives here as
@@ -103,7 +116,7 @@ router.get('/public/events/:code', async ({ params }) => {
 });
 
 router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGISTER_RATE_LIMIT)(async ({ req, params }) => {
-  if ((await getAppSettings()).comingSoonEnabled) return COMING_SOON_ERROR;
+  if (await lockedFor(req)) return COMING_SOON_ERROR;
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { firstName, lastName, nickname, priceGroup, waiverAccepted, accountData, registrationData, character } = body;
