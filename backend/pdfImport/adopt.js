@@ -110,7 +110,7 @@ export async function adoptImport(mapped, { eventId, actingUser }) {
         mapped.registration ?? {}, actingUser, mapped.meta?.waiver === true, { pdfImport: true },
       );
     } catch (err) {
-      if (err.code === 'ALREADY_REGISTERED') throw adoptionError('Dieser Gast ist für das Event bereits angemeldet.', 'ALREADY_REGISTERED');
+      if (err.code === 'ALREADY_REGISTERED') throw adoptionError('Diese Direktanmeldung ist für das Event bereits angemeldet.', 'ALREADY_REGISTERED');
       if (err.code === 'WAIVER_NOT_ACCEPTED') {
         throw adoptionError('Die Einverständniserklärung ist im PDF nicht bestätigt (Feld „Einverständnis akzeptiert“ zuordnen).', 'WAIVER_NOT_ACCEPTED');
       }

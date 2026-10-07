@@ -72,7 +72,7 @@ async function buildExportText(userId) {
   lines.push(`Vorname: ${formatValue(account.firstName)}`);
   lines.push(`Nachname: ${formatValue(account.lastName)}`);
   lines.push(`Rufname: ${formatValue(account.nickname)}`);
-  lines.push(`Gruppe: ${account.group?.name ?? '–'}`);
+  lines.push(`Rolle: ${account.group?.name ?? '–'}`);
   lines.push(`E-Mail bestätigt: ${formatValue(account.emailVerified)}`);
   lines.push(formatSchemaFields(accountSchema, account));
   if (oauthRows.length > 0) {

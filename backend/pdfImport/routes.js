@@ -93,7 +93,7 @@ async function tryAdopt(record, eventId, user) {
     if (!known.includes(err.code)) {
       logger.error('pdf import: adoption failed', { error: err.message });
     }
-    await markPdfImportAdopted(record.id, { eventId, error: known.includes(err.code) ? err.message : 'Unerwarteter Fehler beim Anlegen des Gast-Kontos.' });
+    await markPdfImportAdopted(record.id, { eventId, error: known.includes(err.code) ? err.message : 'Unerwarteter Fehler beim Anlegen der Direktanmeldung.' });
     return { adopted: false, reason: err.message };
   }
 }
@@ -255,7 +255,7 @@ router.post('/pdf-import/submissions/:id/adopt', requireAddon(async ({ req, para
   const body = (await readJsonBody(req)) ?? {};
   const record = await getPdfImport(params.id);
   if (!record) return { status: 404, body: { error: 'import not found' } };
-  if (record.adoptedAt) return { status: 409, body: { error: 'Dieser Import wurde bereits als Gast-Konto übernommen.' } };
+  if (record.adoptedAt) return { status: 409, body: { error: 'Dieser Import wurde bereits als Direktanmeldung übernommen.' } };
   if (typeof body.eventId !== 'string' || !(await getEvent(body.eventId))) {
     return { status: 400, body: { error: 'eventId must be an existing event' } };
   }

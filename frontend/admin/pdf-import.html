@@ -64,7 +64,7 @@
         <input type="file" id="pdf-files" accept="application/pdf" multiple>
         <label for="pdf-files">Ausgefüllte Anmelde-PDFs</label>
         <select id="upload-event"></select>
-        <label for="upload-event">Als Gast-Konto anlegen und für dieses Event anmelden <span style="opacity:0.6;font-size:12px;">Gast-Konten können sich nicht einloggen und lassen sich später unter Mitglieder in ein volles Konto umwandeln.</span></label>
+        <label for="upload-event">Als Direktanmeldung anlegen und für dieses Event anmelden <span style="opacity:0.6;font-size:12px;">Direktanmeldungen können sich nicht einloggen und lassen sich später unter Mitglieder in ein volles Konto umwandeln.</span></label>
         <label id="send-email-wrap" hidden><input type="checkbox" id="send-email"> Eingangsbestätigung an die E-Mail-Adresse im PDF senden</label>
         <div class="event-form-actions">
           <button type="button" id="upload-pdfs">Einlesen</button>
@@ -75,7 +75,7 @@
       <div class="card">
         <div class="table-scroll">
           <table id="import-list">
-            <thead><tr><th>Eingegangen</th><th>Name</th><th>E-Mail</th><th>Datei</th><th>Gast-Konto</th><th>Bestätigung</th><th></th></tr></thead>
+            <thead><tr><th>Eingegangen</th><th>Name</th><th>E-Mail</th><th>Datei</th><th>Direktanmeldung</th><th>Bestätigung</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -87,8 +87,8 @@
       <div id="import-dialog-body"></div>
       <div id="import-adopt-wrap" hidden>
         <select id="import-adopt-event"></select>
-        <label for="import-adopt-event">Event für das Gast-Konto</label>
-        <button type="button" id="import-adopt">Als Gast-Konto übernehmen</button>
+        <label for="import-adopt-event">Event für die Direktanmeldung</label>
+        <button type="button" id="import-adopt">Als Direktanmeldung übernehmen</button>
       </div>
       <button type="button" id="import-send-email" class="btn-ghost">Bestätigung senden</button>
       <button type="button" id="import-delete" class="btn-danger">Löschen</button>
@@ -274,7 +274,7 @@ document.getElementById('upload-pdfs').addEventListener('click', async () => {
   for (const file of input.files) {
     try {
       const { email, adoption } = await api.post('/pdf-import/submissions', { filename: file.name, dataBase64: await fileToBase64(file), sendEmail, eventId });
-      const adoptNote = eventId ? (adoption.adopted ? ' – Gast-Konto angelegt' : ` – Gast-Konto NICHT angelegt (${adoption.reason})`) : '';
+      const adoptNote = eventId ? (adoption.adopted ? ' – Direktanmeldung angelegt' : ` – Direktanmeldung NICHT angelegt (${adoption.reason})`) : '';
       const note = adoptNote + (sendEmail ? (email.sent ? ' – Bestätigung gesendet' : ` – keine Bestätigung (${email.reason ?? 'unbekannt'})`) : '');
       results.insertAdjacentHTML('beforeend', `<li>✓ ${escapeHtml(file.name)}${escapeHtml(note)}</li>`);
     } catch (err) {
@@ -339,7 +339,7 @@ async function openImport(id) {
     <details><summary>Alle PDF-Rohwerte</summary><dl class="confirm-list">${rawHtml}</dl></details>`;
   document.getElementById('import-send-email').hidden = !record.mapped.sender?.email;
   if (record.adoptError) {
-    document.getElementById('import-dialog-body').insertAdjacentHTML('afterbegin', `<p class="error">Gast-Konto nicht angelegt: ${escapeHtml(record.adoptError)}</p>`);
+    document.getElementById('import-dialog-body').insertAdjacentHTML('afterbegin', `<p class="error">Direktanmeldung nicht angelegt: ${escapeHtml(record.adoptError)}</p>`);
   }
   document.getElementById('import-adopt-wrap').hidden = Boolean(record.adoptedAt);
   document.getElementById('import-adopt-event').innerHTML = eventOptions(record.eventId);
@@ -351,7 +351,7 @@ document.getElementById('import-adopt').addEventListener('click', async () => {
   if (!eventId) { notify('Bitte ein Event wählen.', 'error'); return; }
   try {
     await api.post(`/pdf-import/submissions/${currentImportId}/adopt`, { eventId });
-    notify('Gast-Konto angelegt und angemeldet.', 'success');
+    notify('Direktanmeldung angelegt und angemeldet.', 'success');
     document.getElementById('import-dialog').close();
   } catch (err) {
     notify(err.message, 'error');
@@ -405,7 +405,7 @@ try {
     setTemplateCardOpen(Object.keys(config.mapping).length === 0);
     events = await api.get('/events');
     const active = events.find((e) => e.is_active);
-    document.getElementById('upload-event').innerHTML = '<option value="">Nur speichern, kein Gast-Konto anlegen</option>' + eventOptions(active?.id);
+    document.getElementById('upload-event').innerHTML = '<option value="">Nur speichern, keine Direktanmeldung anlegen</option>' + eventOptions(active?.id);
     await loadImports();
   }
 } catch (err) {

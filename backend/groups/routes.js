@@ -84,7 +84,7 @@ router.delete('/groups/:id', requireAuth(requireAdminGroup(async ({ params }) =>
     await deleteGroup(params.id);
   } catch (err) {
     if (err.code === '23503') {
-      return { status: 409, body: { error: 'Gruppe wird noch von Mitgliedern verwendet und kann nicht gelöscht werden.' } };
+      return { status: 409, body: { error: 'Rolle wird noch von Mitgliedern verwendet und kann nicht gelöscht werden.' } };
     }
     throw err;
   }

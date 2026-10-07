@@ -39,18 +39,18 @@
           <button type="button" class="toggle-btn" data-view="deactivated">Deaktivierte Mitglieder</button>
         </div>
         <div class="card" style="margin-top:16px;">
-          <div class="toolbar"><input class="search" id="member-search" placeholder="Suche nach Name, E-Mail oder Gruppe …"></div>
+          <div class="toolbar"><input class="search" id="member-search" placeholder="Suche nach Name, E-Mail oder Rolle …"></div>
           <div class="member-filters">
             <div>
               <select id="member-filter-group"></select>
-              <label for="member-filter-group">Gruppe</label>
+              <label for="member-filter-group">Rolle</label>
             </div>
             <div>
               <select id="member-filter-kind">
                 <option value="">Alle Konten</option>
                 <option value="full">Vollkonten</option>
                 <option value="managed">Verwaltete Personen</option>
-                <option value="guest">Gäste</option>
+                <option value="guest">Direktanmeldungen</option>
                 <option value="invited">Eingeladen</option>
                 <option value="discord">Mit Discord</option>
                 <option value="no-discord">Ohne Discord</option>
@@ -90,7 +90,7 @@
               <tr>
                 <th data-sort="name">Name</th>
                 <th data-sort="email">E-Mail</th>
-                <th data-sort="group">Gruppe</th>
+                <th data-sort="group">Rolle</th>
                 <th data-sort="status">Status</th>
                 <th></th>
               </tr>
@@ -110,7 +110,7 @@
           <div class="tab-panel" id="detail-tab-konto">
             <div id="detail-group-wrap" style="display:none;">
               <select id="detail-group" name="group"></select>
-              <label for="detail-group">Gruppe</label>
+              <label for="detail-group">Rolle</label>
             </div>
             <div id="detail-fields"></div>
             <div class="save-bar"><button type="button" id="detail-save">Konto speichern</button></div>
@@ -155,7 +155,7 @@
             </div>
             <div id="invite-group-wrap" style="display:none;">
               <select id="invite-group" name="group" disabled></select>
-              <label for="invite-group">Gruppe</label>
+              <label for="invite-group">Rolle</label>
             </div>
             <div id="invite-fields"></div>
             <label for="invite-send-email"><input id="invite-send-email" name="sendEmail" type="checkbox" checked> Per
@@ -209,7 +209,7 @@
     let currentSearch = '';
 
     // ---- Filter, search and sort (all client-side on the loaded list) ----
-    const SORT_LABELS = { name: 'Name', email: 'E-Mail', group: 'Gruppe', status: 'Status' };
+    const SORT_LABELS = { name: 'Name', email: 'E-Mail', group: 'Rolle', status: 'Status' };
     const STATUS_RANK = { active: 0, invited: 1, deactivated: 2 };
     const PREFS_KEY = 'memberListPrefs';
     let viewMembers = [];
@@ -239,7 +239,7 @@
     function refreshGroupFilterOptions() {
       const groups = [...new Set(viewMembers.map((m) => m.group?.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
       if (prefs.group && !groups.includes(prefs.group)) prefs.group = '';
-      groupFilter.innerHTML = `<option value="">Alle Gruppen</option>${groups.map((g) => `<option value="${escapeHtml(g)}"${g === prefs.group ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('')}`;
+      groupFilter.innerHTML = `<option value="">Alle Rollen</option>${groups.map((g) => `<option value="${escapeHtml(g)}"${g === prefs.group ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('')}`;
       kindFilter.value = prefs.kind;
       refreshEventFilter();
       sortSelect.value = `${prefs.sort}:${prefs.dir}`;
@@ -519,7 +519,7 @@
           : '';
         const guestBadge = m.managedBy
           ? ` <span class="badge badge-inactive" title="Wird von ${escapeHtml(m.managedBy.name)} verwaltet">Verwaltet von ${escapeHtml(m.managedBy.name)}</span>`
-          : (m.isGuest ? ` <span class="badge badge-inactive">Gast</span>` : '');
+          : (m.isGuest ? ` <span class="badge badge-inactive">Direktanmeldung</span>` : '');
         // A managed person without an e-mail can't be sent a link; their manager converts them.
         const conversionLinkBtn = m.isGuest && m.email
           ? `<button type="button" class="btn-sm btn-ghost" data-generate-conversion-link="${m.id}">Konvertierungslink erzeugen</button>`

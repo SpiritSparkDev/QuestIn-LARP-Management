@@ -29,7 +29,7 @@ const MENU_LINKS = [
 ];
 
 const ADMIN_ONLY_LINKS = [
-  { label: 'Gruppen', href: '/admin/groups.html', icon: 'groups' },
+  { label: 'Rollen', href: '/admin/groups.html', icon: 'groups' },
   { label: 'Charakterschema', href: '/admin/character-schema.html', icon: 'badge' },
   { label: 'E-Mail-Vorlagen', href: '/admin/email-templates.html', icon: 'mail' },
   { label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' },
