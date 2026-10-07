@@ -605,6 +605,17 @@
       const value = collectAccountFieldValues(registrationPriceGroupContainer, [priceGroupFieldFor(events.find((e) => e.id === eventSelect.value))]).priceGroup;
       return value || undefined;
     }
+
+    // A Teilnahmegruppe marked "Con-Zahler" by the orga makes the registration a Con-Zahler one.
+    function syncConPayerWithGroup() {
+      const event = events.find((e) => e.id === eventSelect.value);
+      const group = collectRegistrationPriceGroup();
+      const box = document.getElementById("registration-conpayer-checkbox");
+      const forced = Boolean(group) && (event?.pricing?.conPayerGroups ?? []).includes(group);
+      if (forced) box.checked = true;
+      box.disabled = forced;
+    }
+    registrationPriceGroupContainer.addEventListener("change", syncConPayerWithGroup);
     const registrationExtrasContainer = document.getElementById("registration-extras");
     function renderRegistrationExtras() {
       const extras = events.find((e) => e.id === eventSelect.value)?.extras ?? [];

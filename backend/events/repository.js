@@ -55,7 +55,9 @@ function normalizePricing(pricing) {
     const bUntil = b.until ?? '9999-99-99';
     return aUntil < bUntil ? -1 : aUntil > bUntil ? 1 : 0;
   });
-  return { groups, tiers: normalizedTiers };
+  // Groups whose people pay at the con ("Con-Zahler"): the registration is marked automatically.
+  const conPayerGroups = Array.isArray(pricing?.conPayerGroups) ? groups.filter((g) => pricing.conPayerGroups.includes(g)) : [];
+  return { groups, tiers: normalizedTiers, conPayerGroups };
 }
 
 // Keeps an extra's id when it has one (registrations refer to it), otherwise

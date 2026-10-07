@@ -91,7 +91,7 @@ router.get('/public/events/:code', async ({ params }) => {
   return {
     status: 200,
     body: {
-      id: event.id, name: event.name, eventDate: event.event_date, priceGroups: groups, prices,
+      id: event.id, name: event.name, eventDate: event.event_date, priceGroups: groups, prices, conPayerGroups: event.pricing?.conPayerGroups ?? [],
       accountFields: await guestAccountSchema(),
       registrationFields: await getRegistrationFieldSchema(),
       scFields: await guestCharacterSchema('sc'),
@@ -112,7 +112,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   const characterName = typeof character?.name === 'string' ? character.name.trim() : '';
   const emptyCharacter = character?.empty === true;
   if (conRole === 'sc' && !characterName && !emptyCharacter) return { status: 400, body: { error: 'Bitte gib einen Charakternamen an.' } };
-  const conPayer = body.conPayer === true;
+  const wantsConPayer = body.conPayer === true;
   const email = body.email?.toLowerCase();
   if (!email || !firstName || !lastName) {
     return { status: 400, body: { error: 'email, firstName, and lastName are required' } };
@@ -158,7 +158,7 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
         : await createCharacter(userId, { characterClass: conRole, name: characterName || nickname || firstName, data: characterData });
       createdCharacterId = created.id;
     }
-    await registerForEvent(userId, params.eventId, conRole, createdCharacterId, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { conPayer });
+    await registerForEvent(userId, params.eventId, conRole, createdCharacterId, false, null, [], priceGroup, registrationData ?? {}, requestingUser, waiverAccepted, { conPayer: wantsConPayer });
   } catch (err) {
     // Only clean up the guest row if THIS request created it -- an existing
     // guest reusing their email for a second event must never be deleted
@@ -197,10 +197,12 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
   }
 
   const { rows: amountRows } = await query(
-    'SELECT amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2',
+    'SELECT amount_due_cents, con_payer FROM registrations WHERE event_id = $1 AND user_id = $2',
     [params.eventId, userId]
   );
   const amountDueCents = amountRows[0]?.amount_due_cents ?? null;
+  // Also true when the chosen Teilnahmegruppe is a Con-Zahler group.
+  const conPayer = amountRows[0]?.con_payer === true;
 
   const { token } = await setGuestPaymentToken(params.eventId, userId, tokenTtlMs(event));
   const ticketUrl = `/guest-payment.html?token=${token}`;

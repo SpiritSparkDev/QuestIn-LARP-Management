@@ -4679,7 +4679,7 @@ th.is-sortable[data-dir="desc"]::after {
 
 /* ---------- Event form: price groups, tiers, guest widget ---------- */
 
-.price-group-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.price-group-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .extra-row {
   display: grid;
   grid-template-columns: minmax(180px, 2fr) minmax(120px, 1fr) minmax(120px, 1fr) auto;
@@ -4852,3 +4852,4 @@ th.is-sortable[data-dir="desc"]::after {
     padding: 0;
   }
 }
+.price-group-conpayer { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }

@@ -110,6 +110,38 @@ test('unpaid reminders: up to the configured count, one mail per event, Con-Zahl
   assert.equal(admin.userId !== undefined, true);
 });
 
+test('Teilnahmegruppen can be marked Con-Zahler: validated, kept, and applied to the registration', async () => {
+  await withTestServer(async (port) => {
+    const base = `http://localhost:${port}`;
+    const json = (cookie) => ({ 'Content-Type': 'application/json', Cookie: cookie });
+    const admin = await makeUser('admin', 'Gruppen');
+    const carl = await makeUser('mitglied', 'Carl');
+    const dora = await makeUser('mitglied', 'Dora');
+    const pricing = (conPayerGroups) => ({
+      groups: ['Erwachsene', 'Helfer'],
+      conPayerGroups,
+      tiers: [{ name: 'Standard', until: null, amounts: { Erwachsene: 3000, Helfer: 0 } }],
+    });
+    const create = (conPayerGroups) => fetch(`${base}/events`, {
+      method: 'POST', headers: json(admin.cookie),
+      body: JSON.stringify({ name: `${TAG} Gruppen`, eventDate: '2099-08-01', pricing: pricing(conPayerGroups) }),
+    });
+    assert.equal((await create(['Unbekannt'])).status, 400);
+    const res = await create(['Helfer']);
+    assert.equal(res.status, 201);
+    const event = await res.json();
+    assert.deepEqual(event.pricing.conPayerGroups, ['Helfer']);
+    await query('UPDATE events SET is_active = true WHERE id = $1', [event.id]);
+
+    const register = (user, priceGroup) => fetch(`${base}/events/${event.id}/register`, { method: 'POST', headers: json(user.cookie), body: JSON.stringify({ conRole: 'helfer', priceGroup }) });
+    assert.equal((await register(carl, 'Erwachsene')).status, 201);
+    assert.equal((await register(dora, 'Helfer')).status, 201);
+    const conPayerOf = async (user) => (await query('SELECT con_payer FROM registrations WHERE event_id = $1 AND user_id = $2', [event.id, user.userId])).rows[0].con_payer;
+    assert.equal(await conPayerOf(carl), false);
+    assert.equal(await conPayerOf(dora), true);
+  });
+});
+
 test.after(async () => {
   await query("DELETE FROM registrations WHERE event_id IN (SELECT id FROM events WHERE name LIKE $1)", [`${TAG}%`]);
   await query("DELETE FROM payments WHERE event_id IN (SELECT id FROM events WHERE name LIKE $1)", [`${TAG}%`]);

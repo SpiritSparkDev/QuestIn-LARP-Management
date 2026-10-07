@@ -46,6 +46,10 @@ function validatePricing(pricing) {
   if (new Set(trimmedGroups).size !== trimmedGroups.length) {
     return 'pricing.groups must not contain duplicates';
   }
+  if (pricing.conPayerGroups !== undefined
+    && (!Array.isArray(pricing.conPayerGroups) || pricing.conPayerGroups.some((g) => !trimmedGroups.includes(g)))) {
+    return 'pricing.conPayerGroups must be a list of groups from pricing.groups';
+  }
   if (!Array.isArray(tiers)) return 'pricing.tiers must be an array';
   if (tiers.length > 0 && trimmedGroups.length === 0) {
     return 'pricing.tiers requires at least one group in pricing.groups';

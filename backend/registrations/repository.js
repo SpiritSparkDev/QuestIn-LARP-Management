@@ -360,7 +360,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
           waiverAccepted === true ? appSettings.waiverVersion : null,
           waiverAccepted === true ? new Date() : null,
           amountDueCents, JSON.stringify(resolvedExtras), extrasCents, lodging.lodging?.id ?? null, lodging.lodgingCents, lodging.details ? JSON.stringify(lodging.details) : null,
-          conPayer === true, pdfImport === true,
+          conPayer === true || (event.pricing?.conPayerGroups ?? []).includes(resolvedPrice.priceGroup), pdfImport === true,
         ]
       );
       return rows[0];
