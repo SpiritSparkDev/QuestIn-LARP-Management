@@ -4220,10 +4220,13 @@ dialog.member-dialog {
 .member-filter-summary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
   gap: 12px;
   padding-bottom: 18px;
 }
+
+.member-filter-summary .sub { margin-right: auto; }
 
 th.is-sortable {
   cursor: pointer;
