@@ -24,7 +24,7 @@ Konzept und Ablauf: `docs/superpowers/plans/2026-10-07-p7-offline-modus.md`. Die
    ```
    docker compose -f docker-compose.offline.yml up -d --build
    ```
-4. Importieren: `docker compose -f docker-compose.offline.yml exec app npm run offline:import -- /pfad/zur/datei.qpkg` (Datei vorher per `docker cp` in den Container; Passphrase wird abgefragt).
+4. Importieren: `docker compose -f docker-compose.offline.yml exec app npm run offline:import -- /pfad/zur/datei.qpkg` (Datei vorher per `docker cp` in den Container; Passphrase wird abgefragt, alternativ per Env `OFFLINE_PASSPHRASE`).
 5. Prüfen: `https://con.local` im Browser, roter Banner „OFFLINE-VERSION – Stand vom …" muss sichtbar sein.
 
 ## Ablauf
