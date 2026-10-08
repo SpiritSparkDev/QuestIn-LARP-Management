@@ -29,7 +29,8 @@
   </button>
   <div class="main"><div class="content">
     <h1>Backup</h1>
-    <p class="sub">Lade eine verschlüsselte Sicherung der Teilnehmendendaten und/oder der Eventinformationen herunter. Die Datei enthält personenbezogene Daten und ist mit deinem Passwort geschützt – bewahre es getrennt von der Datei auf.</p>
+    <p class="sub">Verschlüsselte Sicherung der Teilnehmendendaten und/oder der Eventinformationen – zum Download, in einen Server-Ordner, auf S3 oder per SFTP, auch mehrere Ziele auf einmal. Die Datei enthält personenbezogene Daten und ist mit deinem Passwort geschützt – bewahre es getrennt von der Datei auf.</p>
+
     <form id="backup-form" class="card form-pad">
       <h2>Neue Sicherung</h2>
       <div class="role-cards" id="backup-scope">
@@ -54,90 +55,71 @@
       </div>
       <input id="backup-passphrase" type="password" minlength="8" autocomplete="new-password" required>
       <label for="backup-passphrase">Passwort für die Datei (mind. 8 Zeichen)</label>
-      <div class="save-bar"><button type="submit" id="backup-submit">Sicherung herunterladen</button></div>
+      <h3>Wohin?</h3>
+      <div class="backup-targets" id="backup-targets">
+        <label><input type="checkbox" value="download" checked> Download im Browser</label>
+        <label><input type="checkbox" value="local"> Server-Ordner</label>
+        <label><input type="checkbox" value="s3"> S3-Speicher</label>
+        <label><input type="checkbox" value="sftp"> SFTP-Server</label>
+      </div>
+      <div class="save-bar"><button type="submit" id="backup-submit">Sicherung erstellen</button></div>
+      <ul id="backup-results" class="backup-results"></ul>
       <p class="sub">Nicht enthalten: Passwort-Hashes, Zugangs-Tokens und die hochgeladenen Dateien selbst. Verschlüsselte Personenfelder bleiben verschlüsselt und sind nur mit dem <code>ENCRYPTION_KEY</code> des Servers lesbar. Die automatische Sicherung der kompletten Datenbank läuft separat im Backup-Dienst des Servers.</p>
     </form>
+
+    <form id="backup-settings" class="card form-pad">
+      <h2>Ziele einrichten</h2>
+      <p class="sub">Zugangsdaten werden verschlüsselt gespeichert. Ein leeres Passwort-Feld behält das gespeicherte. Der Server-Ordner ist <code id="local-dir"></code> (Umgebungsvariable <code>BACKUP_LOCAL_DIR</code>; im Docker-Betrieb dort ein Volume einhängen).</p>
+      <details open>
+        <summary><strong>S3-Speicher</strong></summary>
+        <div class="field-grid">
+          <div><input id="s3-bucket" type="text"><label for="s3-bucket">Bucket</label></div>
+          <div><input id="s3-prefix" type="text" placeholder="questin"><label for="s3-prefix">Ordner im Bucket (optional)</label></div>
+          <div><input id="s3-endpoint" type="text" placeholder="leer = AWS"><label for="s3-endpoint">Endpoint (für S3-kompatible Anbieter)</label></div>
+          <div><input id="s3-region" type="text" placeholder="us-east-1"><label for="s3-region">Region</label></div>
+          <div><input id="s3-accessKeyId" type="text" autocomplete="off"><label for="s3-accessKeyId">Access Key ID</label></div>
+          <div><input id="s3-secretAccessKey" type="password" autocomplete="new-password"><label for="s3-secretAccessKey" id="s3-secret-label">Secret Access Key</label></div>
+        </div>
+        <button type="button" class="btn-ghost" data-test="s3">Verbindung testen</button>
+      </details>
+      <details>
+        <summary><strong>SFTP-Server</strong></summary>
+        <div class="field-grid">
+          <div><input id="sftp-host" type="text"><label for="sftp-host">Server</label></div>
+          <div><input id="sftp-port" type="number" placeholder="22"><label for="sftp-port">Port</label></div>
+          <div><input id="sftp-username" type="text" autocomplete="off"><label for="sftp-username">Benutzer</label></div>
+          <div><input id="sftp-dir" type="text" placeholder="/backups"><label for="sftp-dir">Zielordner</label></div>
+          <div><input id="sftp-password" type="password" autocomplete="new-password"><label for="sftp-password" id="sftp-password-label">Passwort</label></div>
+          <div><textarea id="sftp-privateKey" rows="3" placeholder="Statt Passwort: privater Schlüssel (PEM)"></textarea><label for="sftp-privateKey" id="sftp-key-label">Privater Schlüssel (optional)</label></div>
+        </div>
+        <button type="button" class="btn-ghost" data-test="sftp">Verbindung testen</button>
+      </details>
+      <button type="button" class="btn-ghost" data-test="local">Server-Ordner testen</button>
+      <div class="save-bar"><button type="submit">Einstellungen speichern</button></div>
+    </form>
+
+    <form id="restore-form" class="card form-pad">
+      <h2>Backup einspielen</h2>
+      <p class="sub">Die Daten aus der Datei werden mit dem aktuellen Stand <strong>zusammengeführt</strong>: Fehlendes wird angelegt, Vorhandenes mit dem Stand der Datei überschrieben. Es wird nichts gelöscht. Schlägt etwas fehl, bleibt alles unverändert. Passwörter sind nicht Teil des Backups – neu angelegte Konten setzen ihr Passwort über „Passwort vergessen" neu.</p>
+      <input id="restore-file" type="file" accept=".qbak" required>
+      <label for="restore-file">Backup-Datei (.qbak)</label>
+      <input id="restore-passphrase" type="password" autocomplete="off" required>
+      <label for="restore-passphrase">Passwort der Datei</label>
+      <button type="button" id="restore-inspect" class="btn-ghost">Datei prüfen</button>
+      <div id="restore-info" hidden>
+        <p id="restore-summary" class="sub"></p>
+        <div class="backup-targets" id="restore-parts"></div>
+        <label><input type="checkbox" id="restore-confirm"> Ich weiß, dass vorhandene Daten mit dem Stand der Datei überschrieben werden.</label>
+        <div class="save-bar"><button type="submit" id="restore-submit" disabled>Jetzt einspielen</button></div>
+      </div>
+    </form>
+
     <div class="card form-pad">
-      <h2>Letzte Sicherungen</h2>
-      <div class="table-scroll"><table id="backup-history"><thead><tr><th>Zeitpunkt</th><th>Wer</th><th>Umfang</th></tr></thead><tbody></tbody></table></div>
+      <h2>Letzte Vorgänge</h2>
+      <div class="table-scroll"><table id="backup-history"><thead><tr><th>Zeitpunkt</th><th>Wer</th><th>Vorgang</th></tr></thead><tbody></tbody></table></div>
     </div>
   </div></div>
 </div>
-
-<script type="module">
-import { api } from '/js/api.js';
-import { applyBranding } from '/js/branding.js';
-import { hideLoading } from '/js/loading.js';
-import { escapeHtml } from '/js/formFields.js';
-import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
-import { notify } from '/js/notifications.js';
-applyBranding();
-initSidebarToggle();
-
-const SCOPE_LABELS = { participants: 'Teilnehmende', events: 'Events', all: 'Alles' };
-let scope = 'participants';
-const scopeButtons = [...document.querySelectorAll('#backup-scope .role-card')];
-scopeButtons.forEach((button) => button.addEventListener('click', () => {
-  scope = button.dataset.scope;
-  scopeButtons.forEach((b) => b.classList.toggle('active', b === button));
-}));
-
-async function loadHistory() {
-  const rows = await api.get('/backup/history');
-  document.querySelector('#backup-history tbody').innerHTML = rows.length ? rows.map((r) => `<tr>
-    <td>${escapeHtml(new Date(r.createdAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</td>
-    <td>${escapeHtml(r.actorName ?? '–')}</td>
-    <td>${escapeHtml(SCOPE_LABELS[r.details?.scope] ?? '–')}</td>
-  </tr>`).join('') : '<tr><td colspan="3" class="sub">Noch keine Sicherung heruntergeladen.</td></tr>';
-}
-
-document.getElementById('backup-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const button = document.getElementById('backup-submit');
-  const passphrase = document.getElementById('backup-passphrase');
-  button.disabled = true;
-  try {
-    const res = await fetch('/backup/export', {
-      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope, passphrase: passphrase.value }),
-    });
-    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Backup fehlgeschlagen (${res.status})`);
-    const url = URL.createObjectURL(await res.blob());
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'questin-backup.qbak';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    passphrase.value = '';
-    notify('Sicherung heruntergeladen.', 'success');
-    await loadHistory();
-  } catch (err) {
-    notify(err.message, 'error');
-  } finally {
-    button.disabled = false;
-  }
-});
-
-document.getElementById('logout-link').addEventListener('click', async (evt) => {
-  evt.preventDefault();
-  if (!confirm('Wirklich abmelden?')) return;
-  await api.post('/auth/logout', {});
-  window.location.href = '/login.html';
-});
-
-try {
-  const account = await api.get('/account');
-  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
-  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
-  await loadHistory();
-} catch (err) {
-  if (err.status === 401) window.location.href = '/login.html';
-  else notify(err.status === 403 ? 'Kein Zugriff – nur für Admins.' : err.message, 'error');
-} finally {
-  hideLoading();
-}
-</script>
+<script type="module" src="/js/backupPage.js"></script>
 </body>
 </html>

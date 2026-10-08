@@ -11,7 +11,7 @@
 <body>
 <div class="main"><div class="content card form-pad" style="max-width:860px;margin:32px auto;">
 <h1>Datenschutzerklärung</h1>
-<p>Stand: 06.10.2026</p>
+<p>Stand: 08.10.2026</p>
 <h2>1. Datenschutz auf einen Blick</h2>
 <h3>Allgemeine Hinweise</h3>
 <p>Die folgenden Hinweise geben einen einfachen Überblick darüber, was mit Ihren personenbezogenen Daten passiert, wenn Sie diese Website besuchen oder sich über unsere Plattform zur Veranstaltung Pakyrion anmelden. Personenbezogene Daten sind alle Daten, mit denen Sie persönlich identifiziert werden können. Ausführliche Informationen zum Thema Datenschutz entnehmen Sie dieser Datenschutzerklärung.</p>
@@ -55,6 +55,7 @@
 <li>Discord Inc. (USA, optionale Anmeldung, Kommunikation)</li>
 <li>All Inkl (Emails und Domain)</li>
 <li>Stripe/Paypal (Zahlungsabwicklung)</li>
+<li>Speicher-/SFTP-Anbieter für Datensicherungen (siehe Abschnitt „Datensicherung“, nur falls eingerichtet)</li>
 </ul>
 <p>Soweit Daten in Drittländer wie die USA übermittelt werden, erfolgt dies auf Grundlage Ihrer Einwilligung (Art. 49 Abs. 1 lit. a DSGVO), eines Angemessenheitsbeschlusses der EU-Kommission oder von Standardvertragsklauseln.</p>
 <h3>Widerruf Ihrer Einwilligung zur Datenverarbeitung</h3>
@@ -120,6 +121,11 @@
 <p>Systemmails (z. B. Bestätigungen, Passwort-Zurücksetzung, Veranstaltungsinformationen) versenden wir über All-Inkl. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO.</p>
 <h3>Speicherdauer und Löschung</h3>
 <p>Teilnehmerdaten löschen wir spätestens 6 Monate nach Ende der Veranstaltung, sofern keine gesetzlichen Aufbewahrungspflichten entgegenstehen. Ihr Nutzerkonto und Ihre Charakterdaten bleiben darüber hinaus nur bestehen, sollten sie dem Explizit zustimmen.</p>
+<h3>Datensicherung (Backups)</h3>
+<p>Zum Schutz vor Datenverlust sichern wir die Datenbank der Anmeldeplattform regelmäßig automatisch (tägliche, vor und während einer Veranstaltung stündliche Sicherungen) sowie die hochgeladenen Dateien. Zusätzlich können Administratoren verschlüsselte Sicherungen der Teilnehmerdaten (Konten, Charaktere, Anmeldungen, Zahlungsstatus, Verweise auf hochgeladene Dateien) und der Veranstaltungsinformationen anlegen. Passwörter und Zugangs-Tokens sind darin nicht enthalten. Personenbezogene Daten sind in den Sicherungen verschlüsselt; die zusätzlich angelegten Sicherungsdateien sind mit einem separaten Passwort geschützt, das getrennt von der Datei aufbewahrt wird.</p>
+<p>Sicherungen werden an folgende Orte übertragen, soweit der Verantwortliche sie eingerichtet hat: ein Ordner auf unserem Server in Deutschland, ein von uns ausgewählter S3-kompatibler Speicherdienst, ein von uns betriebener oder ausgewählter SFTP-Server sowie der lokale Download durch einen berechtigten Administrator. Wo sich der jeweilige Speicherdienst befindet, richtet sich nach dem von uns gewählten Anbieter; wir wählen bevorzugt Anbieter innerhalb der EU und schließen mit Anbietern, die in unserem Auftrag Daten speichern, einen Auftragsverarbeitungsvertrag (Art. 28 DSGVO). Findet eine Übermittlung in ein Drittland statt, erfolgt sie nur auf Grundlage eines Angemessenheitsbeschlusses oder von Standardvertragsklauseln.</p>
+<p>Zweck ist die Sicherstellung der Verfügbarkeit und Wiederherstellbarkeit der Daten (Art. 32 Abs. 1 lit. c DSGVO); Rechtsgrundlage ist unser berechtigtes Interesse an einem sicheren und stabilen Betrieb (Art. 6 Abs. 1 lit. f DSGVO). Sicherungen werden nach einem rotierenden Verfahren aufbewahrt (die jeweils neuesten Stände der letzten Tage, Wochen und Monate). Gelöschte Daten verschwinden dadurch spätestens nach Ablauf dieser Rotation, in der Regel nach rund sechs Monaten, aus den Sicherungen; manuell angelegte Sicherungsdateien löschen wir, sobald sie nicht mehr benötigt werden. Bei einer Wiederherstellung stellen wir sicher, dass bereits auf Ihren Wunsch gelöschte Daten nicht erneut in den Livebetrieb gelangen.</p>
+<p>Das Anlegen, Herunterladen und Einspielen von Sicherungen wird im internen Protokoll der Plattform festgehalten (wer, wann, welcher Umfang, welches Ziel).</p>
 <h3>Technische Sicherheit</h3>
 <p>Die Plattform läuft auf einem Server in Deutschland. Die Übertragung ist TLS-verschlüsselt, Passwörter werden nur als Hash gespeichert.</p>
 <h2>6. Besondere Kategorien personenbezogener Daten</h2>

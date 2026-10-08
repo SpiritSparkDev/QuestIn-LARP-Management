@@ -3,67 +3,50 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { query } from '../db.js';
-import { seal } from '../offlinePackage/container.js';
+import { seal, open } from '../offlinePackage/container.js';
 import { logAudit } from '../audit/repository.js';
-import { APP_VERSION } from '../../frontend/js/version.js';
+import { logger } from '../logger.js';
+import { buildBackup, describeBackup, restoreBackup } from './dump.js';
+import { TARGETS, deliver, testTarget, getBackupSettings, setBackupSettings } from './targets.js';
 
-// What a backup holds. Table names are fixed here (never from the request).
-// Columns that look like credentials (password hashes, access/payment tokens)
-// are dropped; encrypted personal-data blobs stay encrypted (base64) and need
-// the server's ENCRYPTION_KEY to be read after a restore.
-const SCOPES = {
-  participants: ['users', 'characters', 'registrations', 'payments', 'account_files', 'character_files'],
-  events: ['events', 'event_lodgings', 'event_mailings', 'sc_character_schema', 'nsc_profile_schema', 'account_field_schema', 'registration_field_schema'],
-};
-const SECRET_COLUMN = /(password|token)/i;
 const MIN_PASSPHRASE = 8;
-
-async function dumpTable(table) {
-  const { rows } = await query(`SELECT * FROM ${table}`);
-  return rows.map((row) => Object.fromEntries(Object.entries(row)
-    .filter(([column]) => !SECRET_COLUMN.test(column))
-    .map(([column, value]) => [column, Buffer.isBuffer(value) ? { $base64: value.toString('base64') } : value])));
-}
-
-// Per event: its own metadata plus how many registrations per status, so a
-// backup can be read without restoring it.
-async function eventMetadata() {
-  const { rows: events } = await query('SELECT id, name, event_date, end_date, code, is_active, created_at FROM events ORDER BY event_date DESC');
-  const { rows: counts } = await query('SELECT event_id, status, COUNT(*)::int AS n FROM registrations GROUP BY event_id, status');
-  return events.map((e) => {
-    const byStatus = Object.fromEntries(counts.filter((c) => c.event_id === e.id).map((c) => [c.status, c.n]));
-    return { ...e, registrations: Object.values(byStatus).reduce((sum, n) => sum + n, 0), registrationsByStatus: byStatus };
-  });
-}
-
-export async function buildBackup(scope) {
-  const scopes = scope === 'all' ? Object.keys(SCOPES) : [scope];
-  const data = {};
-  const counts = {};
-  for (const name of scopes) {
-    data[name] = {};
-    for (const table of SCOPES[name]) {
-      data[name][table] = await dumpTable(table);
-      counts[table] = data[name][table].length;
-    }
-  }
-  if (scopes.includes('events')) data.events.metadata = await eventMetadata();
-  const { rows: [migration] } = await query('SELECT filename FROM schema_migrations ORDER BY filename DESC LIMIT 1');
-  return {
-    manifest: { kind: 'backup', scope, createdAt: new Date().toISOString(), appVersion: APP_VERSION, schemaVersion: migration?.filename ?? null, counts },
-    data,
-  };
-}
+const MAX_RESTORE_BODY_BYTES = 300 * 1024 * 1024;
 
 router.get('/backup/history', requireAuth(requireAdminGroup(async () => {
   const { rows } = await query(
-    `SELECT a.created_at, a.details, concat_ws(' ', u.first_name, u.last_name) AS actor_name
+    `SELECT a.created_at, a.action, a.details, concat_ws(' ', u.first_name, u.last_name) AS actor_name
      FROM audit_log a LEFT JOIN users u ON u.id = a.actor_id
-     WHERE a.action = 'backup.created' ORDER BY a.created_at DESC LIMIT 10`
+     WHERE a.action IN ('backup.created', 'backup.restored') ORDER BY a.created_at DESC LIMIT 10`
   );
-  return { status: 200, body: rows.map((r) => ({ createdAt: r.created_at, actorName: r.actor_name || null, details: r.details })) };
+  return { status: 200, body: rows.map((r) => ({ createdAt: r.created_at, action: r.action, actorName: r.actor_name || null, details: r.details })) };
 })));
 
+router.get('/backup/settings', requireAuth(requireAdminGroup(async () => ({ status: 200, body: await getBackupSettings() }))));
+
+router.put('/backup/settings', requireAuth(requireAdminGroup(async ({ req, user }) => {
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  await setBackupSettings(body);
+  await logAudit({ actorId: user.id, action: 'backup.settings_changed', details: {} });
+  return { status: 200, body: await getBackupSettings() };
+})));
+
+router.post('/backup/settings/test', requireAuth(requireAdminGroup(async ({ req }) => {
+  const body = await readJsonBody(req);
+  if (!TARGETS.includes(body?.target)) return { status: 400, body: { error: 'unknown target' } };
+  try {
+    await testTarget(body.target);
+    return { status: 200, body: { ok: true } };
+  } catch (err) {
+    return { status: 200, body: { ok: false, error: err.message } };
+  }
+})));
+
+// Creates the backup once and hands it to every chosen recipient: "download"
+// (the response itself) and/or the server targets local / s3 / sftp. Results
+// of the server targets are listed per target; one failing target does not
+// stop the others. With "download" the file is the response body and the
+// results travel in the X-Backup-Results header.
 router.post('/backup/export', requireAuth(requireAdminGroup(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
@@ -71,16 +54,72 @@ router.post('/backup/export', requireAuth(requireAdminGroup(async ({ req, user }
   if (typeof body.passphrase !== 'string' || body.passphrase.length < MIN_PASSPHRASE) {
     return { status: 400, body: { error: `Bitte ein Passwort mit mindestens ${MIN_PASSPHRASE} Zeichen wählen – die Datei enthält personenbezogene Daten.` } };
   }
+  const requested = Array.isArray(body.targets) && body.targets.length ? body.targets : ['download'];
+  if (requested.some((t) => t !== 'download' && !TARGETS.includes(t))) return { status: 400, body: { error: 'unknown target' } };
+
   const backup = await buildBackup(body.scope);
-  await logAudit({ actorId: user.id, action: 'backup.created', details: { scope: body.scope, counts: backup.manifest.counts } });
+  const file = seal(backup, body.passphrase);
   const stamp = backup.manifest.createdAt.slice(0, 16).replace(/[-:T]/g, '');
+  const filename = `questin-backup-${body.scope}-${stamp}.qbak`;
+
+  const results = [];
+  for (const target of requested.filter((t) => t !== 'download')) {
+    try {
+      results.push({ target, ok: true, detail: await deliver(target, filename, file) });
+    } catch (err) {
+      logger.error('backup delivery failed', { target, error: err.message });
+      results.push({ target, ok: false, detail: err.message });
+    }
+  }
+  await logAudit({ actorId: user.id, action: 'backup.created', details: { scope: body.scope, counts: backup.manifest.counts, targets: requested, failed: results.filter((r) => !r.ok).map((r) => r.target) } });
+
+  if (!requested.includes('download')) return { status: 200, body: { filename, results } };
   return {
     status: 200,
     isBinary: true,
-    body: seal(backup, body.passphrase),
+    body: file,
     headers: {
       'Content-Type': 'application/octet-stream',
-      'Content-Disposition': `attachment; filename="questin-backup-${body.scope}-${stamp}.qbak"`,
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'X-Backup-Results': encodeURIComponent(JSON.stringify(results)),
     },
   };
+})));
+
+function openUpload(body) {
+  if (typeof body?.fileBase64 !== 'string' || typeof body?.passphrase !== 'string') return { error: 'Datei und Passwort sind erforderlich.' };
+  try {
+    return { pkg: open(Buffer.from(body.fileBase64, 'base64'), body.passphrase) };
+  } catch (err) {
+    return { error: err.code === 'BAD_FORMAT' ? err.message : 'Die Datei lässt sich mit diesem Passwort nicht öffnen (falsches Passwort oder beschädigte Datei).' };
+  }
+}
+
+// Step 1: look into a backup file without changing anything.
+router.post('/backup/inspect', requireAuth(requireAdminGroup(async ({ req }) => {
+  const body = await readJsonBody(req, MAX_RESTORE_BODY_BYTES);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const { pkg, error } = openUpload(body);
+  if (error) return { status: 400, body: { error } };
+  if (pkg.manifest.kind !== 'backup') return { status: 400, body: { error: 'Das ist keine Backup-Datei.' } };
+  return { status: 200, body: await describeBackup(pkg) };
+})));
+
+// Step 2: merge the chosen parts of the backup into the live database.
+router.post('/backup/restore', requireAuth(requireAdminGroup(async ({ req, user }) => {
+  const body = await readJsonBody(req, MAX_RESTORE_BODY_BYTES);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (body.confirm !== true) return { status: 400, body: { error: 'Bitte das Einspielen ausdrücklich bestätigen.' } };
+  const { pkg, error } = openUpload(body);
+  if (error) return { status: 400, body: { error } };
+  const parts = Array.isArray(body.parts) ? body.parts.filter((p) => p === 'participants' || p === 'events') : [];
+  try {
+    const restored = await restoreBackup(pkg, parts);
+    await logAudit({ actorId: user.id, action: 'backup.restored', details: { parts, backupCreatedAt: pkg.manifest.createdAt, counts: restored } });
+    return { status: 200, body: { restored } };
+  } catch (err) {
+    if (['WRONG_KIND', 'SCHEMA_MISMATCH', 'NOTHING_TO_RESTORE'].includes(err.code)) return { status: 409, body: { error: err.message } };
+    logger.error('backup restore failed', { error: err.message });
+    return { status: 409, body: { error: `Einspielen fehlgeschlagen, es wurde nichts verändert: ${err.message}` } };
+  }
 })));
