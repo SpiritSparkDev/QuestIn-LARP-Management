@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { query, withTransaction } from '../db.js';
 import { displayName } from '../displayName.js';
+import { logAudit } from '../audit/repository.js';
 
 function mapRegistrationRow(r) {
   return { userId: r.user_id, eventId: r.event_id, amountDueCents: r.amount_due_cents, paidAt: r.paid_at };
@@ -60,7 +61,8 @@ export async function setDiscount(eventId, userId, discountCents) {
 }
 
 export async function markPaidManually(eventId, userId, confirmedByUserId) {
-  return withTransaction(async (client) => {
+  let booked = null;
+  const result = await withTransaction(async (client) => {
     const registration = await getRegistrationOrThrow(client, eventId, userId);
     if (registration.amount_due_cents == null) {
       const err = new Error('Kein Betrag hinterlegt.');
@@ -78,6 +80,7 @@ export async function markPaidManually(eventId, userId, confirmedByUserId) {
          VALUES ($1, $2, 'bank_transfer', $3, $4)`,
         [userId, eventId, registration.amount_due_cents, confirmedByUserId]
       );
+      booked = registration.amount_due_cents;
     }
     const { rows } = await client.query(
       `UPDATE registrations SET paid_at = COALESCE(paid_at, now()) WHERE event_id = $1 AND user_id = $2
@@ -86,6 +89,8 @@ export async function markPaidManually(eventId, userId, confirmedByUserId) {
     );
     return mapRegistrationRow(rows[0]);
   });
+  if (booked !== null) await logAudit({ actorId: confirmedByUserId, action: 'payment.received', subjectUserId: userId, details: { eventId, provider: 'manual', method: 'bank_transfer', amountCents: booked, kind: 'registration' } });
+  return result;
 }
 
 export async function markUnpaid(eventId, userId) {
@@ -139,7 +144,10 @@ export async function getRegistrationByPaymentToken(token) {
 // timeout -- ON CONFLICT DO NOTHING on provider_reference plus
 // COALESCE(paid_at, now()) makes replays of the exact same event a no-op
 // instead of a duplicate payments row or a paid_at that jumps forward.
+// PAYMENT LOG: every new payment source (PayPal, a second Stripe flow, ...) must call logPaymentReceived
+// with its own `provider` once the payment is booked -- see docs/log-ereignisse.md.
 export async function recordSuccessfulStripePayment({ eventId, userId, method, amountCents, providerReference, stripePaymentIntentId }) {
+  let recorded = false;
   await withTransaction(async (client) => {
     const { rows: existing } = await client.query(
       'SELECT 1 FROM registrations WHERE event_id = $1 AND user_id = $2',
@@ -161,7 +169,13 @@ export async function recordSuccessfulStripePayment({ eventId, userId, method, a
       'UPDATE registrations SET paid_at = COALESCE(paid_at, now()) WHERE event_id = $1 AND user_id = $2',
       [eventId, userId]
     );
+    recorded = true;
   });
+  if (recorded) await logPaymentReceived({ userId, eventId, provider: 'stripe', method, amountCents, reference: providerReference });
+}
+
+export function logPaymentReceived({ userId, eventId = null, provider, method, amountCents, reference = null, kind = 'registration' }) {
+  return logAudit({ actorId: null, action: 'payment.received', subjectUserId: userId, details: { eventId, provider, method, amountCents, reference, kind } });
 }
 
 // Everyone with an open balance for an event -- feeds the admin-triggered
@@ -210,6 +224,7 @@ export async function refundPayment(eventId, userId, refundAmountCents, { stripe
     throw err;
   }
   const r = rows[0];
+  await logAudit({ actorId: null, action: 'payment.refunded', subjectUserId: r.user_id, details: { eventId: r.event_id, method: r.method, amountCents: r.refund_amount_cents } });
   return {
     paymentId: r.id,
     userId: r.user_id,

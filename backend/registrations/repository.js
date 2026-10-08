@@ -16,6 +16,7 @@ import { sanitizeFieldValue, sanitizeDocumentFields } from '../richText.js';
 import { validateCharacterData } from '../events/schemaValidation.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { updateCharacter } from '../characters/repository.js';
+import { logAudit } from '../audit/repository.js';
 
 // 'ticket' = a self-service guest ticket bought via the external ticket
 // widget (backend/guestRegistrations/routes.js) -- no character, distinct
@@ -408,6 +409,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
         }
       })();
     }
+    await logAudit({ actorId: requestingUser?.id ?? userId, action: 'registration.created', subjectUserId: userId, details: { eventId, eventName: event?.name, conRole, waitlisted: registration.status === 'waitlisted' } });
     return registration;
   } catch (err) {
     if (err.code === '23505') {
@@ -577,6 +579,7 @@ export async function unregisterFromEvent(userId, eventId) {
     err.code = 'CANNOT_UNREGISTER';
     throw err;
   }
+  await logAudit({ actorId: userId, action: 'registration.cancelled', subjectUserId: userId, details: { eventId, self: true } });
   if (previousStatus === 'pending') {
     await maybePromoteFromWaitlist(eventId);
   }
@@ -953,6 +956,7 @@ export async function approveRegistration(eventId, userId) {
 
 export async function cancelRegistration(eventId, userId) {
   const result = await transitionStatus(eventId, userId, 'cancel');
+  await logAudit({ actorId: null, action: 'registration.cancelled', subjectUserId: userId, details: { eventId, self: false } });
   await maybePromoteFromWaitlist(eventId);
   return result;
 }

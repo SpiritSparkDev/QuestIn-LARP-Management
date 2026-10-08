@@ -7,6 +7,7 @@ import { logger } from '../logger.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { isValidEmail, isValidPassword } from '../validation.js';
 import { generateAccessToken, getUserByAccessToken, rotateAccessToken, ensureAccessToken } from './accessTokens.js';
+import { logAudit } from '../audit/repository.js';
 
 const REGISTER_RATE_LIMIT = { keyPrefix: 'register', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 const RESEND_RATE_LIMIT = { keyPrefix: 'verify-resend', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
@@ -48,6 +49,8 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
     }
     throw err;
   }
+
+  await logAudit({ actorId: userId, action: 'user.registered', subjectUserId: userId, details: {} });
 
   try {
     await sendVerificationEmail(email, token, { userId });

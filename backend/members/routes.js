@@ -105,8 +105,12 @@ router.patch('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ req,
     fields.group = rows[0].id;
   }
 
+  const before = fields.group !== undefined ? await getMember(params.id) : null;
   const member = await updateMember(params.id, fields);
   if (!member) return { status: 404, body: { error: 'member not found' } };
+  if (before && before.group.id !== fields.group) {
+    await logAudit({ actorId: user.id, action: 'role.changed', subjectUserId: params.id, details: { from: before.group.name, to: member.group.name } });
+  }
   return { status: 200, body: member };
 })));
 
@@ -160,7 +164,7 @@ router.get('/members/:id/access-link', requireAuth(requireMenu('mitglieder')(asy
   return { status: 200, body: { link, emailVerified: member.emailVerified } };
 })));
 
-router.post('/members/:id/access-link/send', requireAuth(requireMenu('mitglieder')(async ({ params, requestId }) => {
+router.post('/members/:id/access-link/send', requireAuth(requireMenu('mitglieder')(async ({ params, requestId, user }) => {
   const member = await getMember(params.id);
   if (!member) return { status: 404, body: { error: 'member not found' } };
   if (member.isGuest) return { status: 400, body: { error: 'guest accounts have no access link' } };
@@ -176,6 +180,7 @@ router.post('/members/:id/access-link/send', requireAuth(requireMenu('mitglieder
     logger.error('failed to send access link email', { requestId, userId: params.id, email: member.email, error: err.message });
     return { status: 502, body: { error: 'failed to send email' } };
   }
+  await logAudit({ actorId: user.id, action: 'link.sent', subjectUserId: params.id, details: { kind: member.emailVerified ? 'password_reset' : 'verification' } });
   return { status: 200, body: { sent: true } };
 })));
 
@@ -250,6 +255,7 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     }
   }
 
+  await logAudit({ actorId: user.id, action: 'link.sent', details: { kind: 'invitation', email: invitation.email, emailed: emailSent === true } });
   const link = `${await baseUrl()}/set-password.html?token=${invitation.token}`;
   return { status: 201, body: { id: invitation.id, email: invitation.email, status: 'invited', emailSent, link } };
 })));
@@ -278,11 +284,12 @@ router.post('/members/:id/generate-conversion-link', requireAuth(requireMenu('mi
     ttlDays: invitationTtlDays,
   });
 
+  await logAudit({ actorId: user.id, action: 'link.sent', subjectUserId: member.id, details: { kind: 'guest_conversion' } });
   const link = `${await baseUrl()}/set-password.html?token=${invitation.token}`;
   return { status: 201, body: { id: invitation.id, link } };
 })));
 
-router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglieder')(async ({ req, params }) => {
+router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglieder')(async ({ req, params, user }) => {
   const body = (await readJsonBody(req)) ?? {};
   const shouldSendEmail = body.sendEmail !== false;
 
@@ -305,6 +312,7 @@ router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglied
       logger.error('failed to resend invitation email', { error: err.message });
     }
   }
+  await logAudit({ actorId: user.id, action: 'link.sent', details: { kind: 'invitation_resent', email: updated.email, emailed: emailSent === true } });
   const link = `${await baseUrl()}/set-password.html?token=${updated.token}`;
   return { status: 200, body: { id: updated.id, email: updated.email, status: 'invited', emailSent, link } };
 })));

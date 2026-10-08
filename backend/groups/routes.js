@@ -5,6 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { listGroups, getGroup, createGroup, updateGroup, deleteGroup } from './repository.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
+import { logAudit } from '../audit/repository.js';
 
 const MENU_KEYS = ['konto', 'mitglieder', 'events', 'checkin', 'taverne'];
 const KEY_PATTERN = /^[a-z0-9_]+$/;
@@ -30,7 +31,7 @@ router.get('/groups', requireAuth(requireAdminGroup(async () => {
   return { status: 200, body: groups };
 })));
 
-router.post('/groups', requireAuth(requireAdminGroup(async ({ req }) => {
+router.post('/groups', requireAuth(requireAdminGroup(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { key, name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive } = body;
@@ -48,6 +49,7 @@ router.post('/groups', requireAuth(requireAdminGroup(async ({ req }) => {
   }
   try {
     const group = await createGroup({ key, name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive });
+    await logAudit({ actorId: user.id, action: 'group.created', details: { name, key } });
     return { status: 201, body: group };
   } catch (err) {
     if (err.code === '23505') return { status: 409, body: { error: 'a group with this key already exists' } };

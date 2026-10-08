@@ -23,7 +23,9 @@ router.patch('/group-tree/name', requireGroupManager(async ({ req, user }) => {
   const body = await readJsonBody(req);
   const name = typeof body?.name === 'string' ? body.name.trim() : null;
   if (name === null || name.length > 60) return { status: 400, body: { error: 'Der Gruppenname darf höchstens 60 Zeichen lang sein.' } };
+  const hadName = (await getGroupTree(user.id)).groupName;
   await setGroupName(user.id, name);
+  if (!hadName && name) await logAudit({ actorId: user.id, action: 'group_tree.founded', details: { group: name } });
   return { status: 200, body: await getGroupTree(user.id) };
 }));
 

@@ -37,6 +37,7 @@ const ADMIN_ONLY_LINKS = [
   { label: 'Datenabgleich', href: '/admin/sync.html', icon: 'sync_alt' },
   { label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' },
   { label: 'Protokoll', href: '/admin/audit.html', icon: 'history' },
+  { label: 'Backup', href: '/admin/backup.html', icon: 'cloud_download' },
 ];
 
 // Opt-in add-ons (switched on under Einstellungen); `flag` is the /account

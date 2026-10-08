@@ -14,7 +14,7 @@ export async function logAudit({ actorId, action, subjectUserId = null, details 
   }
 }
 
-export async function listAudit({ action, limit = 200 } = {}) {
+export async function listAudit({ action, prefix, limit = 200 } = {}) {
   const { rows } = await query(
     `SELECT a.id, a.created_at, a.action, a.details,
             concat_ws(' ', actor.first_name, actor.last_name) AS actor_name,
@@ -23,9 +23,10 @@ export async function listAudit({ action, limit = 200 } = {}) {
      LEFT JOIN users actor ON actor.id = a.actor_id
      LEFT JOIN users subject ON subject.id = a.subject_user_id
      WHERE ($1::text IS NULL OR a.action = $1)
+       AND ($3::text IS NULL OR a.action LIKE $3 || '%')
      ORDER BY a.created_at DESC
      LIMIT $2`,
-    [action ?? null, limit]
+    [action ?? null, limit, prefix ?? null]
   );
   return rows.map((r) => ({
     id: r.id, createdAt: r.created_at, action: r.action, details: r.details,

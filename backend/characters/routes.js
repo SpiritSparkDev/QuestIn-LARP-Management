@@ -8,6 +8,7 @@ import { getScCharacterSchema } from '../scSchema/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { isGroupAncestorOf } from '../groupTree/repository.js';
 import { isManagedBy } from '../managedPersons/repository.js';
+import { logAudit } from '../audit/repository.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -34,6 +35,7 @@ router.post('/characters', requireAuth(async ({ req, user }) => {
 
   try {
     const character = await createCharacter(ownerId, { name, data });
+    await logAudit({ actorId: user.id, action: 'character.created', subjectUserId: ownerId, details: { characterName: name } });
     return { status: 201, body: character };
   } catch (err) {
     if (err.code === 'INVALID_CHARACTER_DATA') {
@@ -120,6 +122,7 @@ router.delete('/characters/:id', requireAuth(async ({ req, params, user }) => {
   try {
     const force = new URL(req.url, 'http://localhost').searchParams.get('force') === 'true';
     await deleteCharacter(params.id, character.user_id, { force, actorId: user.id });
+    await logAudit({ actorId: user.id, action: 'character.deleted', subjectUserId: character.user_id, details: { characterName: character.name, forced: force } });
     return { status: 200, body: { deleted: true } };
   } catch (err) {
     if (err.code === 'CHARACTER_IN_USE') {

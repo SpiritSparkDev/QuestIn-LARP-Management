@@ -29,16 +29,20 @@
   </button>
   <div class="main"><div class="content">
     <h1>Protokoll</h1>
-    <p class="sub">Wer hat wann etwas Sensibles getan: Änderungen an Staff-Feldern von Charakteren (z. B. IT-Geld), CSV-Exporte und Tavernen-Exporte. Neueste zuerst.</p>
+    <p class="sub">Wichtige Ereignisse im System: Registrierungen, Charaktere, Zahlungen, Gruppen, versendete Links, Exporte und Backups. Kleine Änderungen (Profil, Felder, Texte) werden bewusst nicht protokolliert. Neueste zuerst.</p>
     <div class="card form-pad">
-      <select id="audit-action">
-        <option value="">Alle Einträge</option>
-        <option value="character.staff_field_changed">Staff-Feld geändert</option>
-        <option value="members.export">Export Mitgliederliste</option>
-        <option value="checkin.export">Export Check-In-Liste</option>
-        <option value="tavern.export">Export Tavernenbuchungen</option>
+      <select id="audit-category">
+        <option value="">Alle Ereignisse</option>
+        <option value="accounts">Konten &amp; Rollen</option>
+        <option value="characters">Charaktere</option>
+        <option value="registrations">Anmeldungen &amp; Check-in</option>
+        <option value="payments">Zahlungen</option>
+        <option value="groups">Gruppen</option>
+        <option value="links">Zugangs- &amp; Einladungslinks</option>
+        <option value="exports">Exporte &amp; Backups</option>
+        <option value="system">Offline-Betrieb &amp; Datenschutz</option>
       </select>
-      <label for="audit-action">Filter</label>
+      <label for="audit-category">Kategorie</label>
     </div>
     <div class="card">
       <div class="table-scroll">
@@ -62,30 +66,73 @@ import { notify } from '/js/notifications.js';
 initSidebarToggle();
 
 const ACTION_LABELS = {
+  'user.registered': 'Konto registriert',
+  'role.changed': 'Rolle geändert',
+  'character.created': 'Charakter erstellt',
+  'character.deleted': 'Charakter gelöscht',
   'character.staff_field_changed': 'Staff-Feld geändert',
+  'registration.created': 'Event-Anmeldung',
+  'registration.cancelled': 'Anmeldung storniert',
+  'registration.admin_create': 'Anmeldung durch Orga',
+  'checkin.confirm': 'Check-in-Angaben bestätigt',
+  'payment.received': 'Zahlung eingegangen',
+  'payment.refunded': 'Zahlung erstattet',
+  'group.created': 'Rolle (Gruppe) angelegt',
+  'group_tree.founded': 'Gruppe gegründet',
+  'group_tree.join_code_redeemed': 'Gruppe per Code beigetreten',
+  'group_tree.view_characters': 'Gruppenverwaltung sah Charaktere',
+  'link.sent': 'Link versendet',
   'members.export': 'Export Mitgliederliste',
   'checkin.export': 'Export Check-In-Liste',
   'tavern.export': 'Export Tavernenbuchungen',
+  'backup.created': 'Backup heruntergeladen',
+  'privacy.deletion': 'Daten gelöscht (Datenschutz)',
 };
+const CATEGORIES = {
+  accounts: /^(user|role)\./,
+  characters: /^character\./,
+  registrations: /^(registration|checkin)\./,
+  payments: /^payment\./,
+  groups: /^group/,
+  links: /^link\./,
+  exports: /\.export$|^backup\./,
+  system: /^(offline|sync|privacy|snapshot)/,
+};
+const LINK_KINDS = { verification: 'Bestätigungslink', password_reset: 'Passwort-Link', invitation: 'Einladung', invitation_resent: 'Einladung erneut', guest_conversion: 'Gast-Umwandlung' };
+const PAYMENT_KINDS = { registration: 'Event-Ticket', tavern_topup: 'Tavernen-Aufladung' };
+const euro = (cents) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format((cents ?? 0) / 100);
 
 function describe(entry) {
   const d = entry.details ?? {};
+  const who = entry.subjectName ? ` · ${entry.subjectName}` : '';
   switch (entry.action) {
+    case 'user.registered': return entry.subjectName ?? '';
+    case 'role.changed': return `${d.from} → ${d.to}${who}`;
+    case 'character.created':
+    case 'character.deleted': return `„${d.characterName}“${who}${d.forced ? ' · trotz Anmeldung gelöscht' : ''}`;
     case 'character.staff_field_changed':
       return `${d.label ?? d.field} bei „${d.characterName}“${entry.subjectName ? ` (${entry.subjectName})` : ''}: ${JSON.stringify(d.from)} → ${JSON.stringify(d.to)}`;
+    case 'registration.created': return `${d.eventName ?? ''} · ${d.conRole ?? ''}${d.waitlisted ? ' · Warteliste' : ''}${who}`;
+    case 'registration.cancelled': return `${d.self ? 'selbst abgemeldet' : 'von Orga storniert'}${who}`;
+    case 'payment.received': return `${euro(d.amountCents)} · ${PAYMENT_KINDS[d.kind] ?? d.kind ?? ''} · ${d.provider ?? ''}${who}`;
+    case 'payment.refunded': return `${euro(d.amountCents)}${who}`;
+    case 'group.created': return `${d.name} (${d.key})`;
+    case 'group_tree.founded': return d.group;
+    case 'link.sent': return `${LINK_KINDS[d.kind] ?? d.kind}${d.email ? ` an ${d.email}` : who}${d.emailed === false ? ' · nur Link, keine Mail' : ''}`;
+    case 'backup.created': return `Umfang: ${d.scope}`;
     case 'members.export':
     case 'checkin.export':
       return `${d.count} Einträge${d.eventName ? ` · ${d.eventName}` : ''}${d.includesSensitive ? ' · inkl. sensibler Felder erlaubt' : ''}`;
     case 'tavern.export':
       return `${d.count} Buchungen · ${d.from}${d.to !== d.from ? ` bis ${d.to}` : ''}`;
     default:
-      return JSON.stringify(d);
+      return Object.keys(d).length ? JSON.stringify(d) : who.replace(' · ', '');
   }
 }
 
 async function load() {
-  const action = document.getElementById('audit-action').value;
-  const entries = await api.get(`/audit${action ? `?action=${encodeURIComponent(action)}` : ''}`);
+  const category = CATEGORIES[document.getElementById('audit-category').value];
+  const entries = (await api.get('/audit?limit=1000')).filter((e) => !category || category.test(e.action));
   document.querySelector('#audit-list tbody').innerHTML = entries.length ? entries.map((e) => `<tr>
     <td>${escapeHtml(new Date(e.createdAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</td>
     <td>${escapeHtml(e.actorName ?? '–')}</td>
@@ -93,7 +140,7 @@ async function load() {
     <td>${escapeHtml(describe(e))}</td>
   </tr>`).join('') : '<tr><td colspan="4" class="sub">Keine Einträge.</td></tr>';
 }
-document.getElementById('audit-action').addEventListener('change', load);
+document.getElementById('audit-category').addEventListener('change', load);
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();

@@ -1,4 +1,5 @@
 import { query, withTransaction } from '../db.js';
+import { logPaymentReceived } from '../payments/repository.js';
 
 const TOPUP_METHODS = ['cash', 'card', 'paypal', 'bank_transfer'];
 export { TOPUP_METHODS };
@@ -231,13 +232,16 @@ export async function topUp(accountId, { amountCents, method, note, createdBy, r
 // that is already booked is a no-op (returns null). Booked even when the
 // account is locked: the money has already arrived.
 export async function topUpFromStripe(accountId, { amountCents, method, providerReference }) {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const account = await lockAccount(client, accountId);
     const { rows: existing } = await client.query('SELECT 1 FROM tavern_transactions WHERE provider_reference = $1', [providerReference]);
     if (existing.length > 0) return null;
     const row = await applyEntry(client, account, { type: 'topup', amountCents, method, note: 'Online-Aufladung', providerReference });
-    return rowToTransaction(row);
+    return { transaction: rowToTransaction(row), userId: account.user_id, eventId: account.event_id };
   });
+  if (!result) return null;
+  await logPaymentReceived({ userId: result.userId, eventId: result.eventId, provider: 'stripe', method, amountCents, reference: providerReference, kind: 'tavern_topup' });
+  return result.transaction;
 }
 
 // The account a person tops up themselves: the one for the active event.
