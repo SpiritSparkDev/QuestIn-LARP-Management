@@ -5,14 +5,8 @@ import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 import { sanitizeFieldValue } from '../richText.js';
 import { isGroupAncestorOf } from '../groupTree/repository.js';
 
-// A person can be deleted unless a registration is already binding: paid, or
-// confirmed/checked in. Open registrations (pending, waitlisted, ...) are
-// removed together with the person (ON DELETE CASCADE).
-const BINDING_REGISTRATION = "(registrations.paid_at IS NOT NULL OR registrations.status IN ('confirmed', 'checked_in', 'checked_out'))";
-
 const SELECT_COLUMNS = `
-  id, email, first_name, last_name, nickname, account_data_enc,
-  NOT EXISTS (SELECT 1 FROM registrations WHERE registrations.user_id = users.id AND ${BINDING_REGISTRATION}) AS can_delete
+  id, email, first_name, last_name, nickname, account_data_enc
 `;
 
 function decryptManagedPerson(row) {
@@ -23,7 +17,6 @@ function decryptManagedPerson(row) {
     lastName: row.last_name,
     nickname: row.nickname,
     name: displayName({ firstName: row.first_name, lastName: row.last_name, nickname: row.nickname }),
-    canDelete: row.can_delete,
     ...decryptFieldBlob(row.account_data_enc),
   };
 }
@@ -56,7 +49,7 @@ export async function getManagedPersonForRegistration(id, actorId) {
   const { rows } = await query('SELECT id, first_name, last_name, nickname FROM users WHERE id = $1', [id]);
   const r = rows[0];
   return { id: r.id, email: null, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname,
-    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }), canDelete: false, groupView: true };
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }), groupView: true };
 }
 
 export async function listManagedPersons(ownerId) {
@@ -140,25 +133,6 @@ export async function updateManagedPerson(id, ownerId, fields) {
     }
     throw err;
   }
-}
-
-export async function deleteManagedPerson(id, ownerId, { force = false } = {}) {
-  const { rows: regRows } = force ? { rows: [] } : await query(
-    `SELECT 1 FROM registrations r JOIN users u ON u.id = r.user_id
-     WHERE r.user_id = $1 AND u.managed_by_user_id = $2
-       AND (r.paid_at IS NOT NULL OR r.status IN ('confirmed', 'checked_in', 'checked_out'))`,
-    [id, ownerId]
-  );
-  if (regRows.length > 0) {
-    const err = new Error('Diese Person hat bereits bestätigte oder bezahlte Event-Anmeldungen und kann nicht gelöscht werden.');
-    err.code = 'HAS_REGISTRATIONS';
-    throw err;
-  }
-  const { rows } = await query(
-    'DELETE FROM users WHERE id = $1 AND managed_by_user_id = $2 RETURNING id',
-    [id, ownerId]
-  );
-  return rows.length > 0;
 }
 
 // "Hold an existing person into my group": guest accounts (no login -- e.g.

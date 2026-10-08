@@ -40,7 +40,6 @@ test('POST /managed-persons creates a person owned by the caller, in the caller\
     assert.equal(res.status, 201);
     const body = await res.json();
     assert.equal(body.firstName, 'ManagedTestPerson');
-    assert.equal(body.canDelete, true);
 
     const { rows } = await query(
       'SELECT is_guest, password_hash, managed_by_user_id, group_id FROM users WHERE id = $1',
@@ -101,7 +100,7 @@ test('GET /managed-persons lists only the caller\'s own', async () => {
   }
 });
 
-test('a foreign account cannot read, edit, or delete another account\'s managed person (404, not 403)', async () => {
+test('a foreign account cannot read or edit another account\'s managed person (404, not 403)', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
@@ -124,9 +123,6 @@ test('a foreign account cannot read, edit, or delete another account\'s managed 
       body: JSON.stringify({ lastName: 'Uebernommen' }),
     });
     assert.equal(patchRes.status, 404);
-
-    const deleteRes = await fetch(`http://localhost:${port}/managed-persons/${id}`, { method: 'DELETE', headers: { Cookie: strangerCookie } });
-    assert.equal(deleteRes.status, 404);
   } finally {
     server.close();
   }
@@ -157,7 +153,7 @@ test('PATCH /managed-persons/:id rejects an OT field the caller isn\'t permitted
   }
 });
 
-test('DELETE /managed-persons/:id succeeds with open registrations, 409s once one is confirmed', async () => {
+test('a manager can never delete a managed person (no DELETE route)', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
@@ -165,39 +161,12 @@ test('DELETE /managed-persons/:id succeeds with open registrations, 409s once on
     const createRes = await fetch(`http://localhost:${port}/managed-persons`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'LoeschTest' }),
+      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'Bleibt' }),
     });
-    let { id } = await createRes.json();
-
-    const { rows: eventRows } = await query(
-      "INSERT INTO events (name, event_date) VALUES ('Managed Delete Test Event', '2026-01-01') RETURNING id"
-    );
-    await query(
-      "INSERT INTO registrations (user_id, event_id, con_role) VALUES ($1, $2, 'helfer')",
-      [id, eventRows[0].id]
-    );
-
-    await query("UPDATE registrations SET status = 'confirmed' WHERE user_id = $1", [id]);
-    const blockedRes = await fetch(`http://localhost:${port}/managed-persons/${id}`, { method: 'DELETE', headers: { Cookie: cookie } });
-    assert.equal(blockedRes.status, 409);
-
-    const forcedRes = await fetch(`http://localhost:${port}/managed-persons/${id}?force=true`, { method: 'DELETE', headers: { Cookie: cookie } });
-    assert.equal(forcedRes.status, 200);
-    const createRes2 = await fetch(`http://localhost:${port}/managed-persons`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ firstName: 'ManagedTestPerson', lastName: 'LoeschTest2' }),
-    });
-    id = (await createRes2.json()).id;
-    await query(
-      "INSERT INTO registrations (user_id, event_id, con_role) VALUES ($1, $2, 'helfer')",
-      [id, eventRows[0].id]
-    );
-
-    const okRes = await fetch(`http://localhost:${port}/managed-persons/${id}`, { method: 'DELETE', headers: { Cookie: cookie } });
-    assert.equal(okRes.status, 200);
-    const { rows } = await query('SELECT 1 FROM users WHERE id = $1', [id]);
-    assert.equal(rows.length, 0);
+    const { id } = await createRes.json();
+    const res = await fetch(`http://localhost:${port}/managed-persons/${id}?force=true`, { method: 'DELETE', headers: { Cookie: cookie } });
+    assert.notEqual(res.status, 200);
+    assert.equal((await query('SELECT 1 FROM users WHERE id = $1', [id])).rows.length, 1);
   } finally {
     server.close();
   }
