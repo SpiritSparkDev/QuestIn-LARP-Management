@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anleitung – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+<style>
+  .help-toc { columns: 2; padding-left: 18px; }
+  .help-doc section { margin-top: 32px; scroll-margin-top: 16px; }
+  .help-doc section:target { background: var(--primary-container); border-radius: 8px; padding: 0 12px 8px; }
+  @media (max-width: 600px) { .help-toc { columns: 1; } }
+</style>
+</head>
+<body>
+<div class="main"><div class="content card form-pad help-doc" style="max-width:860px;margin:32px auto;">
+<h1>Anleitung</h1>
+<p><a href="javascript:history.length > 1 ? history.back() : window.close()">← Zurück zur App</a></p>
+<p>Kurz und praktisch: was du wo findest und wie es geht. In der App zeigt dir das <strong>Hilfe</strong>-Feld am rechten Rand kurze Hinweise zur aktuellen Seite und verlinkt hierher.</p>
+
+<h2>Inhalt</h2>
+<ul class="help-toc">
+  <li><a href="#teilnehmer">Für Teilnehmende</a>
+    <ul>
+      <li><a href="#dashboard">Dashboard</a></li>
+      <li><a href="#konto">Konto</a></li>
+      <li><a href="#anmelden">Anmelden</a></li>
+      <li><a href="#gruppe">Gruppe</a></li>
+      <li><a href="#charaktere">Charaktere</a></li>
+    </ul></li>
+  <li><a href="#orga">Für Orga &amp; Admin</a>
+    <ul>
+      <li><a href="#mitglieder">Mitglieder</a></li>
+      <li><a href="#events">Events</a></li>
+      <li><a href="#checkin">Check-In</a></li>
+      <li><a href="#taverne">Taverne</a></li>
+      <li><a href="#rollen">Rollen</a></li>
+      <li><a href="#schema">Charakterschema</a></li>
+      <li><a href="#email">E-Mail-Vorlagen</a></li>
+      <li><a href="#sync">Datenabgleich</a></li>
+      <li><a href="#einstellungen">Einstellungen</a></li>
+      <li><a href="#protokoll">Protokoll</a></li>
+      <li><a href="#pdf">PDF-Import &amp; -Erzeugung</a></li>
+      <li><a href="#unterkuenfte">Unterkünfte</a></li>
+    </ul></li>
+</ul>
+
+<h2 id="teilnehmer">Für Teilnehmende</h2>
+
+<section id="dashboard">
+<h3>Dashboard</h3>
+<p>Deine Startseite. Sie zeigt, was als Nächstes zu tun ist: fehlende Angaben, offene Anmeldung, Zahlung. Wenn jemand deinen Charakter geändert hat, erscheint hier eine Karte: <strong>Bestätigen</strong> übernimmt die Änderung, <strong>Ablehnen</strong> verwirft sie.</p>
+</section>
+
+<section id="konto">
+<h3>Konto</h3>
+<p>Deine Stammdaten, E-Mail und Passwort. Ein roter Punkt am Menüpunkt „Konto“ heißt: Pflichtangaben fehlen. Ohne sie ist keine Anmeldung möglich.</p>
+</section>
+
+<section id="anmelden">
+<h3>Anmelden</h3>
+<ol>
+  <li>Event wählen.</li>
+  <li>Angaben, Unterkunft und Extras auswählen. Der Preis wird sofort berechnet.</li>
+  <li>Anmeldung absenden. Du bekommst eine Bestätigungs-Mail.</li>
+</ol>
+<p>Ist das Event voll, kommst du auf die <strong>Warteliste</strong> und wirst benachrichtigt, sobald ein Platz frei wird. Wenige freie Plätze werden als „Letzte Plätze“ markiert.</p>
+</section>
+
+<section id="gruppe">
+<h3>Gruppe</h3>
+<p>Für Gruppenleitungen und Verwalter. Du kannst Personen anlegen, sie einzeln oder alle auf einmal anmelden und weitere Verwalter per Einladungslink einladen. Welche Felder du für deine Mitglieder bearbeiten darfst, legt die Orga im Charakterschema fest.</p>
+</section>
+
+<section id="charaktere">
+<h3>Charaktere</h3>
+<p>Lege Spielercharaktere (SC) und Nichtspielercharaktere (NSC) an, pflege Merkmale und lade Dateien hoch. Ändert jemand anderes (z. B. die Gruppenleitung) deinen Charakter, wird die Änderung erst wirksam, wenn du sie auf dem Dashboard bestätigst.</p>
+</section>
+
+<h2 id="orga">Für Orga &amp; Admin</h2>
+<p>Welche Menüpunkte du siehst, hängt von deiner <a href="#rollen">Rolle</a> ab. Die Punkte unter „Administration“ sind nur für Admins.</p>
+
+<section id="mitglieder">
+<h3>Mitglieder</h3>
+<p>Alle Personen mit Suche und Filtern. Öffne eine Person, um Angaben, Anmeldungen, Rolle und Zahlungen zu sehen und zu ändern.</p>
+</section>
+
+<section id="events">
+<h3>Events</h3>
+<p>Event anlegen und konfigurieren: Termin, Preise und Preisgruppen, Fristen, Anmeldeoptionen, Extras. Das <strong>Teilnehmerlimit</strong> hat eine Hartgrenze (darüber geht es nur auf die Warteliste) und löst den Hinweis „Letzte Plätze“ aus. Hier findest du auch die Einbettung für die Website (Widget).</p>
+</section>
+
+<section id="checkin">
+<h3>Check-In</h3>
+<p>Ticket-QR scannen oder per Name suchen, Teilnahme bestätigen. Für Tablet oder Handy am Eingang gibt es die Variante ohne Menü unter <code>/checkin</code>. Für die Con vor Ort siehe auch <code>docs/betrieb-offline.md</code>.</p>
+</section>
+
+<section id="taverne">
+<h3>Taverne</h3>
+<p>Nur sichtbar, wenn das Modul in den Einstellungen eingeschaltet ist. Buchungen an der Theke erfassen; ohne Menü unter <code>/taverne</code>.</p>
+</section>
+
+<section id="rollen">
+<h3>Rollen</h3>
+<p>Rollen bündeln Menüs und Rechte. Mit „Als [Rolle] betrachten“ prüfst du als Admin, was eine Rolle sieht. Der Hinweisbalken oben beendet die Ansicht wieder.</p>
+</section>
+
+<section id="schema">
+<h3>Charakterschema</h3>
+<p>Definiert die Felder für Konto, Anmeldung und Charaktere. Mit der Option <strong>Gruppenverwaltung</strong> darf eine Gruppenleitung dieses Feld für ihre Mitglieder bearbeiten.</p>
+</section>
+
+<section id="email">
+<h3>E-Mail-Vorlagen</h3>
+<p>Betreff und Text der automatischen Mails. Platzhalter in doppelten geschweiften Klammern werden beim Versand durch echte Werte ersetzt. Die Liste der möglichen Platzhalter steht im Editor.</p>
+</section>
+
+<section id="sync">
+<h3>Datenabgleich</h3>
+<p>Gleicht Online-Daten mit der Offline-Con-Instanz ab. Ablauf und Voraussetzungen: <code>docs/betrieb-offline.md</code>.</p>
+</section>
+
+<section id="einstellungen">
+<h3>Einstellungen</h3>
+<p>Zusatzmodule ein- und ausschalten (PDF, Unterkünfte, Taverne), Branding, Datei-Speicher und weitere Voreinstellungen.</p>
+</section>
+
+<section id="protokoll">
+<h3>Protokoll</h3>
+<p>Chronik aller Änderungen: wer, wann, was. Hilfreich bei Rückfragen.</p>
+</section>
+
+<section id="pdf">
+<h3>PDF-Import &amp; -Erzeugung</h3>
+<p>Optionale Module. Import liest Charakterbögen aus PDFs ein, Erzeugung gibt Bögen und Listen als PDF aus.</p>
+</section>
+
+<section id="unterkuenfte">
+<h3>Unterkünfte</h3>
+<p>Optionales Modul: Schlafplätze verwalten und Teilnehmenden zuweisen.</p>
+</section>
+
+<p style="margin-top:32px">Nicht gefunden, was du suchst? Frag die Orga.</p>
+</div></div>
+</body>
+</html>
