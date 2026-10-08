@@ -7,11 +7,13 @@ import { logAudit } from '../audit/repository.js';
 import { listCharactersForUser } from '../characters/repository.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
+import { getGroupAccountFields, updateGroupAccountFields } from './accountFields.js';
 import {
   isGroupAncestorOf, inviteByEmail, inviteById, setGroupName, setGroupFields, acceptInvitation, declineInvitation, cancelInvitation,
   leaveParentGroup, removeChild, getGroupTree, createJoinCode, deleteJoinCode, redeemJoinCode, CODE_VALIDITIES,
 } from './repository.js';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const INVITE_RATE_LIMIT = { keyPrefix: 'group-invite', maxAttempts: 20, windowMs: 15 * 60 * 1000 };
 const REDEEM_RATE_LIMIT = { keyPrefix: 'group-redeem', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
@@ -119,4 +121,17 @@ router.get('/group-tree/persons/:userId/characters', requireGroupManager(async (
       return { id: c.id, name: c.name, fields, data, nscFields, nscData };
     }).filter((c) => c.fields.length > 0 || c.nscFields.length > 0),
   };
+}));
+
+// The account (Konto) fields marked "Gruppenverwaltung" of someone below me.
+router.get('/group-tree/persons/:userId/account', requireGroupManager(async ({ params, user }) => {
+  const result = UUID_RE.test(params.userId) && await getGroupAccountFields(user.id, params.userId);
+  return result ? { status: 200, body: result } : { status: 404, body: { error: 'Person nicht gefunden.' } };
+}));
+
+router.patch('/group-tree/persons/:userId/account', requireGroupManager(async ({ req, params, user }) => {
+  const body = await readJsonBody(req);
+  if (body === null || typeof body !== 'object') return { status: 400, body: { error: 'invalid JSON' } };
+  const result = UUID_RE.test(params.userId) && await updateGroupAccountFields(user.id, params.userId, body);
+  return result ? { status: 200, body: result } : { status: 404, body: { error: 'Person nicht gefunden.' } };
 }));

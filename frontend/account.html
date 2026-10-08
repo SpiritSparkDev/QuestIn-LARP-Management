@@ -1402,7 +1402,7 @@
       const banner = document.getElementById("character-changes-banner");
       let pending = [];
       try { pending = await api.get("/character-changes"); } catch { /* banner is optional */ }
-      banner.innerHTML = pending.map((r) => `<div class="note-box"><p><strong>${escapeHtml(r.actorName)}</strong> hat Daten ${r.nsc ? "des NSC-Profils von" : "von"} <strong>${escapeHtml(r.characterName)}</strong> geändert. Bitte schau sie dir an:</p><ul>${r.changes.map((c) => `<li>${escapeHtml(c.label)}: ${escapeHtml(formatChangeValue(c.from))} → <strong>${escapeHtml(formatChangeValue(c.to))}</strong></li>`).join("")}</ul><div class="action-row"><button type="button" class="btn-sm" data-change-accept="${escapeHtml(r.id)}">Passt so</button><button type="button" class="btn-ghost btn-sm" data-change-reject="${escapeHtml(r.id)}">Änderung ablehnen</button></div></div>`).join("");
+      banner.innerHTML = pending.map((r) => `<div class="note-box"><p><strong>${escapeHtml(r.actorName)}</strong> hat ${r.account ? (r.subjectName ? `Kontodaten von <strong>${escapeHtml(r.subjectName)}</strong>` : "deine Kontodaten") : `Daten ${r.nsc ? "des NSC-Profils von" : "von"} <strong>${escapeHtml(r.characterName)}</strong>`} geändert. Bitte schau sie dir an:</p><ul>${r.changes.map((c) => `<li>${escapeHtml(c.label)}: ${escapeHtml(formatChangeValue(c.from))} → <strong>${escapeHtml(formatChangeValue(c.to))}</strong></li>`).join("")}</ul><div class="action-row"><button type="button" class="btn-sm" data-change-accept="${escapeHtml(r.id)}">Passt so</button><button type="button" class="btn-ghost btn-sm" data-change-reject="${escapeHtml(r.id)}">Änderung ablehnen</button></div></div>`).join("");
       const answer = (id, verb) => async () => {
         try {
           await api.post(`/character-changes/${id}/${verb}`, {});
@@ -1486,10 +1486,29 @@
       body.innerHTML = '<p class="sub">Wird geladen …</p>';
       document.getElementById("group-fields-dialog").showModal();
       try {
-        const characters = await api.get(`/group-tree/persons/${personId}/characters`);
-        body.innerHTML = characters.length === 0
+        const [characters, account] = await Promise.all([
+          api.get(`/group-tree/persons/${personId}/characters`),
+          api.get(`/group-tree/persons/${personId}/account`),
+        ]);
+        const accountForm = account.fields.length
+          ? `<form class="group-account-form"><h4>Konto-Daten</h4>${account.fields.map((f) => `<div class="form-group">${renderField(f, account.data[f.key], "ga-")}</div>`).join("")}<button type="submit">Speichern</button></form>`
+          : "";
+        body.innerHTML = accountForm + (characters.length === 0
           ? '<p class="sub">Keine Charaktere mit freigegebenen Gruppen-Feldern.</p>'
-          : characters.map((c) => `<form class="group-char-form" data-character-id="${escapeHtml(c.id)}"><h4>${escapeHtml(c.name)}</h4>${c.fields.map((f) => `<div class="form-group">${renderField(f, c.data[f.key], `gf-${c.id}-`)}</div>`).join("")}<button type="submit">Speichern</button></form>${c.nscFields?.length ? `<form class="group-nsc-form" data-character-id="${escapeHtml(c.id)}"><h4>NSC-Profil: ${escapeHtml(c.name)}</h4>${c.nscFields.map((f) => `<div class="form-group">${renderField(f, c.nscData[f.key], `gnf-${c.id}-`)}</div>`).join("")}<button type="submit">Speichern</button></form>` : ""}`).join("");
+          : characters.map((c) => `<form class="group-char-form" data-character-id="${escapeHtml(c.id)}"><h4>${escapeHtml(c.name)}</h4>${c.fields.map((f) => `<div class="form-group">${renderField(f, c.data[f.key], `gf-${c.id}-`)}</div>`).join("")}<button type="submit">Speichern</button></form>${c.nscFields?.length ? `<form class="group-nsc-form" data-character-id="${escapeHtml(c.id)}"><h4>NSC-Profil: ${escapeHtml(c.name)}</h4>${c.nscFields.map((f) => `<div class="form-group">${renderField(f, c.nscData[f.key], `gnf-${c.id}-`)}</div>`).join("")}<button type="submit">Speichern</button></form>` : ""}`).join(""));
+        const accountEl = body.querySelector(".group-account-form");
+        if (accountEl) {
+          attachLiveValidation(accountEl);
+          accountEl.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            try {
+              await api.patch(`/group-tree/persons/${personId}/account`, collectFieldValues(accountEl, account.fields));
+              notify("Gespeichert. Die Person sieht die Änderung auf ihrem Dashboard.", "success");
+            } catch (err) {
+              notify(err.message, "error");
+            }
+          });
+        }
         body.querySelectorAll(".group-char-form, .group-nsc-form").forEach((form) => {
           const character = characters.find((c) => c.id === form.dataset.characterId);
           const isNsc = form.classList.contains("group-nsc-form");
