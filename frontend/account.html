@@ -314,6 +314,14 @@
           </form>
 
           <div class="card form-pad">
+            <h2>Meine Dateien</h2>
+            <p class="sub">Bilder und PDFs zu deinem Konto – getrennt von den Charakteren. Mit dem Stern legst du dein Profilbild fest, das unten links in der Seitenleiste erscheint.</p>
+            <div id="account-files-list" class="file-list"></div>
+            <input type="file" id="account-file-input" accept="image/jpeg,image/png,image/webp,application/pdf" multiple hidden>
+            <button type="button" id="account-file-upload-btn" class="btn-ghost">Datei hochladen</button>
+          </div>
+
+          <div class="card form-pad">
             <h2>Meine Daten (DSGVO-Auskunft)</h2>
             <p class="sub">Lade eine vollständige Auskunft über alle bei uns gespeicherten Daten zu deinem Konto herunter.</p>
             <button type="button" id="export-data-btn">Meine Daten herunterladen (TXT)</button>
@@ -2616,6 +2624,62 @@
       });
     }
 
+    // Account-level files (separate from character files); the starred image is
+    // the profile picture shown in the sidebar.
+    async function loadAccountFiles(account) {
+      const list = document.getElementById("account-files-list");
+      const files = await api.get("/account/files");
+      account.avatarFileId = files.find((f) => f.kind === "image" && f.is_portrait)?.id ?? null;
+      document.getElementById("sidebar-user-info").innerHTML = renderSidebarUser(account);
+      list.innerHTML = files.length
+        ? files.map((f) => {
+            const url = `/account/files/${f.id}`;
+            const thumb = f.kind === "image"
+              ? `<img src="${url}" alt="" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:50%;">`
+              : `<span class="material-symbols-outlined" aria-hidden="true">description</span>`;
+            const star = f.kind === "image"
+              ? `<button type="button" class="file-thumb-portrait${f.is_portrait ? " is-active" : ""}" data-avatar-file="${f.id}" data-avatar-active="${f.is_portrait ? "1" : ""}" title="${f.is_portrait ? "Ist das Profilbild (Klick: zurücksetzen)" : "Als Profilbild festlegen"}" aria-label="Als Profilbild festlegen"><span class="material-symbols-outlined" aria-hidden="true">star</span></button>`
+              : "";
+            return `<div class="file-item" style="display:flex;align-items:center;gap:10px;">
+              ${thumb}<a href="${url}" target="_blank" rel="noopener">${escapeHtml(f.original_filename)}</a>
+              ${star}<button type="button" class="btn-ghost" data-delete-account-file="${f.id}">Löschen</button></div>`;
+          }).join("")
+        : '<p class="sub">Noch keine Dateien hochgeladen.</p>';
+      list.querySelectorAll("[data-avatar-file]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          try {
+            await api.put("/account/portrait", { fileId: button.dataset.avatarActive ? null : button.dataset.avatarFile });
+            await loadAccountFiles(account);
+          } catch (err) { notify(err.message, "error"); }
+        });
+      });
+      list.querySelectorAll("[data-delete-account-file]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          try {
+            await api.delete(`/account/files/${button.dataset.deleteAccountFile}`);
+            await loadAccountFiles(account);
+          } catch (err) { notify(err.message, "error"); }
+        });
+      });
+    }
+
+    function initAccountFiles(account) {
+      const input = document.getElementById("account-file-input");
+      document.getElementById("account-file-upload-btn").addEventListener("click", () => input.click());
+      input.addEventListener("change", async () => {
+        for (const file of input.files) {
+          const kind = kindForMimeType(file.type);
+          if (!kind) { notify(`„${file.name}“: nur JPG, PNG, WebP oder PDF.`, "error"); continue; }
+          try {
+            await api.post("/account/files", { kind, filename: file.name, mimeType: file.type, dataBase64: await readFileAsBase64(file), gdprConsent: true });
+          } catch (err) { notify(`„${file.name}“ konnte nicht hochgeladen werden: ${err.message}`, "error"); }
+        }
+        input.value = "";
+        await loadAccountFiles(account);
+      });
+      return loadAccountFiles(account);
+    }
+
     function renderFileList(characterId, files) {
       const images = files.filter((f) => f.kind === "image");
       const documents = files.filter((f) => f.kind !== "image");
@@ -3014,6 +3078,7 @@
       renderNav();
       document.getElementById("sidebar-user-info").innerHTML =
         renderSidebarUser(account);
+      initAccountFiles(account).catch((err) => notify(err.message, "error"));
 
       accountForm.elements.firstName.value = account.firstName ?? "";
       accountForm.elements.lastName.value = account.lastName ?? "";

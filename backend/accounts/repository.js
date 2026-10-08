@@ -25,6 +25,7 @@ function decryptAccount(row) {
     keepDataConsent: row.keep_data_consent,
     groupMemberOnly: row.group_member_only,
     discordUsername: row.discord_username,
+    avatarFileId: row.avatar_file_id,
     ...decryptFieldBlob(row.account_data_enc),
   };
 }
@@ -33,7 +34,8 @@ const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys, users.keep_data_consent, (users.group_member_only OR users.group_parent_id IS NOT NULL) AS group_member_only,
   users.account_data_enc,
   groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive,
-  discord_accounts.username AS discord_username
+  discord_accounts.username AS discord_username,
+  (SELECT id FROM account_files WHERE user_id = users.id AND is_portrait) AS avatar_file_id
 `;
 
 const FROM_JOIN = `

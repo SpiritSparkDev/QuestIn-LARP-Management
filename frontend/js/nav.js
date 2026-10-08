@@ -190,7 +190,7 @@ export function renderNavLinks(account, currentPath, { accountIncomplete = false
 export function renderSidebarUser(account) {
   const initials = `${account.firstName?.[0] ?? ''}${account.lastName?.[0] ?? ''}`.toUpperCase();
   return `<div class="sidebar-user">
-    <div class="sidebar-user-avatar">${escapeHtml(initials)}</div>
+    <div class="sidebar-user-avatar">${account.avatarFileId ? `<img src="/account/files/${escapeHtml(account.avatarFileId)}" alt="">` : escapeHtml(initials)}</div>
     <div class="sidebar-user-text">
       <p class="sidebar-user-name">${escapeHtml(account.name)}</p>
       <p class="sidebar-user-role">${escapeHtml(account.group.name)}</p>
