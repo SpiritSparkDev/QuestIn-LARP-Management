@@ -1398,12 +1398,31 @@
       const banner = document.getElementById("character-changes-banner");
       let pending = [];
       try { pending = await api.get("/character-changes"); } catch { /* banner is optional */ }
-      banner.innerHTML = pending.map((r) => `<div class="note-box"><p><strong>${escapeHtml(r.actorName)}</strong> hat ${r.account ? (r.subjectName ? `Kontodaten von <strong>${escapeHtml(r.subjectName)}</strong>` : "deine Kontodaten") : `Daten ${r.nsc ? "des NSC-Profils von" : "von"} <strong>${escapeHtml(r.characterName)}</strong>`} geändert. Bitte schau sie dir an:</p><ul class="change-list">${r.changes.map((c) => `<li><label><input type="checkbox" data-change-key="${escapeHtml(c.key)}" checked> ${escapeHtml(c.label)}: ${escapeHtml(formatChangeValue(c.from))} → <strong>${escapeHtml(formatChangeValue(c.to))}</strong></label></li>`).join("")}</ul><p class="sub">Angehakte Änderungen werden übernommen, nicht angehakte zurückgesetzt.</p><div class="action-row"><button type="button" class="btn-sm" data-change-apply="${escapeHtml(r.id)}">Auswahl übernehmen</button><button type="button" class="btn-ghost btn-sm" data-change-all="1">Alle auswählen</button><button type="button" class="btn-ghost btn-sm" data-change-all="0">Alle abwählen</button></div></div>`).join("");
+      // Rows that end up identical (empty -> empty) carry no information; they stay in the
+      // request (accepting or rejecting them changes nothing) but are not shown.
+      const shownChanges = (r) => r.changes.filter((c) => formatChangeValue(c.from) !== formatChangeValue(c.to));
+      const reviewTitle = (r) => `<strong>${escapeHtml(r.actorName)}</strong> hat ${r.account ? (r.subjectName ? `Kontodaten von <strong>${escapeHtml(r.subjectName)}</strong>` : "deine Kontodaten") : `Daten ${r.nsc ? "des NSC-Profils von" : "von"} <strong>${escapeHtml(r.characterName)}</strong>`} geändert.`;
+      const changeRow = (c) => `<li><label><input type="checkbox" data-change-key="${escapeHtml(c.key)}" checked><span class="change-label">${escapeHtml(c.label)}</span><span class="change-values"><span class="change-from">${escapeHtml(formatChangeValue(c.from))}</span><span class="change-arrow" aria-hidden="true">→</span><strong class="change-to">${escapeHtml(formatChangeValue(c.to))}</strong></span></label></li>`;
+      banner.innerHTML = pending.map((r) => {
+        const shown = shownChanges(r);
+        const hidden = r.changes.filter((c) => !shown.includes(c));
+        return `<div class="change-review">
+          <p class="change-review-title">${reviewTitle(r)}</p>
+          <p class="sub">Haken setzen, was übernommen werden soll. Nicht angehakte Änderungen werden zurückgesetzt.</p>
+          <ul class="change-list">${shown.map(changeRow).join("") || '<li class="sub">Keine sichtbaren Unterschiede.</li>'}</ul>
+          ${hidden.map((c) => `<input type="checkbox" data-change-key="${escapeHtml(c.key)}" checked hidden>`).join("")}
+          <div class="change-actions">
+            <button type="button" class="btn-sm" data-change-apply="${escapeHtml(r.id)}">Auswahl übernehmen</button>
+            <button type="button" class="btn-ghost btn-sm" data-change-all="1">Alle auswählen</button>
+            <button type="button" class="btn-ghost btn-sm" data-change-all="0">Alle abwählen</button>
+          </div>
+        </div>`;
+      }).join("");
       banner.querySelectorAll("[data-change-all]").forEach((b) => b.addEventListener("click", () => {
-        b.closest(".note-box").querySelectorAll("[data-change-key]").forEach((box) => { box.checked = b.dataset.changeAll === "1"; });
+        b.closest(".change-review").querySelectorAll("[data-change-key]").forEach((box) => { box.checked = b.dataset.changeAll === "1"; });
       }));
       banner.querySelectorAll("[data-change-apply]").forEach((b) => b.addEventListener("click", async () => {
-        const rejectKeys = [...b.closest(".note-box").querySelectorAll("[data-change-key]")].filter((box) => !box.checked).map((box) => box.dataset.changeKey);
+        const rejectKeys = [...b.closest(".change-review").querySelectorAll("[data-change-key]")].filter((box) => !box.checked).map((box) => box.dataset.changeKey);
         try {
           await api.post(`/character-changes/${b.dataset.changeApply}/accept`, { rejectKeys });
           notify(rejectKeys.length ? "Auswahl übernommen, der Rest wurde zurückgesetzt." : "Änderungen bestätigt.", "success");

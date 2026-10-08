@@ -1515,6 +1515,95 @@ textarea.invalid {
   color: var(--on-primary-container);
 }
 
+/* ---------- Review of changes made by someone else (Dashboard) ---------- */
+
+.change-review {
+  background: var(--primary-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin: 8px 0 20px;
+  color: var(--on-primary-container);
+}
+
+.change-review p {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.change-review .change-review-title {
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+.change-list {
+  list-style: none;
+  margin: 12px 0 14px;
+  padding: 0;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.change-list li {
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.change-list label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1.8fr);
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 8px 2px;
+  margin: 0;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.change-list input[type="checkbox"] {
+  margin: 0;
+  align-self: center;
+}
+
+.change-label {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.change-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.change-from {
+  color: var(--on-surface-variant, inherit);
+}
+
+.change-arrow {
+  opacity: 0.6;
+}
+
+.change-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+@media (max-width: 600px) {
+  .change-list label {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .change-values {
+    grid-column: 2;
+  }
+}
+
 .checkbox-group {
   display: flex;
   flex-wrap: wrap;
