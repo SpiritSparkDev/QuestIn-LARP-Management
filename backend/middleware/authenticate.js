@@ -26,7 +26,7 @@ export function requireAuth(handler) {
       `SELECT users.id, users.email, users.deactivated_at, (users.group_member_only OR users.group_parent_id IS NOT NULL) AS group_member_only,
               groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
               groups.visible_menus, groups.account_fields, groups.can_edit_characters,
-              groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive
+              groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive, groups.can_use_offline
        FROM users
        JOIN groups ON groups.id = users.group_id
        WHERE users.id = $1`,
@@ -50,6 +50,7 @@ export function requireAuth(handler) {
         canOverrideCheckinStatus: row.can_override_checkin_status,
         canExportMembers: row.can_export_members,
         canExportSensitive: row.can_export_sensitive,
+        canUseOffline: row.can_use_offline,
       },
     };
 
@@ -57,7 +58,7 @@ export function requireAuth(handler) {
     // permissions for this session. The identity stays the same.
     if (session.viewAsGroupId && user.group.key === 'admin') {
       const { rows: viewRows } = await query(
-        `SELECT id, key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive
+        `SELECT id, key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive, can_use_offline
          FROM groups WHERE id = $1`,
         [session.viewAsGroupId]
       );
@@ -75,6 +76,7 @@ export function requireAuth(handler) {
           canOverrideCheckinStatus: v.can_override_checkin_status,
           canExportMembers: v.can_export_members,
           canExportSensitive: v.can_export_sensitive,
+          canUseOffline: v.can_use_offline,
         };
       }
     }

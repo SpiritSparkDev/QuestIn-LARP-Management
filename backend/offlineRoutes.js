@@ -3,7 +3,7 @@ import { router } from './routes.js';
 import { query } from './db.js';
 import * as db from './db.js';
 import { requireAuth } from './middleware/authenticate.js';
-import { requireAdminGroup } from './middleware/authorize.js';
+import { requireOfflinePermission } from './middleware/authorize.js';
 import { readJsonBody } from './httpBody.js';
 import { toCsv } from './csv.js';
 import { logAudit } from './audit/repository.js';
@@ -97,7 +97,7 @@ async function guarded(fn) {
   }
 }
 
-const admin = (handler) => requireAuth(requireAdminGroup(({ ...ctx }) => guarded(() => handler(ctx))));
+const admin = (handler) => requireAuth(requireOfflinePermission(({ ...ctx }) => guarded(() => handler(ctx))));
 const validPassphrase = (p) => typeof p === 'string' && p.length >= 8;
 const safeEqual = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 

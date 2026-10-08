@@ -19,6 +19,7 @@ router.get('/account', requireAuth(async ({ user }) => {
     canOverrideCheckinStatus: user.group.canOverrideCheckinStatus,
     canExportMembers: user.group.canExportMembers,
     canExportSensitive: user.group.canExportSensitive,
+    canUseOffline: user.group.canUseOffline,
     viewingAs: user.viewingAs,
   } : {};
   return { status: 200, body: { ...account, ...viewAs, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, testMode: await isTestModeEnabled(), instance: await getSummary() } };

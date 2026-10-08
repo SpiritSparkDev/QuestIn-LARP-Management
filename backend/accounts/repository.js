@@ -21,6 +21,7 @@ function decryptAccount(row) {
     canOverrideCheckinStatus: row.can_override_checkin_status,
     canExportMembers: row.can_export_members,
     canExportSensitive: row.can_export_sensitive,
+    canUseOffline: row.can_use_offline,
     emailVerified: row.email_verified,
     keepDataConsent: row.keep_data_consent,
     groupMemberOnly: row.group_member_only,
@@ -33,7 +34,7 @@ function decryptAccount(row) {
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.hotkeys, users.keep_data_consent, (users.group_member_only OR users.group_parent_id IS NOT NULL) AS group_member_only,
   users.account_data_enc,
-  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive,
+  groups.key AS group_key, groups.name AS group_name, groups.visible_menus, groups.can_edit_characters, groups.account_fields, groups.can_override_checkin_status, groups.can_export_members, groups.can_export_sensitive, groups.can_use_offline,
   discord_accounts.username AS discord_username,
   (SELECT id FROM account_files WHERE user_id = users.id AND is_portrait) AS avatar_file_id
 `;

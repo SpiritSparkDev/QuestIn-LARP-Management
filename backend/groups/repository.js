@@ -10,7 +10,7 @@ export async function effectiveAccountFields(groupKey, stored) {
   return ['group', ...account.map((f) => f.key), ...registration.map((f) => f.key)];
 }
 
-const SELECT_COLUMNS = 'id, key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive, is_protected';
+const SELECT_COLUMNS = 'id, key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive, can_use_offline, is_protected';
 
 export async function listGroups() {
   const { rows } = await query(`SELECT ${SELECT_COLUMNS} FROM groups ORDER BY name`);
@@ -22,12 +22,12 @@ export async function getGroup(id) {
   return rows[0] ?? null;
 }
 
-export async function createGroup({ key, name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive }) {
+export async function createGroup({ key, name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive, canUseOffline }) {
   const { rows } = await query(
-    `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive, can_use_offline)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING ${SELECT_COLUMNS}`,
-    [key, name, JSON.stringify(visibleMenus ?? []), JSON.stringify(accountFields ?? []), !!canEditCharacters, !!canOverrideCheckinStatus, !!canExportMembers, !!canExportSensitive]
+    [key, name, JSON.stringify(visibleMenus ?? []), JSON.stringify(accountFields ?? []), !!canEditCharacters, !!canOverrideCheckinStatus, !!canExportMembers, !!canExportSensitive, !!canUseOffline]
   );
   return rows[0];
 }
@@ -37,7 +37,7 @@ export async function deleteGroup(id) {
   return rows[0] ?? null;
 }
 
-export async function updateGroup(id, { name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive }) {
+export async function updateGroup(id, { name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive, canUseOffline }) {
   const { rows } = await query(
     `UPDATE groups SET
        name = COALESCE($2, name),
@@ -46,7 +46,8 @@ export async function updateGroup(id, { name, visibleMenus, accountFields, canEd
        can_edit_characters = COALESCE($5, can_edit_characters),
        can_override_checkin_status = COALESCE($6, can_override_checkin_status),
        can_export_members = COALESCE($7, can_export_members),
-       can_export_sensitive = COALESCE($8, can_export_sensitive)
+       can_export_sensitive = COALESCE($8, can_export_sensitive),
+       can_use_offline = COALESCE($9, can_use_offline)
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
     [
@@ -58,6 +59,7 @@ export async function updateGroup(id, { name, visibleMenus, accountFields, canEd
       canOverrideCheckinStatus !== undefined ? canOverrideCheckinStatus : null,
       canExportMembers !== undefined ? canExportMembers : null,
       canExportSensitive !== undefined ? canExportSensitive : null,
+      canUseOffline !== undefined ? canUseOffline : null,
     ]
   );
   return rows[0] ?? null;

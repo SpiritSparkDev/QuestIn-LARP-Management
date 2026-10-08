@@ -34,7 +34,7 @@ router.get('/groups', requireAuth(requireAdminGroup(async () => {
 router.post('/groups', requireAuth(requireAdminGroup(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { key, name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive } = body;
+  const { key, name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive, canUseOffline } = body;
   if (!key || !KEY_PATTERN.test(key)) {
     return { status: 400, body: { error: 'key is required and must contain only lowercase letters, digits, and underscores' } };
   }
@@ -48,7 +48,7 @@ router.post('/groups', requireAuth(requireAdminGroup(async ({ req, user }) => {
     return { status: 400, body: { error: `accountFields must be an array containing only: ${(await allowedFieldKeys()).join(', ')}` } };
   }
   try {
-    const group = await createGroup({ key, name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive });
+    const group = await createGroup({ key, name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive, canUseOffline });
     await logAudit({ actorId: user.id, action: 'group.created', details: { name, key } });
     return { status: 201, body: group };
   } catch (err) {
@@ -65,14 +65,14 @@ router.put('/groups/:id', requireAuth(requireAdminGroup(async ({ req, params }) 
   }
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive } = body;
+  const { name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive, canUseOffline } = body;
   if (visibleMenus !== undefined && !isValidMenuList(visibleMenus)) {
     return { status: 400, body: { error: `visibleMenus must be an array containing only: ${MENU_KEYS.join(', ')}` } };
   }
   if (accountFields !== undefined && !(await isValidFieldList(accountFields))) {
     return { status: 400, body: { error: `accountFields must be an array containing only: ${(await allowedFieldKeys()).join(', ')}` } };
   }
-  const group = await updateGroup(params.id, { name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive });
+  const group = await updateGroup(params.id, { name, visibleMenus, accountFields, canEditCharacters, canOverrideCheckinStatus, canExportMembers, canExportSensitive, canUseOffline });
   return { status: 200, body: group };
 })));
 

@@ -15,6 +15,15 @@ export function requireAnyMenu(...menuKeys) {
   };
 }
 
+// Allowed when the group may operate the offline database (admin-assigned permission).
+export function requireOfflinePermission(handler) {
+  return async (ctx) => {
+    if (!ctx.user) return { status: 401, body: { error: 'Nicht angemeldet.' } };
+    if (!ctx.user.group.canUseOffline) return { status: 403, body: { error: 'Kein Zugriff.' } };
+    return handler(ctx);
+  };
+}
+
 export function requireAdminGroup(handler) {
   return async (ctx) => {
     if (!ctx.user) return { status: 401, body: { error: 'Nicht angemeldet.' } };

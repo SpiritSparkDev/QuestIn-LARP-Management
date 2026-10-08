@@ -36,8 +36,13 @@ async function loadMode() {
 export async function updateModeChip(account) {
   lastAccount = account;
   const mode = await loadMode();
+  // Only roles the admin allowed to use the offline database see (and can click) the chip.
+  if (account.canUseOffline !== true) {
+    document.getElementById('mode-chip')?.remove();
+    return;
+  }
   const state = chipState(account.instance, mode);
-  const isAdmin = account.group?.key === 'admin';
+  const isAdmin = true;
   if (isAdmin && !snapshotId && state.key !== 'online') {
     try {
       const events = (await api.get('/offline/status')).events;

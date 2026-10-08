@@ -5,7 +5,7 @@ import { seal, open, returnToken, fail } from './container.js';
 // e.g. `import * as db from '../db.js'`.
 
 const REG_COLUMNS = 'user_id, event_id, status, checked_in_at, checked_out_at, con_role, character_id, amount_due_cents, paid_at, flags, con_payer, created_at';
-const GROUP_COLUMNS = 'key, name, visible_menus, account_fields, can_edit_characters, is_protected, can_override_checkin_status, can_export_members, can_export_sensitive';
+const GROUP_COLUMNS = 'key, name, visible_menus, account_fields, can_edit_characters, is_protected, can_override_checkin_status, can_export_members, can_export_sensitive, can_use_offline';
 const TX_COLUMNS = 'id, account_id, type, amount_cents, method, note, items, reverses_id, voided_at, created_by, created_at';
 
 async function schemaVersion(db) {

@@ -78,6 +78,10 @@
         </div>
 
         <div class="checkbox-group">
+          <label><input type="checkbox" id="can-use-offline"> Darf die Datenbank offline verwenden (Online/Offline umschalten, Datenabgleich)</label>
+        </div>
+
+        <div class="checkbox-group">
           <label><input type="checkbox" id="can-override-checkin-status"> Darf Check-In-Status frei setzen und alle Charakterfelder sehen (Admin/Orga/SL-Funktion)</label>
         </div>
 
@@ -189,6 +193,7 @@ function startEdit(group) {
   document.getElementById('can-override-checkin-status').checked = group.can_override_checkin_status;
   document.getElementById('can-export-members').checked = group.can_export_members;
   document.getElementById('can-export-sensitive').checked = group.can_export_sensitive;
+  document.getElementById('can-use-offline').checked = group.can_use_offline;
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
   dialog.showModal();
 }
@@ -218,6 +223,7 @@ form.addEventListener('submit', async (event) => {
     canOverrideCheckinStatus: document.getElementById('can-override-checkin-status').checked,
     canExportMembers: document.getElementById('can-export-members').checked,
     canExportSensitive: document.getElementById('can-export-sensitive').checked,
+    canUseOffline: document.getElementById('can-use-offline').checked,
   };
   try {
     if (editingGroupId) {
