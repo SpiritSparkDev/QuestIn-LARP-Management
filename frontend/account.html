@@ -371,7 +371,7 @@
 
                   <form id="registration-form">
                     <div class="section-head">
-                      <h3>1. Veranstaltung</h3>
+                      <h3>1. Veranstaltung &amp; Teilnahme</h3>
                       <span class="badge" id="event-status-badge"></span>
                       <span class="badge" id="event-low-seats-badge" hidden>Nur noch wenige Plätze verfügbar</span>
                     </div>
@@ -379,23 +379,23 @@
                     <label for="event-select" id="event-select-label">Event</label>
                     <p class="event-display" id="event-display" style="display:none;"></p>
 
-                    <div id="character-select-wrap">
-                      <h3>2. Wie nimmst du am Event teil?</h3>
-                      <div class="role-cards" id="registration-role-tabs">
-                        <button type="button" class="role-card active" data-role="sc">
-                          <span class="material-symbols-outlined role-card-icon" aria-hidden="true">theater_comedy</span>
-                          <span class="role-card-title">Als Spielercharakter (SC)</span>
-                          <span class="role-card-desc">Du reist mit eigenem Charakter an.</span>
-                          <span class="role-card-selected"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span> Ausgewählt</span>
-                        </button>
-                        <button type="button" class="role-card" data-role="nsc">
-                          <span class="material-symbols-outlined role-card-icon" aria-hidden="true">support_agent</span>
-                          <span class="role-card-title">Als Nichtspieler (NSC)</span>
-                          <span class="role-card-desc">Du unterstützt die Spielleitung, ob in einer Festrolle oder bei der Umsetzung einer Quest.</span>
-                          <span class="role-card-selected"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span> Ausgewählt</span>
-                        </button>
-                      </div>
+                    <div class="role-cards" id="registration-role-tabs">
+                      <button type="button" class="role-card active" data-role="sc">
+                        <span class="material-symbols-outlined role-card-icon" aria-hidden="true">theater_comedy</span>
+                        <span class="role-card-title">Als Spielercharakter (SC)</span>
+                        <span class="role-card-desc">Du spielst deinen eigenen Charakter.</span>
+                        <span class="role-card-selected"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span> Ausgewählt</span>
+                      </button>
+                      <button type="button" class="role-card" data-role="nsc">
+                        <span class="material-symbols-outlined role-card-icon" aria-hidden="true">support_agent</span>
+                        <span class="role-card-title">Als Nichtspieler (NSC)</span>
+                        <span class="role-card-desc">Du unterstützt die Spielleitung – mit fester Rolle oder flexibel als Springer.</span>
+                        <span class="role-card-selected"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span> Ausgewählt</span>
+                      </button>
+                    </div>
 
+                    <div id="character-select-wrap">
+                      <h3>2. Deine Rolle</h3>
                       <div id="sc-role-panel">
                         <select id="character-select" style="display:none;"></select>
                         <label for="character-select" id="character-select-label" style="display:none;">Als welcher Charakter kommst du?</label>
@@ -410,7 +410,8 @@
                       </div>
 
                       <div id="nsc-role-panel" hidden>
-                        <h3>Mit welchem Charakter spielst du?</h3>
+                        <h3>Hast du eine feste Rolle?</h3>
+                        <p class="sub">Wähle einen Charakter, falls du eine feste Figur darstellst – sonst „Springer“ lassen.</p>
                         <select id="nsc-character-select"></select>
                         <label for="nsc-character-select">Charakter</label>
                         <div class="create-card-wrap">
