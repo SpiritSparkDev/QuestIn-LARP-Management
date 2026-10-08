@@ -36,7 +36,7 @@ function validateLodgings(lodgings) {
 router.get('/events/:id/lodgings', requireAuth(async ({ params, user }) => {
   if (!(await getAppSettings()).lodgingEnabled) return DISABLED;
   if (!(await getEvent(params.id))) return { status: 404, body: { error: 'event not found' } };
-  return { status: 200, body: await listLodgings(params.id, { showNames: user.group.visibleMenus.includes('events') }) };
+  return { status: 200, body: await listLodgings(params.id, { showNames: user.group.visibleMenus.includes('events'), viewerId: user.id }) };
 }));
 
 router.put('/events/:id/lodgings', requireAuth(requireMenu('events')(async ({ req, params }) => {

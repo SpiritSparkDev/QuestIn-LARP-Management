@@ -81,6 +81,8 @@ test('lodging add-on: setup, booking, sold-out, visibility, switching and locks'
     await query('UPDATE registrations SET character_id = $2, con_role = $4 WHERE event_id = $1 AND user_id = $3', [eventId, held[0].id, bob.userId, 'sc']);
     await query('UPDATE users SET group_parent_id = $1 WHERE id = $2', [carol.userId, bob.userId]);
     assert.deepEqual((await (await getLodgings(carol.cookie)).json())[0].occupants.map((o) => o.name), ['Bobs Held']);
+    // ... but only people of the same group see that; an outsider doesn't.
+    assert.deepEqual((await (await getLodgings(alice.cookie)).json())[0].occupants, []);
     await query('UPDATE users SET group_parent_id = NULL WHERE id = $1', [bob.userId]);
 
     // Switching frees the bed and moves the price.
