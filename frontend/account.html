@@ -1245,6 +1245,7 @@
       <div class="action-row">
         <a href="${manageHref}" class="btn-ghost">Charaktere &amp; Anmeldung verwalten</a>
         <button type="button" data-managed-person-edit="${p.id}" class="btn-ghost">Bearbeiten</button>
+        <button type="button" data-managed-person-release="${p.id}" class="btn-ghost">Aus Gruppe entfernen</button>
         <button type="button" data-managed-person-delete="${p.id}" class="btn-ghost">Löschen</button>
         <button type="button" data-managed-person-convert="${p.id}" class="btn-ghost">Einladungslink erzeugen</button>
       </div>
@@ -1369,6 +1370,17 @@
       });
       container.querySelectorAll("[data-managed-person-delete]").forEach((btn) => {
         btn.addEventListener("click", () => openManagedPersonDeleteDialog(btn.dataset.managedPersonDelete));
+      });
+      container.querySelectorAll("[data-managed-person-release]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Person aus deiner Gruppe entfernen? Sie wird nicht gelöscht, du kannst sie danach aber nicht mehr verwalten.")) return;
+          try {
+            await api.post(`/managed-persons/${btn.dataset.managedPersonRelease}/release`, {});
+            await loadManagedPersons();
+          } catch (err) {
+            notify(err.message, "error");
+          }
+        });
       });
       container.querySelectorAll("[data-managed-person-convert]").forEach((btn) => {
         btn.addEventListener("click", () => convertManagedPerson(btn.dataset.managedPersonConvert));

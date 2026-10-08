@@ -15,6 +15,7 @@ const { query, closePool } = await import('../../backend/db.js');
 const { getAccountFieldSchema, setAccountFieldSchema } = await import('../../backend/accountFieldSchema/repository.js');
 const { getGroupAccountFields, updateGroupAccountFields } = await import('../../backend/groupTree/accountFields.js');
 const { listPendingReviews, resolveReview } = await import('../../backend/characterReviews/repository.js');
+const { releasePerson } = await import('../../backend/managedPersons/repository.js');
 const { encryptFieldBlob, decryptFieldBlob } = await import('../../backend/accountFields.js');
 
 const makeUser = async (tag, parentId = null) => (await query(
@@ -71,4 +72,15 @@ test('owner can accept some changed fields and reject the rest', async () => {
   const blob = decryptFieldBlob((await query('SELECT account_data_enc FROM users WHERE id = $1', [child])).rows[0].account_data_enc);
   assert.equal(blob.gaShared, 'a2');
   assert.equal(blob.gaShared2, 'b1');
+});
+
+test('releasePerson detaches a managed person without deleting them, only for their manager', async () => {
+  const person = await makeUser('Managed');
+  await query('UPDATE users SET managed_by_user_id = $2 WHERE id = $1', [person, manager]);
+  assert.equal(await releasePerson(person, stranger), false);
+  assert.equal(await releasePerson(person, manager), true);
+  const { rows } = await query('SELECT managed_by_user_id FROM users WHERE id = $1', [person]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].managed_by_user_id, null);
+  await query('DELETE FROM users WHERE id = $1', [person]);
 });

@@ -6,10 +6,12 @@ import { filterToAllowedFields } from '../members/routes.js';
 import { createCharacter } from '../characters/repository.js';
 import {
   listManagedPersons, getManagedPersonForRegistration, createManagedPerson, updateManagedPerson, deleteManagedPerson,
-  searchClaimablePersons, claimPerson,
+  searchClaimablePersons, claimPerson, releasePerson,
 } from './repository.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { logAudit } from '../audit/repository.js';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const SEARCH_RATE_LIMIT = { keyPrefix: 'managed-search', maxAttempts: 30, windowMs: 15 * 60 * 1000 };
 
@@ -30,6 +32,12 @@ router.post('/managed-persons/:id/claim', requireGroupManager(async ({ params, u
   if (!person) return { status: 404, body: { error: 'Person nicht gefunden oder bereits in einer Gruppe.' } };
   await logAudit({ actorId: user.id, action: 'managed_person.claim', details: { personId: params.id } });
   return { status: 200, body: person };
+}));
+
+router.post('/managed-persons/:id/release', requireGroupManager(async ({ params, user }) => {
+  if (!UUID_RE.test(params.id) || !(await releasePerson(params.id, user.id))) return { status: 404, body: { error: 'managed person not found' } };
+  await logAudit({ actorId: user.id, action: 'managed_person.release', subjectUserId: params.id, details: {} });
+  return { status: 200, body: { released: true } };
 }));
 
 router.get('/managed-persons/:id', requireAuth(async ({ params, user }) => {

@@ -199,6 +199,13 @@ export async function searchClaimablePersons(term, ownerId) {
   ];
 }
 
+// The inverse of claimPerson: the person stays in the system (with registrations and
+// characters), the manager just no longer manages them.
+export async function releasePerson(id, ownerId) {
+  const { rowCount } = await query('UPDATE users SET managed_by_user_id = NULL WHERE id = $1 AND managed_by_user_id = $2', [id, ownerId]);
+  return rowCount > 0;
+}
+
 export async function claimPerson(id, ownerId) {
   const { rows } = await query(
     `UPDATE users SET managed_by_user_id = $2
