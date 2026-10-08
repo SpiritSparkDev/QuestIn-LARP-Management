@@ -66,6 +66,7 @@
               </dialog>
 
               <div id="group-invitations-banner"></div>
+              <div id="character-changes-banner"></div>
 
               <div class="dashboard-split">
               <div class="dashboard-col">
@@ -1375,6 +1376,27 @@
       banner.querySelectorAll("[data-invite-accept]").forEach((b) => b.addEventListener("click", answer(b.dataset.inviteAccept, "accept")));
       banner.querySelectorAll("[data-invite-decline]").forEach((b) => b.addEventListener("click", answer(b.dataset.inviteDecline, "decline")));
     }
+
+    // Changes to the user's characters made by someone else: look them over, then keep or undo.
+    const formatChangeValue = (v) => (v === null || v === "" ? "–" : Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v));
+    async function loadCharacterChanges() {
+      const banner = document.getElementById("character-changes-banner");
+      let pending = [];
+      try { pending = await api.get("/character-changes"); } catch { /* banner is optional */ }
+      banner.innerHTML = pending.map((r) => `<div class="note-box"><p><strong>${escapeHtml(r.actorName)}</strong> hat Daten ${r.nsc ? "des NSC-Profils von" : "von"} <strong>${escapeHtml(r.characterName)}</strong> geändert. Bitte schau sie dir an:</p><ul>${r.changes.map((c) => `<li>${escapeHtml(c.label)}: ${escapeHtml(formatChangeValue(c.from))} → <strong>${escapeHtml(formatChangeValue(c.to))}</strong></li>`).join("")}</ul><div class="action-row"><button type="button" class="btn-sm" data-change-accept="${escapeHtml(r.id)}">Passt so</button><button type="button" class="btn-ghost btn-sm" data-change-reject="${escapeHtml(r.id)}">Änderung ablehnen</button></div></div>`).join("");
+      const answer = (id, verb) => async () => {
+        try {
+          await api.post(`/character-changes/${id}/${verb}`, {});
+          notify(verb === "reject" ? "Änderung zurückgesetzt." : "Änderung bestätigt.", "success");
+          await loadCharacterChanges();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      };
+      banner.querySelectorAll("[data-change-accept]").forEach((b) => b.addEventListener("click", answer(b.dataset.changeAccept, "accept")));
+      banner.querySelectorAll("[data-change-reject]").forEach((b) => b.addEventListener("click", answer(b.dataset.changeReject, "reject")));
+    }
+    loadCharacterChanges();
 
     let groupFieldSchema = [];
     function renderGroupSettingsFields() {

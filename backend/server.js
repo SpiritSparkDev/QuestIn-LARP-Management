@@ -18,6 +18,7 @@ import './mailings/routes.js';
 import './privacy/routes.js';
 import { runDueAutoDeletions } from './privacy/repository.js';
 import './characters/routes.js';
+import './characterReviews/routes.js';
 import './characterFiles/routes.js';
 import './registrations/routes.js';
 import './lodging/routes.js';

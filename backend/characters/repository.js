@@ -8,6 +8,8 @@ import { validateCharacterData } from '../events/schemaValidation.js';
 import { sanitizeDocumentFields } from '../richText.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
+import { isManagedBy } from '../managedPersons/repository.js';
+import { diffForReview, recordReview } from '../characterReviews/repository.js';
 
 const SELECT_COLUMNS = 'id, user_id, name, data, nsc_data, created_at';
 
@@ -104,6 +106,7 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
   let newData;
   let staffFieldChanges = [];
   let groupFieldChanges = [];
+  let reviewChanges = [];
   if (data !== undefined) {
     const schema = nsc ? await getNscProfileSchema() : await getScCharacterSchema();
     const stored = character[column] ?? {};
@@ -135,6 +138,7 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
       throw err;
     }
     newData = effectiveData;
+    reviewChanges = diffForReview(schema, stored, effectiveData, character.name, groupFieldsOnly ? null : name);
     if (groupFieldsOnly) {
       groupFieldChanges = schema
         .filter((field) => field.groupManaged)
@@ -158,6 +162,11 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
      RETURNING ${SELECT_COLUMNS}`,
     [id, userId, groupFieldsOnly ? null : (name ?? null), newData !== undefined ? JSON.stringify(newData) : null]
   );
+  // A change by someone other than the owner (or the owner's manager) is put to the owner for review.
+  if (rows[0] && actorId && actorId !== userId && !(await isManagedBy(userId, actorId))) {
+    if (data === undefined && name != null && !groupFieldsOnly) reviewChanges = diffForReview([], {}, {}, character.name, name);
+    await recordReview({ characterId: id, ownerId: userId, actorId, column, changes: reviewChanges });
+  }
   if (rows[0]) {
     for (const change of groupFieldChanges) {
       await logAudit({
