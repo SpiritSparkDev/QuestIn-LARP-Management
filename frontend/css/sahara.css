@@ -5163,3 +5163,62 @@ dialog.mode-dialog input[type="password"], dialog.mode-dialog input[type="url"],
     display: none;
   }
 }
+
+/* ---------- Phones and touch screens: nothing may stick out, targets big enough ---------- */
+/* Found with scripts/mobile-audit.mjs. */
+
+.stat-row {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 700px) {
+  /* The help tab sits on the screen edge and would cover card content: icon only. */
+  .help-panel-tab-label {
+    display: none;
+  }
+
+  /* A card row holding a label plus several buttons wraps instead of pushing the page wider. */
+  table tbody td,
+  .grid-row:not(.grid-header) .grid-cell {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    /* long e-mail addresses and names must break instead of widening the page */
+    overflow-wrap: anywhere;
+  }
+
+  table tbody td > *,
+  .grid-row:not(.grid-header) .grid-cell > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (pointer: coarse) {
+  .sidebar-foot #logout-link,
+  .standalone-link a,
+  .help-panel-link,
+  .toggle-btn,
+  .tab-btn {
+    min-height: 44px;
+  }
+
+  .help-panel-link,
+  .standalone-link a {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .toggle-btn,
+  .toast-close {
+    min-width: 44px;
+  }
+
+  .toast-close {
+    min-height: 44px;
+  }
+
+  .btn-sm,
+  .mode-chip {
+    min-height: 40px;
+  }
+}

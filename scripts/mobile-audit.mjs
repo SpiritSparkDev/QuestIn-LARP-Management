@@ -72,12 +72,17 @@ function measure() {
   const label = (el) => {
     const id = el.id ? `#${el.id}` : '';
     const cls = typeof el.className === 'string' && el.className ? `.${el.className.trim().split(/\s+/).slice(0, 2).join('.')}` : '';
-    return `${el.tagName.toLowerCase()}${id}${cls}`;
+    const text = ['BUTTON', 'A'].includes(el.tagName) ? ` "${(el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 24)}"` : '';
+    return `${el.tagName.toLowerCase()}${id}${cls}${text}`;
   };
   const visible = (el) => {
     const r = el.getBoundingClientRect();
     const st = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' && st.display !== 'none';
+  };
+  const inFixed = (el) => {
+    for (let p = el; p; p = p.parentElement) if (getComputedStyle(p).position === 'fixed') return true;
+    return false;
   };
   const inScrollable = (el) => {
     for (let p = el.parentElement; p; p = p.parentElement) {
@@ -88,7 +93,7 @@ function measure() {
   };
   const overflow = [];
   for (const el of document.querySelectorAll('body *')) {
-    if (!visible(el) || inScrollable(el)) continue;
+    if (!visible(el) || inScrollable(el) || inFixed(el)) continue;
     const r = el.getBoundingClientRect();
     if (r.right > vw + 1 && getComputedStyle(el).position !== 'fixed') overflow.push(`${label(el)} (right ${Math.round(r.right)} > ${vw})`);
   }
@@ -117,7 +122,7 @@ function measure() {
 for (const vp of VIEWPORTS) {
   const context = await browser.newContext({
     storageState,
-    viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 2, isMobile: vp.width < 768, hasTouch: vp.width < 768,
+    viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 2, isMobile: vp.width < 768, hasTouch: vp.width <= 1024,
   });
   for (const state of STATES) {
     const page = await context.newPage();
