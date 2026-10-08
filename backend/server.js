@@ -24,6 +24,7 @@ import './accountFiles/routes.js';
 import './backup/routes.js';
 import './registrations/routes.js';
 import './registrations/checkinConfirm.js';
+import './nscDialog/routes.js';
 import './lodging/routes.js';
 import './groupTree/routes.js';
 import './viewAs/routes.js';

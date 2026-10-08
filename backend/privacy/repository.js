@@ -116,6 +116,8 @@ export async function runPrivacyDeletion(eventId, category, actor = null) {
   }
   await wipeCharacterFields(event, category, 'sc');
   await wipeCharacterFields(event, category, 'nsc');
+  // NSC dialog texts are free-form participation data: they go with the 'teilnahme' category.
+  if (category === 'teilnahme') await query('DELETE FROM nsc_dialog_messages WHERE event_id = $1', [eventId]);
 
   await query(`UPDATE events SET privacy_deleted = privacy_deleted || jsonb_build_object($2::text, now()::text) WHERE id = $1`, [eventId, category]);
   await logAudit({ actorId: actor, action: 'privacy.deletion', details: { eventId, category } });

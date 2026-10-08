@@ -53,6 +53,25 @@ export const EMAIL_SLOTS = [
     ],
   },
   {
+    key: 'nsc_dialog_staff',
+    label: 'Orga-Hinweis: Neue Nachricht im NSC-Dialog',
+    supportsAccount: false,
+    extraFields: [
+      { key: 'userName', label: 'Name des Spielers' },
+      { key: 'eventName', label: 'Eventname' },
+      { key: 'link', label: 'Link zum NSC-Dialog' },
+    ],
+  },
+  {
+    key: 'nsc_dialog_player',
+    label: 'Neue Nachricht der Orga im NSC-Dialog',
+    supportsAccount: true,
+    extraFields: [
+      { key: 'eventName', label: 'Eventname' },
+      { key: 'link', label: 'Link zum Konto' },
+    ],
+  },
+  {
     key: 'waitlisted',
     label: 'Auf die Warteliste gesetzt',
     supportsAccount: true,

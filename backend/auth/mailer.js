@@ -196,3 +196,22 @@ export async function sendGuestDeadlineEmail(to, { eventName, deadline, url, opt
   }), { userId, extra: { eventName, deadline: date, link: url, optoutLink: optoutUrl, conPayerNext } });
   return deliver(transporter, from, to, rendered);
 }
+
+// Hint only: the message text never travels by mail.
+export async function sendNscDialogStaffEmail(to, { eventName, userName }, { transporter, from }) {
+  const url = `${await baseUrl()}/admin/nsc-dialog.html`;
+  const rendered = await renderSlotEmail('nsc_dialog_staff', () => ({
+    subject: `Neue NSC-Nachricht: ${eventName}`,
+    body: `${userName} hat im NSC-Dialog zu "${eventName}" geschrieben. Antworten: ${url}`,
+  }), { extra: { userName, eventName, link: url } });
+  return deliver(transporter, from, to, rendered);
+}
+
+export async function sendNscDialogPlayerEmail(to, { eventName, userId }, { transporter, from }) {
+  const url = `${await baseUrl()}/account.html#anmelden`;
+  const rendered = await renderSlotEmail('nsc_dialog_player', () => ({
+    subject: `Neue Nachricht zu deiner NSC-Anmeldung: ${eventName}`,
+    body: `Die Orga hat dir im NSC-Dialog zu "${eventName}" geschrieben. Lies und antworte in deinem Konto: ${url}`,
+  }), { userId, extra: { eventName, link: url } });
+  return deliver(transporter, from, to, rendered);
+}

@@ -57,6 +57,7 @@ const HINTS = {
   ] },
   '/admin/pdf-import.html': { title: 'PDF-Import', anchor: 'pdf', tips: ['Lädt Charakterbögen aus PDFs in die Datenbank.'] },
   '/admin/pdf-export.html': { title: 'PDF-Erzeugung', anchor: 'pdf', tips: ['Erzeugt Charakterbögen und Listen als PDF.'] },
+  '/admin/nsc-dialog.html': { title: 'NSC-Dialog', anchor: 'nsc-dialog', tips: ['Antworte NSC-Spielern und schlage konkrete Rollen vor.'] },
   '/admin/lodging.html': { title: 'Unterkünfte', anchor: 'unterkuenfte', tips: ['Verwalte Schlafplätze und weise sie Teilnehmern zu.'] },
 };
 

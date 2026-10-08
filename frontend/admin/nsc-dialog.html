@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NSC-Dialog – Pakyrion Admin</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
+    <h1>NSC-Dialog</h1>
+    <p class="sub">Spieler, die als NSC zur Verfügung stehen, schreiben hier ihre Wünsche. Antworte und schlage konkrete Rollen vor. Angenommene Vorschläge werden nur angezeigt, nicht automatisch übernommen.</p>
+    <div class="card form-pad"><select id="dlg-event"></select><label for="dlg-event">Event</label></div>
+    <div class="card form-pad"><h2>Dialoge</h2><div id="dlg-overview"></div></div>
+    <div class="card form-pad" id="dlg-thread-card" hidden>
+      <h2 id="dlg-thread-title"></h2>
+      <div id="dlg-thread"></div>
+      <form id="dlg-form">
+        <div class="form-group"><textarea id="dlg-body" maxlength="2000" rows="3" required></textarea><label for="dlg-body">Antwort</label></div>
+        <details><summary>Rollenvorschlag anhängen</summary>
+          <div class="form-group"><input type="text" id="dlg-role" maxlength="100"><label for="dlg-role">Rolle</label></div>
+          <div class="form-group"><textarea id="dlg-desc" maxlength="1000" rows="2"></textarea><label for="dlg-desc">Beschreibung</label></div>
+        </details>
+        <button type="submit">Senden</button>
+      </form>
+    </div>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
+applyBranding();
+import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
+initSidebarToggle();
+
+const eventSelect = document.getElementById('dlg-event');
+const overview = document.getElementById('dlg-overview');
+let currentUser = null;
+
+async function loadOverview() {
+  const list = await api.get(`/events/${eventSelect.value}/nsc-dialogs`);
+  overview.innerHTML = list.length === 0 ? '<p class="sub">Noch keine Dialoge.</p>' : list.map((d) => `
+    <p><a href="#" data-user="${escapeHtml(d.userId)}" data-name="${escapeHtml(d.name)}"><strong>${escapeHtml(d.name)}</strong></a>
+      ${d.unread ? `<span class="tag">${d.unread} ungelesen</span>` : ''}
+      ${d.openProposals ? `<span class="tag">${d.openProposals} Vorschlag offen</span>` : ''}
+      ${d.acceptedRoles.length ? `<span class="sub">angenommen: ${d.acceptedRoles.map(escapeHtml).join(', ')}</span>` : ''}</p>`).join('');
+  overview.querySelectorAll('[data-user]').forEach((a) => a.addEventListener('click', (evt) => { evt.preventDefault(); openThread(a.dataset.user, a.dataset.name); }));
+}
+
+function renderThread(messages) {
+  document.getElementById('dlg-thread').innerHTML = messages.map((m) => {
+    const p = m.proposal;
+    const proposal = p ? `<p><strong>Rollenvorschlag: ${escapeHtml(p.roleName)}</strong> <span class="tag">${{ open: 'offen', accepted: 'angenommen', declined: 'abgelehnt' }[p.status]}</span><br>${escapeHtml(p.description)}</p>` : '';
+    return `<div><p class="sub">${m.from === 'staff' ? 'Orga' : 'Spieler'} · ${escapeHtml(new Date(m.createdAt).toLocaleString('de-DE'))}</p><p style="white-space:pre-wrap">${escapeHtml(m.body)}</p>${proposal}</div>`;
+  }).join('');
+}
+
+async function openThread(userId, name) {
+  currentUser = userId;
+  document.getElementById('dlg-thread-title').textContent = name;
+  document.getElementById('dlg-thread-card').hidden = false;
+  renderThread(await api.get(`/events/${eventSelect.value}/nsc-dialogs/${userId}`));
+  loadOverview();
+}
+
+document.getElementById('dlg-form').addEventListener('submit', async (evt) => {
+  evt.preventDefault();
+  const role = document.getElementById('dlg-role').value.trim();
+  const payload = { body: document.getElementById('dlg-body').value };
+  if (role) payload.proposal = { roleName: role, description: document.getElementById('dlg-desc').value };
+  try {
+    renderThread(await api.post(`/events/${eventSelect.value}/nsc-dialogs/${currentUser}`, payload));
+    for (const id of ['dlg-body', 'dlg-role', 'dlg-desc']) document.getElementById(id).value = '';
+    loadOverview();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
+eventSelect.addEventListener('change', () => {
+  document.getElementById('dlg-thread-card').hidden = true;
+  loadOverview().catch((err) => notify(err.message, 'error'));
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  const events = await api.get('/events');
+  eventSelect.innerHTML = events.map((e) => `<option value="${escapeHtml(e.id)}"${e.is_active ? ' selected' : ''}>${escapeHtml(e.name)} (${escapeHtml(e.event_date)})</option>`).join('');
+  if (events.length > 0) await loadOverview();
+  else overview.innerHTML = '<p class="sub">Lege zuerst ein Event an.</p>';
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else if (err.status === 403) notify('Kein Zugriff.', 'error');
+  else notify(err.message, 'error');
+} finally {
+  hideLoading();
+}
+</script>
+</body>
+</html>

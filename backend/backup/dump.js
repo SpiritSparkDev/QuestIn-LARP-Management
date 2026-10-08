@@ -6,7 +6,7 @@ import { APP_VERSION } from '../../frontend/js/version.js';
 // are dropped; encrypted personal-data blobs stay encrypted (base64) and need
 // the server's ENCRYPTION_KEY to be read after a restore.
 export const SCOPES = {
-  participants: ['users', 'characters', 'registrations', 'payments', 'account_files', 'character_files'],
+  participants: ['users', 'characters', 'registrations', 'payments', 'account_files', 'character_files', 'nsc_dialog_messages'],
   events: ['events', 'event_lodgings', 'event_mailings', 'sc_character_schema', 'nsc_profile_schema', 'account_field_schema', 'registration_field_schema'],
 };
 // Parent rows first. Restoring a part that references rows of the other part
@@ -14,7 +14,7 @@ export const SCOPES = {
 const RESTORE_ORDER = [
   'users', 'events', 'event_lodgings', 'event_mailings',
   'sc_character_schema', 'nsc_profile_schema', 'account_field_schema', 'registration_field_schema',
-  'characters', 'registrations', 'payments', 'account_files', 'character_files',
+  'characters', 'registrations', 'payments', 'account_files', 'character_files', 'nsc_dialog_messages',
 ];
 const SELF_REFERENCES = { users: ['group_parent_id', 'managed_by_user_id'] };
 const SECRET_COLUMN = /(password|token)/i;

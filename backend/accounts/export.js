@@ -107,6 +107,17 @@ async function buildExportText(userId) {
   }
   lines.push('');
 
+  lines.push('=== NSC-Dialog ===');
+  const { rows: dialog } = await query(
+    `SELECT m.author_side, m.body, m.proposal, m.proposal_status, m.created_at, e.name AS event_name
+     FROM nsc_dialog_messages m JOIN events e ON e.id = m.event_id WHERE m.user_id = $1 ORDER BY m.created_at`, [userId]);
+  if (dialog.length === 0) lines.push('(keine)');
+  for (const m of dialog) {
+    const proposal = m.proposal ? ` [Rollenvorschlag: ${m.proposal.roleName} – ${m.proposal_status}]` : '';
+    lines.push(`- ${m.event_name}, ${new Date(m.created_at).toLocaleString('de-DE')}, ${m.author_side === 'player' ? 'von dir' : 'von der Orga'}: ${m.body}${proposal}`);
+  }
+  lines.push('');
+
   lines.push('=== Zahlungen ===');
   if (payments.length === 0) lines.push('(keine)');
   for (const p of payments) {

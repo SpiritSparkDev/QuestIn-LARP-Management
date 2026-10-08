@@ -467,6 +467,16 @@
                 <button type="button" id="active-registration-unregister-btn" class="btn-secondary" style="display:none;">Abmelden</button>
               </div>
 
+              <div class="card" id="nsc-dialog-panel" style="display:none;">
+                <h2>NSC-Dialog</h2>
+                <p class="sub">Schreibe der Orga, was du als NSC spielen möchtest, und beantworte Rollenvorschläge. Es sieht nur die Orga mit.</p>
+                <div id="nsc-dialog-thread"></div>
+                <form id="nsc-dialog-form">
+                  <div class="form-group"><textarea id="nsc-dialog-body" maxlength="2000" rows="3" required></textarea><label for="nsc-dialog-body">Nachricht an die Orga</label></div>
+                  <button type="submit">Senden</button>
+                </form>
+              </div>
+
               <div class="card" id="active-registration-empty" style="display:none;">
                 <p class="sub" id="active-registration-empty-hint"></p>
                 <button type="button" id="active-registration-empty-btn">Jetzt anmelden</button>
@@ -1821,6 +1831,38 @@
     const characterSelectLabel = document.getElementById("character-select-label");
     const noCharacterHint = document.getElementById("no-character-hint");
     const scRolePanel = document.getElementById("sc-role-panel");
+    // NSC-Dialog: thread with the Orga (all texts escaped, never HTML).
+    const nscDialogPanel = document.getElementById("nsc-dialog-panel");
+    let nscDialogEventId = null;
+    function renderNscDialog(messages) {
+      document.getElementById("nsc-dialog-thread").innerHTML = messages.length === 0
+        ? '<p class="sub">Noch keine Nachrichten.</p>'
+        : messages.map((m) => {
+          const p = m.proposal;
+          const proposal = p ? `<p><strong>Rollenvorschlag: ${escapeHtml(p.roleName)}</strong><br>${escapeHtml(p.description)}</p>${p.status === "open"
+            ? `<button type="button" data-answer="${escapeHtml(m.id)}" data-accept="true">Annehmen</button> <button type="button" class="btn-secondary" data-answer="${escapeHtml(m.id)}" data-accept="false">Ablehnen</button>`
+            : `<span class="tag">${p.status === "accepted" ? "angenommen" : "abgelehnt"}</span>`}` : "";
+          return `<div class="nsc-dialog-msg"><p class="sub">${m.from === "staff" ? "Orga" : "Du"} · ${escapeHtml(new Date(m.createdAt).toLocaleString("de-DE"))}</p><p style="white-space:pre-wrap">${escapeHtml(m.body)}</p>${proposal}</div>`;
+        }).join("");
+      document.querySelectorAll("#nsc-dialog-thread [data-answer]").forEach((b) => b.addEventListener("click", async () => {
+        try { renderNscDialog(await api.patch(`/events/${nscDialogEventId}/nsc-dialog/${b.dataset.answer}`, { accept: b.dataset.accept === "true" })); }
+        catch (err) { notify(err.message, "error"); }
+      }));
+    }
+    async function loadNscDialog(eventId, isNsc) {
+      nscDialogEventId = eventId;
+      nscDialogPanel.style.display = isNsc ? "" : "none";
+      if (isNsc) renderNscDialog(await api.get(`/events/${eventId}/nsc-dialog`).catch(() => []));
+    }
+    document.getElementById("nsc-dialog-form").addEventListener("submit", async (evt) => {
+      evt.preventDefault();
+      const field = document.getElementById("nsc-dialog-body");
+      try {
+        renderNscDialog(await api.post(`/events/${nscDialogEventId}/nsc-dialog`, { body: field.value }));
+        field.value = "";
+      } catch (err) { notify(err.message, "error"); }
+    });
+
     const nscRolePanel = document.getElementById("nsc-role-panel");
     const roleTabButtons = [...document.querySelectorAll("#registration-role-tabs .role-card")];
     const nscCharacterSelect = document.getElementById("nsc-character-select");
@@ -2298,6 +2340,8 @@
       } else {
         nscBadge.style.display = "none";
       }
+
+      loadNscDialog(activeEvent.id, Boolean(registration.nscAvailable || registration.conRole === "nsc"));
 
       document.getElementById("active-registration-price-table").innerHTML = renderPriceTable(activeEvent.pricing, registration.priceGroup, { highlight: registration.priceTier });
       document.getElementById("active-registration-edit-btn").onclick = () =>

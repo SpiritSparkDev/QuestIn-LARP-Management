@@ -27,6 +27,7 @@ const MENU_LINKS = [
   { key: 'konto', label: 'Charaktere', href: '/account.html#charaktere', icon: 'theater_comedy' },
   { key: 'mitglieder', label: 'Mitglieder', href: '/admin/members.html', icon: 'group' },
   { key: 'events', label: 'Events', href: '/admin/events.html', icon: 'calendar_month' },
+  { key: 'events', label: 'NSC-Dialog', href: '/admin/nsc-dialog.html', icon: 'forum' },
   { key: 'checkin', label: 'Check-In', href: '/admin/checkin.html', icon: 'qr_code_scanner' },
   { key: 'taverne', flag: 'tavernEnabled', label: 'Taverne', href: '/admin/tavern.html', icon: 'local_bar' },
 ];
