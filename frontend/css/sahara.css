@@ -1521,6 +1521,95 @@ textarea.invalid {
   color: var(--on-primary-container);
 }
 
+/* ---------- Review of changes made by someone else (Dashboard) ---------- */
+
+.change-review {
+  background: var(--primary-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin: 8px 0 20px;
+  color: var(--on-primary-container);
+}
+
+.change-review p {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.change-review .change-review-title {
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+.change-list {
+  list-style: none;
+  margin: 12px 0 14px;
+  padding: 0;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.change-list li {
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.change-list label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1.8fr);
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 8px 2px;
+  margin: 0;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.change-list input[type="checkbox"] {
+  margin: 0;
+  align-self: center;
+}
+
+.change-label {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.change-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.change-from {
+  color: var(--on-surface-variant, inherit);
+}
+
+.change-arrow {
+  opacity: 0.6;
+}
+
+.change-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+@media (max-width: 600px) {
+  .change-list label {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .change-values {
+    grid-column: 2;
+  }
+}
+
 .checkbox-group {
   display: flex;
   flex-wrap: wrap;
@@ -5078,5 +5167,64 @@ dialog.mode-dialog input[type="password"], dialog.mode-dialog input[type="url"],
 @media print {
   .help-panel {
     display: none;
+  }
+}
+
+/* ---------- Phones and touch screens: nothing may stick out, targets big enough ---------- */
+/* Found with scripts/mobile-audit.mjs. */
+
+.stat-row {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 700px) {
+  /* The help tab sits on the screen edge and would cover card content: icon only. */
+  .help-panel-tab-label {
+    display: none;
+  }
+
+  /* A card row holding a label plus several buttons wraps instead of pushing the page wider. */
+  table tbody td,
+  .grid-row:not(.grid-header) .grid-cell {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    /* long e-mail addresses and names must break instead of widening the page */
+    overflow-wrap: anywhere;
+  }
+
+  table tbody td > *,
+  .grid-row:not(.grid-header) .grid-cell > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@media (pointer: coarse) {
+  .sidebar-foot #logout-link,
+  .standalone-link a,
+  .help-panel-link,
+  .toggle-btn,
+  .tab-btn {
+    min-height: 44px;
+  }
+
+  .help-panel-link,
+  .standalone-link a {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .toggle-btn,
+  .toast-close {
+    min-width: 44px;
+  }
+
+  .toast-close {
+    min-height: 44px;
+  }
+
+  .btn-sm,
+  .mode-chip {
+    min-height: 40px;
   }
 }

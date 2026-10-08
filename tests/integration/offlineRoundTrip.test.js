@@ -26,6 +26,9 @@ const { exportSnapshot, importSnapshot, exportReturnPackage } = await import('..
 const { mergeReturnBuffer } = await import('../../backend/offlineMerge/merge.js');
 
 const pool = new pg.Pool({ connectionString: OFFLINE_URL });
+// DROP DATABASE ... WITH (FORCE) in `after` can reach connections that are still closing;
+// without a listener that error on an idle client is an uncaught exception that fails the run.
+pool.on('error', () => {});
 const off = {
   query: (t, p) => pool.query(t, p),
   async withTransaction(fn) {
