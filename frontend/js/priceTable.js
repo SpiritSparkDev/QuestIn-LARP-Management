@@ -1,5 +1,5 @@
-// Two-row price table for one Teilnahmegruppe: the header row names every Preisstufe with the dates
-// it applies to, the second row shows the price of the chosen group in each stage.
+// Price list for one Teilnahmegruppe: one line per Preisstufe with the dates it applies to and the
+// price of the chosen group -- stacked, so it fits phone widths.
 import { escapeHtml } from './formFields.js';
 
 const dateFmt = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
@@ -26,18 +26,19 @@ export function currentTierName(tiers, today = new Date().toISOString().slice(0,
 export function renderPriceTable(pricing, group, { highlight = currentTierName(pricing?.tiers ?? []) } = {}) {
   const tiers = pricing?.tiers ?? [];
   if (!group || !(pricing?.groups ?? []).includes(group) || tiers.length === 0) return '';
-  const head = tiers.map((t, i) => `<th class="${t.name === highlight ? 'is-current' : ''}">
-      <strong>${escapeHtml(t.name)}</strong>
-      <span class="price-table-range">${escapeHtml(tierRangeLabel(tiers, i))}</span>
-      ${t.conPayer ? '<span class="price-table-tag">Zahlung vor Ort</span>' : ''}
-    </th>`).join('');
-  const prices = tiers.map((t) => {
+  const rows = tiers.map((t, i) => {
     const cents = t.amounts?.[group];
-    return `<td class="${t.name === highlight ? 'is-current' : ''}">${Number.isInteger(cents) ? euroFmt.format(cents / 100) : '–'}</td>`;
+    return `<li class="${t.name === highlight ? 'is-current' : ''}">
+      <span class="price-table-label">
+        <strong>${escapeHtml(t.name)}</strong>
+        <span class="price-table-range">${escapeHtml(tierRangeLabel(tiers, i))}</span>
+        ${t.conPayer ? '<span class="price-table-tag">Zahlung vor Ort</span>' : ''}
+      </span>
+      <span class="price-table-amount">${Number.isInteger(cents) ? euroFmt.format(cents / 100) : '–'}</span>
+    </li>`;
   }).join('');
-  return `<div class="price-table-wrap"><table class="price-table">
-    <caption>Preise für „${escapeHtml(group)}“ im Zeitverlauf</caption>
-    <thead><tr>${head}</tr></thead>
-    <tbody><tr>${prices}</tr></tbody>
-  </table></div>`;
+  return `<div class="price-table-wrap">
+    <p class="price-table-caption">Preise für „${escapeHtml(group)}“ im Zeitverlauf</p>
+    <ul class="price-table">${rows}</ul>
+  </div>`;
 }

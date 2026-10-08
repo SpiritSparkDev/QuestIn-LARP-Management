@@ -5089,15 +5089,17 @@ textarea.mail-source {
 .price-group-card h3 { margin: 0 0 4px; }
 .price-group-card select { font-size: 1.1rem; font-weight: 600; padding: 14px 12px; border-width: 2px; }
 .price-group-card .price-group-hint { margin: 6px 0 0; color: var(--primary-deep, var(--primary)); font-weight: 600; }
-.price-table-wrap { overflow-x: auto; margin: 12px 0 4px; }
-.price-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; background: var(--surface-container-lowest, #fff); border-radius: 8px; }
-.price-table caption { caption-side: top; text-align: left; font-size: 0.8rem; color: var(--on-surface-variant); padding-bottom: 6px; }
-.price-table th, .price-table td { padding: 8px 12px; border: 1px solid var(--outline-variant); text-align: center; vertical-align: top; }
-.price-table th { background: var(--surface-container-low); font-weight: 600; text-transform: none; letter-spacing: 0; }
-.price-table td { font-size: 1.05rem; font-weight: 700; }
-.price-table .price-table-range { display: block; font-weight: 400; font-size: 0.8rem; color: var(--on-surface-variant); }
-.price-table .price-table-tag { display: inline-block; margin-top: 4px; padding: 1px 8px; border-radius: 999px; background: var(--primary-container); font-size: 0.72rem; font-weight: 600; }
-.price-table .is-current { background: var(--primary-container); box-shadow: inset 0 -3px 0 var(--primary); }
+.price-table-wrap { margin: 14px 0 4px; }
+.price-table-caption { margin: 0 0 8px; font-size: 0.85rem; color: var(--on-surface-variant); }
+.price-table { list-style: none; margin: 0; padding: 0; background: var(--surface-container-lowest, #fff); border: 1px solid var(--outline-variant); border-radius: 10px; overflow: hidden; }
+.price-table li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--outline-variant); }
+.price-table li:first-child { border-top: none; }
+.price-table-label { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.price-table-label strong { font-weight: 600; }
+.price-table .price-table-range { font-size: 0.8rem; color: var(--on-surface-variant); }
+.price-table .price-table-tag { margin-top: 2px; padding: 1px 8px; border-radius: 999px; background: var(--primary-container); font-size: 0.72rem; font-weight: 600; }
+.price-table-amount { font-size: 1.1rem; font-weight: 700; white-space: nowrap; }
+.price-table li.is-current { background: var(--primary-container); box-shadow: inset 4px 0 0 var(--primary); }
 
 
 /* ---------- Offline mode chip + Datenabgleich ---------- */

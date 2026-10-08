@@ -24,11 +24,11 @@ test('current stage is the first one whose deadline is not over', () => {
   assert.equal(currentTierName(pricing.tiers, '2028-01-01'), 'Vor Ort');
 });
 
-test('table has the dates in the header and the group prices in the second row', () => {
+test('one line per stage with its dates and the group price', () => {
   const html = renderPriceTable(pricing, 'Kinder', { highlight: 'Standard' });
-  assert.match(html, /<thead><tr>.*Frühbucher.*bis 01\.01\.2027.*Standard.*Vor Ort.*Zahlung vor Ort/s);
+  assert.match(html, /Frühbucher.*bis 01\.01\.2027.*Standard.*Vor Ort.*Zahlung vor Ort/s);
   assert.match(html, /160,00\s€.*175,00\s€.*195,00\s€/s);
-  assert.equal((html.match(/is-current/g) ?? []).length, 2);
+  assert.equal((html.match(/is-current/g) ?? []).length, 1);
   assert.equal(renderPriceTable(pricing, ''), '');
   assert.equal(renderPriceTable(pricing, 'Unbekannt'), '');
   assert.equal(renderPriceTable({ groups: ['A'], tiers: [] }, 'A'), '');
