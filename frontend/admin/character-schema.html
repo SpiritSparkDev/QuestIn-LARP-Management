@@ -120,8 +120,10 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
   // permission. Health notes (key medicalNotes) always count as sensitive.
   const alwaysSensitive = field.key === 'medicalNotes';
   const sensitiveCheckboxHtml = allowSensitive
-    ? `<label title="${alwaysSensitive ? 'Gesundheitsdaten sind immer sensibel' : 'Nur mit dem Recht „sensible Felder exportieren“ in CSV-Exporten'}"><input type="checkbox" class="schema-sensitive" ${field.sensitive || alwaysSensitive ? 'checked' : ''} ${alwaysSensitive ? 'disabled' : ''}> Sensibel (CSV-Export nur mit Sonderrecht)</label>`
+    ? `<label title="${alwaysSensitive ? 'Gesundheitsdaten sind immer sensibel' : 'Nur mit dem Recht „sensible Felder exportieren“ in CSV-Exporten'}"><input type="checkbox" class="schema-sensitive" ${field.sensitive || alwaysSensitive ? 'checked' : ''} ${alwaysSensitive ? 'disabled' : ''}> Sensibel</label>`
     : '';
+  // Every tab: ask for this field again (editable) when checking a person in.
+  const checkinCheckboxHtml = `<label title="Beim Check-in wird dieses Feld der Person nochmal gezeigt und kann korrigiert werden"><input type="checkbox" class="schema-checkin-confirm" ${field.checkinConfirm ? 'checked' : ''}> Beim Check-in abfragen</label>`;
   const groupInputHtml = allowGroup
     ? `<input type="text" placeholder="Gruppe (z.B. Grunddaten) -- leer = Sammelgruppe" class="schema-group" value="${escapeHtml(field.group ?? '')}">`
     : '';
@@ -148,6 +150,7 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
       ${publicCheckboxHtml}
       ${groupManagedCheckboxHtml}
       ${cardCheckboxHtml}
+      ${checkinCheckboxHtml}
       ${sensitiveCheckboxHtml}
     </div>
     <button type="button" class="remove-row">Entfernen</button>
@@ -186,6 +189,7 @@ function collectSchema(container, { allowPublic = true, allowGroup = false, allo
       field.group = row.querySelector('.schema-group').value.trim();
     }
     if (row.querySelector('.schema-card').checked) field.card = true;
+    if (row.querySelector('.schema-checkin-confirm').checked) field.checkinConfirm = true;
     // Only stored when set, so existing schemas stay unchanged.
     if (allowSensitive && row.querySelector('.schema-sensitive').checked && !row.querySelector('.schema-sensitive').disabled) {
       field.sensitive = true;

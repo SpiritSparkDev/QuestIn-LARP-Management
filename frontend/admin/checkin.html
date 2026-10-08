@@ -69,6 +69,17 @@
       <button type="button" id="scan-confirm">Einchecken</button>
       <button type="button" id="scan-cancel" class="btn-ghost">Abbrechen</button>
     </dialog>
+    <dialog id="confirm-dialog" class="confirm-dialog">
+      <h2>Angaben prüfen</h2>
+      <p class="sub">Bitte diese Angaben mit der Person durchgehen und bei Bedarf korrigieren. Erst danach wird eingecheckt.</p>
+      <form id="confirm-form" method="dialog">
+        <div id="confirm-fields"></div>
+        <div class="save-bar">
+          <button type="submit" id="confirm-submit">Bestätigen &amp; einchecken</button>
+          <button type="button" id="confirm-cancel" class="btn-ghost">Abbrechen</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="role-dialog">
       <h2 id="role-dialog-title">Rolle ändern</h2>
       <select id="role-select"></select>
@@ -545,7 +556,7 @@ document.getElementById('scan-confirm').addEventListener('click', async (event) 
   const userId = event.target.dataset.userId;
   scanDialog.close();
   if (!confirmPaid(scanLookupForConfirm)) return;
-  await transition(dialogOpenForEventId, userId, 'checkin', { paidConfirmed: !scanLookupForConfirm?.paidAt });
+  await checkInWithConfirmation(dialogOpenForEventId, userId, !scanLookupForConfirm?.paidAt);
 });
 
 document.getElementById('scan-cancel').addEventListener('click', () => {
@@ -729,7 +740,7 @@ function renderParticipants(participants, eventId) {
     button.addEventListener('click', () => {
       const p = participantsById.get(button.dataset.checkin);
       if (!confirmPaid(p)) return;
-      transition(eventId, button.dataset.checkin, 'checkin', { paidConfirmed: !p?.paidAt });
+      checkInWithConfirmation(eventId, button.dataset.checkin, !p?.paidAt);
     });
   });
   listBody.querySelectorAll('[data-checkout]').forEach((button) => {
@@ -763,6 +774,49 @@ function renderParticipants(participants, eventId) {
 // A second tap while the first request is still running would only produce a
 // confusing "already checked in" error (or a duplicate on a slow connection).
 const transitionsInFlight = new Set();
+
+// Fields flagged "Beim Check-in erneut abfragen" are shown (editable) first;
+// the check-in only happens once they were confirmed.
+const CONFIRM_SECTIONS = [['account', 'Konto'], ['registration', 'Anmeldung'], ['character', 'Charakter']];
+const confirmDialog = document.getElementById('confirm-dialog');
+const confirmFieldsEl = document.getElementById('confirm-fields');
+document.getElementById('confirm-cancel').addEventListener('click', () => confirmDialog.close());
+
+async function checkInWithConfirmation(eventId, userId, paidConfirmed) {
+  let data;
+  try {
+    data = await api.get(`/events/${eventId}/checkin-confirm/${userId}`);
+  } catch (err) {
+    notify(err.message, 'error');
+    return;
+  }
+  const sections = CONFIRM_SECTIONS.filter(([key]) => data[key].fields.length > 0);
+  if (sections.length === 0) return transition(eventId, userId, 'checkin', { paidConfirmed });
+
+  confirmFieldsEl.innerHTML = sections.map(([key, title]) => `<fieldset class="confirm-section" data-section="${key}">
+    <legend>${title}${key === 'character' && data.character.name ? ` – ${escapeHtml(data.character.name)}` : ''}</legend>
+    ${data[key].fields.map((f) => renderAccountFieldInput(f, data[key].values[f.key] ?? '', { idPrefix: `confirm-${key}-` })).join('')}
+  </fieldset>`).join('');
+  confirmDialog.showModal();
+
+  const form = document.getElementById('confirm-form');
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const payload = {};
+    for (const [key] of sections) {
+      const container = confirmFieldsEl.querySelector(`[data-section="${key}"]`);
+      payload[key] = nullifyBlankNumberFields(data[key].fields, collectAccountFieldValues(container, data[key].fields));
+    }
+    try {
+      await api.put(`/events/${eventId}/checkin-confirm/${userId}`, payload);
+    } catch (err) {
+      notify(err.message, 'error');
+      return;
+    }
+    confirmDialog.close();
+    await transition(eventId, userId, 'checkin', { paidConfirmed });
+  };
+}
 
 async function transition(eventId, userId, action, extra = {}) {
   const key = `${eventId}:${userId}:${action}`;

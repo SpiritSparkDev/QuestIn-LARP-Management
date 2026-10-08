@@ -22,6 +22,7 @@ import './characterReviews/routes.js';
 import './characterFiles/routes.js';
 import './accountFiles/routes.js';
 import './registrations/routes.js';
+import './registrations/checkinConfirm.js';
 import './lodging/routes.js';
 import './groupTree/routes.js';
 import './viewAs/routes.js';
