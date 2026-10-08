@@ -9,6 +9,10 @@ Two compose files exist — always pick explicitly, never rely on Docker's defau
 docker compose -f docker-compose.dev.yml up
 ```
 
+The production compose file also runs a `backup` service (nightly `pg_dump` plus
+uploads archive, see `docs/betrieb-backup.md`). The app's `ENCRYPTION_KEY` is not
+part of the backup; it must be stored separately.
+
 `docker-compose.yml` is the default filename on purpose, so Plesk's Docker UI (which has no way to pass `-f`) picks up the production config automatically.
 
 # Intentional DOM hooks — do not "clean up"

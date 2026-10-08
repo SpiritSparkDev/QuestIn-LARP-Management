@@ -28,7 +28,7 @@ Wer „zuerst angefasst" wurde, entscheidet also nicht ein Zeitvergleich, sonder
 4. **Keine Online-Zahlungen in der Offline-Zeit** für Taverne (ist ohnehin entschieden: kein Online-Aufladen) → keine Zahlungs-Webhooks, die in die gesperrten Tabellen schreiben. Stripe-Webhooks für Anmeldungen laufen normal weiter.
 5. **IDs sind UUID** → neue Datensätze offline kollidieren nicht. Ausnahme: `tavern_accounts.number` (`UNIQUE (event_id, number)`, fortlaufend). Offline neu vergebene Nummern können mit online (z. B. durch einen Gast-Account während der Delegation) vergebenen kollidieren → Nummernvergabe online in der Delegationszeit sperren **oder** Offline-Nummernband reservieren (z. B. ab 9000).
 
-## Datenmodell (neue Migration, nächste freie Nummer, aktuell `086_instance_authority.sql`)
+## Datenmodell (neue Migration, nächste freie Nummer, aktuell `097_instance_authority.sql`)
 Einzeilige Tabelle `instance_authority`:
 - `role` text: `primary` | `delegated` (online) | `offline_primary` | `retired` (Offline-Instanz nach Rückgabe)
 - `event_id` uuid null (Delegation je Event; siehe offene Frage)
@@ -86,7 +86,7 @@ Technisch erweitert das `account`-Objekt (`/account`) um `instance: { role, snap
 4. Nie ohne Rückfrage: kein Wechsel während laufender Buchung/Scan (Button zeigt „Vorgang läuft"), und der Wechsel verlangt dieselbe Berechtigung wie das Erzeugen des Pakets.
 
 ### Konfliktmenü („Datenabgleich")
-Neuer Menüpunkt unter Admin/Check-in, sichtbar nur mit Admin-Recht, per Chip erreichbar. Er arbeitet mit einer Tabelle `sync_conflicts` (neue Migration, zusammen mit `086`): `id`, `snapshot_id`, `generation`, `type`, `entity` (z. B. registration/tavern_account), `entity_id`, `offline_value jsonb`, `online_value jsonb`, `status` (`open`/`resolved`), `resolution` (`offline`/`online`/`merged`/`ignored`), `resolved_by`, `resolved_at`, `note`.
+Neuer Menüpunkt unter Admin/Check-in, sichtbar nur mit Admin-Recht, per Chip erreichbar. Er arbeitet mit einer Tabelle `sync_conflicts` (neue Migration, zusammen mit `097`): `id`, `snapshot_id`, `generation`, `type`, `entity` (z. B. registration/tavern_account), `entity_id`, `offline_value jsonb`, `online_value jsonb`, `status` (`open`/`resolved`), `resolution` (`offline`/`online`/`merged`/`ignored`), `resolved_by`, `resolved_at`, `note`.
 
 **Wann entsteht ein Konflikt** (alles andere wird automatisch und idempotent übernommen):
 | Typ | Beispiel | Vorgeschlagene Standardlösung |
