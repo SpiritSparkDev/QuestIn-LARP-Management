@@ -551,6 +551,12 @@ function openScanDialog(eventId, lookup) {
   scanDialogAutoCloseId = setTimeout(() => { if (scanDialog.open) scanDialog.close(); }, 30000);
 }
 
+// Fires on every close path (buttons, auto-close, native Escape).
+scanDialog.addEventListener('close', () => {
+  clearTimeout(scanDialogAutoCloseId);
+  scanDialogAutoCloseId = null;
+});
+
 document.getElementById('scan-confirm').addEventListener('click', async (event) => {
   clearTimeout(scanDialogAutoCloseId);
   const userId = event.target.dataset.userId;
