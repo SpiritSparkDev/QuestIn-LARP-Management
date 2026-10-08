@@ -1029,6 +1029,12 @@ h1, h2, h3 {
   margin: 0;
 }
 
+.sidebar-user-help {
+  font-size: 12px;
+  color: var(--primary);
+  text-decoration: underline;
+}
+
 .sidebar-version {
   font-size: 10px;
   color: var(--on-surface-variant);

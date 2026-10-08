@@ -194,6 +194,7 @@ export function renderSidebarUser(account) {
     <div class="sidebar-user-text">
       <p class="sidebar-user-name">${escapeHtml(account.name)}</p>
       <p class="sidebar-user-role">${escapeHtml(account.group.name)}</p>
+      <a class="sidebar-user-help" href="/help.html" target="_blank" rel="noopener">Hilfe</a>
     </div>
   </div>
   <p class="sidebar-version">v${APP_VERSION}</p>`;
