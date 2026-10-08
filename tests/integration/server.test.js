@@ -8,13 +8,14 @@ process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64);
 
 const { router } = await import('../../backend/server.js');
 const { closePool } = await import('../../backend/db.js');
+const { APP_VERSION } = await import('../../frontend/js/version.js');
 
 test('GET /health returns ok and a request id header', async () => {
   await withTestServer(async (port) => {
     const res = await fetch(`http://localhost:${port}/health`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { status: 'ok' });
+    assert.deepEqual(body, { status: 'ok', version: APP_VERSION });
     assert.ok(res.headers.get('x-request-id'));
   });
 });

@@ -11,6 +11,10 @@ docker compose -f docker-compose.dev.yml up
 
 - `docker-compose.offline.yml` — **offline Con instance** (Postgres + app with `APP_MODE=offline` + Caddy TLS proxy on `con.local`). Only for on-site check-in/tavern; see `docs/betrieb-offline.md`. Never start it with plain `docker compose up`.
 
+The production compose file also runs a `backup` service (nightly `pg_dump` plus
+uploads archive, see `docs/betrieb-backup.md`). The app's `ENCRYPTION_KEY` is not
+part of the backup; it must be stored separately.
+
 `docker-compose.yml` is the default filename on purpose, so Plesk's Docker UI (which has no way to pass `-f`) picks up the production config automatically.
 
 # Intentional DOM hooks — do not "clean up"
@@ -41,3 +45,10 @@ jeder `feat:`/`fix:`-Commit erhöht die Version, nicht erst der erste des Tages.
 Beim Erstellen eines `feat:`- oder `fix:`-Commits die Version nach obigem
 Schema erhöhen und die geänderten Versionsdateien in denselben Commit
 aufnehmen.
+
+# Migrationen
+
+Neue Migration = nächste freie dreistellige Nummer in `db/migrations/`
+(`NNN_snake_case.sql`), nie ein bestehendes Präfix doppelt vergeben —
+`tests/unit/migrationFiles.test.js` schlägt sonst fehl. Bestehende Dateien
+werden nie nachträglich geändert. Server-Vergleich: `docs/betrieb-migrationen.md`.

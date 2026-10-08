@@ -14,8 +14,8 @@ Entscheidungen zur Fragenliste: Wo nichts anderes gesagt wurde, gilt die jeweili
 13. **Echtgeräte-Test:** Check-In mit QR-Scan und Taverne einmal auf einem echten Handy ausprobieren, vor dem nächsten Con. (Bisher nur simulierte Geräte.)
 14. **Mobile Prüfung:** Event-Bearbeitung, Charakter-Bearbeitung und das Mitglieder-Fenster wurden noch nicht im Handy-Format durchgesehen.
 15. **Check-In ohne aktives Event:** Das Event-Dropdown ist leer. Idee: Hinweis mit Link zu "Events" statt leerer Seite.
-16. **Migrationen:** Es gab ein doppeltes Präfix `067` (Stripe-Überweisung und meine CSV-Migration). Meine ist inzwischen `070_group_can_export_members.sql`. Prüfen, ob auf den Servern `067` bis `069` in anderer Reihenfolge gelaufen sind; `npm run migrate` wendet alle noch fehlenden Dateien nach Namen an.
-17. **Webhook:** Der Test-Push zeigte HTTP 404 auf `/api/stacks/webhooks/…` (Deploy-Hook). Ursache offen (falsche/erneuerte Webhook-ID, Stack neu angelegt, Endpoint nimmt `ping` nicht an).
+16. **Migrationen:** Repo-seitig erledigt (2026-10-08): Reihenfolge innerhalb aller Doppelpräfixe nachweislich egal, neue Doppelpräfixe per Test verhindert, `out-of-order`-Warnung in `migrate.js`. Offen: Schemavergleich je Server nach `docs/betrieb-migrationen.md` (braucht Serverzugang).
+17. **Webhook:** Repo-seitig vorbereitet (2026-10-08): `scripts/deploy-hook.sh` und Job `deploy` in der CI (nur mit Secret `DEPLOY_HOOK_URL`, rot bei Nicht-2xx, optionaler Health-Check mit Versionsvergleich). Ursache des 404 weiter offen: braucht Zugriff auf den Server, Vorgehen in `docs/deploy.md` (Muster `/api/stacks/webhooks/` = Portainer).
 
 ## Ideen ohne Entscheidung
 - Event-Anmeldung als Mitglieder-Filter ist da; Massenaktionen (Mail/Einladung an die gefilterte Liste) nicht.

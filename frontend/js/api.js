@@ -1,9 +1,17 @@
 async function request(path, options = {}) {
-  const res = await fetch(path, {
-    ...options,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      ...options,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+    });
+  } catch {
+    // fetch only rejects when no answer arrived (offline, server unreachable).
+    const error = new Error('Keine Verbindung zum Server.');
+    error.network = true;
+    throw error;
+  }
 
   let body = null;
   try {

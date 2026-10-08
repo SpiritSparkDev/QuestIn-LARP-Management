@@ -1,0 +1,5 @@
+FROM postgres:16-alpine
+RUN apk add --no-cache curl rclone age tzdata
+COPY backup.sh restore.sh backup-entrypoint.sh /ops/
+RUN chmod +x /ops/*.sh
+ENTRYPOINT ["/ops/backup-entrypoint.sh"]

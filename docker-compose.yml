@@ -1,3 +1,10 @@
+# Keep container logs from filling the disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
     image: postgres:16-alpine
@@ -8,6 +15,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 2s
@@ -50,8 +58,60 @@ services:
     volumes:
       - uploads-data:/app/uploads
     restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     command: sh -c "npm run migrate && npm run seed-groups && npm run seed-nsc-schema && npm run seed-admin && npm run migrate-account-data-blob && npm run migrate-registration-data-blob && npm start"
+
+  # Nightly pg_dump + uploads archive with rotation, optional age encryption,
+  # rclone offsite copy and a heartbeat ping. See docs/betrieb-backup.md.
+  # The app's ENCRYPTION_KEY is deliberately not in the backup.
+  backup:
+    build:
+      context: ./ops
+      dockerfile: Dockerfile.backup
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      UPLOADS_DIR: /data/uploads
+      BACKUP_DIR: /backups
+      BACKUP_CRON: ${BACKUP_CRON:-17 3 * * *}
+      BACKUP_ON_START: ${BACKUP_ON_START:-1}
+      KEEP_DAILY: ${KEEP_DAILY:-7}
+      KEEP_WEEKLY: ${KEEP_WEEKLY:-4}
+      KEEP_MONTHLY: ${KEEP_MONTHLY:-6}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      BACKUP_PING_URL: ${BACKUP_PING_URL:-}
+      # Offsite copy via rclone, e.g. BACKUP_OFFSITE_REMOTE=offsite:bucket/questin
+      # with an S3-compatible remote configured through RCLONE_CONFIG_OFFSITE_*.
+      BACKUP_OFFSITE_REMOTE: ${BACKUP_OFFSITE_REMOTE:-}
+      RCLONE_CONFIG_OFFSITE_TYPE: ${RCLONE_CONFIG_OFFSITE_TYPE:-}
+      RCLONE_CONFIG_OFFSITE_PROVIDER: ${RCLONE_CONFIG_OFFSITE_PROVIDER:-}
+      RCLONE_CONFIG_OFFSITE_ENDPOINT: ${RCLONE_CONFIG_OFFSITE_ENDPOINT:-}
+      RCLONE_CONFIG_OFFSITE_REGION: ${RCLONE_CONFIG_OFFSITE_REGION:-}
+      RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID: ${RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY: ${RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY:-}
+      RCLONE_CONFIG_OFFSITE_HOST: ${RCLONE_CONFIG_OFFSITE_HOST:-}
+      RCLONE_CONFIG_OFFSITE_PORT: ${RCLONE_CONFIG_OFFSITE_PORT:-}
+      RCLONE_CONFIG_OFFSITE_USER: ${RCLONE_CONFIG_OFFSITE_USER:-}
+      RCLONE_CONFIG_OFFSITE_PASS: ${RCLONE_CONFIG_OFFSITE_PASS:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Read by backup.sh; restore.sh writes here when restoring uploads.
+      - uploads-data:/data/uploads
+      - backups-data:/backups
+    restart: unless-stopped
+    logging: *default-logging
 
 volumes:
   db-data:
   uploads-data:
+  backups-data:

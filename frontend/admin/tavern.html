@@ -188,6 +188,7 @@ applyBranding();
 import { escapeHtml, renderEventOptions } from '/js/formFields.js';
 import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
 import { notify } from '/js/notifications.js';
+import { createRequestKeys } from '/js/requestKey.js';
 initSidebarToggle();
 
 const METHOD_LABELS = { cash: 'Bar', card: 'Karte', paypal: 'PayPal', bank_transfer: 'Überweisung' };
@@ -318,22 +319,48 @@ document.getElementById('cart-clear').addEventListener('click', () => {
   renderCart();
 });
 
-document.getElementById('cart-charge').addEventListener('click', async () => {
-  const custom = toCents(document.getElementById('custom-amount').value || 0);
+// One key per booking attempt: a second tap or a retry after a lost answer
+// repeats the same key and is booked only once (see requestKey.js).
+const chargeKeys = createRequestKeys();
+const topupKeys = createRequestKeys();
+const payoutKeys = createRequestKeys();
+
+// Runs a booking with its button locked; a network error says so plainly
+// (the retry is safe because of the request key).
+async function bookOnce(button, keys, run) {
+  if (button.dataset.busy) return;
+  button.dataset.busy = '1';
+  const wasDisabled = button.disabled;
+  button.disabled = true;
   try {
+    await run();
+    keys.done();
+  } catch (err) {
+    notify(err.network ? `${err.message} Ob die Buchung angekommen ist, siehst du im Verlauf; erneutes Drücken bucht nicht doppelt.` : err.message, 'error');
+    if (!err.network) await openAccount(currentAccount.id).catch(() => {});
+  } finally {
+    delete button.dataset.busy;
+    button.disabled = wasDisabled;
+    renderCart();
+  }
+}
+
+document.getElementById('cart-charge').addEventListener('click', (event) => {
+  const custom = toCents(document.getElementById('custom-amount').value || 0);
+  const items = [...cart].map(([itemId, quantity]) => ({ itemId, quantity }));
+  const requestId = chargeKeys.get(`${currentAccount.id}|${JSON.stringify(items)}|${custom}`);
+  return bookOnce(event.currentTarget, chargeKeys, async () => {
     const result = await api.post(`/tavern/accounts/${currentAccount.id}/charge`, {
-      items: [...cart].map(([itemId, quantity]) => ({ itemId, quantity })),
+      items,
       ...(custom > 0 ? { customAmountCents: custom } : {}),
+      requestId,
     });
     cart = new Map();
     document.getElementById('custom-amount').value = '';
     showAccount(result);
     notify('Abgebucht.', 'success');
     searchAccounts();
-  } catch (err) {
-    notify(err.message, 'error');
-    openAccount(currentAccount.id);
-  }
+  });
 });
 
 // ---- top-up ----
@@ -341,18 +368,18 @@ document.querySelectorAll('#topup-quick [data-amount]').forEach((b) => {
   b.addEventListener('click', () => { document.getElementById('topup-amount').value = b.dataset.amount; });
 });
 
-document.getElementById('topup-submit').addEventListener('click', async () => {
+document.getElementById('topup-submit').addEventListener('click', (event) => {
   const amountCents = toCents(document.getElementById('topup-amount').value || 0);
   if (!(amountCents > 0)) { notify('Bitte einen Betrag eingeben.', 'error'); return; }
-  try {
-    const result = await api.post(`/tavern/accounts/${currentAccount.id}/topup`, { amountCents, method: document.getElementById('topup-method').value });
+  const method = document.getElementById('topup-method').value;
+  const requestId = topupKeys.get(`${currentAccount.id}|${amountCents}|${method}`);
+  return bookOnce(event.currentTarget, topupKeys, async () => {
+    const result = await api.post(`/tavern/accounts/${currentAccount.id}/topup`, { amountCents, method, requestId });
     document.getElementById('topup-amount').value = '';
     showAccount(result);
     notify(`${euro(amountCents)} aufgeladen.`, 'success');
     searchAccounts();
-  } catch (err) {
-    notify(err.message, 'error');
-  }
+  });
 });
 
 // ---- history / storno / lock ----
@@ -370,18 +397,16 @@ function renderPayoutBox() {
   document.getElementById('payout-box').classList.toggle('is-due', Boolean(over));
 }
 
-document.getElementById('payout-submit').addEventListener('click', async () => {
+document.getElementById('payout-submit').addEventListener('click', (event) => {
   if (!confirm(`Restguthaben von ${euro(currentAccount.balanceCents)} wirklich auszahlen?`)) return;
-  try {
-    const result = await api.post(`/tavern/accounts/${currentAccount.id}/payout`, {});
+  const requestId = payoutKeys.get(`${currentAccount.id}|${currentAccount.balanceCents}`);
+  return bookOnce(event.currentTarget, payoutKeys, async () => {
+    const result = await api.post(`/tavern/accounts/${currentAccount.id}/payout`, { requestId });
     showAccount(result);
     notify('Restguthaben ausgezahlt.', 'success');
     searchAccounts();
-  } catch (err) {
-    notify(err.message, 'error');
-  }
+  });
 });
-
 function describeEntry(t) {
   if (t.type === 'payout') return 'Auszahlung Restguthaben';
   if (t.type === 'topup') return `Aufladung (${METHOD_LABELS[t.method] ?? t.method ?? '–'})`;

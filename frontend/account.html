@@ -154,14 +154,11 @@
                 <div class="tab-panel card form-pad" id="group-settings-tab" hidden>
                   <h2>Gruppeneinstellungen</h2>
                   <p class="sub">Name und Angaben deiner Gruppe. Der Name erscheint in der Gruppenstruktur und in Einladungen an andere.</p>
-                  <form id="group-name-form" class="group-tree-form">
+                  <form id="group-settings-form" class="group-tree-form">
                     <input id="group-name-input" type="text" maxlength="60" placeholder="z. B. Drachenbande">
                     <label for="group-name-input">Gruppenname</label>
-                    <button type="submit" class="btn-ghost">Speichern</button>
-                  </form>
-                  <form id="group-settings-fields-form" class="group-tree-form" style="display:none;">
                     <div id="group-settings-fields"></div>
-                    <button type="submit" class="btn-ghost">Gruppenangaben speichern</button>
+                    <div class="save-bar"><button type="submit">Speichern</button></div>
                   </form>
                 </div>
                 <div class="tab-panel card form-pad" id="group-invite-tab" hidden>
@@ -1420,26 +1417,17 @@
 
     let groupFieldSchema = [];
     function renderGroupSettingsFields() {
-      const form = document.getElementById("group-settings-fields-form");
-      form.style.display = groupFieldSchema.length ? "" : "none";
-      if (!groupFieldSchema.length) return;
+      const form = document.getElementById("group-settings-form");
+      if (!groupFieldSchema.length) {
+        document.getElementById("group-settings-fields").innerHTML = "";
+        return;
+      }
       document.getElementById("group-settings-fields").innerHTML = groupFieldSchema
         .map((field) => renderAccountFieldInput(field, groupTree?.groupData?.[field.key], { idPrefix: "group-" }))
         .join("");
       attachLiveValidation(form);
     }
 
-    document.getElementById("group-settings-fields-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      try {
-        const values = nullifyBlankNumberFields(groupFieldSchema, collectAccountFieldValues(document.getElementById("group-settings-fields"), groupFieldSchema));
-        groupTree = await api.patch("/group-tree/fields", values);
-        renderGroupTree();
-        notify("Gruppenangaben gespeichert.", "success");
-      } catch (err) {
-        notify(err.message, "error");
-      }
-    });
 
     function renderGroupTree() {
       const view = document.getElementById("group-tree-view");
@@ -1531,12 +1519,17 @@
 
     document.getElementById("group-fields-close").addEventListener("click", () => document.getElementById("group-fields-dialog").close());
 
-    document.getElementById("group-name-form").addEventListener("submit", async (event) => {
+    // One save for name and group fields (the fixed save bar), two endpoints.
+    document.getElementById("group-settings-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       try {
         groupTree = await api.patch("/group-tree/name", { name: document.getElementById("group-name-input").value });
+        if (groupFieldSchema.length) {
+          const values = nullifyBlankNumberFields(groupFieldSchema, collectAccountFieldValues(document.getElementById("group-settings-fields"), groupFieldSchema));
+          groupTree = await api.patch("/group-tree/fields", values);
+        }
         renderGroupTree();
-        notify("Gruppenname gespeichert.", "success");
+        notify("Gruppeneinstellungen gespeichert.", "success");
       } catch (err) {
         notify(err.message, "error");
       }
