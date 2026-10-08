@@ -1,7 +1,12 @@
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
-import { requireMenu } from '../middleware/authorize.js';
+import { requireMenu, requireAdminGroup } from '../middleware/authorize.js';
 import { buildMembersCsv } from './exportCsv.js';
+import { analyzeImport, MAX_IMPORT_BYTES } from './importCsv.js';
+import crypto from 'node:crypto';
+import { withTransaction } from '../db.js';
+import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
+import { sanitizeFieldValue } from '../richText.js';
 import { logAudit } from '../audit/repository.js';
 import { getEvent, listEvents } from '../events/repository.js';
 import { readJsonBody } from '../httpBody.js';
@@ -77,6 +82,81 @@ router.post('/members/export', requireAuth(requireMenu('mitglieder')(async ({ re
     },
   };
 })));
+const DEFAULT_IMPORT_GROUP_KEY = 'mitglied';
+
+// CSV import, counterpart of the export (admin only). One endpoint, two steps:
+// without `apply` it only validates and returns the preview; with `apply: true`
+// it re-validates and writes everything in one transaction, or nothing if any
+// row has an error. No passwords are set: new members get an invitation
+// (same mechanism as /members/invite) and the mail goes out after the commit.
+router.post('/members/import', requireAuth(requireAdminGroup(async ({ req, user }) => {
+  const body = await readJsonBody(req, MAX_IMPORT_BYTES * 2);
+  if (body === null || typeof body.csv !== 'string') return { status: 400, body: { error: 'csv fehlt oder Datei zu groß.' } };
+  if (Buffer.byteLength(body.csv) > MAX_IMPORT_BYTES) return { status: 413, body: { error: 'Datei ist größer als 2 MB.' } };
+
+  const [accountSchema, groupRows, userRows, invRows] = await Promise.all([
+    getAccountFieldSchema(),
+    query('SELECT id, key, name FROM groups'),
+    query('SELECT id, email FROM users'),
+    query('SELECT email FROM invitations WHERE redeemed_at IS NULL AND cancelled_at IS NULL'),
+  ]);
+  const result = analyzeImport(body.csv, {
+    accountSchema,
+    groups: groupRows.rows,
+    existingByEmail: new Map(userRows.rows.map((u) => [u.email.toLowerCase(), u.id])),
+    openInvitationEmails: new Set(invRows.rows.map((i) => i.email.toLowerCase())),
+    mayImportSensitive: user.group.canExportSensitive === true,
+  });
+  if (result.error) return { status: 400, body: { error: result.error } };
+  if (result.tooMany) return { status: 413, body: { error: 'Mehr als 5000 Zeilen.' } };
+  const { rows, ignoredColumns, summary } = result;
+  const publicRows = rows.map(({ line, email, status, message }) => ({ line, email, status, message }));
+  if (body.apply !== true) return { status: 200, body: { applied: false, summary, rows: publicRows, ignoredColumns } };
+  if (summary.error > 0) return { status: 409, body: { error: 'Es gibt fehlerhafte Zeilen, nichts wurde importiert.', summary, rows: publicRows, ignoredColumns } };
+
+  const defaultGroupId = groupRows.rows.find((g) => g.key === DEFAULT_IMPORT_GROUP_KEY)?.id;
+  const { invitationTtlDays } = await getAppSettings();
+  const toMail = [];
+  await withTransaction(async (client) => {
+    for (const r of rows) {
+      const { firstName, lastName, nickname, ...ot } = r.fields;
+      const merge = (current) => {
+        const data = { ...current };
+        for (const f of accountSchema) if (ot[f.key] !== undefined) data[f.key] = sanitizeFieldValue(f, ot[f.key]);
+        return data;
+      };
+      if (r.status === 'update') {
+        const { rows: cur } = await client.query('SELECT account_data_enc FROM users WHERE id = $1', [r.userId]);
+        await client.query(
+          `UPDATE users SET group_id = COALESCE($2, group_id), first_name = COALESCE($3, first_name), last_name = COALESCE($4, last_name),
+             nickname = COALESCE($5, nickname), account_data_enc = $6 WHERE id = $1`,
+          [r.userId, r.groupId ?? null, firstName ?? null, lastName ?? null, nickname ?? null, encryptFieldBlob(merge(decryptFieldBlob(cur[0].account_data_enc)))]
+        );
+      } else {
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + invitationTtlDays * 24 * 60 * 60 * 1000);
+        await client.query(
+          `INSERT INTO invitations (token, email, first_name, last_name, nickname, group_id, account_data_enc, invited_by, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [token, r.email, firstName, lastName, nickname ?? null, r.groupId ?? defaultGroupId, encryptFieldBlob(merge({})), user.id, expiresAt]
+        );
+        toMail.push({ email: r.email, token, account: { email: r.email, firstName, lastName, nickname } });
+      }
+    }
+  });
+  await logAudit({ actorId: user.id, action: 'members.import', details: { ...summary, includesSensitive: user.group.canExportSensitive === true } });
+
+  let emailed = 0;
+  if (body.sendEmail !== false) {
+    for (const m of toMail) {
+      try { await sendInvitationEmail(m.email, m.token, { account: m.account }); emailed++; } catch (err) {
+        logger.error('failed to send import invitation email', { error: err.message });
+      }
+    }
+  }
+  return { status: 200, body: { applied: true, summary, rows: publicRows, ignoredColumns, invitations: toMail.length, emailed } };
+})));
+
 router.get('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ params, user }) => {
   const member = await getMember(params.id);
   if (!member) return { status: 404, body: { error: 'member not found' } };

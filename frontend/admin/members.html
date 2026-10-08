@@ -82,6 +82,8 @@
               <span class="sub" id="member-count"></span>
               <button type="button" id="member-filter-reset" class="btn-ghost btn-sm">Zurücksetzen</button>
               <button type="button" id="member-export" class="btn-secondary btn-sm">CSV exportieren</button>
+              <button type="button" id="member-import" class="btn-secondary btn-sm" hidden>CSV importieren</button>
+              <input type="file" id="member-import-file" accept=".csv,text/csv" hidden>
               <button type="button" id="member-nsc-overview" class="btn-secondary btn-sm">NSC-Übersicht</button>
             </div>
           </div>
@@ -174,6 +176,13 @@
             <button type="submit">Einladung senden</button>
             <button type="button" id="invite-cancel" class="btn-ghost">Abbrechen</button>
           </form>
+        </dialog>
+        <dialog id="import-dialog">
+          <h2>Mitglieder aus CSV importieren</h2>
+          <div id="import-preview"></div>
+          <label for="import-send-email"><input id="import-send-email" type="checkbox" checked> Einladungen per E-Mail versenden</label>
+          <button type="button" id="import-apply">Importieren</button>
+          <button type="button" id="import-close" class="btn-ghost">Schließen</button>
         </dialog>
         <div id="invite-link-box" style="display:none;">
           <input id="invite-link-text" readonly>
@@ -370,6 +379,46 @@
       } finally {
         exportButton.disabled = false;
       }
+    });
+
+    // CSV import (admin only): the server validates first (preview), the
+    // second click applies the same file in one transaction.
+    const importDialog = document.getElementById('import-dialog');
+    const importFile = document.getElementById('member-import-file');
+    const importApply = document.getElementById('import-apply');
+    let importCsv = '';
+    const runImport = (apply) => api.post('/members/import', { csv: importCsv, apply, sendEmail: document.getElementById('import-send-email').checked });
+    const renderImport = (r) => {
+      const label = { new: 'Neu', update: 'Aktualisieren', error: 'Fehler' };
+      document.getElementById('import-preview').innerHTML = `
+        <p>${r.summary.new} neu, ${r.summary.update} Aktualisierungen, ${r.summary.error} Fehler.
+        Neue Mitglieder erhalten eine Einladung (Passwort setzen), es werden keine Passwörter importiert.</p>
+        ${r.ignoredColumns.length ? `<p class="sub">Ignorierte Spalten: ${r.ignoredColumns.map((c) => `${escapeHtml(c.column)} (${escapeHtml(c.reason)})`).join('; ')}</p>` : ''}
+        <div class="table-scroll"><table><thead><tr><th>Zeile</th><th>E-Mail</th><th>Ergebnis</th></tr></thead><tbody>
+        ${r.rows.map((x) => `<tr><td>${x.line}</td><td>${escapeHtml(x.email)}</td><td>${label[x.status]}${x.message ? `: ${escapeHtml(x.message)}` : ''}</td></tr>`).join('')}
+        </tbody></table></div>`;
+      importApply.disabled = r.summary.error > 0 || r.summary.new + r.summary.update === 0;
+    };
+    document.getElementById('member-import').addEventListener('click', () => importFile.click());
+    document.getElementById('import-close').addEventListener('click', () => importDialog.close());
+    importFile.addEventListener('change', async () => {
+      const file = importFile.files[0];
+      importFile.value = '';
+      if (!file) return;
+      try {
+        importCsv = await file.text();
+        renderImport(await runImport(false));
+        importDialog.showModal();
+      } catch (err) { notify(err.message, 'error'); }
+    });
+    importApply.addEventListener('click', async () => {
+      importApply.disabled = true;
+      try {
+        const r = await runImport(true);
+        importDialog.close();
+        notify(`Import fertig: ${r.summary.new} neu (${r.emailed} Einladungen versendet), ${r.summary.update} aktualisiert.`, 'success');
+        await loadMembers();
+      } catch (err) { notify(err.message, 'error'); importApply.disabled = false; }
     });
 
     searchInput.addEventListener('input', () => {
@@ -1116,6 +1165,7 @@
       canOverrideCheckin = account.canOverrideCheckinStatus === true;
       canCreateForOthers = ['admin', 'moderator'].includes(account.group.key);
       document.getElementById('member-export').hidden = account.canExportMembers !== true;
+      document.getElementById('member-import').hidden = account.group.key !== 'admin';
       myUserId = account.id;
       accountSchema = await api.get('/account-schema');
       registrationSchema = await api.get('/registration-schema');
