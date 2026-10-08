@@ -52,8 +52,9 @@ export async function listPendingReviews(ownerId) {
   }));
 }
 
-// 'accept' just closes the review; 'reject' restores the previous values.
-export async function resolveReview(id, ownerId, decision) {
+// Closes the review. 'reject' restores all previous values; 'accept' keeps them, except
+// the fields listed in `rejectKeys` (partial rejection).
+export async function resolveReview(id, ownerId, decision, rejectKeys = []) {
   const review = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM character_change_reviews WHERE id = $1 AND owner_id = $2 AND status = 'pending' FOR UPDATE`,
@@ -61,23 +62,24 @@ export async function resolveReview(id, ownerId, decision) {
     );
     const review = rows[0];
     if (!review) return null;
-    if (decision === 'reject' && review.column_name === 'account') {
+    const revert = decision === 'reject' ? review.changes : review.changes.filter((c) => rejectKeys.includes(c.key));
+    if (revert.length > 0 && review.column_name === 'account') {
       const { rows: users } = await client.query('SELECT account_data_enc FROM users WHERE id = $1 FOR UPDATE', [review.subject_user_id]);
       if (users[0]) {
         const blob = decryptFieldBlob(users[0].account_data_enc);
-        for (const c of review.changes) {
+        for (const c of revert) {
           if (c.from === null) delete blob[c.key];
           else blob[c.key] = c.from;
         }
         await client.query('UPDATE users SET account_data_enc = $2 WHERE id = $1', [review.subject_user_id, encryptFieldBlob(blob)]);
       }
-    } else if (decision === 'reject') {
+    } else if (revert.length > 0) {
       const col = review.column_name === 'nsc_data' ? 'nsc_data' : 'data';
       const { rows: chars } = await client.query(`SELECT name, ${col} AS blob FROM characters WHERE id = $1 FOR UPDATE`, [review.character_id]);
       if (chars[0]) {
         const blob = { ...(chars[0].blob ?? {}) };
         let name = chars[0].name;
-        for (const c of review.changes) {
+        for (const c of revert) {
           if (c.key === 'name') name = c.from;
           else if (c.from === null) delete blob[c.key];
           else blob[c.key] = c.from;
@@ -87,17 +89,17 @@ export async function resolveReview(id, ownerId, decision) {
     }
     await client.query(
       `UPDATE character_change_reviews SET status = $2, resolved_at = now() WHERE id = $1`,
-      [id, decision === 'reject' ? 'rejected' : 'accepted']
+      [id, revert.length === review.changes.length ? 'rejected' : 'accepted']
     );
-    return review;
+    return { ...review, revertedKeys: revert.map((c) => c.key) };
   });
   if (!review) return null;
   // Outside the transaction: the audit write uses its own connection and would wait on our row locks.
   await logAudit({
     actorId: ownerId,
-    action: decision === 'reject' ? 'character.change_rejected' : 'character.change_accepted',
+    action: review.revertedKeys.length === review.changes.length ? 'character.change_rejected' : 'character.change_accepted',
     subjectUserId: ownerId,
-    details: { characterId: review.character_id, subjectUserId: review.subject_user_id, reviewId: id, changedBy: review.actor_id },
+    details: { characterId: review.character_id, subjectUserId: review.subject_user_id, reviewId: id, changedBy: review.actor_id, rejectedFields: review.revertedKeys },
   });
-  return { id, status: decision === 'reject' ? 'rejected' : 'accepted' };
+  return { id, status: review.revertedKeys.length === review.changes.length ? 'rejected' : 'accepted', rejectedFields: review.revertedKeys };
 }

@@ -27,8 +27,9 @@ const manager = await makeUser('Manager');
 const child = await makeUser('Child', manager);
 const stranger = await makeUser('Stranger');
 await setAccountFieldSchema([
-  ...originalSchema.filter((f) => !['gaShared', 'gaPrivate'].includes(f.key)),
+  ...originalSchema.filter((f) => !['gaShared', 'gaShared2', 'gaPrivate'].includes(f.key)),
   { key: 'gaShared', label: 'Geteilt', type: 'text', required: false, groupManaged: true },
+  { key: 'gaShared2', label: 'Geteilt 2', type: 'text', required: false, groupManaged: true },
   { key: 'gaPrivate', label: 'Privat', type: 'text', required: false },
 ]);
 await query('UPDATE users SET account_data_enc = $2 WHERE id = $1', [child, encryptFieldBlob({ gaShared: 'alt', gaPrivate: 'geheim' })]);
@@ -44,7 +45,7 @@ test('group manager edits only groupManaged account fields; owner can reject', a
   assert.equal(await updateGroupAccountFields(stranger, child, { gaShared: 'x' }), null);
 
   const view = await getGroupAccountFields(manager, child);
-  assert.deepEqual(view.fields.map((f) => f.key), ['gaShared']);
+  assert.deepEqual(view.fields.map((f) => f.key), ['gaShared', 'gaShared2']);
   assert.equal(view.data.gaShared, 'alt');
 
   assert.deepEqual(await updateGroupAccountFields(manager, child, { gaShared: 'neu', gaPrivate: 'gehackt' }), { changed: 1 });
@@ -58,4 +59,16 @@ test('group manager edits only groupManaged account fields; owner can reject', a
   await resolveReview(pending[0].id, child, 'reject');
   const after = decryptFieldBlob((await query('SELECT account_data_enc FROM users WHERE id = $1', [child])).rows[0].account_data_enc);
   assert.equal(after.gaShared, 'alt');
+});
+
+test('owner can accept some changed fields and reject the rest', async () => {
+  await query('UPDATE users SET account_data_enc = $2 WHERE id = $1', [child, encryptFieldBlob({ gaShared: 'a1', gaShared2: 'b1' })]);
+  await updateGroupAccountFields(manager, child, { gaShared: 'a2', gaShared2: 'b2' });
+  const [review] = await listPendingReviews(child);
+  assert.equal(review.changes.length, 2);
+  const result = await resolveReview(review.id, child, 'accept', ['gaShared2']);
+  assert.deepEqual(result.rejectedFields, ['gaShared2']);
+  const blob = decryptFieldBlob((await query('SELECT account_data_enc FROM users WHERE id = $1', [child])).rows[0].account_data_enc);
+  assert.equal(blob.gaShared, 'a2');
+  assert.equal(blob.gaShared2, 'b1');
 });

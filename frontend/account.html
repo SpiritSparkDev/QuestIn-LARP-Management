@@ -1402,18 +1402,20 @@
       const banner = document.getElementById("character-changes-banner");
       let pending = [];
       try { pending = await api.get("/character-changes"); } catch { /* banner is optional */ }
-      banner.innerHTML = pending.map((r) => `<div class="note-box"><p><strong>${escapeHtml(r.actorName)}</strong> hat ${r.account ? (r.subjectName ? `Kontodaten von <strong>${escapeHtml(r.subjectName)}</strong>` : "deine Kontodaten") : `Daten ${r.nsc ? "des NSC-Profils von" : "von"} <strong>${escapeHtml(r.characterName)}</strong>`} geändert. Bitte schau sie dir an:</p><ul>${r.changes.map((c) => `<li>${escapeHtml(c.label)}: ${escapeHtml(formatChangeValue(c.from))} → <strong>${escapeHtml(formatChangeValue(c.to))}</strong></li>`).join("")}</ul><div class="action-row"><button type="button" class="btn-sm" data-change-accept="${escapeHtml(r.id)}">Passt so</button><button type="button" class="btn-ghost btn-sm" data-change-reject="${escapeHtml(r.id)}">Änderung ablehnen</button></div></div>`).join("");
-      const answer = (id, verb) => async () => {
+      banner.innerHTML = pending.map((r) => `<div class="note-box"><p><strong>${escapeHtml(r.actorName)}</strong> hat ${r.account ? (r.subjectName ? `Kontodaten von <strong>${escapeHtml(r.subjectName)}</strong>` : "deine Kontodaten") : `Daten ${r.nsc ? "des NSC-Profils von" : "von"} <strong>${escapeHtml(r.characterName)}</strong>`} geändert. Bitte schau sie dir an:</p><ul class="change-list">${r.changes.map((c) => `<li><label><input type="checkbox" data-change-key="${escapeHtml(c.key)}" checked> ${escapeHtml(c.label)}: ${escapeHtml(formatChangeValue(c.from))} → <strong>${escapeHtml(formatChangeValue(c.to))}</strong></label></li>`).join("")}</ul><p class="sub">Angehakte Änderungen werden übernommen, nicht angehakte zurückgesetzt.</p><div class="action-row"><button type="button" class="btn-sm" data-change-apply="${escapeHtml(r.id)}">Auswahl übernehmen</button><button type="button" class="btn-ghost btn-sm" data-change-all="1">Alle auswählen</button><button type="button" class="btn-ghost btn-sm" data-change-all="0">Alle abwählen</button></div></div>`).join("");
+      banner.querySelectorAll("[data-change-all]").forEach((b) => b.addEventListener("click", () => {
+        b.closest(".note-box").querySelectorAll("[data-change-key]").forEach((box) => { box.checked = b.dataset.changeAll === "1"; });
+      }));
+      banner.querySelectorAll("[data-change-apply]").forEach((b) => b.addEventListener("click", async () => {
+        const rejectKeys = [...b.closest(".note-box").querySelectorAll("[data-change-key]")].filter((box) => !box.checked).map((box) => box.dataset.changeKey);
         try {
-          await api.post(`/character-changes/${id}/${verb}`, {});
-          notify(verb === "reject" ? "Änderung zurückgesetzt." : "Änderung bestätigt.", "success");
+          await api.post(`/character-changes/${b.dataset.changeApply}/accept`, { rejectKeys });
+          notify(rejectKeys.length ? "Auswahl übernommen, der Rest wurde zurückgesetzt." : "Änderungen bestätigt.", "success");
           await loadCharacterChanges();
         } catch (err) {
           notify(err.message, "error");
         }
-      };
-      banner.querySelectorAll("[data-change-accept]").forEach((b) => b.addEventListener("click", answer(b.dataset.changeAccept, "accept")));
-      banner.querySelectorAll("[data-change-reject]").forEach((b) => b.addEventListener("click", answer(b.dataset.changeReject, "reject")));
+      }));
     }
     loadCharacterChanges();
 
