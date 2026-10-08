@@ -5,7 +5,7 @@ import { isValidEmail } from '../validation.js';
 import { filterToAllowedFields } from '../members/routes.js';
 import { createCharacter } from '../characters/repository.js';
 import {
-  listManagedPersons, getManagedPersonForRegistration, createManagedPerson, updateManagedPerson, deleteManagedPerson,
+  listManagedPersons, getManagedPersonForRegistration, createManagedPerson, updateManagedPerson,
   searchClaimablePersons, claimPerson, releasePerson,
 } from './repository.js';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -96,18 +96,6 @@ router.patch('/managed-persons/:id', requireGroupManager(async ({ req, params, u
     return { status: 200, body: person };
   } catch (err) {
     if (err.code === 'EMAIL_TAKEN') return { status: 409, body: { error: err.message } };
-    throw err;
-  }
-}));
-
-router.delete('/managed-persons/:id', requireGroupManager(async ({ req, params, user }) => {
-  try {
-    const force = new URL(req.url, 'http://localhost').searchParams.get('force') === 'true';
-    const deleted = await deleteManagedPerson(params.id, user.id, { force });
-    if (!deleted) return { status: 404, body: { error: 'managed person not found' } };
-    return { status: 200, body: { deleted: true } };
-  } catch (err) {
-    if (err.code === 'HAS_REGISTRATIONS') return { status: 409, body: { error: err.message } };
     throw err;
   }
 }));

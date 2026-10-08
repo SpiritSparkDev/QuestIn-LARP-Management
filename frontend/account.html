@@ -283,15 +283,6 @@
                     </div>
                   </form>
                 </dialog>
-
-                <dialog id="managed-person-delete-dialog">
-                  <h3>Person löschen</h3>
-                  <p class="lede" id="managed-person-delete-text">Diese Aktion kann nicht rückgängig gemacht werden. Charaktere und offene Event-Anmeldungen der Person werden mitgelöscht.</p>
-                  <div class="dialog-actions">
-                    <button type="button" id="managed-person-delete-confirm">Löschen</button>
-                    <button type="button" id="managed-person-delete-cancel" class="btn-ghost">Abbrechen</button>
-                  </div>
-                </dialog>
               </div>
         </div>
 
@@ -1243,7 +1234,6 @@
         <a href="${manageHref}" class="btn-ghost">Charaktere &amp; Anmeldung verwalten</a>
         <button type="button" data-managed-person-edit="${p.id}" class="btn-ghost">Bearbeiten</button>
         <button type="button" data-managed-person-release="${p.id}" class="btn-ghost">Aus Gruppe entfernen</button>
-        <button type="button" data-managed-person-delete="${p.id}" class="btn-ghost">Löschen</button>
         <button type="button" data-managed-person-convert="${p.id}" class="btn-ghost">Einladungslink erzeugen</button>
       </div>
     </div>`;
@@ -1364,9 +1354,6 @@
         : navAccount?.groupMemberOnly ? "" : '<p class="sub">Noch niemand in deiner Gruppe. Lege im Tab „Leute einladen“ Personen an oder lade andere Verwalter ein.</p>';
       container.querySelectorAll("[data-managed-person-edit]").forEach((btn) => {
         btn.addEventListener("click", () => openManagedPersonDialog(btn.dataset.managedPersonEdit));
-      });
-      container.querySelectorAll("[data-managed-person-delete]").forEach((btn) => {
-        btn.addEventListener("click", () => openManagedPersonDeleteDialog(btn.dataset.managedPersonDelete));
       });
       container.querySelectorAll("[data-managed-person-release]").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -1774,38 +1761,6 @@
           notify(err.message, "error");
         }
       });
-    });
-
-    const managedPersonDeleteDialog = document.getElementById("managed-person-delete-dialog");
-    let deletingManagedPersonId = null;
-
-    const DELETE_TEXT_DEFAULT = "Diese Aktion kann nicht rückgängig gemacht werden. Charaktere und offene Event-Anmeldungen der Person werden mitgelöscht.";
-    const DELETE_TEXT_FORCE = "Diese Person hat bestätigte oder bezahlte Event-Anmeldungen. Wenn du trotzdem löschst, gehen Anmeldungen, Zahlungsdaten und Charaktere unwiderruflich verloren. Wirklich trotzdem löschen?";
-    let deletingForce = false;
-
-    function openManagedPersonDeleteDialog(id) {
-      deletingManagedPersonId = id;
-      const person = managedPersons.find((p) => p.id === id);
-      deletingForce = person ? !person.canDelete : false;
-      document.getElementById("managed-person-delete-text").textContent = deletingForce ? DELETE_TEXT_FORCE : DELETE_TEXT_DEFAULT;
-      document.getElementById("managed-person-delete-confirm").textContent = deletingForce ? "Trotzdem löschen" : "Löschen";
-      managedPersonDeleteDialog.showModal();
-    }
-
-    document.getElementById("managed-person-delete-cancel").addEventListener("click", () => {
-      deletingManagedPersonId = null;
-      managedPersonDeleteDialog.close();
-    });
-
-    document.getElementById("managed-person-delete-confirm").addEventListener("click", async () => {
-      try {
-        await api.delete(`/managed-persons/${deletingManagedPersonId}${deletingForce ? "?force=true" : ""}`);
-        notify("Gelöscht.", "success");
-        managedPersonDeleteDialog.close();
-        await loadManagedPersons();
-      } catch (err) {
-        notify(err.message, "error");
-      }
     });
 
     async function convertManagedPerson(id) {

@@ -36,18 +36,15 @@ Root-Einträge). Sie wird nicht zur Laufzeit aus Git gelesen, weil `.git` per
 `.dockerignore` nicht im Image landet.
 
 Schema (Conventional Commits, `0.x` bis zu einem bewussten 1.0-Release):
-jeder Kalendertag mit Commits zählt als ein Release.
-- Tag mit mindestens einem `feat:`-Commit → MINOR +1, PATCH auf 0
-- Tag nur mit `fix:`-Commits → PATCH +1
-- Tag nur mit `docs:`/`test:`/`refactor:`/`chore:`/`style:` → keine Änderung
+jeder `feat:`/`fix:`-Commit erhöht die Version, nicht erst der erste des Tages.
+- `feat:`-Commit → MINOR +1, PATCH auf 0
+- `fix:`-Commit → PATCH +1
+- `docs:`/`test:`/`refactor:`/`chore:`/`style:` → keine Änderung
 - Breaking Change (`feat!:` / `BREAKING CHANGE`) → vorher mit dem User klären
 
-Wenn du einen `feat:`- oder `fix:`-Commit erstellst, prüfe, ob für den
-heutigen Tag schon ein Bump erfolgt ist (`git log --since=midnight`). Wenn
-nicht, erhöhe die Version nach obigem Schema und nimm die geänderten
-Versionsdateien in denselben Commit auf. Pro Tag höchstens ein MINOR-Bump;
-ein späterer `feat:` am selben Tag nach einem PATCH-Bump wandelt diesen in
-einen MINOR-Bump um.
+Beim Erstellen eines `feat:`- oder `fix:`-Commits die Version nach obigem
+Schema erhöhen und die geänderten Versionsdateien in denselben Commit
+aufnehmen.
 
 # Migrationen
 
