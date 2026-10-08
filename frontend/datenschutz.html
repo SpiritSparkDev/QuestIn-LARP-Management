@@ -9,7 +9,7 @@
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
 </head>
 <body>
-<div class="main"><div class="content card form-pad" style="max-width:860px;margin:32px auto;">
+<div class="main"><div class="content card form-pad" id="legal-content" style="max-width:860px;margin:32px auto;">
 <h1>Datenschutzerklärung</h1>
 <p>Stand: 08.10.2026</p>
 <h2>1. Datenschutz auf einen Blick</h2>
@@ -42,7 +42,7 @@
 <p>Die verantwortliche Stelle für die Datenverarbeitung auf dieser Website ist:</p>
 <p>André Busch<br>Rethelstraße 25<br>01139 Dresden</p>
 <p>E-Mail: info@geistesfunke-design.de</p>
-<p>Der Veranstalter führt die Veranstaltung Pakyrion als Privatperson durch. Weitere Angaben finden Sie im <a href="/impressum">Impressum</a>.</p>
+<p>Der Veranstalter führt die Veranstaltung Pakyrion als Privatperson durch. Weitere Angaben finden Sie im <a href="/impressum.html">Impressum</a>.</p>
 <p>Verantwortliche Stelle ist die natürliche oder juristische Person, die allein oder gemeinsam mit anderen über die Zwecke und Mittel der Verarbeitung von personenbezogenen Daten (z. B. Namen, E-Mail-Adressen o. Ä.) entscheidet.</p>
 <h3>Speicherdauer</h3>
 <p>Soweit innerhalb dieser Datenschutzerklärung keine speziellere Speicherdauer genannt wurde, verbleiben Ihre personenbezogenen Daten bei uns, bis der Zweck für die Datenverarbeitung entfällt. Wenn Sie ein berechtigtes Löschersuchen geltend machen oder eine Einwilligung zur Datenverarbeitung widerrufen, werden Ihre Daten gelöscht, sofern wir keine anderen rechtlich zulässigen Gründe für die Speicherung Ihrer personenbezogenen Daten haben (z. B. steuer- oder handelsrechtliche Aufbewahrungsfristen); im letztgenannten Fall erfolgt die Löschung nach Fortfall dieser Gründe.</p>
@@ -160,5 +160,6 @@
 <h3>Schriftarten und Icons (lokales Hosting)</h3>
 <p>Diese Seite nutzt zur einheitlichen Darstellung Schriftarten und Icons (u. a. Font Awesome). Alle Schriftarten und Icons sind lokal auf unserem Server installiert. Eine Verbindung zu Servern von Google oder Fonticons, Inc. findet dabei nicht statt.</p>
 </div></div>
+<script type="module">import { applyLegalDocument } from "/js/legalPage.js"; applyLegalDocument("privacy", "Datenschutzerklärung");</script>
 </body>
 </html>

@@ -154,6 +154,32 @@
               </div>
             </form>
           </div>
+          <div class="card form-pad">
+            <h2>Datenschutzerklärung &amp; Impressum</h2>
+            <p class="sub">
+              Je Dokument: Link auf eine externe Seite oder direkt eingegebener Text.
+              Die Links erscheinen unten auf den öffentlichen Seiten und in der Seitenleiste.
+              „Nicht konfiguriert“: Datenschutz zeigt die eingebaute Erklärung, das Impressum wird nicht verlinkt.
+            </p>
+            <form id="legal-form">
+              <div data-legal="privacy">
+                <h3>Datenschutzerklärung</h3>
+                <select name="mode"><option value="none">Nicht konfiguriert (eingebaute Erklärung)</option><option value="url">Link auf externe Seite</option><option value="text">Eigener Text</option></select>
+                <div data-legal-url hidden><input type="url" name="url" placeholder="https://…"></div>
+                <div data-legal-text hidden><div class="rte"></div></div>
+              </div>
+              <div data-legal="imprint">
+                <h3>Impressum</h3>
+                <select name="mode"><option value="none">Nicht konfiguriert (kein Link)</option><option value="url">Link auf externe Seite</option><option value="text">Eigener Text</option></select>
+                <div data-legal-url hidden><input type="url" name="url" placeholder="https://…"></div>
+                <div data-legal-text hidden><div class="rte"></div></div>
+              </div>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
+            </form>
+          </div>
           </div>
           <div class="tab-panel grid col2 settings-panel" id="settings-tab-checkin" hidden>
           <div class="card form-pad">
@@ -560,6 +586,7 @@
       import { notify as showToast } from "/js/notifications.js";
       import { initBranding } from "/js/settingsBranding.js";
       import { initStorage } from "/js/settingsStorage.js";
+      import { renderToolbar, sanitizeHtml } from "/js/richText.js";
 
       // Save feedback shared by every settings form: a form shows "Nicht
       // gespeichert" as soon as a field changes and "Gespeichert" once the
@@ -799,6 +826,47 @@
           });
           notify("Gespeichert.", "success");
           await loadWaiverSettings();
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
+
+      const legalForm = document.getElementById("legal-form");
+      const legalBlocks = [...legalForm.querySelectorAll("[data-legal]")];
+      for (const block of legalBlocks) {
+        block.querySelector("[data-legal-text] .rte").innerHTML =
+          `${renderToolbar()}<div class="rte-editor" contenteditable="true" role="textbox" aria-multiline="true"></div><input type="hidden">`;
+        block.querySelector("select").addEventListener("change", () => syncLegalBlock(block));
+      }
+      function syncLegalBlock(block) {
+        const mode = block.querySelector("select").value;
+        block.querySelector("[data-legal-url]").hidden = mode !== "url";
+        block.querySelector("[data-legal-text]").hidden = mode !== "text";
+      }
+      async function loadLegalDocuments() {
+        const docs = await api.get("/legal-documents");
+        for (const block of legalBlocks) {
+          const doc = docs[block.dataset.legal];
+          block.querySelector("select").value = doc.mode ?? "none";
+          block.querySelector("[name=url]").value = doc.url;
+          block.querySelector(".rte-editor").innerHTML = sanitizeHtml(doc.html);
+          syncLegalBlock(block);
+        }
+      }
+      legalForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const payload = {};
+        for (const block of legalBlocks) {
+          payload[block.dataset.legal] = {
+            mode: block.querySelector("select").value,
+            url: block.querySelector("[name=url]").value,
+            html: sanitizeHtml(block.querySelector(".rte-editor").innerHTML),
+          };
+        }
+        try {
+          await api.put("/legal-documents", payload);
+          notify("Gespeichert.", "success");
+          await loadLegalDocuments();
         } catch (err) {
           notify(err.message, "error");
         }
@@ -1075,6 +1143,7 @@
         await loadWaitlistSetting();
         await loadPaymentSettings();
         await loadWaiverSettings();
+        await loadLegalDocuments();
         await loadComingSoonSettings();
         await brandingTab.load();
         await storageTab.load();

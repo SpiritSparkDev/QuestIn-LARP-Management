@@ -4,6 +4,7 @@ import { initResponsiveTables } from './responsiveTables.js';
 import { api } from './api.js';
 import { updateModeChip } from './offlineSwitch.js';
 import './help.js';
+import './legalFooter.js';
 
 // Every page that renders the sidebar also gets the narrow-screen table
 // labelling -- nav.js is the one module they all share.
