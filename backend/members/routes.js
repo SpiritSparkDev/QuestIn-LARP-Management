@@ -10,7 +10,8 @@ import { sanitizeFieldValue } from '../richText.js';
 import { logAudit } from '../audit/repository.js';
 import { getEvent, listEvents } from '../events/repository.js';
 import { readJsonBody } from '../httpBody.js';
-import { listMembers, getMember, updateMember, deactivateMember, reactivateMember, deleteMember } from './repository.js';
+import { listMembers, getMember, reactivateMember, deleteMember } from './repository.js';
+import { updateMemberAudited, deactivateChecked } from './actions.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
 import { sendInvitationEmail, sendVerificationEmail, sendPasswordResetEmail, baseUrl } from '../auth/mailer.js';
 import { getAppSettings } from '../appSettings/repository.js';
@@ -185,21 +186,14 @@ router.patch('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ req,
     fields.group = rows[0].id;
   }
 
-  const before = fields.group !== undefined ? await getMember(params.id) : null;
-  const member = await updateMember(params.id, fields);
+  const member = await updateMemberAudited(user.id, params.id, fields);
   if (!member) return { status: 404, body: { error: 'member not found' } };
-  if (before && before.group.id !== fields.group) {
-    await logAudit({ actorId: user.id, action: 'role.changed', subjectUserId: params.id, details: { from: before.group.name, to: member.group.name } });
-  }
   return { status: 200, body: member };
 })));
 
 router.post('/members/:id/deactivate', requireAuth(requireMenu('mitglieder')(async ({ params, user }) => {
-  if (params.id.toLowerCase() === user.id.toLowerCase()) {
-    return { status: 400, body: { error: 'cannot deactivate your own account' } };
-  }
-  const deactivated = await deactivateMember(params.id);
-  if (!deactivated) return { status: 404, body: { error: 'member not found' } };
+  const failure = await deactivateChecked(user.id, params.id);
+  if (failure) return { status: failure.status, body: { error: failure.error } };
   return { status: 200, body: { deactivated: true } };
 })));
 

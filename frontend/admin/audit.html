@@ -83,13 +83,14 @@ const ACTION_LABELS = {
   'group_tree.view_characters': 'Gruppenverwaltung sah Charaktere',
   'link.sent': 'Link versendet',
   'members.export': 'Export Mitgliederliste',
+  'members.bulk': 'Sammelaktion Mitglieder',
   'checkin.export': 'Export Check-In-Liste',
   'tavern.export': 'Export Tavernenbuchungen',
   'backup.created': 'Backup heruntergeladen',
   'privacy.deletion': 'Daten gelöscht (Datenschutz)',
 };
 const CATEGORIES = {
-  accounts: /^(user|role)\./,
+  accounts: /^(user|role|members\.bulk)/,
   characters: /^character\./,
   registrations: /^(registration|checkin)\./,
   payments: /^payment\./,
@@ -123,6 +124,7 @@ function describe(entry) {
     case 'members.export':
     case 'checkin.export':
       return `${d.count} Einträge${d.eventName ? ` · ${d.eventName}` : ''}${d.includesSensitive ? ' · inkl. sensibler Felder erlaubt' : ''}`;
+    case 'members.bulk': return `${d.action}: ${d.ok} von ${d.count} erfolgreich${d.eventName ? ` · ${d.eventName}` : ''}${d.group ? ` · ${d.group}` : ''}`;
     case 'tavern.export':
       return `${d.count} Buchungen · ${d.from}${d.to !== d.from ? ` bis ${d.to}` : ''}`;
     default:

@@ -29,6 +29,7 @@ import './groupTree/routes.js';
 import './viewAs/routes.js';
 import './groups/routes.js';
 import './members/routes.js';
+import './members/bulk.js';
 import './managedPersons/routes.js';
 import './managedPersons/characterRoutes.js';
 import './managedPersons/registrationRoutes.js';

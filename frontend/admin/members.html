@@ -87,10 +87,19 @@
               <button type="button" id="member-nsc-overview" class="btn-secondary btn-sm">NSC-Übersicht</button>
             </div>
           </div>
+          <div id="bulk-bar" class="member-filter-summary" hidden>
+            <strong id="bulk-count"></strong>
+            <button type="button" class="btn-secondary btn-sm" data-bulk="group" hidden>Rolle ändern …</button>
+            <button type="button" class="btn-secondary btn-sm" data-bulk="deactivate" hidden>Deaktivieren</button>
+            <button type="button" class="btn-secondary btn-sm" data-bulk="reactivate" hidden>Reaktivieren</button>
+            <button type="button" class="btn-secondary btn-sm" data-bulk="registration" hidden>Anmeldestatus …</button>
+            <button type="button" id="bulk-clear" class="btn-ghost btn-sm">Auswahl aufheben</button>
+          </div>
           <div class="table-scroll">
           <table id="member-list">
             <thead>
               <tr>
+                <th><input type="checkbox" id="member-select-all" aria-label="Alle angezeigten auswählen"></th>
                 <th data-sort="name">Name</th>
                 <th data-sort="email">E-Mail</th>
                 <th data-sort="group">Rolle</th>
@@ -103,6 +112,15 @@
           </table>
           </div>
         </div>
+
+        <dialog id="bulk-dialog">
+          <h2 id="bulk-title"></h2>
+          <div id="bulk-body"></div>
+          <div class="dialog-actions">
+            <button type="button" id="bulk-run">Ausführen</button>
+            <button type="button" id="bulk-close" class="btn-ghost">Abbrechen</button>
+          </div>
+        </dialog>
 
         <dialog id="detail-dialog" class="member-dialog">
           <h2 id="detail-title">Mitglied bearbeiten</h2>
@@ -349,12 +367,104 @@
       });
     }
 
+    // ---- Bulk actions on the selected rows ----
+    // The server runs the single-member rules per id and answers per id; the page
+    // only lists what failed. The selection never holds rows hidden by a filter.
+    let selected = new Set();
+    let groupOptions = [];
+    const bulkBar = document.getElementById('bulk-bar');
+    const bulkDialog = document.getElementById('bulk-dialog');
+    const bulkBody = document.getElementById('bulk-body');
+    const bulkRun = document.getElementById('bulk-run');
+    const selectAll = document.getElementById('member-select-all');
+    const isSelectable = (m) => m.status !== 'invited' && m.id !== myUserId;
+
+    function updateBulkBar() {
+      const selectable = filteredAndSortedMembers().filter(isSelectable);
+      bulkBar.hidden = selected.size === 0;
+      document.getElementById('bulk-count').textContent = `${selected.size} ausgewählt`;
+      bulkBar.querySelector('[data-bulk="group"]').hidden = !myAccountFields.includes('group');
+      bulkBar.querySelector('[data-bulk="registration"]').hidden = !canOverrideCheckin;
+      bulkBar.querySelector('[data-bulk="deactivate"]').hidden = currentView !== 'active';
+      bulkBar.querySelector('[data-bulk="reactivate"]').hidden = currentView !== 'deactivated';
+      selectAll.checked = selectable.length > 0 && selected.size === selectable.length;
+      selectAll.indeterminate = selected.size > 0 && !selectAll.checked;
+      exportButton.textContent = selected.size ? 'Auswahl exportieren' : 'CSV exportieren';
+    }
+    selectAll.addEventListener('change', () => {
+      selected = selectAll.checked ? new Set(filteredAndSortedMembers().filter(isSelectable).map((m) => m.id)) : new Set();
+      listBody.querySelectorAll('[data-select]').forEach((box) => { box.checked = selected.has(box.dataset.select); });
+      updateBulkBar();
+    });
+    document.getElementById('bulk-clear').addEventListener('click', () => {
+      selected = new Set();
+      listBody.querySelectorAll('[data-select]').forEach((box) => { box.checked = false; });
+      updateBulkBar();
+    });
+
+    const BULK_TITLES = { group: 'Rolle ändern', deactivate: 'Deaktivieren', reactivate: 'Reaktivieren', registration: 'Anmeldestatus setzen' };
+    let bulkKind = null;
+    bulkBar.querySelectorAll('[data-bulk]').forEach((btn) => btn.addEventListener('click', async () => {
+      bulkKind = btn.dataset.bulk;
+      document.getElementById('bulk-title').textContent = BULK_TITLES[bulkKind];
+      let controls = '';
+      let sentence = `${selected.size} Mitglieder`;
+      if (bulkKind === 'group') {
+        if (!groupOptions.length) {
+          try { groupOptions = (await api.get('/groups')).map((g) => ({ key: g.key, name: g.name })); } catch {
+            // /groups is admin-only: fall back to the roles present in the list.
+            groupOptions = [...new Map(viewMembers.filter((m) => m.group).map((m) => [m.group.key, { key: m.group.key, name: m.group.name }])).values()];
+          }
+        }
+        controls = `<select id="bulk-group">${groupOptions.map((g) => `<option value="${escapeHtml(g.key)}">${escapeHtml(g.name)}</option>`).join('')}</select><label for="bulk-group">Neue Rolle</label>`;
+        sentence += ' erhalten die gewählte Rolle';
+      } else if (bulkKind === 'registration') {
+        controls = `<select id="bulk-event">${allEvents.map((e) => `<option value="${escapeHtml(e.id)}"${e.id === prefs.event ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select><label for="bulk-event">Event</label>
+          <select id="bulk-reg-action"><option value="approve">Bestätigen (Zahlung eingegangen)</option><option value="cancel">Absagen (Nachrücken von der Warteliste inklusive)</option></select><label for="bulk-reg-action">Aktion</label>`;
+        sentence += ' werden im gewählten Event geändert (nur wo der Statuswechsel erlaubt ist)';
+      } else {
+        sentence += bulkKind === 'deactivate' ? ' werden deaktiviert und sofort abgemeldet' : ' werden reaktiviert';
+      }
+      bulkBody.innerHTML = `${controls}<p>${escapeHtml(sentence)}. Fortfahren?</p>`;
+      bulkRun.hidden = false;
+      document.getElementById('bulk-close').textContent = 'Abbrechen';
+      bulkDialog.showModal();
+    }));
+    document.getElementById('bulk-close').addEventListener('click', () => bulkDialog.close());
+
+    bulkRun.addEventListener('click', async () => {
+      const ids = [...selected];
+      const payload = { ids };
+      if (bulkKind === 'group') payload.group = document.getElementById('bulk-group').value;
+      if (bulkKind === 'registration') {
+        payload.eventId = document.getElementById('bulk-event').value;
+        payload.action = document.getElementById('bulk-reg-action').value;
+      }
+      bulkRun.disabled = true;
+      try {
+        const res = await api.post(`/members-bulk/${bulkKind}`, payload);
+        const names = new Map(viewMembers.map((m) => [m.id, fullName(m) || m.email]));
+        const failures = Object.entries(res.results).filter(([, r]) => !r.ok);
+        bulkBody.innerHTML = `<p>${res.ok} von ${ids.length} erfolgreich${failures.length ? `, ${failures.length} fehlgeschlagen:` : '.'}</p>${failures.length
+          ? `<ul>${failures.map(([id, r]) => `<li>${escapeHtml(names.get(id) ?? id)}: ${escapeHtml(r.error)}</li>`).join('')}</ul>` : ''}`;
+        bulkRun.hidden = true;
+        document.getElementById('bulk-close').textContent = 'Schließen';
+        selected = new Set(failures.map(([id]) => id));
+        await loadMembers();
+      } catch (err) {
+        notify(err.message, 'error');
+      } finally {
+        bulkRun.disabled = false;
+      }
+    });
+
     // CSV of exactly what the list shows (filters, search and sort applied).
     // The server builds the file and enforces the export permission and the
     // group's field visibility; the page only says which members, in which order.
     const exportButton = document.getElementById('member-export');
     exportButton.addEventListener('click', async () => {
-      const rows = filteredAndSortedMembers();
+      const all = filteredAndSortedMembers();
+      const rows = selected.size ? all.filter((m) => selected.has(m.id)) : all;
       if (rows.length === 0) { notify('Keine Mitglieder zum Exportieren.', 'error'); return; }
       exportButton.disabled = true;
       try {
@@ -648,7 +758,9 @@
         const discordBadge = m.discordUsername
           ? ` <span class="discord-badge" title="Discord: ${escapeHtml(m.discordUsername)}"><svg width="14" height="14" viewBox="0 0 127.14 96.36" aria-hidden="true"><path fill="#5865F2" d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg></span>`
           : '';
+        const selectable = m.status !== 'invited' && m.id !== myUserId;
         return `<tr>
+    <td>${selectable ? `<input type="checkbox" data-select="${m.id}" aria-label="Auswählen"${selected.has(m.id) ? ' checked' : ''}>` : ''}</td>
     <td>${escapeHtml(fullName(m))}${discordBadge}</td>
     <td>${escapeHtml(m.email)}</td>
     <td>${escapeHtml(m.group?.name ?? '–')}</td>
@@ -656,8 +768,19 @@
     <td>${statusCell}</td>
     <td>${actionsCell}</td>
   </tr>`;
-      }).join('') : '<tr><td colspan="6" class="sub">Keine Mitglieder gefunden.</td></tr>';
+      }).join('') : '<tr><td colspan="7" class="sub">Keine Mitglieder gefunden.</td></tr>';
 
+      // Only what is still shown stays selected: changing filter or search clears the rest.
+      const shownIds = new Set(visible.map((m) => m.id));
+      selected = new Set([...selected].filter((id) => shownIds.has(id)));
+      listBody.querySelectorAll('[data-select]').forEach((box) => {
+        box.checked = selected.has(box.dataset.select);
+        box.addEventListener('change', () => {
+          if (box.checked) selected.add(box.dataset.select); else selected.delete(box.dataset.select);
+          updateBulkBar();
+        });
+      });
+      updateBulkBar();
       listBody.querySelectorAll('[data-edit]').forEach((button) => {
         button.addEventListener('click', () => openDetail(button.dataset.edit));
       });
