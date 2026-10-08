@@ -31,6 +31,31 @@ test('applies new migrations and skips already-applied ones', async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
+test('warns about a migration that sorts before an already applied one', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'migrations-'));
+  const names = ['901_ooo_later.sql', '900_ooo_earlier.sql'];
+  await writeFile(path.join(dir, names[0]), 'SELECT 1');
+  await runMigrations({ migrationsDir: dir });
+
+  const warnings = [];
+  const realWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (chunk, ...rest) => {
+    if (String(chunk).includes('out-of-order migration')) warnings.push(String(chunk));
+    return realWrite(chunk, ...rest);
+  };
+  try {
+    await writeFile(path.join(dir, names[1]), 'SELECT 1');
+    const applied = await runMigrations({ migrationsDir: dir });
+    assert.deepEqual(applied, [names[1]]);
+  } finally {
+    process.stderr.write = realWrite;
+    await query("DELETE FROM schema_migrations WHERE filename = ANY($1)", [names]);
+    await rm(dir, { recursive: true, force: true });
+  }
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /900_ooo_earlier\.sql/);
+});
+
 test.after(async () => {
   await closePool();
 });

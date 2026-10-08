@@ -32,9 +32,17 @@ export async function runMigrations({ migrationsDir = DEFAULT_DIR } = {}) {
     const { rows } = await client.query('SELECT filename FROM schema_migrations');
     const applied = new Set(rows.map((r) => r.filename));
 
+    // A file that sorts before one that is already applied runs here *after*
+    // it, but on a fresh database *before* it. Harmless for independent
+    // migrations, so only warn -- check the schema if it ever shows up.
+    const latestApplied = [...applied].sort().at(-1);
+
     const newlyApplied = [];
     for (const file of files) {
       if (applied.has(file)) continue;
+      if (latestApplied && file < latestApplied) {
+        logger.warn('out-of-order migration', { file, latestApplied });
+      }
       const sql = await readFile(path.join(migrationsDir, file), 'utf8');
       await client.query(sql);
       await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);

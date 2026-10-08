@@ -46,3 +46,10 @@ nicht, erhöhe die Version nach obigem Schema und nimm die geänderten
 Versionsdateien in denselben Commit auf. Pro Tag höchstens ein MINOR-Bump;
 ein späterer `feat:` am selben Tag nach einem PATCH-Bump wandelt diesen in
 einen MINOR-Bump um.
+
+# Migrationen
+
+Neue Migration = nächste freie dreistellige Nummer in `db/migrations/`
+(`NNN_snake_case.sql`), nie ein bestehendes Präfix doppelt vergeben —
+`tests/unit/migrationFiles.test.js` schlägt sonst fehl. Bestehende Dateien
+werden nie nachträglich geändert. Server-Vergleich: `docs/betrieb-migrationen.md`.
