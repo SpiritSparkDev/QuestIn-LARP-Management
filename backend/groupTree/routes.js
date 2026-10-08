@@ -9,7 +9,7 @@ import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import {
   isGroupAncestorOf, inviteByEmail, inviteById, setGroupName, setGroupFields, acceptInvitation, declineInvitation, cancelInvitation,
-  leaveParentGroup, removeChild, getGroupTree, createJoinCode, redeemJoinCode,
+  leaveParentGroup, removeChild, getGroupTree, createJoinCode, deleteJoinCode, redeemJoinCode, CODE_VALIDITIES,
 } from './repository.js';
 
 const INVITE_RATE_LIMIT = { keyPrefix: 'group-invite', maxAttempts: 20, windowMs: 15 * 60 * 1000 };
@@ -47,7 +47,9 @@ router.post('/group-tree/invitations', rateLimit(INVITE_RATE_LIMIT)(requireGroup
 })));
 
 router.post('/group-tree/invitations/:id/accept', requireAuth(async ({ params, user }) => {
-  if (!(await acceptInvitation(params.id, user.id))) return { status: 404, body: { error: 'Einladung nicht gefunden oder nicht mehr gültig.' } };
+  const result = await acceptInvitation(params.id, user.id);
+  if (!result) return { status: 404, body: { error: 'Einladung nicht gefunden oder nicht mehr gültig.' } };
+  if (result.error) return { status: 409, body: { error: result.error } };
   return { status: 200, body: await getGroupTree(user.id) };
 }));
 
@@ -61,16 +63,29 @@ router.delete('/group-tree/invitations/:id', requireGroupManager(async ({ params
   return { status: 200, body: { cancelled: true } };
 }));
 
-// A manager creates a code and sends it to the manager above them ...
-router.post('/group-tree/join-code', requireGroupManager(async ({ user }) => ({ status: 201, body: await createJoinCode(user.id) })));
-
-// ... who enters it here; the other manager joins directly.
-router.post('/group-tree/join-code/redeem', rateLimit(REDEEM_RATE_LIMIT)(requireGroupManager(async ({ req, user }) => {
+// A group manager hands out codes (validity and number of redemptions are theirs to choose) ...
+router.post('/group-tree/join-codes', requireGroupManager(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const name = await redeemJoinCode(user.id, body.code);
-  if (!name) return { status: 404, body: { error: 'Der Code ist ungültig, abgelaufen oder kann nicht mehr verwendet werden.' } };
-  await logAudit({ actorId: user.id, action: 'group_tree.join_code_redeemed', details: { name } });
+  const max = body.maxRedemptions ?? null;
+  if (!Object.hasOwn(CODE_VALIDITIES, body.validity)) return { status: 400, body: { error: 'Bitte eine Gültigkeit wählen (1 Tag, 3 Tage, 7 Tage, 1 Monat oder unbegrenzt).' } };
+  if (max !== null && !(Number.isInteger(max) && max >= 1 && max <= 1000000)) return { status: 400, body: { error: 'Die Anzahl der Einlösungen muss eine ganze Zahl ab 1 sein (oder unbegrenzt).' } };
+  return { status: 201, body: await createJoinCode(user.id, body.validity, max) };
+}));
+
+router.delete('/group-tree/join-codes/:id', requireGroupManager(async ({ params, user }) => {
+  if (!UUID_RE.test(params.id) || !(await deleteJoinCode(params.id, user.id))) return { status: 404, body: { error: 'Code nicht gefunden.' } };
+  return { status: 200, body: await getGroupTree(user.id) };
+}));
+
+// ... and whoever is in no group yet enters one here and joins directly.
+router.post('/group-tree/join-code/redeem', rateLimit(REDEEM_RATE_LIMIT)(requireAuth(async ({ req, user }) => {
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const result = await redeemJoinCode(user.id, body.code);
+  if (!result) return { status: 404, body: { error: 'Der Code ist ungültig, abgelaufen, aufgebraucht oder gelöscht.' } };
+  if (result.error) return { status: 409, body: { error: result.error } };
+  await logAudit({ actorId: user.id, action: 'group_tree.join_code_redeemed', details: { group: result.name } });
   return { status: 200, body: await getGroupTree(user.id) };
 })));
 

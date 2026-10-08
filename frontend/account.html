@@ -186,15 +186,34 @@
                         <button type="submit" class="btn-ghost">Einladung senden</button>
                       </form>
                     </div>
-                    <div class="group-option">
-                      <h3>Beitrittscode</h3>
+                    <div class="group-option" id="group-redeem-option">
+                      <h3>Beitrittscode einlösen</h3>
+                      <p class="sub">Nur möglich, solange du noch in keiner Gruppe bist und selbst keine verwaltest.</p>
                       <form id="group-redeem-form" class="group-tree-form">
                         <input id="group-redeem-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off">
-                        <label for="group-redeem-code">Code eines anderen Verwalters einlösen</label>
+                        <label for="group-redeem-code">Code eines Gruppenverwalters</label>
                         <button type="submit" class="btn-ghost">Code einlösen</button>
                       </form>
-                      <p><button type="button" id="group-code-create" class="btn-ghost">Eigenen Code erzeugen</button></p>
+                    </div>
+                    <div class="group-option">
+                      <h3>Beitrittscodes erzeugen</h3>
+                      <p class="sub">Wer einen deiner Codes einlöst und noch in keiner Gruppe ist, kommt direkt in deine Gruppe.</p>
+                      <form id="group-code-form" class="group-tree-form">
+                        <p><label for="group-code-validity">Gültigkeit</label>
+                          <select id="group-code-validity">
+                            <option value="1d">1 Tag</option>
+                            <option value="3d">3 Tage</option>
+                            <option value="7d" selected>7 Tage</option>
+                            <option value="1m">1 Monat</option>
+                            <option value="unlimited">unbegrenzt</option>
+                          </select></p>
+                        <p><label for="group-code-max">Erlaubte Einlösungen</label>
+                          <input id="group-code-max" type="number" min="1" step="1" value="1">
+                          <label><input type="checkbox" id="group-code-unlimited"> unbegrenzt</label></p>
+                        <button type="submit" class="btn-ghost">Code erzeugen</button>
+                      </form>
                       <p class="sub" id="group-code-result"></p>
+                      <div id="group-code-list"></div>
                     </div>
                   </div>
                   <div id="group-outgoing-view"></div>
@@ -1178,7 +1197,7 @@
       const summary = document.getElementById("dashboard-group-summary");
       summary.style.display = hasAny ? "" : "none";
       const parts = [`${managedPersons.length} verwaltete ${managedPersons.length === 1 ? "Person" : "Personen"}`];
-      if (groupTree?.node.children.length) parts.push(`${groupTree.node.children.length} Untergruppe${groupTree.node.children.length === 1 ? "" : "n"}`);
+      if (groupTree?.node.children.length) parts.push(`${groupTree.node.children.length} Mitglied${groupTree.node.children.length === 1 ? "" : "er"}`);
       if (groupTree?.outgoing.length) parts.push(`${groupTree.outgoing.length} offene Einladung${groupTree.outgoing.length === 1 ? "" : "en"}`);
       document.getElementById("dashboard-group-summary-text").textContent = parts.join(" · ");
     }
@@ -1320,7 +1339,7 @@
         <span class="mp-avatar" aria-hidden="true">${escapeHtml((child.name || "?").trim().charAt(0).toUpperCase())}</span>
         <div>
           <h3>${escapeHtml(child.name)}</h3>
-          <p class="sub">Eigener Account · ${parentName ? `Untergruppe von ${escapeHtml(parentName)}` : "Untergruppe"}</p>
+          <p class="sub">Eigener Account · Mitglied deiner Gruppe</p>
           ${renderGroupValues(child.groupData)}
         </div>
         <span class="mp-origin mp-origin--invited" title="Eingeladen – hat einen eigenen Account und ist deiner Gruppe beigetreten"><span class="material-symbols-outlined" aria-hidden="true">mail</span>Eingeladen</span>
@@ -1355,7 +1374,7 @@
         btn.addEventListener("click", () => convertManagedPerson(btn.dataset.managedPersonConvert));
       });
       container.querySelectorAll("[data-group-remove]").forEach((b) => b.addEventListener("click", () => {
-        if (confirm("Diese Untergruppe wirklich aus deiner Gruppe entfernen?")) groupAct(() => api.delete(`/group-tree/children/${b.dataset.groupRemove}`));
+        if (confirm("Dieses Mitglied wirklich aus deiner Gruppe entfernen?")) groupAct(() => api.delete(`/group-tree/children/${b.dataset.groupRemove}`));
       }));
       container.querySelectorAll("[data-group-person]").forEach((b) => b.addEventListener("click", () => openGroupFieldsDialog(b.dataset.groupPerson, b.dataset.groupPersonName)));
     }
@@ -1363,7 +1382,7 @@
     // Incoming invitations are shown at the top of the dashboard, not hidden in the group section.
     function renderGroupInvitations() {
       const banner = document.getElementById("group-invitations-banner");
-      const incoming = groupTree?.incoming ?? [];
+      const incoming = groupTree?.canJoinGroup ? groupTree.incoming : [];
       banner.innerHTML = incoming.map((i) => `<div class="note-box"><p><strong>${escapeHtml(i.parentName)}</strong> lädt dich ein, Teil ihrer Gruppe zu werden. Als übergeordneter Verwalter sieht sie dann deine Gruppe, bearbeitet die für die Gruppenverwaltung freigegebenen Felder und kann dich und deine Personen für Events anmelden.</p><div class="action-row"><button type="button" class="btn-sm" data-invite-accept="${escapeHtml(i.id)}">Annehmen</button><button type="button" class="btn-ghost btn-sm" data-invite-decline="${escapeHtml(i.id)}">Ablehnen</button></div></div>`).join("");
       const answer = (id, verb) => async () => {
         try {
@@ -1437,6 +1456,8 @@
         ? `<p class="sub">Offene Einladungen: ${groupTree.outgoing.map((o) => `${escapeHtml(o.name)} <button type="button" class="btn-ghost btn-sm" data-group-cancel="${escapeHtml(o.id)}">Zurückziehen</button>`).join(", ")}</p>`
         : "";
       document.getElementById("group-name-input").value = groupTree.groupName ?? "";
+      document.getElementById("group-redeem-option").style.display = groupTree.canJoinGroup ? "" : "none";
+      renderJoinCodes();
       renderGroupSettingsFields();
       renderGroupInvitations();
       renderGroupMembers();
@@ -1591,17 +1612,45 @@
       try {
         await api.post("/group-tree/join-code/redeem", { code: document.getElementById("group-redeem-code").value });
         document.getElementById("group-redeem-code").value = "";
-        notify("Gruppenverwalter aufgenommen.", "success");
+        notify("Du bist der Gruppe beigetreten.", "success");
         await loadGroupTree();
       } catch (err) {
         notify(err.message, "error");
       }
     });
 
-    document.getElementById("group-code-create").addEventListener("click", async () => {
+    const joinCodeValidity = { "1d": "1 Tag", "3d": "3 Tage", "7d": "7 Tage", "1m": "1 Monat", unlimited: "unbegrenzt" };
+
+    function renderJoinCodes() {
+      const codes = groupTree?.joinCodes ?? [];
+      const list = document.getElementById("group-code-list");
+      list.innerHTML = codes.length
+        ? `<ul>${codes.map((c) => {
+          const used = c.maxRedemptions === null ? `${c.redemptions} eingelöst, unbegrenzt` : `${c.remaining} von ${c.maxRedemptions} Einlösungen übrig`;
+          const until = c.expiresAt ? (c.expired ? "abgelaufen" : `gültig bis ${new Date(c.expiresAt).toLocaleDateString("de-DE")}`) : "unbegrenzt gültig";
+          return `<li>Code …${escapeHtml(c.hint)}: ${used}, ${until} <button type="button" class="btn-ghost btn-sm" data-join-code-delete="${escapeHtml(c.id)}">Löschen</button></li>`;
+        }).join("")}</ul>`
+        : "";
+      list.querySelectorAll("[data-join-code-delete]").forEach((b) => b.addEventListener("click", () => {
+        if (confirm("Diesen Code wirklich löschen? Er lässt sich dann nicht mehr einlösen.")) groupAct(() => api.delete(`/group-tree/join-codes/${b.dataset.joinCodeDelete}`));
+      }));
+    }
+
+    document.getElementById("group-code-unlimited").addEventListener("change", (event) => {
+      document.getElementById("group-code-max").disabled = event.target.checked;
+    });
+
+    document.getElementById("group-code-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
       try {
-        const { code, expiresAt } = await api.post("/group-tree/join-code", {});
-        document.getElementById("group-code-result").textContent = `Dein Code: ${code} – sieben Tage gültig (bis ${new Date(expiresAt).toLocaleDateString("de-DE")}). Schicke ihn dem Verwalter, in dessen Gruppe du aufgenommen werden willst; er löst ihn bei sich ein, und du bist sofort Teil seiner Gruppe.`;
+        const unlimited = document.getElementById("group-code-unlimited").checked;
+        const validity = document.getElementById("group-code-validity").value;
+        const { code } = await api.post("/group-tree/join-codes", {
+          validity,
+          maxRedemptions: unlimited ? null : Number(document.getElementById("group-code-max").value),
+        });
+        document.getElementById("group-code-result").textContent = `Neuer Code: ${code} (Gültigkeit: ${joinCodeValidity[validity]}). Er wird nur jetzt angezeigt – gib ihn weiter.`;
+        await loadGroupTree();
       } catch (err) {
         notify(err.message, "error");
       }
