@@ -79,7 +79,7 @@ export async function updateAccount(userId, fields) {
       fields.firstName ?? null,
       fields.lastName ?? null,
       fields.nickname ?? null,
-      fields.hotkeys !== undefined ? JSON.stringify(fields.hotkeys) : null,
+      fields.hotkeys != null ? JSON.stringify(fields.hotkeys) : null,
       encryptFieldBlob(nextData),
       typeof fields.keepDataConsent === 'boolean' ? fields.keepDataConsent : null,
     ]

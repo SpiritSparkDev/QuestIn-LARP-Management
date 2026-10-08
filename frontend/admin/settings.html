@@ -577,6 +577,7 @@
       import { api } from "/js/api.js";
       import { applyBranding } from "/js/branding.js";
       import { hideLoading } from "/js/loading.js";
+      import { hotkeyFromEvent, hotkeyLabel, isReservedHotkey, sameHotkey } from "/js/hotkeys.js";
       applyBranding();
       import {
         renderNavLinks,
@@ -641,14 +642,7 @@
       const testToInput = document.getElementById("test-to");
 
       const DEFAULT_HOTKEYS = { confirm: "Enter", cancel: "Escape", scan: " " };
-      const HOTKEY_DISPLAY = {
-        Enter: "Enter",
-        Escape: "Esc",
-        " ": "Leertaste",
-      };
-      function displayKey(key) {
-        return HOTKEY_DISPLAY[key] ?? key;
-      }
+      const displayKey = hotkeyLabel;
 
       let currentHotkeys = { ...DEFAULT_HOTKEYS };
 
@@ -676,7 +670,19 @@
               return;
             event.preventDefault();
             event.stopPropagation();
-            currentHotkeys = { ...currentHotkeys, [action]: event.key };
+            const spec = hotkeyFromEvent(event);
+            if (isReservedHotkey(spec)) {
+              notify(`${hotkeyLabel(spec)} ist vom Browser reserviert und kann nicht belegt werden.`, "error");
+              return;
+            }
+            const clash = Object.keys(currentHotkeys).find(
+              (a) => a !== action && sameHotkey(currentHotkeys[a], spec),
+            );
+            if (clash) {
+              notify(`${hotkeyLabel(spec)} ist bereits belegt.`, "error");
+              return;
+            }
+            currentHotkeys = { ...currentHotkeys, [action]: spec };
             renderHotkeyInputs();
             try {
               await api.patch("/account", { hotkeys: currentHotkeys });

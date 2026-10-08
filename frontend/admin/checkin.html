@@ -141,6 +141,7 @@ import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js
 initSidebarToggle();
 import { parseScanCode } from '/js/qrCode.js';
 import { notify } from '/js/notifications.js';
+import { hotkeyMatches } from '/js/hotkeys.js';
 import { cameraErrorMessage } from '/js/cameraErrors.js';
 import { renderNscFields, collectNscFields } from '/js/nscFields.js';
 
@@ -1042,14 +1043,14 @@ function isTypingTarget(el) {
 document.addEventListener('keydown', (event) => {
   if (!scanDialog.open && isTypingTarget(document.activeElement)) return;
   if (scanDialog.open) {
-    if (event.key === currentHotkeys.confirm) {
+    if (hotkeyMatches(currentHotkeys.confirm, event)) {
       event.preventDefault();
       if (!document.getElementById('scan-confirm').disabled) document.getElementById('scan-confirm').click();
-    } else if (event.key === currentHotkeys.cancel) {
+    } else if (hotkeyMatches(currentHotkeys.cancel, event)) {
       event.preventDefault();
       document.getElementById('scan-cancel').click();
     }
-  } else if (event.key === currentHotkeys.scan && scanStartButton.style.display !== 'none' && !event.repeat) {
+  } else if (hotkeyMatches(currentHotkeys.scan, event) && scanStartButton.style.display !== 'none' && !event.repeat) {
     event.preventDefault();
     scanStartButton.click();
   }

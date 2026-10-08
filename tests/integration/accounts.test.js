@@ -197,6 +197,24 @@ test('PATCH /account omitting hotkeys preserves the previously-saved value', asy
   });
 });
 
+test('PATCH /account validates hotkey format and treats hotkeys:null as omitted', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await registerLoginAndGetCookie(port);
+    const patch = (body) => fetch(`http://localhost:${port}/account`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body),
+    });
+    const ok = await patch({ hotkeys: { confirm: { key: 'k', ctrl: true, alt: true }, cancel: 'Escape' } });
+    assert.equal(ok.status, 200);
+    assert.deepEqual((await ok.json()).hotkeys, { confirm: { key: 'k', ctrl: true, alt: true }, cancel: 'Escape' });
+    for (const bad of ['x', { confirm: 5 }, { confirm: { key: 'k', meta: true } }, { bogus: 'k' }]) {
+      assert.equal((await patch({ hotkeys: bad })).status, 400, JSON.stringify(bad));
+    }
+    const nul = await patch({ hotkeys: null, nickname: 'N' });
+    assert.equal(nul.status, 200);
+    assert.deepEqual((await nul.json()).hotkeys, { confirm: { key: 'k', ctrl: true, alt: true }, cancel: 'Escape' });
+  });
+});
+
 test.after(async () => {
   await closePool();
 });
