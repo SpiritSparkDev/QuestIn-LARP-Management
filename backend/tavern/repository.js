@@ -183,18 +183,32 @@ export async function listTransactions(accountId, limit = 50) {
 // Applies a signed amount to an account and records it, atomically: the
 // account row is locked for the duration, so two tablets charging the same
 // account at once can never both pass the balance check.
-async function applyEntry(client, account, { type, amountCents, method, note, items, reversesId, createdBy, providerReference }) {
+async function applyEntry(client, account, { type, amountCents, method, note, items, reversesId, createdBy, providerReference, requestId }) {
   const newBalance = account.balance_cents + amountCents;
   if (amountCents < 0 && newBalance < 0) {
     throw tavernError('Das Guthaben reicht nicht aus.', 'INSUFFICIENT_FUNDS');
   }
   const { rows } = await client.query(
-    `INSERT INTO tavern_transactions (account_id, type, amount_cents, method, note, items, reverses_id, created_by, provider_reference)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-    [account.id, type, amountCents, method ?? null, note || null, items ? JSON.stringify(items) : null, reversesId ?? null, createdBy ?? null, providerReference ?? null]
+    `INSERT INTO tavern_transactions (account_id, type, amount_cents, method, note, items, reverses_id, created_by, provider_reference, request_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    [account.id, type, amountCents, method ?? null, note || null, items ? JSON.stringify(items) : null, reversesId ?? null, createdBy ?? null, providerReference ?? null, requestId ?? null]
   );
   await client.query('UPDATE tavern_accounts SET balance_cents = $2 WHERE id = $1', [account.id, newBalance]);
   return rows[0];
+}
+
+// An entry already booked for this account under the same idempotency key
+// (the account row is locked, so concurrent duplicates arrive one by one).
+async function findByRequestId(client, accountId, requestId) {
+  if (!requestId) return null;
+  const { rows } = await client.query('SELECT * FROM tavern_transactions WHERE account_id = $1 AND request_id = $2', [accountId, requestId]);
+  return rows[0] ?? null;
+}
+
+export async function hasRequestId(accountId, requestId) {
+  if (!requestId) return false;
+  const { rows } = await query('SELECT 1 FROM tavern_transactions WHERE account_id = $1 AND request_id = $2', [accountId, requestId]);
+  return rows.length > 0;
 }
 
 async function lockAccount(client, id) {
@@ -203,10 +217,12 @@ async function lockAccount(client, id) {
   return rows[0];
 }
 
-export async function topUp(accountId, { amountCents, method, note, createdBy }) {
+export async function topUp(accountId, { amountCents, method, note, createdBy, requestId }) {
   return withTransaction(async (client) => {
     const account = await lockAccount(client, accountId);
-    const row = await applyEntry(client, account, { type: 'topup', amountCents, method, note, createdBy });
+    const done = await findByRequestId(client, accountId, requestId);
+    if (done) return rowToTransaction(done);
+    const row = await applyEntry(client, account, { type: 'topup', amountCents, method, note, createdBy, requestId });
     return rowToTransaction(row);
   });
 }
@@ -237,9 +253,11 @@ export async function findActiveAccountForUser(userId) {
 // Charges the listed items at their CURRENT menu price (prices come from the
 // database, never from the client). The item names/prices are snapshotted
 // onto the entry so later menu edits don't rewrite history.
-export async function charge(accountId, { items = [], customAmountCents = 0, note, createdBy }) {
+export async function charge(accountId, { items = [], customAmountCents = 0, note, createdBy, requestId }) {
   return withTransaction(async (client) => {
     const account = await lockAccount(client, accountId);
+    const done = await findByRequestId(client, accountId, requestId);
+    if (done) return rowToTransaction(done);
     if (account.locked) throw tavernError('Dieses Konto ist gesperrt.', 'ACCOUNT_LOCKED');
 
     const snapshot = [];
@@ -260,7 +278,7 @@ export async function charge(accountId, { items = [], customAmountCents = 0, not
     }
     if (total <= 0) throw tavernError('Es wurde nichts zum Abbuchen ausgewählt.', 'NOTHING_TO_CHARGE');
 
-    const row = await applyEntry(client, account, { type: 'charge', amountCents: -total, note, items: snapshot, createdBy });
+    const row = await applyEntry(client, account, { type: 'charge', amountCents: -total, note, items: snapshot, createdBy, requestId });
     return rowToTransaction(row);
   });
 }
@@ -268,11 +286,13 @@ export async function charge(accountId, { items = [], customAmountCents = 0, not
 // Pays a (remaining) balance out in cash/transfer, e.g. after the event. It
 // reduces the balance like a charge, so it can never overdraw the account;
 // a locked account has to be unlocked first.
-export async function payout(accountId, { amountCents, note, createdBy }) {
+export async function payout(accountId, { amountCents, note, createdBy, requestId }) {
   return withTransaction(async (client) => {
     const account = await lockAccount(client, accountId);
+    const done = await findByRequestId(client, accountId, requestId);
+    if (done) return rowToTransaction(done);
     if (account.locked) throw tavernError('Dieses Konto ist gesperrt.', 'ACCOUNT_LOCKED');
-    const row = await applyEntry(client, account, { type: 'payout', amountCents: -amountCents, note: note || 'Auszahlung Restguthaben', createdBy });
+    const row = await applyEntry(client, account, { type: 'payout', amountCents: -amountCents, note: note || 'Auszahlung Restguthaben', createdBy, requestId });
     return rowToTransaction(row);
   });
 }

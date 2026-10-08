@@ -23,7 +23,7 @@ Ergebnis mit `ls db/migrations | sort` vergleichen:
 ## Schritt 2 — Schema-Vergleich (der eigentliche Beweis)
 - Frische DB: `createdb ref && DATABASE_URL=…/ref npm run migrate`.
 - Beide Schemata dumpen: `pg_dump --schema-only --no-owner --no-privileges` und mit `diff` vergleichen (Prod-Dump aus dem laufenden Container: `docker compose exec db pg_dump -U $POSTGRES_USER --schema-only …`).
-- Erwartung: nur Reihenfolge-Rauschen. Echte Unterschiede (Spalte/Constraint/Default/Index fehlt) → korrigierende Migration `097_…sql` mit idempotentem SQL (`IF NOT EXISTS`), niemals bestehende Migrationsdateien editieren.
+- Erwartung: nur Reihenfolge-Rauschen. Echte Unterschiede (Spalte/Constraint/Default/Index fehlt) → korrigierende Migration mit der nächsten freien Nummer mit idempotentem SQL (`IF NOT EXISTS`), niemals bestehende Migrationsdateien editieren.
 
 ## Schritt 3 — Absicherung (Code, mit Tests)
 - Neuer Unit-/Integrationstest `tests/integration/migrationFiles.test.js` (läuft ohne DB, nur Dateisystem):
@@ -34,7 +34,7 @@ Ergebnis mit `ls db/migrations | sort` vergleichen:
 - Optional: `migrate.js` loggt beim Start eine Warnung, wenn ein *neu anzuwendender* Dateiname alphabetisch **vor** dem zuletzt angewendeten liegt (out-of-order), damit es im Log sichtbar wird.
 
 ## Schritt 4 — Dokumentation
-- Ergebnis (je Server: „identisch" / „korrigiert mit 097") in `docs/offene-punkte.md`, Punkt 16 abhaken.
+- Ergebnis (je Server: „identisch" / „korrigiert mit neuer Migration") in `docs/offene-punkte.md`, Punkt 16 abhaken.
 
 ## Risiken
 - Prod-Daten nicht verändern ohne vorheriges Backup → P5 zuerst oder wenigstens ein manueller `pg_dump` vor Schritt 2/Korrektur.

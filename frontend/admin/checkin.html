@@ -130,6 +130,7 @@ import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js
 initSidebarToggle();
 import { parseScanCode } from '/js/qrCode.js';
 import { notify } from '/js/notifications.js';
+import { cameraErrorMessage } from '/js/cameraErrors.js';
 import { renderNscFields, collectNscFields } from '/js/nscFields.js';
 
 const eventSelect = document.getElementById('event-select');
@@ -422,22 +423,37 @@ function stopScanning() {
   scanLookupPending = false;
 }
 
+// The camera must not stay on in the background (battery, "camera in use").
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && scanStream) {
+    stopScanning();
+    scanStatus.textContent = 'Scan pausiert, weil die Seite im Hintergrund war. Bitte neu starten.';
+  }
+});
+
 async function startScanning({ pushMode }) {
   stopScanning();
   scanStatus.textContent = '';
-  if (!navigator.mediaDevices?.getUserMedia) {
-    scanStatus.textContent = 'Kamerazugriff funktioniert nur über eine HTTPS-Verbindung.';
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    scanStatus.textContent = cameraErrorMessage(null, { secureContext: window.isSecureContext, hasMediaDevices: Boolean(navigator.mediaDevices?.getUserMedia) });
     return;
   }
   try {
-    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } });
-  } catch {
-    scanStatus.textContent = 'Kamera nicht verfügbar oder Zugriff verweigert. Bitte den Kamerazugriff für diese Seite erlauben.';
+    try {
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } });
+    } catch (err) {
+      // No rear camera / constraint not satisfiable (e.g. laptop): any camera will do.
+      if (err?.name !== 'OverconstrainedError' && err?.name !== 'NotFoundError') throw err;
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    }
+    scanVideo.srcObject = scanStream;
+    scanViewport.hidden = false;
+    await scanVideo.play();
+  } catch (err) {
+    stopScanning();
+    scanStatus.textContent = cameraErrorMessage(err);
     return;
   }
-  scanVideo.srcObject = scanStream;
-  scanViewport.hidden = false;
-  await scanVideo.play();
   scanStatus.textContent = 'QR-Code in den Rahmen halten.';
   // Keep the screen awake while scanning (not available everywhere).
   try { scanWakeLock = await navigator.wakeLock?.request('screen'); } catch { scanWakeLock = null; }
@@ -487,7 +503,7 @@ async function handleScannedCode(rawCode) {
     lastScan = { code: rawCode, at: Date.now() };
     openScanDialog(eventId, lookup);
   } catch (err) {
-    scanStatus.textContent = err.message;
+    scanStatus.textContent = err.network ? `${err.message} Bitte Netz prüfen und den Code erneut scannen.` : err.message;
   } finally {
     scanLookupPending = false;
   }
@@ -744,12 +760,21 @@ function renderParticipants(participants, eventId) {
   applySearchFilter();
 }
 
+// A second tap while the first request is still running would only produce a
+// confusing "already checked in" error (or a duplicate on a slow connection).
+const transitionsInFlight = new Set();
+
 async function transition(eventId, userId, action, extra = {}) {
+  const key = `${eventId}:${userId}:${action}`;
+  if (transitionsInFlight.has(key)) return;
+  transitionsInFlight.add(key);
   try {
     await api.post(`/events/${eventId}/${action}`, { userId, ...extra });
     await loadParticipants(eventId);
   } catch (err) {
-    notify(err.message, 'error');
+    notify(err.network ? `${err.message} Bitte Netz prüfen und erneut versuchen; den aktuellen Stand zeigt die Liste.` : err.message, 'error');
+  } finally {
+    transitionsInFlight.delete(key);
   }
 }
 

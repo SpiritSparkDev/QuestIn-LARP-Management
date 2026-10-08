@@ -34,3 +34,12 @@ test('a response with no JSON body does not crash', async (t) => {
   const result = await api.get('/whatever');
   assert.equal(result, null);
 });
+
+test('a failed fetch (no connection) becomes a readable error flagged as network', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('Failed to fetch'); });
+  await assert.rejects(api.post('/x', {}), (err) => {
+    assert.equal(err.network, true);
+    assert.equal(err.message, 'Keine Verbindung zum Server.');
+    return true;
+  });
+});

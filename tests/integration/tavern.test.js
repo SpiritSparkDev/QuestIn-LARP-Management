@@ -251,3 +251,58 @@ test('tavern: the settlement counts takings per item, top-ups per method and pay
     assert.equal(lines.length, 1 + 6); // header + 2 top-ups, 2 charges, 1 void, 1 payout
   });
 });
+
+test('tavern: repeating a booking with the same requestId books it only once (double tap, lost response)', async () => {
+  await withTestServer(async (port) => {
+    const base = `http://localhost:${port}`;
+    const admin = await makeUserAndSession('admin');
+    await query('UPDATE app_settings SET tavern_enabled = true');
+    const { rows: ev } = await query("INSERT INTO events (name, event_date) VALUES ('Doppel-Con', '2027-07-01') RETURNING id");
+    const post = (path, body) => fetch(`${base}${path}`, { method: 'POST', headers: json(admin.cookie), body: JSON.stringify(body) });
+    const beer = await (await post('/tavern/items', { name: 'Doppelbier', priceCents: 300 })).json();
+    const { id } = await (await post('/tavern/accounts', { eventId: ev[0].id, label: 'Gast' })).json();
+
+    const topupId = crypto.randomUUID();
+    for (let i = 0; i < 2; i += 1) {
+      const res = await post(`/tavern/accounts/${id}/topup`, { amountCents: 2000, method: 'cash', requestId: topupId });
+      assert.equal(res.status, 201);
+    }
+    let detail = await (await fetch(`${base}/tavern/accounts/${id}`, { headers: json(admin.cookie) })).json();
+    assert.equal(detail.account.balanceCents, 2000);
+
+    const chargeId = crypto.randomUUID();
+    const bodies = [];
+    for (let i = 0; i < 3; i += 1) {
+      const res = await post(`/tavern/accounts/${id}/charge`, { items: [{ itemId: beer.id, quantity: 1 }], requestId: chargeId });
+      assert.equal(res.status, 201);
+      bodies.push(await res.json());
+    }
+    assert.equal(bodies[2].account.balanceCents, 1700);
+    assert.equal(bodies[2].transactions.filter((t) => t.type === 'charge').length, 1);
+
+    // A different requestId is a genuinely new booking.
+    const again = await post(`/tavern/accounts/${id}/charge`, { items: [{ itemId: beer.id, quantity: 1 }], requestId: crypto.randomUUID() });
+    assert.equal((await again.json()).account.balanceCents, 1400);
+
+    // Concurrent duplicates (two taps before the first answer) also book once.
+    const parallelId = crypto.randomUUID();
+    await Promise.all([1, 2, 3].map(() => post(`/tavern/accounts/${id}/charge`, { items: [{ itemId: beer.id, quantity: 1 }], requestId: parallelId })));
+    detail = await (await fetch(`${base}/tavern/accounts/${id}`, { headers: json(admin.cookie) })).json();
+    assert.equal(detail.account.balanceCents, 1100);
+
+    assert.equal((await post(`/tavern/accounts/${id}/charge`, { items: [{ itemId: beer.id, quantity: 1 }], requestId: 'nope' })).status, 400);
+    // A retried payout (response lost) is answered, not rejected for "no balance left".
+    const payoutId = crypto.randomUUID();
+    const first = await post(`/tavern/accounts/${id}/payout`, { requestId: payoutId });
+    assert.equal(first.status, 201);
+    const retry = await post(`/tavern/accounts/${id}/payout`, { requestId: payoutId });
+    assert.equal(retry.status, 201);
+    const final = await retry.json();
+    assert.equal(final.account.balanceCents, 0);
+    assert.equal(final.transactions.filter((t) => t.type === 'payout').length, 1);
+    await post(`/tavern/accounts/${id}/topup`, { amountCents: 1000, method: 'cash' });
+    // Without a requestId nothing changes (existing behaviour).
+    const plain = await post(`/tavern/accounts/${id}/charge`, { items: [{ itemId: beer.id, quantity: 1 }] });
+    assert.equal((await plain.json()).account.balanceCents, 700);
+  });
+});

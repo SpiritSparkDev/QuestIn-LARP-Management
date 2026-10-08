@@ -6,7 +6,7 @@ import { getEvent } from '../events/repository.js';
 import {
   TOPUP_METHODS, listItems, createItem, updateItem, deleteItem,
   listAccounts, getAccount, createAccount, setLocked, listParticipantsWithoutAccount,
-  listTransactions, topUp, charge, payout, voidTransaction, listBalancesForUser, getReport, listTransactionsForExport,
+  listTransactions, hasRequestId, topUp, charge, payout, voidTransaction, listBalancesForUser, getReport, listTransactionsForExport,
 } from './repository.js';
 import { toCsv } from '../csv.js';
 import { logAudit } from '../audit/repository.js';
@@ -28,6 +28,9 @@ function requireTavern(handler) {
   });
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Optional idempotency key from the client; anything but a UUID is rejected.
+const validRequestId = (value) => value === undefined || (typeof value === 'string' && UUID_RE.test(value));
 const isCents = (value) => Number.isInteger(value) && value > 0 && value <= MAX_AMOUNT_CENTS;
 
 const ERROR_STATUS = {
@@ -132,10 +135,11 @@ router.put('/tavern/accounts/:id/lock', requireTavern(async ({ req, params }) =>
 router.post('/tavern/accounts/:id/topup', requireTavern(async ({ req, params, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (!validRequestId(body.requestId)) return { status: 400, body: { error: 'requestId must be a UUID' } };
   if (!isCents(body.amountCents)) return { status: 400, body: { error: 'amountCents must be a positive integer' } };
   if (!TOPUP_METHODS.includes(body.method)) return { status: 400, body: { error: `method must be one of: ${TOPUP_METHODS.join(', ')}` } };
   return handleErrors(async () => {
-    await topUp(params.id, { amountCents: body.amountCents, method: body.method, note: body.note, createdBy: user.id });
+    await topUp(params.id, { amountCents: body.amountCents, method: body.method, note: body.note, createdBy: user.id, requestId: body.requestId });
     return { status: 201, body: { account: await getAccount(params.id), transactions: await listTransactions(params.id) } };
   });
 }));
@@ -143,6 +147,7 @@ router.post('/tavern/accounts/:id/topup', requireTavern(async ({ req, params, us
 router.post('/tavern/accounts/:id/charge', requireTavern(async ({ req, params, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (!validRequestId(body.requestId)) return { status: 400, body: { error: 'requestId must be a UUID' } };
   const items = Array.isArray(body.items) ? body.items : [];
   for (const item of items) {
     if (typeof item?.itemId !== 'string' || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > MAX_QUANTITY) {
@@ -153,7 +158,7 @@ router.post('/tavern/accounts/:id/charge', requireTavern(async ({ req, params, u
     return { status: 400, body: { error: 'customAmountCents must be a positive integer' } };
   }
   return handleErrors(async () => {
-    await charge(params.id, { items, customAmountCents: body.customAmountCents ?? 0, note: body.note, createdBy: user.id });
+    await charge(params.id, { items, customAmountCents: body.customAmountCents ?? 0, note: body.note, createdBy: user.id, requestId: body.requestId });
     return { status: 201, body: { account: await getAccount(params.id), transactions: await listTransactions(params.id) } };
   });
 }));
@@ -161,13 +166,19 @@ router.post('/tavern/accounts/:id/charge', requireTavern(async ({ req, params, u
 router.post('/tavern/accounts/:id/payout', requireTavern(async ({ req, params, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  if (!validRequestId(body.requestId)) return { status: 400, body: { error: 'requestId must be a UUID' } };
   const account = await getAccount(params.id);
   if (!account) return { status: 404, body: { error: 'account not found' } };
+  // A repeated request (answer got lost) is answered with the current state,
+  // even though the balance it paid out is already gone.
+  if (await hasRequestId(params.id, body.requestId)) {
+    return { status: 201, body: { account, transactions: await listTransactions(params.id) } };
+  }
   // No amount means "pay out everything that is left".
   const amountCents = body.amountCents === undefined ? account.balanceCents : body.amountCents;
   if (!isCents(amountCents)) return { status: 400, body: { error: 'Es gibt kein Guthaben zum Auszahlen.' } };
   return handleErrors(async () => {
-    await payout(params.id, { amountCents, note: body.note, createdBy: user.id });
+    await payout(params.id, { amountCents, note: body.note, createdBy: user.id, requestId: body.requestId });
     return { status: 201, body: { account: await getAccount(params.id), transactions: await listTransactions(params.id) } };
   });
 }));
