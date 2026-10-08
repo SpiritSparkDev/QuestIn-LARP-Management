@@ -1,7 +1,7 @@
 import { router } from '../routes.js';
 import { requireAuth, requireGroupManager } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
-import { getManagedPerson, getManagedPersonForRegistration } from './repository.js';
+import { getManagedPersonForRegistration } from './repository.js';
 import { createCharacter, listCharactersForUser } from '../characters/repository.js';
 
 router.get('/managed-persons/:id/characters', requireAuth(async ({ params, user }) => {
@@ -12,7 +12,7 @@ router.get('/managed-persons/:id/characters', requireAuth(async ({ params, user 
 }));
 
 router.post('/managed-persons/:id/characters', requireGroupManager(async ({ req, params, user }) => {
-  const person = await getManagedPerson(params.id, user.id);
+  const person = await getManagedPersonForRegistration(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
 
   const body = await readJsonBody(req);

@@ -1602,3 +1602,39 @@ test('nscData is ignored when registering as sc', async () => {
     assert.deepEqual(c.nsc_data, {});
   });
 });
+
+test('hard capacity: no waitlist between planned and hard capacity; waitlisted from hard capacity; promotion only below it', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEventWithCapacity(1);
+    await query('UPDATE events SET hard_capacity = 2 WHERE id = $1', [eventId]);
+    const admin = await makeUserAndSession('admin');
+    const users = [];
+    const statuses = [];
+    for (let i = 0; i < 3; i += 1) {
+      const u = await makeUserAndSession();
+      const characterId = await makeCharacter(port, u.cookie);
+      const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: u.cookie },
+        body: JSON.stringify({ conRole: 'sc', characterId }),
+      });
+      statuses.push((await res.json()).status);
+      users.push(u);
+    }
+    assert.deepEqual(statuses, ['pending', 'pending', 'waitlisted']);
+
+    // Raising only the planned capacity does not free a slot.
+    await fetch(`http://localhost:${port}/events/${eventId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ capacity: 2 }),
+    });
+    const status = async () => (await query('SELECT status FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, users[2].userId])).rows[0].status;
+    assert.equal(await status(), 'waitlisted');
+
+    // Raising the hard capacity promotes.
+    await fetch(`http://localhost:${port}/events/${eventId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie },
+      body: JSON.stringify({ hardCapacity: 3 }),
+    });
+    assert.equal(await status(), 'pending');
+  });
+});

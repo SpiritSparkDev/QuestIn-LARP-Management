@@ -101,14 +101,17 @@ initTabs(document.getElementById('class-tabs'));
 // `allowPublic` is false for the two OT (Konto/Anmeldung) tabs -- per spec,
 // OT schema fields have no "public" concept at all, unlike IT (character)
 // fields, so those tabs must render neither the checkbox nor a `public` key.
-function addSchemaRow(container, field = { key: '', label: '', type: 'text', required: false, public: false, staffOnly: false, options: [], group: '' }, { allowPublic = true, allowGroup = false, allowSensitive = false } = {}) {
+function addSchemaRow(container, field = { key: '', label: '', type: 'text', required: false, public: false, staffOnly: false, options: [], group: '' }, { allowPublic = true, allowGroup = false, allowSensitive = false, allowGroupManaged = false } = {}) {
   const row = document.createElement('div');
   row.className = allowGroup ? 'schema-row schema-row--grouped' : 'schema-row';
   const optionsValue = Array.isArray(field.options) ? field.options.join(' | ') : '';
   const publicCheckboxHtml = allowPublic
     ? `<label><input type="checkbox" class="schema-public" ${field.public ? 'checked' : ''}> Öffentlich sichtbar</label>
-       <label><input type="checkbox" class="schema-staff-only" ${field.staffOnly ? 'checked' : ''}> Nur Staff darf bearbeiten</label>
-       <label title="Der übergeordnete Gruppenverwalter darf dieses Feld bei Charakteren seiner Untergruppen bearbeiten"><input type="checkbox" class="schema-group-managed" ${field.groupManaged ? 'checked' : ''}> Gruppenverwaltung</label>`
+       <label><input type="checkbox" class="schema-staff-only" ${field.staffOnly ? 'checked' : ''}> Nur Staff darf bearbeiten</label>`
+    : '';
+  // Characters (via allowPublic) and the OT Konto/Anmeldung tabs.
+  const groupManagedCheckboxHtml = allowPublic || allowGroupManaged
+    ? `<label title="Der übergeordnete Gruppenverwalter darf dieses Feld bei seinen Untergruppen bearbeiten"><input type="checkbox" class="schema-group-managed" ${field.groupManaged ? 'checked' : ''}> Gruppenverwaltung</label>`
     : '';
   // Every tab (characters, Konto, Anmeldung): show the field as its own card.
   const cardCheckboxHtml = `<label title="Das Feld wird als eigene Card dargestellt"><input type="checkbox" class="schema-card" ${field.card ? 'checked' : ''}> Als Card darstellen</label>`;
@@ -143,6 +146,7 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
     <div class="schema-checkboxes">
       <label><input type="checkbox" class="schema-required" ${field.required ? 'checked' : ''}> Pflichtfeld</label>
       ${publicCheckboxHtml}
+      ${groupManagedCheckboxHtml}
       ${cardCheckboxHtml}
       ${sensitiveCheckboxHtml}
     </div>
@@ -161,7 +165,7 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
   container.appendChild(row);
 }
 
-function collectSchema(container, { allowPublic = true, allowGroup = false, allowSensitive = false } = {}) {
+function collectSchema(container, { allowPublic = true, allowGroup = false, allowSensitive = false, allowGroupManaged = false } = {}) {
   return [...container.children].map((row) => {
     const type = row.querySelector('.schema-type').value;
     const field = {
@@ -175,9 +179,9 @@ function collectSchema(container, { allowPublic = true, allowGroup = false, allo
     if (allowPublic) {
       field.public = row.querySelector('.schema-public').checked;
       field.staffOnly = row.querySelector('.schema-staff-only').checked;
-      // Only stored when set, so existing schemas stay unchanged.
-      if (row.querySelector('.schema-group-managed').checked) field.groupManaged = true;
     }
+    // Only stored when set, so existing schemas stay unchanged.
+    if (row.querySelector('.schema-group-managed')?.checked) field.groupManaged = true;
     if (allowGroup) {
       field.group = row.querySelector('.schema-group').value.trim();
     }
@@ -196,18 +200,18 @@ function collectSchema(container, { allowPublic = true, allowGroup = false, allo
   }).filter((field) => field.key.length > 0);
 }
 
-function setupSchemaEditor({ rowsId, addFieldId, saveId, endpoint, loadTemplateId, allowPublic = true, allowGroup = false, allowSensitive = false }) {
+function setupSchemaEditor({ rowsId, addFieldId, saveId, endpoint, loadTemplateId, allowPublic = true, allowGroup = false, allowSensitive = false, allowGroupManaged = false }) {
   const rows = document.getElementById(rowsId);
-  document.getElementById(addFieldId).addEventListener('click', () => addSchemaRow(rows, undefined, { allowPublic, allowGroup, allowSensitive }));
+  document.getElementById(addFieldId).addEventListener('click', () => addSchemaRow(rows, undefined, { allowPublic, allowGroup, allowSensitive, allowGroupManaged }));
   if (loadTemplateId) {
     document.getElementById(loadTemplateId).addEventListener('click', () => {
       rows.innerHTML = '';
-      DEFAULT_CHARACTER_SCHEMA.forEach((field) => addSchemaRow(rows, field, { allowPublic, allowGroup, allowSensitive }));
+      DEFAULT_CHARACTER_SCHEMA.forEach((field) => addSchemaRow(rows, field, { allowPublic, allowGroup, allowSensitive, allowGroupManaged }));
     });
   }
   document.getElementById(saveId).addEventListener('click', async () => {
     try {
-      await api.put(endpoint, { schema: collectSchema(rows, { allowPublic, allowGroup, allowSensitive }) });
+      await api.put(endpoint, { schema: collectSchema(rows, { allowPublic, allowGroup, allowSensitive, allowGroupManaged }) });
       notify('Gespeichert.', 'success');
     } catch (err) {
       notify(err.status === 400 && err.body?.error ? err.body.error : err.message, 'error');
@@ -218,8 +222,8 @@ function setupSchemaEditor({ rowsId, addFieldId, saveId, endpoint, loadTemplateI
 
 const scRows = setupSchemaEditor({ rowsId: 'sc-schema-rows', addFieldId: 'sc-add-field', saveId: 'sc-schema-save', endpoint: '/sc-schema', loadTemplateId: 'sc-load-template', allowGroup: true });
 const nscRows = setupSchemaEditor({ rowsId: 'nsc-schema-rows', addFieldId: 'nsc-add-field', saveId: 'nsc-schema-save', endpoint: '/nsc-schema', allowGroup: true });
-const accountRows = setupSchemaEditor({ rowsId: 'account-schema-rows', addFieldId: 'account-add-field', saveId: 'account-schema-save', endpoint: '/account-schema', allowPublic: false, allowSensitive: true });
-const registrationRows = setupSchemaEditor({ rowsId: 'registration-schema-rows', addFieldId: 'registration-add-field', saveId: 'registration-schema-save', endpoint: '/registration-schema', allowPublic: false, allowSensitive: true });
+const accountRows = setupSchemaEditor({ rowsId: 'account-schema-rows', addFieldId: 'account-add-field', saveId: 'account-schema-save', endpoint: '/account-schema', allowPublic: false, allowSensitive: true, allowGroupManaged: true });
+const registrationRows = setupSchemaEditor({ rowsId: 'registration-schema-rows', addFieldId: 'registration-add-field', saveId: 'registration-schema-save', endpoint: '/registration-schema', allowPublic: false, allowSensitive: true, allowGroupManaged: true });
 const groupRows = setupSchemaEditor({ rowsId: 'group-schema-rows', addFieldId: 'group-add-field', saveId: 'group-schema-save', endpoint: '/group-schema', allowPublic: false });
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
@@ -242,8 +246,8 @@ try {
     groupSchema.forEach((field) => addSchemaRow(groupRows, field, { allowPublic: false }));
     scSchema.forEach((field) => addSchemaRow(scRows, field, { allowGroup: true }));
     nscSchema.forEach((field) => addSchemaRow(nscRows, field, { allowGroup: true }));
-    accountSchema.forEach((field) => addSchemaRow(accountRows, field, { allowPublic: false, allowSensitive: true }));
-    registrationSchema.forEach((field) => addSchemaRow(registrationRows, field, { allowPublic: false, allowSensitive: true }));
+    accountSchema.forEach((field) => addSchemaRow(accountRows, field, { allowPublic: false, allowSensitive: true, allowGroupManaged: true }));
+    registrationSchema.forEach((field) => addSchemaRow(registrationRows, field, { allowPublic: false, allowSensitive: true, allowGroupManaged: true }));
   }
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

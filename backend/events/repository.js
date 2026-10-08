@@ -4,7 +4,9 @@ import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELECT_COLUMNS = 'id, name, event_date, end_date, code, capacity, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at';
+const SELECT_COLUMNS = `id, name, event_date, end_date, code, capacity, hard_capacity, low_seats_notice, low_seats_from, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at,
+  (low_seats_notice AND (SELECT count(*) FROM registrations r WHERE r.event_id = events.id AND r.status IN ('pending', 'confirmed', 'checked_in', 'checked_out'))
+    BETWEEN COALESCE(low_seats_from, capacity) AND COALESCE(hard_capacity, capacity) - 1) AS low_seats`;
 
 // Trims, drops empty strings, and deduplicates while preserving first-seen
 // order -- the admin-facing comma-separated textfield can easily produce
@@ -88,12 +90,12 @@ function normalizeText(value) {
   return value.trim() === '' ? null : value;
 }
 
-export async function createEvent({ name, eventDate, endDate, code, capacity, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url, flag_details, end_date)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url, flag_details, end_date, hard_capacity, low_seats_notice, low_seats_from)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      RETURNING ${SELECT_COLUMNS}`,
-    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), JSON.stringify(normalizeExtras(extras)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl), JSON.stringify(normalizeFlagDetails(flagDetails, flags)), endDate || null]
+    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), JSON.stringify(normalizeExtras(extras)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl), JSON.stringify(normalizeFlagDetails(flagDetails, flags)), endDate || null, hardCapacity ?? null, Boolean(lowSeatsNotice), lowSeatsFrom ?? null]
   );
   return rows[0];
 }
@@ -121,7 +123,7 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { privacyDeletion, endDate, name, eventDate, code, capacity, clearCapacity, flags, flagDetails, flagRenames, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function updateEvent(id, { privacyDeletion, endDate, name, eventDate, code, capacity, clearCapacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, flags, flagDetails, flagRenames, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   // code/capacity are the fields a caller can legitimately want to CLEAR
   // (empty string / "unbegrenzt") rather than just omit -- COALESCE alone
   // can't tell those apart, since both arrive as a falsy value. $6/$7
@@ -160,7 +162,10 @@ export async function updateEvent(id, { privacyDeletion, endDate, name, eventDat
        extras = COALESCE($20, extras),
        flag_details = COALESCE($21, flag_details),
        privacy_deletion = COALESCE($22, privacy_deletion),
-       end_date = CASE WHEN $23 THEN $24 ELSE end_date END
+       end_date = CASE WHEN $23 THEN $24 ELSE end_date END,
+       hard_capacity = CASE WHEN $25 THEN $26 ELSE hard_capacity END,
+       low_seats_notice = COALESCE($27, low_seats_notice),
+       low_seats_from = CASE WHEN $28 THEN $29 ELSE low_seats_from END
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
     [
@@ -177,6 +182,9 @@ export async function updateEvent(id, { privacyDeletion, endDate, name, eventDat
       nextDetails,
       privacyDeletion !== undefined ? JSON.stringify(privacyDeletion) : null,
       endDate !== undefined, endDate || null,
+      hardCapacity !== undefined, hardCapacity ?? null,
+      lowSeatsNotice === undefined ? null : Boolean(lowSeatsNotice),
+      lowSeatsFrom !== undefined, lowSeatsFrom ?? null,
     ]
   );
   return rows[0] ?? null;

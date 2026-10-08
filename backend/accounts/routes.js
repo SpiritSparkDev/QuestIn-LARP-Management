@@ -4,6 +4,7 @@ import { readJsonBody } from '../httpBody.js';
 import { getAccount, updateAccount } from './repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { isTestModeEnabled } from '../testMode/load.js';
+import { getSummary } from '../instanceAuthority/repository.js';
 
 router.get('/account', requireAuth(async ({ user }) => {
   const account = await getAccount(user.id);
@@ -20,7 +21,7 @@ router.get('/account', requireAuth(async ({ user }) => {
     canExportSensitive: user.group.canExportSensitive,
     viewingAs: user.viewingAs,
   } : {};
-  return { status: 200, body: { ...account, ...viewAs, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, testMode: await isTestModeEnabled() } };
+  return { status: 200, body: { ...account, ...viewAs, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, testMode: await isTestModeEnabled(), instance: await getSummary() } };
 }));
 
 router.patch('/account', requireAuth(async ({ req, user }) => {

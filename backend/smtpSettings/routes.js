@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { isOffline } from '../appMode.js';
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
@@ -28,6 +29,7 @@ router.post('/admin/settings/smtp/test', requireAuth(requireAdminGroup(async ({ 
     const saved = await getSmtpSettingsForSending();
     if (saved && saved.username === username) effectivePassword = saved.password;
   }
+  if (isOffline()) return { status: 409, body: { error: 'Im Offline-Modus werden keine Mails versendet.' } };
   try {
     const transporter = nodemailer.createTransport({
       host,

@@ -2,6 +2,8 @@ import { escapeHtml } from './formFields.js';
 import { APP_VERSION } from './version.js';
 import { initResponsiveTables } from './responsiveTables.js';
 import { api } from './api.js';
+import { updateModeChip } from './offlineSwitch.js';
+import './help.js';
 
 // Every page that renders the sidebar also gets the narrow-screen table
 // labelling -- nav.js is the one module they all share.
@@ -32,6 +34,7 @@ const ADMIN_ONLY_LINKS = [
   { label: 'Rollen', href: '/admin/groups.html', icon: 'groups' },
   { label: 'Charakterschema', href: '/admin/character-schema.html', icon: 'badge' },
   { label: 'E-Mail-Vorlagen', href: '/admin/email-templates.html', icon: 'mail' },
+  { label: 'Datenabgleich', href: '/admin/sync.html', icon: 'sync_alt' },
   { label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' },
   { label: 'Protokoll', href: '/admin/audit.html', icon: 'history' },
 ];
@@ -77,6 +80,33 @@ function showTestModeBanner(account) {
   }
   if (!existing) document.body.prepend(banner);
 }
+
+// Permanent red strip + red favicon on the on-site Con server (APP_MODE=offline),
+// so nobody mistakes it for the live database. Fetched once; /app-config is public.
+async function showOfflineBanner() {
+  if (document.getElementById('offline-banner')) return;
+  let config;
+  try {
+    config = await (await fetch('/app-config')).json();
+  } catch {
+    return;
+  }
+  if (config.mode !== 'offline' || !document.body) return;
+  const taken = config.snapshotTakenAt ? new Date(config.snapshotTakenAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : 'unbekannt';
+  const banner = document.createElement('div');
+  banner.id = 'offline-banner';
+  banner.className = 'testmode-banner offline-banner';
+  banner.textContent = `OFFLINE-VERSION – Stand vom ${taken}`;
+  document.body.prepend(banner);
+  document.body.classList.add('has-testmode-banner');
+  const icon = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#c62828"/></svg>');
+  document.querySelectorAll('link[rel~="icon"]').forEach((l) => l.remove());
+  const link = document.createElement('link');
+  link.rel = 'icon';
+  link.href = icon;
+  document.head.append(link);
+}
+showOfflineBanner();
 
 const ADMIN_OPEN_KEY = 'sidebarAdminOpen';
 const GROUP_MENU_KEY = 'groupMenuEnabled';
@@ -130,6 +160,7 @@ document.addEventListener('click', (event) => {
 
 export function renderNavLinks(account, currentPath, { accountIncomplete = false } = {}) {
   showTestModeBanner(account);
+  updateModeChip(account);
   // Add-on entries (item.flag) also need the add-on switched on; admins see
   // every enabled add-on without needing its menu key.
   const items = MENU_LINKS.filter((item) => (account.menus.includes(item.key) || (item.flag && account.group.key === 'admin')) && (!item.flag || account[item.flag]) && (!item.groupMenu || (groupMenuEnabled() || account.groupMemberOnly)));

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datenabgleich – Pakyrion Admin</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
+    <h1>Datenabgleich</h1>
+    <p class="sub">Übergabe von Check-in und Taverne an eine Offline-Version vor Ort, Rückgabe und Klärung von Konflikten.</p>
+
+    <div id="sync-banner"></div>
+
+    <div class="card form-pad">
+      <h2>Status</h2>
+      <p id="sync-instance" class="sub"></p>
+      <div class="table-scroll">
+        <table id="sync-events">
+          <thead><tr><th>Event</th><th>Zustand</th><th>Stand</th><th>Delegiert</th><th>Generation</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card form-pad" id="import-card" hidden>
+      <h2>Rückgabe einspielen</h2>
+      <p class="sub">Rückgabedatei (.qpkg) der Offline-Instanz hochladen. Die Passphrase ist die beim Export vergebene.</p>
+      <form id="import-form">
+        <input type="file" id="import-file" accept=".qpkg" required>
+        <label for="import-file">Rückgabedatei</label>
+        <input type="password" id="import-pass" minlength="8" autocomplete="off" required>
+        <label for="import-pass">Passphrase</label>
+        <label class="check-label"><input type="checkbox" id="import-interim"> Zwischenabgleich (Online bleibt delegiert)</label>
+        <button type="submit" class="btn" id="import-submit">Einspielen</button>
+      </form>
+      <p id="import-result" role="status"></p>
+    </div>
+
+    <div class="card form-pad">
+      <h2>Konflikte</h2>
+      <p id="readonly-hint" class="sub" hidden>Diese Offline-Instanz zeigt die Liste nur an. Konflikte werden online gelöst.</p>
+      <div class="sync-actions">
+        <select id="filter-status" aria-label="Status">
+          <option value="open">Offen</option>
+          <option value="resolved">Gelöst</option>
+        </select>
+        <select id="filter-type" aria-label="Typ"><option value="">Alle Typen</option></select>
+        <a class="btn-secondary btn-sm" id="csv-link" href="/offline/conflicts.csv?status=open" download>CSV-Export</a>
+      </div>
+    </div>
+    <div class="card" id="conflict-list"></div>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
+applyBranding();
+import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { mergeMessage } from '/js/offlineSwitch.js';
+import { sideBySide } from '/js/syncDiff.js';
+import { notify } from '/js/notifications.js';
+initSidebarToggle();
+
+const fmt = (iso) => (iso ? new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–');
+const ROLE = { delegated: 'Delegiert (Offline-Rückgabe offen)', offline_primary: 'Offline schreibberechtigt', retired: 'Offline beendet' };
+const TYPES = {
+  registration_changed_online: 'Anmeldung online geändert',
+  account_deleted_online: 'Konto online gelöscht',
+  tavern_number_collision: 'Kontonummer doppelt',
+  balance_mismatch: 'Saldo stimmt nicht',
+  duplicate_walkin: 'Doppelter Walk-in',
+  forced_release: 'Delegation aufgehoben',
+  unknown_entity: 'Unbekannter Datensatz',
+  clock_skew: 'Uhrenabweichung',
+};
+const ACTIONS = { offline: 'Offline übernehmen', online: 'Online behalten', merged: 'Zusammenführen', ignored: 'Ignorieren' };
+
+let status = null;
+const offlineInstance = () => status?.mode === 'offline';
+
+document.getElementById('filter-type').insertAdjacentHTML('beforeend', Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${escapeHtml(v)}</option>`).join(''));
+
+async function loadStatus() {
+  status = await api.get('/offline/status');
+  const i = status.instance;
+  document.getElementById('sync-instance').textContent = offlineInstance()
+    ? `Offline-Instanz, Stand vom ${fmt(i.snapshotTakenAt)}. Offene Konflikte: ${i.openConflicts}.`
+    : `Online-Instanz. Offene Konflikte: ${i.openConflicts}.`;
+  document.getElementById('import-card').hidden = offlineInstance();
+  document.getElementById('readonly-hint').hidden = !offlineInstance();
+  document.querySelector('#sync-events tbody').innerHTML = status.events.length ? status.events.map((e) => `<tr>
+    <td>${escapeHtml(e.eventName)}</td>
+    <td>${escapeHtml(ROLE[e.role] ?? e.role)}</td>
+    <td title="Snapshot ${escapeHtml(e.snapshotId.slice(0, 8))}">${escapeHtml(fmt(e.snapshotTakenAt))}</td>
+    <td>${escapeHtml(fmt(e.delegatedAt))}${e.delegatedByName ? ` · ${escapeHtml(e.delegatedByName)}` : ''}</td>
+    <td>${e.generation}</td>
+    <td>${!offlineInstance() && e.role === 'delegated' ? `<button type="button" class="btn-danger btn-sm" data-release="${e.eventId}" data-name="${escapeHtml(e.eventName)}">Delegation aufheben</button>` : ''}</td>
+  </tr>`).join('') : '<tr><td colspan="6" class="sub">Alle Events sind normal online schreibberechtigt.</td></tr>';
+
+  const delegated = status.events.filter((e) => e.role === 'delegated');
+  document.getElementById('sync-banner').innerHTML = !offlineInstance() && delegated.length ? `<div class="sync-banner" role="alert">
+    <strong>Offline-Version aktiv seit ${escapeHtml(fmt(delegated[0].delegatedAt))}, Rückgabe ausstehend.</strong>
+    Check-in und Taverne sind online gesperrt${i.openConflicts ? `; ${i.openConflicts} Konflikt(e) offen` : ''}.
+    <div class="dialog-actions"><button type="button" class="btn-danger btn-sm" id="emergency">Notfall-Freigabe</button></div>
+  </div>` : '';
+}
+
+async function releaseFlow(eventId, name, force) {
+  const what = force ? `Notfall-Freigabe für „${name}“ trotz offener Konflikte` : `Delegation für „${name}“ aufheben`;
+  if (!confirm(`${what}?\n\nOffline erfasste Buchungen und Check-ins, die noch nicht zurückgegeben wurden, gehen verloren bzw. werden später nur als Konflikt angeboten.`)) return;
+  if (!confirm('Wirklich? Das wird protokolliert und kann nicht rückgängig gemacht werden.')) return;
+  try {
+    if (force) await api.post('/offline/release-force', { eventId, confirm: true });
+    else await api.post('/offline/release', { eventId });
+    notify('Online ist wieder schreibberechtigt.', 'success');
+  } catch (err) {
+    if (!force && err.body?.code === 'OPEN_CONFLICTS') {
+      notify('Es sind Konflikte offen. Bitte lösen oder die Notfall-Freigabe nutzen.', 'error');
+    } else {
+      notify(err.message, 'error');
+    }
+  }
+  await refresh();
+}
+
+document.addEventListener('click', (evt) => {
+  const rel = evt.target.closest('[data-release]');
+  if (rel) releaseFlow(rel.dataset.release, rel.dataset.name, false);
+  if (evt.target.closest('#emergency')) {
+    const e = status.events.find((x) => x.role === 'delegated');
+    if (e) releaseFlow(e.eventId, e.eventName, true);
+  }
+});
+
+const readFileBase64 = (file) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(',')[1]);
+  r.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+  r.readAsDataURL(file);
+});
+
+document.getElementById('import-form').addEventListener('submit', async (evt) => {
+  evt.preventDefault();
+  const btn = document.getElementById('import-submit');
+  const out = document.getElementById('import-result');
+  btn.disabled = true;
+  out.className = 'sub';
+  out.textContent = 'Vorgang läuft …';
+  try {
+    const file = await readFileBase64(document.getElementById('import-file').files[0]);
+    const result = await api.post('/offline/return-import', { file, passphrase: document.getElementById('import-pass').value, interim: document.getElementById('import-interim').checked });
+    out.textContent = mergeMessage(result);
+    document.getElementById('import-pass').value = '';
+    await refresh();
+  } catch (err) {
+    out.className = 'mode-error';
+    out.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function renderSide(title, rows, side) {
+  return `<div class="sync-side"><h4>${title}</h4><dl class="sync-kv">${rows.map((r) =>
+    `<dt>${escapeHtml(r.key)}</dt><dd><span${r.differs ? ' class="differs"' : ''}>${escapeHtml(r[side])}</span></dd>`).join('')}</dl></div>`;
+}
+
+function renderConflict(c) {
+  const rows = sideBySide(c.offlineValue, c.onlineValue);
+  const open = c.status === 'open';
+  const buttons = open && !offlineInstance() ? c.allowedResolutions.map((r) => `<button type="button" class="${r === 'ignored' ? 'btn-ghost' : 'btn-secondary'} btn-sm" data-resolve="${r}">${ACTIONS[r] ?? r}</button>`).join('') : '';
+  return `<div class="sync-conflict" data-id="${c.id}">
+    <h3>${escapeHtml(TYPES[c.type] ?? c.type)} <span class="badge ${open ? 'badge-inactive' : 'badge-active'}">${open ? 'Offen' : `Gelöst: ${escapeHtml(ACTIONS[c.resolution] ?? c.resolution ?? '')}`}</span></h3>
+    <p class="sub">${escapeHtml(c.entity)} · ${escapeHtml(c.entityId)} · entstanden ${escapeHtml(fmt(c.createdAt))}${c.resolvedAt ? ` · gelöst ${escapeHtml(fmt(c.resolvedAt))}` : ''}</p>
+    <div class="sync-sides">${renderSide('Offline-Stand', rows, 'offline')}${renderSide('Online-Stand', rows, 'online')}</div>
+    ${open && !offlineInstance() ? `<div class="sync-actions"><input type="text" class="note" placeholder="Notiz (optional)" aria-label="Notiz">${buttons}</div>` : (c.note ? `<p class="sub">Notiz: ${escapeHtml(c.note)}</p>` : '')}
+  </div>`;
+}
+
+async function loadConflicts() {
+  const st = document.getElementById('filter-status').value;
+  const type = document.getElementById('filter-type').value;
+  document.getElementById('csv-link').href = `/offline/conflicts.csv?status=${st}`;
+  const { conflicts } = await api.get(`/offline/conflicts?status=${st}${type ? `&type=${type}` : ''}`);
+  document.getElementById('conflict-list').innerHTML = conflicts.length ? conflicts.map(renderConflict).join('') : '<p class="sub form-pad">Keine Konflikte.</p>';
+}
+
+document.getElementById('conflict-list').addEventListener('click', async (evt) => {
+  const btn = evt.target.closest('[data-resolve]');
+  if (!btn) return;
+  const row = btn.closest('.sync-conflict');
+  btn.disabled = true;
+  try {
+    const { released } = await api.post(`/offline/conflicts/${row.dataset.id}/resolve`, { resolution: btn.dataset.resolve, note: row.querySelector('.note').value.trim() || undefined });
+    notify(released ? 'Gelöst. Alle Konflikte sind erledigt, Online ist wieder schreibberechtigt.' : 'Konflikt gelöst.', 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+  await refresh();
+});
+document.getElementById('filter-status').addEventListener('change', loadConflicts);
+document.getElementById('filter-type').addEventListener('change', loadConflicts);
+
+async function refresh() {
+  await loadStatus();
+  await loadConflicts();
+}
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  await refresh();
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else notify(err.status === 403 ? 'Kein Zugriff – nur für Admins.' : err.message, 'error');
+} finally {
+  hideLoading();
+}
+</script>
+</body>
+</html>

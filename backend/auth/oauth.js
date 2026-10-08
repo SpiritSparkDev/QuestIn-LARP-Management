@@ -5,6 +5,7 @@ import { createSession } from './sessions.js';
 import { parseCookies, serializeSessionCookie, secureFlag } from './cookies.js';
 import { PROVIDERS } from './oauthProviders.js';
 import { logger } from '../logger.js';
+import { isOffline } from '../appMode.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { splitFullName } from '../displayName.js';
 
@@ -88,6 +89,10 @@ router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
 
   if (!code) {
     return { status: 400, body: { error: 'missing authorization code' }, headers: { 'Set-Cookie': clearStateCookie } };
+  }
+
+  if (isOffline()) {
+    return { status: 302, body: {}, headers: { Location: '/login.html?oauth_error=offline', 'Set-Cookie': clearStateCookie } };
   }
 
   const tokenRes = await fetch(provider.tokenUrl, {

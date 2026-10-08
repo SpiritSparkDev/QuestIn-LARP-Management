@@ -3,6 +3,7 @@ import { displayName } from '../displayName.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../accountFields.js';
 import { sanitizeFieldValue } from '../richText.js';
+import { effectiveAccountFields } from '../groups/repository.js';
 
 function decryptAccount(row) {
   return {
@@ -43,7 +44,7 @@ const FROM_JOIN = `
 export async function getAccount(userId) {
   const { rows } = await query(`SELECT ${SELECT_COLUMNS} ${FROM_JOIN} WHERE users.id = $1`, [userId]);
   if (rows.length === 0) return null;
-  return decryptAccount(rows[0]);
+  return { ...decryptAccount(rows[0]), accountFields: await effectiveAccountFields(rows[0].group_key, rows[0].account_fields) };
 }
 
 export async function updateAccount(userId, fields) {

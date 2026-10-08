@@ -74,7 +74,12 @@
         <label for="event-code">QR-Code-Kennung <span style="opacity:0.6;font-size:12px;">optional, z.B. P17/2027</span></label>
 
         <input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt">
-        <label for="event-capacity">Max. Teilnehmerzahl <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
+        <label for="event-capacity">Plätze (geplant) <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
+        <input id="event-hard-capacity" name="hardCapacity" type="number" min="1" placeholder="wie geplant">
+        <label for="event-hard-capacity">Harte Obergrenze <span style="opacity:0.6;font-size:12px;">optional, ab hier gilt die Warteliste (leer = geplante Plätze)</span></label>
+        <label><input type="checkbox" id="event-low-seats-notice" name="lowSeatsNotice"> Hinweis „Nur noch wenige Plätze verfügbar“ anzeigen</label>
+        <input id="event-low-seats-from" name="lowSeatsFrom" type="number" min="1" placeholder="ab geplanter Platzzahl">
+        <label for="event-low-seats-from">ab … belegten Plätzen <span style="opacity:0.6;font-size:12px;">leer = ab geplanter Platzzahl</span></label>
         <h3 class="event-form-section">Sonderrollen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Besondere Rollen eines Events, z. B. GSC, VP oder Ersthelfer. Teilnehmer sehen sie bei der Anmeldung als Karten mit deiner Kurzbeschreibung und können mehrere wählen.</p>
         <div id="flag-list"></div>
@@ -779,6 +784,9 @@ function startEdit(eventData) {
   form.elements.endDate.value = eventData.end_date ?? "";
   form.elements.code.value = eventData.code ?? '';
   form.elements.capacity.value = eventData.capacity ?? '';
+  form.elements.hardCapacity.value = eventData.hard_capacity ?? '';
+  form.elements.lowSeatsNotice.checked = Boolean(eventData.low_seats_notice);
+  form.elements.lowSeatsFrom.value = eventData.low_seats_from ?? '';
   flagRows = (eventData.flags ?? []).map((name) => ({ original: name, name, description: (eventData.flag_details ?? {})[name] ?? '' }));
   renderFlagRows();
   form.elements.directions.value = eventData.directions ?? '';
@@ -840,6 +848,9 @@ form.addEventListener('submit', async (event) => {
     code: form.elements.code.value || null,
     capacity: capacityValue ? Number(capacityValue) : null,
     clearCapacity: true,
+    hardCapacity: form.elements.hardCapacity.value ? Number(form.elements.hardCapacity.value) : null,
+    lowSeatsNotice: form.elements.lowSeatsNotice.checked,
+    lowSeatsFrom: form.elements.lowSeatsFrom.value ? Number(form.elements.lowSeatsFrom.value) : null,
     ...collectFlags(),
     pricing: collectPricing(),
     extras: collectExtras(),

@@ -1,0 +1,12 @@
+# TLS-Reverse-Proxy fuer die Offline-Instanz (docker-compose.offline.yml).
+# `tls internal` = Caddy erzeugt eine eigene lokale CA und stellt daraus das Zertifikat aus.
+# Die Root-CA (siehe docs/betrieb-offline.md) muss einmalig auf den Scan-Handys installiert werden.
+{
+	# Kein Kontakt zu ACME/Internet.
+	skip_install_trust
+}
+
+{$CON_HOSTNAME:con.local} {
+	tls internal
+	reverse_proxy app:3000
+}

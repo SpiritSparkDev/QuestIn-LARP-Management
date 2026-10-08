@@ -82,6 +82,7 @@
               <span class="sub" id="member-count"></span>
               <button type="button" id="member-filter-reset" class="btn-ghost btn-sm">Zurücksetzen</button>
               <button type="button" id="member-export" class="btn-secondary btn-sm">CSV exportieren</button>
+              <button type="button" id="member-nsc-overview" class="btn-secondary btn-sm">NSC-Übersicht</button>
             </div>
           </div>
           <div class="table-scroll">
@@ -91,6 +92,7 @@
                 <th data-sort="name">Name</th>
                 <th data-sort="email">E-Mail</th>
                 <th data-sort="group">Rolle</th>
+                <th>SC / NSC / Sonderrollen</th>
                 <th data-sort="status">Status</th>
                 <th></th>
               </tr>
@@ -113,7 +115,7 @@
               <label for="detail-group">Rolle</label>
             </div>
             <div id="detail-fields"></div>
-            <div class="save-bar"><button type="button" id="detail-save">Konto speichern</button></div>
+            <div class="save-bar"><button type="button" id="detail-save">Konto speichern</button> <button type="button" id="detail-abort" class="btn-ghost">Abbrechen</button></div>
           </div>
           <div class="tab-panel" id="detail-tab-chars" hidden>
             <div id="detail-characters"></div>
@@ -123,6 +125,15 @@
           </div>
           <div class="dialog-actions">
             <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
+          </div>
+        </dialog>
+
+        <dialog id="nsc-overview-dialog" class="member-dialog">
+          <h2>NSC-Übersicht</h2>
+          <div id="nsc-overview-body" class="table-scroll"></div>
+          <div class="dialog-actions">
+            <button type="button" id="nsc-overview-print" class="btn-secondary">Drucken</button>
+            <button type="button" id="nsc-overview-close" class="btn-ghost">Schließen</button>
           </div>
         </dialog>
 
@@ -184,6 +195,7 @@
     import { notify } from '/js/notifications.js';
     import { renderNscFields, collectNscFields } from '/js/nscFields.js';
     import { formatFieldValue } from '/js/formFields.js';
+    import { renderFlagCards, collectFlagCards, bindFlagCards } from '/js/flagCards.js';
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary } from '/js/extrasPicker.js';
     initSidebarToggle();
 
@@ -512,6 +524,48 @@
       renderMembers();
     }
 
+    // "Vorname Nachname / Rufname"
+    const fullName = (m) => `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() + (m.nickname ? ` / ${m.nickname}` : '');
+
+    const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', hilfs_orga: 'Hilfs-Orga', orga: 'Orga', ticket: 'Direktanmeldung' };
+    // Roles of the member's non-cancelled registrations -- of the chosen event only, if one is chosen.
+    function participationLabels(m) {
+      const regs = (m.registrations ?? []).filter((r) => r.status !== 'cancelled' && (!prefs.event || r.eventId === prefs.event));
+      return [...new Set(regs.flatMap((r) => [CON_ROLE_LABELS[r.conRole] ?? r.conRole, ...(r.flags ?? [])]))];
+    }
+
+    // NSC overview of the members currently shown: one row per NSC registration,
+    // with the NSC profile (character's, else the registration's own).
+    document.getElementById('member-nsc-overview').addEventListener('click', async () => {
+      const nscMembers = filteredAndSortedMembers().filter((m) => (m.registrations ?? []).some((r) => r.conRole === 'nsc' && r.status !== 'cancelled' && (!prefs.event || r.eventId === prefs.event)));
+      if (nscMembers.length === 0) { notify('Keine NSC in der aktuellen Liste.', 'error'); return; }
+      const body = document.getElementById('nsc-overview-body');
+      body.innerHTML = '<p class="sub">Wird geladen …</p>';
+      document.getElementById('nsc-overview-dialog').showModal();
+      try {
+        const details = await Promise.all(nscMembers.map((m) => api.get(`/members/${m.id}`)));
+        const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? '';
+        const rows = details.flatMap((d) => d.registrations
+          .filter((r) => r.conRole === 'nsc' && r.status !== 'cancelled' && (!prefs.event || r.eventId === prefs.event))
+          .map((r) => `<tr><td>${escapeHtml(fullName(d))}</td><td>${escapeHtml(eventName(r.eventId))}</td><td>${escapeHtml(r.characterName ?? 'Springer')}</td>${nscSchema.map((f) => `<td>${escapeHtml(String(formatFieldValue(f, r.nscData?.[f.key]) ?? '–'))}</td>`).join('')}</tr>`));
+        body.innerHTML = `<table><thead><tr><th>Name</th><th>Event</th><th>Charakter</th>${nscSchema.map((f) => `<th>${escapeHtml(f.label ?? f.key)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
+      } catch (err) {
+        body.innerHTML = '';
+        notify(err.message, 'error');
+      }
+    });
+    // Prints just the table: a separate window, so the rest of the page stays out of the printout.
+    document.getElementById('nsc-overview-print').addEventListener('click', () => {
+      const table = document.querySelector('#nsc-overview-body table');
+      if (!table) return;
+      const win = window.open('', '_blank');
+      if (!win) { notify('Das Druckfenster wurde blockiert.', 'error'); return; }
+      win.document.write(`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>NSC-Übersicht</title><style>body{font:12px sans-serif}table{border-collapse:collapse;width:100%}th,td{border:1px solid #888;padding:4px 6px;text-align:left;vertical-align:top}</style></head><body><h1>NSC-Übersicht</h1>${table.outerHTML}</body></html>`);
+      win.document.close();
+      win.print();
+    });
+    document.getElementById('nsc-overview-close').addEventListener('click', () => document.getElementById('nsc-overview-dialog').close());
+
     function renderMembers() {
       const visible = filteredAndSortedMembers();
       listBody.innerHTML = visible.length ? visible.map((m) => {
@@ -546,13 +600,14 @@
           ? ` <span class="discord-badge" title="Discord: ${escapeHtml(m.discordUsername)}"><svg width="14" height="14" viewBox="0 0 127.14 96.36" aria-hidden="true"><path fill="#5865F2" d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg></span>`
           : '';
         return `<tr>
-    <td>${escapeHtml(m.name)}${discordBadge}</td>
+    <td>${escapeHtml(fullName(m))}${discordBadge}</td>
     <td>${escapeHtml(m.email)}</td>
     <td>${escapeHtml(m.group?.name ?? '–')}</td>
+    <td>${escapeHtml(participationLabels(m).join(', ') || '–')}</td>
     <td>${statusCell}</td>
     <td>${actionsCell}</td>
   </tr>`;
-      }).join('') : '<tr><td colspan="5" class="sub">Keine Mitglieder gefunden.</td></tr>';
+      }).join('') : '<tr><td colspan="6" class="sub">Keine Mitglieder gefunden.</td></tr>';
 
       listBody.querySelectorAll('[data-edit]').forEach((button) => {
         button.addEventListener('click', () => openDetail(button.dataset.edit));
@@ -717,16 +772,18 @@
       const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Unbekanntes Event';
       const roleLabel = (key) => REGISTER_ROLES.find(([k]) => k === key)?.[1] ?? key;
       const editableFields = registrationSchema.filter((f) => myAccountFields.includes(f.key));
+      const eventFlagsOf = (id) => allEvents.find((e) => e.id === id)?.flags ?? [];
       const registeredHtml = registered.length
         ? registered.map((r) => `<div class="member-registration" data-reg-event="${escapeHtml(r.eventId)}">
-            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Charakter: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
+            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${(r.flags ?? []).length ? ` <span class="sub">Sonderrollen: ${escapeHtml(r.flags.join(', '))}</span>` : ''}${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Charakter: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
             ${r.conRole === 'nsc' ? renderNscSummary(r.nscData) : ''}
             <div class="action-row">
               ${canOverrideCheckin ? `<label class="sub">Status <select data-reg-status="${escapeHtml(r.eventId)}" data-prev-status="${escapeHtml(r.status)}" aria-label="Status ändern">${STATUS_ORDER.map((st) => `<option value="${st}" ${st === r.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[st])}</option>`).join('')}</select></label>` : ''}
-              ${editableFields.length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
+              ${editableFields.length || eventFlagsOf(r.eventId).length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
             </div>
             <div class="member-registration-edit" data-reg-edit-panel="${escapeHtml(r.eventId)}" hidden>
               <p class="sub">${r.waiverAcceptedAt ? `Einverständnis erteilt am ${escapeHtml(new Date(r.waiverAcceptedAt).toLocaleString('de-DE'))} (Version ${escapeHtml(r.waiverVersionAccepted)})` : 'Kein Einverständnis hinterlegt.'}</p>
+              ${renderFlagCards(allEvents.find((e) => e.id === r.eventId), r.flags ?? [])}
               ${editableFields.map((field) => renderAccountFieldInput(field, r.fields?.[field.key], { idPrefix: `reg-${r.eventId}-` })).join('')}
               <div class="settings-actions"><button type="button" data-reg-save="${escapeHtml(r.eventId)}">Anmeldedaten speichern</button></div>
             </div>
@@ -772,6 +829,7 @@
         const panel = detailRegistrations.querySelector(`[data-reg-edit-panel="${b.dataset.regEdit}"]`);
         panel.hidden = !panel.hidden;
       }));
+      bindFlagCards(detailRegistrations);
       detailRegistrations.querySelectorAll('[data-reg-save]').forEach((b) => b.addEventListener('click', async () => {
         const eventId = b.dataset.regSave;
         const registration = registered.find((r) => r.eventId === eventId);
@@ -782,6 +840,13 @@
         for (const field of editableFields) {
           const original = registration?.fields?.[field.key] ?? (field.type === 'boolean' ? false : '');
           if (!otFieldValuesEqual(field, original, collected[field.key])) payload[field.key] = collected[field.key];
+        }
+        // Only flags the event still defines have a checkbox; keep orphaned ones untouched.
+        const eventFlags = eventFlagsOf(eventId);
+        const oldFlags = (registration?.flags ?? []).filter((f) => eventFlags.includes(f));
+        const newFlags = collectFlagCards(panel);
+        if (oldFlags.length !== newFlags.length || oldFlags.some((f) => !newFlags.includes(f))) {
+          payload.flags = [...(registration?.flags ?? []).filter((f) => !eventFlags.includes(f)), ...newFlags];
         }
         if (Object.keys(payload).length === 0) {
           panel.hidden = true;
@@ -881,10 +946,12 @@
       detailDialog.showModal();
     }
 
-    document.getElementById('detail-cancel').addEventListener('click', () => {
-      editingMemberId = null;
-      detailDialog.close();
-    });
+    for (const id of ['detail-cancel', 'detail-abort']) {
+      document.getElementById(id).addEventListener('click', () => {
+        editingMemberId = null;
+        detailDialog.close();
+      });
+    }
 
     document.getElementById('detail-save').addEventListener('click', async (evt) => {
       const saveButton = evt.currentTarget;

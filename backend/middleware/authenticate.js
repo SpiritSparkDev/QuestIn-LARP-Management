@@ -1,6 +1,7 @@
 import { parseCookies, SESSION_COOKIE_NAME } from '../auth/cookies.js';
 import { getSession } from '../auth/sessions.js';
 import { query } from '../db.js';
+import { effectiveAccountFields } from '../groups/repository.js';
 
 // Group management (inviting, naming, registering people ...) is for the group
 // manager only; plain members of a group get a 403.
@@ -44,7 +45,7 @@ export function requireAuth(handler) {
         key: row.group_key,
         name: row.group_name,
         visibleMenus: row.visible_menus,
-        accountFields: row.account_fields,
+        accountFields: await effectiveAccountFields(row.group_key, row.account_fields),
         canEditCharacters: row.can_edit_characters,
         canOverrideCheckinStatus: row.can_override_checkin_status,
         canExportMembers: row.can_export_members,

@@ -356,7 +356,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
 
   try {
     const registration = await withTransaction(async (client) => {
-      const { rows: eventRows } = await client.query('SELECT capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+      const { rows: eventRows } = await client.query('SELECT COALESCE(hard_capacity, capacity) AS capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
       const capacity = eventRows[0]?.capacity ?? null;
       let status = 'pending';
       if (capacity !== null) {
@@ -592,7 +592,7 @@ export async function maybePromoteFromWaitlist(eventId) {
   if (!waitlistAutoPromote) return;
 
   const promotedUserIds = await withTransaction(async (client) => {
-    const { rows: eventRows } = await client.query('SELECT capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+    const { rows: eventRows } = await client.query('SELECT COALESCE(hard_capacity, capacity) AS capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
     const capacity = eventRows[0]?.capacity ?? null;
     if (capacity === null) return [];
 

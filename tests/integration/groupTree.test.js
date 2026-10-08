@@ -16,6 +16,9 @@ await seedGroups();
 
 const { query, closePool } = await import('../../backend/db.js');
 const { createSession } = await import('../../backend/auth/sessions.js');
+const { resetRateLimits } = await import('../../backend/middleware/rateLimit.js');
+
+test.beforeEach(resetRateLimits);
 
 const TAG = `gtree${crypto.randomUUID().slice(0, 6)}`;
 
@@ -30,7 +33,7 @@ async function makeUser(firstName, { isGuest = false, managedBy = null } = {}) {
   return { userId: rows[0].id, email, cookie: `session=${session.token}` };
 }
 
-test('nested groups: invitation, join code, group-managed fields, cycles and leaving', async () => {
+test('flat groups: invitation, join codes, group-managed fields and leaving', async () => {
   const { rows: oldSchemaRows } = await query('SELECT id, schema FROM sc_character_schema LIMIT 1');
   const schema = [
     { key: 'wunsch', label: 'Wunsch', type: 'text', required: false, groupManaged: true },
@@ -47,27 +50,28 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       const b = await makeUser('Bernd');
       const c = await makeUser('Carla');
       const d = await makeUser('Dora');
-      const person = await makeUser('Kind', { isGuest: true, managedBy: b.userId });
-      const { rows: charRows } = await query(
-        "INSERT INTO characters (user_id, name, data) VALUES ($1, 'Heldin', $2) RETURNING id",
-        [person.userId, JSON.stringify({ wunsch: 'alt', volk: 'Elf' })]
-      );
-      const characterId = charRows[0].id;
-
+      const e = await makeUser('Emma');
+      const f = await makeUser('Falk');
+      const g = await makeUser('Gero');
+      const h = await makeUser('Hanna');
       // Invitation: the answer is the same for unknown accounts.
       assert.equal((await call(a.cookie, 'POST', '/group-tree/invitations', { email: `${TAG}-niemand@example.com` })).status, 202);
       assert.equal((await call(a.cookie, 'POST', '/group-tree/invitations', { email: b.email })).status, 202);
       const incoming = (await (await call(b.cookie, 'GET', '/group-tree')).json()).incoming;
       assert.equal(incoming.length, 1);
 
-      // Not an ancestor yet.
-      assert.equal((await call(a.cookie, 'GET', `/group-tree/persons/${person.userId}/characters`)).status, 404);
-      assert.equal((await call(a.cookie, 'PUT', `/characters/${characterId}`, { data: { wunsch: 'x' } })).status, 403);
-
       assert.equal((await call(b.cookie, 'POST', `/group-tree/invitations/${incoming[0].id}/accept`, {})).status, 200);
+      // A legacy person managed by the member Bernd (members can't create new ones).
+      const person = await makeUser('Kind', { isGuest: true, managedBy: b.userId });
+      const { rows: charRows } = await query(
+        "INSERT INTO characters (user_id, name, data) VALUES ($1, 'Heldin', $2) RETURNING id",
+        [person.userId, JSON.stringify({ wunsch: 'alt', volk: 'Elf' })]
+      );
+      const characterId = charRows[0].id;
       const tree = await (await call(a.cookie, 'GET', '/group-tree')).json();
       assert.equal(tree.node.children[0].id, b.userId);
       assert.deepEqual(tree.node.children[0].persons.map((p) => p.id), [person.userId]);
+      assert.deepEqual(tree.node.children[0].children, []);
 
       // A group name shows up in the tree above and can't be abused for oversized input.
       // Bernd joined a group, so he is a plain member now and may not manage anything.
@@ -131,25 +135,53 @@ test('nested groups: invitation, join code, group-managed fields, cycles and lea
       else await query('DELETE FROM nsc_profile_schema');
       }
 
-      // No cycles: Bernd cannot invite his own ancestor.
-      await call(b.cookie, 'POST', '/group-tree/invitations', { email: a.email });
-      assert.equal((await (await call(a.cookie, 'GET', '/group-tree')).json()).incoming.length, 0);
-
-      // Join code: Carla creates it, Anna enters it, no further confirmation.
-      const { code } = await (await call(c.cookie, 'POST', '/group-tree/join-code', {})).json();
-      assert.match(code, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-      assert.equal((await call(a.cookie, 'POST', '/group-tree/join-code/redeem', { code: 'AAAA-BBBB-CCCC' })).status, 404);
-      const redeemed = await call(a.cookie, 'POST', '/group-tree/join-code/redeem', { code: code.toLowerCase() });
+      // Join codes: only a group manager makes them; validity and redemptions are validated.
+      const create = (cookie, body) => call(cookie, 'POST', '/group-tree/join-codes', body);
+      assert.equal((await create(b.cookie, { validity: '7d', maxRedemptions: 1 })).status, 403);
+      assert.equal((await create(a.cookie, { validity: '2d', maxRedemptions: 1 })).status, 400);
+      assert.equal((await create(a.cookie, { validity: '7d', maxRedemptions: 0 })).status, 400);
+      assert.equal((await create(a.cookie, { validity: '7d', maxRedemptions: 1.5 })).status, 400);
+      assert.equal((await call(c.cookie, 'POST', '/group-tree/join-code', {})).status, 404);
+      const made = await (await create(a.cookie, { validity: '7d', maxRedemptions: 2 })).json();
+      assert.match(made.code, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+      const redeem = (cookie, code) => call(cookie, 'POST', '/group-tree/join-code/redeem', { code });
+      assert.equal((await redeem(c.cookie, 'AAAA-BBBB-CCCC')).status, 404);
+      const redeemed = await redeem(c.cookie, made.code.toLowerCase());
       assert.equal(redeemed.status, 200);
-      assert.deepEqual((await redeemed.json()).node.children.map((ch) => ch.id).sort(), [b.userId, c.userId].sort());
-      assert.equal((await call(d.cookie, 'POST', '/group-tree/join-code/redeem', { code })).status, 404);
+      assert.equal((await redeem(d.cookie, made.code)).status, 200);
+      // Used up after two redemptions; the list shows what is left.
+      assert.equal((await redeem(e.cookie, made.code)).status, 404);
+      const listed = (await (await call(a.cookie, 'GET', '/group-tree')).json());
+      assert.deepEqual(listed.node.children.map((ch) => ch.id).sort(), [b.userId, c.userId, d.userId].sort());
+      assert.equal(listed.joinCodes[0].remaining, 0);
+      assert.equal(listed.joinCodes[0].redemptions, 2);
+      // A member can't join a second group, neither by code nor ...
+      const other = await (await create(e.cookie, { validity: '1d', maxRedemptions: null })).json();
+      assert.equal((await redeem(c.cookie, other.code)).status, 409);
+      // ... a group manager (here Emma, who just made a code) can't join another.
+      assert.equal((await redeem(e.cookie, made.code)).status, 404);
+      const unlimited = await (await create(a.cookie, { validity: 'unlimited', maxRedemptions: null })).json();
+      assert.equal((await redeem(e.cookie, unlimited.code)).status, 409);
+      assert.equal((await redeem(f.cookie, unlimited.code)).status, 200);
+      // Expired codes and deleted codes don't work.
+      const shortLived = await (await create(a.cookie, { validity: '1d', maxRedemptions: null })).json();
+      await query("UPDATE group_join_codes SET expires_at = now() - interval '1 minute' WHERE id = $1", [shortLived.id]);
+      assert.equal((await redeem(g.cookie, shortLived.code)).status, 404);
+      assert.equal((await call(a.cookie, 'DELETE', `/group-tree/join-codes/${unlimited.id}`)).status, 200);
+      assert.equal((await redeem(g.cookie, unlimited.code)).status, 404);
+      assert.equal((await call(b.cookie, 'DELETE', `/group-tree/join-codes/${shortLived.id}`)).status, 403);
+      resetRateLimits();
+      // Concurrent redemptions of a one-time code: exactly one wins.
+      const once = await (await create(a.cookie, { validity: '3d', maxRedemptions: 1 })).json();
+      const results = await Promise.all([redeem(g.cookie, once.code), redeem(h.cookie, once.code)]);
+      assert.deepEqual(results.map((r) => r.status).sort(), [200, 404]);
 
       // The parent may handle event registrations of persons below them -- but only sees their name.
       assert.equal((await call(a.cookie, 'GET', `/managed-persons/${person.userId}/registrations`)).status, 200);
       const seen = await (await call(a.cookie, 'GET', `/managed-persons/${person.userId}`)).json();
       assert.equal(seen.email, null);
       assert.equal((await call(d.cookie, 'GET', `/managed-persons/${person.userId}/registrations`)).status, 404);
-      // ...and the subgroup's manager themselves.
+      // ...and the member themselves.
       assert.equal((await call(a.cookie, 'GET', `/managed-persons/${b.userId}/registrations`)).status, 200);
       assert.equal((await call(d.cookie, 'GET', `/managed-persons/${b.userId}/registrations`)).status, 404);
       // Leaving ends the access.
@@ -190,10 +222,57 @@ test('e-mail invitation without account: sign-up link puts the new account into 
     const { rows: m } = await query('SELECT id FROM users WHERE email = $1', [email]);
     const member = { cookie: `session=${(await createSession(m[0].id)).token}` };
     assert.equal((await post(member.cookie, '/group-tree/invitations', { email: `${TAG}-x@example.com` })).status, 403);
-    assert.equal((await post(member.cookie, '/group-tree/join-code', {})).status, 403);
+    assert.equal((await post(member.cookie, '/group-tree/join-codes', { validity: '7d', maxRedemptions: 1 })).status, 403);
     assert.equal((await post(member.cookie, '/managed-persons', { firstName: 'X' })).status, 403);
     assert.equal((await fetch(`${base}/managed-persons/search?q=abc`, { headers: { Cookie: member.cookie } })).status, 403);
     assert.equal((await fetch(`${base}/account`, { headers: { Cookie: member.cookie } }).then((r) => r.json())).groupMemberOnly, true);
+  });
+});
+
+test('nobody joins a second group: members, managers, invitations and codes', async () => {
+  await withTestServer(async (port) => {
+    const base = `http://localhost:${port}`;
+    const call = (cookie, method, path, body) => fetch(`${base}${path}`, { method, headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const boss = await makeUser('Boss');
+    const other = await makeUser('Zweitboss');
+    const withPerson = await makeUser('Verwalter');
+    await makeUser('Schutzbefohlene', { isGuest: true, managedBy: withPerson.userId });
+    const fresh = await makeUser('Frisch');
+    const code = (await (await call(boss.cookie, 'POST', '/group-tree/join-codes', { validity: '1m', maxRedemptions: null })).json()).code;
+
+    // A manager (has a person) is refused with a clear message, by code and by invitation.
+    const refused = await call(withPerson.cookie, 'POST', '/group-tree/join-code/redeem', { code });
+    assert.equal(refused.status, 409);
+    assert.match((await refused.json()).error, /verwaltest bereits eine eigene Gruppe/);
+    // Not even sent in the first place; one that predates the person's own group is refused on accept.
+    await call(boss.cookie, 'POST', '/group-tree/invitations', { email: withPerson.email });
+    assert.equal((await query('SELECT 1 FROM group_invitations WHERE child_user_id = $1', [withPerson.userId])).rowCount, 0);
+    await query('INSERT INTO group_invitations (parent_user_id, child_user_id) VALUES ($1, $2)', [boss.userId, withPerson.userId]);
+    const invite = (await (await call(withPerson.cookie, 'GET', '/group-tree')).json());
+    assert.equal(invite.canJoinGroup, false);
+    const { rows: [inv] } = await query('SELECT id FROM group_invitations WHERE child_user_id = $1', [withPerson.userId]);
+    const acc = await call(withPerson.cookie, 'POST', `/group-tree/invitations/${inv.id}/accept`, {});
+    assert.equal(acc.status, 409);
+    assert.match((await acc.json()).error, /verwaltest bereits eine eigene Gruppe/);
+
+    // Someone with a group name is a manager too.
+    await call(other.cookie, 'PATCH', '/group-tree/name', { name: 'Eigene Bande' });
+    assert.equal((await call(other.cookie, 'POST', '/group-tree/join-code/redeem', { code })).status, 409);
+
+    // A fresh person joins once; the second try (invitation or code) fails clearly.
+    assert.equal((await (await call(fresh.cookie, 'GET', '/group-tree')).json()).canJoinGroup, true);
+    assert.equal((await call(fresh.cookie, 'POST', '/group-tree/join-code/redeem', { code })).status, 200);
+    assert.equal((await (await call(fresh.cookie, 'GET', '/group-tree')).json()).canJoinGroup, false);
+    const again = await call(fresh.cookie, 'POST', '/group-tree/join-code/redeem', { code });
+    assert.equal(again.status, 409);
+    assert.match((await again.json()).error, /bereits Mitglied einer Gruppe/);
+    await call(other.cookie, 'POST', '/group-tree/invitations', { email: fresh.email });
+    assert.equal((await (await call(fresh.cookie, 'GET', '/group-tree')).json()).incoming.length, 0);
+    // An invitation that existed before joining is cleaned up and can't be accepted later.
+    const { rows: [stale] } = await query('INSERT INTO group_invitations (parent_user_id, child_user_id) VALUES ($1, $2) RETURNING id', [other.userId, fresh.userId]);
+    assert.equal((await call(fresh.cookie, 'POST', `/group-tree/invitations/${stale.id}/accept`, {})).status, 409);
+    const { rows: [parentRow] } = await query('SELECT group_parent_id FROM users WHERE id = $1', [fresh.userId]);
+    assert.equal(parentRow.group_parent_id, boss.userId);
   });
 });
 
