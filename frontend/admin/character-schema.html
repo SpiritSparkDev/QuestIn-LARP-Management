@@ -154,6 +154,7 @@ function addSchemaRow(container, field = { key: '', label: '', type: 'text', req
       ${sensitiveCheckboxHtml}
     </div>
     <button type="button" class="remove-row">Entfernen</button>
+    <input type="text" placeholder="Platzhalter im Eingabefeld (optional, max. 120 Zeichen)" maxlength="120" class="schema-placeholder" value="${escapeHtml(field.placeholder ?? '')}">
     <input type="text" placeholder="Hinweis beim Darüberfahren (optional, max. 500 Zeichen)" maxlength="500" class="schema-hint" value="${escapeHtml(field.hint ?? '')}">
   `;
   row.querySelector('.remove-row').addEventListener('click', () => row.remove());
@@ -179,6 +180,8 @@ function collectSchema(container, { allowPublic = true, allowGroup = false, allo
     };
     const hint = row.querySelector('.schema-hint').value.trim();
     if (hint) field.hint = hint;
+    const placeholder = row.querySelector('.schema-placeholder').value.trim();
+    if (placeholder) field.placeholder = placeholder;
     if (allowPublic) {
       field.public = row.querySelector('.schema-public').checked;
       field.staffOnly = row.querySelector('.schema-staff-only').checked;

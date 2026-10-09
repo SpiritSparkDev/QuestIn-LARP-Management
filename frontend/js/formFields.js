@@ -31,6 +31,11 @@ export function renderHint(field) {
   return ` <span class="field-hint" tabindex="0" role="note" data-hint="${hint}" aria-label="Hinweis: ${hint}"><span class="material-symbols-outlined" aria-hidden="true">info</span></span>`;
 }
 
+// ` placeholder="..."` for text-like inputs, '' when the field has none.
+function placeholderAttr(field) {
+  return typeof field.placeholder === 'string' && field.placeholder.trim() !== '' ? ` placeholder="${escapeHtml(field.placeholder.trim())}"` : '';
+}
+
 // "Dokument" field: WYSIWYG editor (see richText.js) mirrored into a hidden
 // input, which carries whichever attribute the surrounding collector reads
 // (`data-field` for OT fields, `name` for IT fields). `sanitize` is passed
@@ -48,6 +53,7 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
   const val = escapeHtml(value);
   const id = `${idPrefix}field-${key}`;
   const required = field.required ? 'required' : '';
+  const ph = placeholderAttr(field);
   // Schema option "Als Card darstellen" (the per-field container class stays).
   const cls = field.card ? `${key}-container field-card` : `${key}-container`;
 
@@ -65,10 +71,10 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
     return `<div class="${cls}"><span>${escapedLabel}</span>${checkboxes}</div>`;
   }
   if (type === 'number') {
-    return `<div class="${cls}"><input id="${id}" data-field="${key}" type="number" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${cls}"><input id="${id}" data-field="${key}" type="number"${ph} value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'link') {
-    return `<div class="${cls}"><input id="${id}" data-field="${key}" type="url" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${cls}"><input id="${id}" data-field="${key}" type="url"${ph} value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'date') {
     return `<div class="${cls}"><input id="${id}" data-field="${key}" type="date" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
@@ -77,7 +83,7 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
     return `<div class="${cls}">${renderDocumentEditor({ id, attribute: `data-field="${key}"`, value, readOnly: false })}<label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'textarea') {
-    return `<div class="${cls}"><textarea id="${id}" data-field="${key}" ${required}>${val}</textarea><label for="${id}">${escapedLabel}</label></div>`;
+    return `<div class="${cls}"><textarea id="${id}" data-field="${key}"${ph} ${required}>${val}</textarea><label for="${id}">${escapedLabel}</label></div>`;
   }
   if (type === 'select' && Array.isArray(field.options)) {
     const options = field.options.map((opt) => {
@@ -87,7 +93,7 @@ export function renderAccountFieldInput(field, value, { sealedBadge = '', idPref
     }).join('');
     return `<div class="${cls}"><select id="${id}" data-field="${key}" ${required}><option value=""></option>${options}</select><label for="${id}">${escapedLabel}</label></div>`;
   }
-  return `<div class="${cls}"><input id="${id}" data-field="${key}" type="text" value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
+  return `<div class="${cls}"><input id="${id}" data-field="${key}" type="text"${ph} value="${val}" ${required}><label for="${id}">${escapedLabel}</label></div>`;
 }
 
 // Reads a schema-driven OT-field container's current values back into a
@@ -234,6 +240,7 @@ export function renderField(field, value, idPrefix = '', { readOnly = false } = 
   const label = escapeHtml(field.label ?? field.key) + (field.required ? ' *' : '') + (readOnly ? ' 🔒' : '') + renderHint(field);
   const key = escapeHtml(field.key);
   const required = field.required ? 'required' : '';
+  const ph = placeholderAttr(field);
   const disabled = readOnly ? 'disabled' : '';
   const id = `${idPrefix}field-${key}`;
 
@@ -251,10 +258,10 @@ export function renderField(field, value, idPrefix = '', { readOnly = false } = 
     return `<span>${label}</span>${checkboxes}`;
   }
   if (field.type === 'number') {
-    return `<input id="${id}" name="${key}" type="number" value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
+    return `<input id="${id}" name="${key}" type="number"${ph} value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
   }
   if (field.type === 'link') {
-    return `<input id="${id}" name="${key}" type="url" value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
+    return `<input id="${id}" name="${key}" type="url"${ph} value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
   }
   if (field.type === 'date') {
     return `<input id="${id}" name="${key}" type="date" value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
@@ -263,7 +270,7 @@ export function renderField(field, value, idPrefix = '', { readOnly = false } = 
     return `${renderDocumentEditor({ id, attribute: `name="${key}"`, value, readOnly })}<label for="${id}">${label}</label>`;
   }
   if (field.type === 'textarea') {
-    return `<textarea id="${id}" name="${key}" ${required} ${disabled}>${val}</textarea><label for="${id}">${label}</label>`;
+    return `<textarea id="${id}" name="${key}"${ph} ${required} ${disabled}>${val}</textarea><label for="${id}">${label}</label>`;
   }
   if (field.type === 'select' && Array.isArray(field.options)) {
     const blankOption = field.required ? '' : '<option value=""></option>';
@@ -274,7 +281,7 @@ export function renderField(field, value, idPrefix = '', { readOnly = false } = 
     }).join('');
     return `<select id="${id}" name="${key}" ${required} ${disabled}>${blankOption}${options}</select><label for="${id}">${label}</label>`;
   }
-  return `<input id="${id}" name="${key}" type="text" value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
+  return `<input id="${id}" name="${key}" type="text"${ph} value="${val}" ${required} ${disabled}><label for="${id}">${label}</label>`;
 }
 
 // Reads a schema-driven form's current values back into a plain object.

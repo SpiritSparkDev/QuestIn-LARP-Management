@@ -315,3 +315,13 @@ test('formatFieldValue shows a document field as plain text', async () => {
   assert.equal(formatFieldValue({ type: 'document' }, '<p>Hallo <strong>Welt</strong></p>'), 'Hallo Welt');
   assert.equal(formatFieldValue({ type: 'document' }, '<p><br></p>'), undefined);
 });
+
+test('renderField and renderAccountFieldInput render an escaped placeholder on text-like inputs only', () => {
+  const f = { key: 'k', label: 'K', type: 'text', placeholder: 'z.B. "Krieger"' };
+  assert.match(renderField(f, ''), /<input [^>]*placeholder="z\.B\. &quot;Krieger&quot;"/);
+  assert.match(renderAccountFieldInput(f, ''), /<input [^>]*placeholder="z\.B\. &quot;Krieger&quot;"/);
+  assert.match(renderField({ ...f, type: 'textarea' }, ''), /<textarea [^>]*placeholder="/);
+  assert.match(renderField({ ...f, type: 'number' }, ''), /type="number"[^>]*placeholder="/);
+  assert.equal(renderField({ ...f, type: 'boolean' }, '').includes('placeholder'), false);
+  assert.equal(renderField({ key: 'k', type: 'text' }, '').includes('placeholder'), false);
+});

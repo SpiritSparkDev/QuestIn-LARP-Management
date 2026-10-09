@@ -1694,7 +1694,8 @@ textarea.invalid {
 }
 
 
-.schema-row .schema-hint {
+.schema-row .schema-hint,
+.schema-row .schema-placeholder {
   grid-column: 1 / -1;
 }
 

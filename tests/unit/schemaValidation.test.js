@@ -220,3 +220,9 @@ test('document fields allow up to 20000 chars and a correspondingly higher total
   assert.ok(validateCharacterData(schema, { story: 'a'.repeat(20001) }).some((e) => e.includes('story')));
   assert.ok(validateCharacterData(schema, { story: 5 }).some((e) => e.includes('story')));
 });
+
+test('validateSchemaShape accepts a string placeholder up to 120 chars and rejects others', () => {
+  assert.equal(validateSchemaShape([{ key: 'klasse', type: 'text', placeholder: 'z.B. Krieger' }]), true);
+  assert.equal(validateSchemaShape([{ key: 'klasse', type: 'text', placeholder: 'x'.repeat(121) }]), false);
+  assert.equal(validateSchemaShape([{ key: 'klasse', type: 'text', placeholder: 5 }]), false);
+});

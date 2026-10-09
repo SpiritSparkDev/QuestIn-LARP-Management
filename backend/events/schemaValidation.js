@@ -4,6 +4,7 @@ const MAX_TOTAL_LENGTH = 20000;
 // each one raises the serialized total by the same amount.
 const MAX_DOCUMENT_LENGTH = 20000;
 const MAX_HINT_LENGTH = 500;
+const MAX_PLACEHOLDER_LENGTH = 120;
 
 const DEFAULT_RESERVED_SCHEMA_KEYS = ['id', 'name', 'eventId'];
 
@@ -17,6 +18,7 @@ export function validateSchemaShape(schema, reservedKeys = DEFAULT_RESERVED_SCHE
     if (reservedKeys.includes(field.key)) return false;
     if (seenKeys.has(field.key)) return false;
     if (field.hint !== undefined && (typeof field.hint !== 'string' || field.hint.length > MAX_HINT_LENGTH)) return false;
+    if (field.placeholder !== undefined && (typeof field.placeholder !== 'string' || field.placeholder.length > MAX_PLACEHOLDER_LENGTH)) return false;
     seenKeys.add(field.key);
   }
   return true;
