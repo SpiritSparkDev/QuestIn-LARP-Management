@@ -7,6 +7,9 @@
 <link rel="stylesheet" href="/css/fonts.css">
 <link rel="stylesheet" href="/css/sahara.css">
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+<style>
+.capacity-group { margin: 18px 0 6px; font-size: 14px; }
+</style>
 </head>
 <body>
 <div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
@@ -81,22 +84,30 @@
           </div>
         </div>
 
-        <input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt">
-        <label for="event-capacity">Plätze (geplant) <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
-        <input id="event-hard-capacity" name="hardCapacity" type="number" min="1" placeholder="wie geplant">
-        <label for="event-hard-capacity">Harte Obergrenze <span style="opacity:0.6;font-size:12px;">optional, ab hier gilt die Warteliste (leer = geplante Plätze)</span></label>
-        <p class="sub" style="margin-top:12px;">Zusätzlich getrennte Grenzen für SC und NSC. Die Gesamtgrenze oben gilt weiter; ein Platz muss in der Gesamtgrenze <em>und</em> in der Grenze der eigenen Rolle frei sein. Welche Rollen mitzählen, legst du unter Einstellungen fest (Helfer und Orga standardmäßig nicht).</p>
-        <input id="event-sc-capacity" name="scCapacity" type="number" min="1" placeholder="unbegrenzt">
-        <label for="event-sc-capacity">SC: Plätze (geplant) <span style="opacity:0.6;font-size:12px;">optional</span></label>
-        <input id="event-sc-hard-capacity" name="scHardCapacity" type="number" min="1" placeholder="wie geplant">
-        <label for="event-sc-hard-capacity">SC: Harte Obergrenze <span style="opacity:0.6;font-size:12px;">optional, ab hier Warteliste</span></label>
-        <input id="event-nsc-capacity" name="nscCapacity" type="number" min="1" placeholder="unbegrenzt">
-        <label for="event-nsc-capacity">NSC: Plätze (geplant) <span style="opacity:0.6;font-size:12px;">optional</span></label>
-        <input id="event-nsc-hard-capacity" name="nscHardCapacity" type="number" min="1" placeholder="wie geplant">
-        <label for="event-nsc-hard-capacity">NSC: Harte Obergrenze <span style="opacity:0.6;font-size:12px;">optional, ab hier Warteliste</span></label>
-        <label><input type="checkbox" id="event-low-seats-notice" name="lowSeatsNotice"> Hinweis „Nur noch wenige Plätze verfügbar“ anzeigen</label>
-        <input id="event-low-seats-from" name="lowSeatsFrom" type="number" min="1" placeholder="ab geplanter Platzzahl">
-        <label for="event-low-seats-from">ab … belegten Plätzen <span style="opacity:0.6;font-size:12px;">leer = ab geplanter Platzzahl</span></label>
+        <div class="card form-pad capacity-card">
+          <h3 class="event-form-section">Teilnehmerlimits</h3>
+          <p class="sub">Leer lassen = unbegrenzt. „Geplant“ ist die Zielzahl, die „Harte Obergrenze“ ist der Punkt, ab dem neue Anmeldungen auf die Warteliste kommen (leer = geplante Plätze). Ein Platz muss im Gesamtlimit <em>und</em> im Limit der eigenen Rolle frei sein. Welche Rollen mitzählen, legst du unter Einstellungen fest (Helfer und Orga standardmäßig nicht).</p>
+          <h4 class="capacity-group">Gesamt</h4>
+          <div class="field-grid">
+            <div><input id="event-capacity" name="capacity" type="number" min="1" placeholder="unbegrenzt"><label for="event-capacity">Plätze (geplant)</label></div>
+            <div><input id="event-hard-capacity" name="hardCapacity" type="number" min="1" placeholder="wie geplant"><label for="event-hard-capacity">Harte Obergrenze</label></div>
+          </div>
+          <h4 class="capacity-group">Spielercharaktere (SC)</h4>
+          <div class="field-grid">
+            <div><input id="event-sc-capacity" name="scCapacity" type="number" min="1" placeholder="unbegrenzt"><label for="event-sc-capacity">Plätze (geplant)</label></div>
+            <div><input id="event-sc-hard-capacity" name="scHardCapacity" type="number" min="1" placeholder="wie geplant"><label for="event-sc-hard-capacity">Harte Obergrenze</label></div>
+          </div>
+          <h4 class="capacity-group">Nichtspielercharaktere (NSC)</h4>
+          <div class="field-grid">
+            <div><input id="event-nsc-capacity" name="nscCapacity" type="number" min="1" placeholder="unbegrenzt"><label for="event-nsc-capacity">Plätze (geplant)</label></div>
+            <div><input id="event-nsc-hard-capacity" name="nscHardCapacity" type="number" min="1" placeholder="wie geplant"><label for="event-nsc-hard-capacity">Harte Obergrenze</label></div>
+          </div>
+          <h4 class="capacity-group">Hinweis „Nur noch wenige Plätze“</h4>
+          <label><input type="checkbox" id="event-low-seats-notice" name="lowSeatsNotice"> Hinweis anzeigen</label>
+          <div class="field-grid">
+            <div><input id="event-low-seats-from" name="lowSeatsFrom" type="number" min="1" placeholder="ab geplanter Platzzahl"><label for="event-low-seats-from">ab … belegten Plätzen <span style="opacity:0.6;font-size:12px;">leer = ab geplanter Platzzahl</span></label></div>
+          </div>
+        </div>
         <label><input type="checkbox" id="event-payments-open" name="paymentsOpen"> Zahlungen freigeben <span style="opacity:0.6;font-size:12px;">Teilnehmer sehen erst dann „Jetzt bezahlen“</span></label>
         <h3 class="event-form-section">Sonderrollen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Besondere Rollen eines Events, z. B. GSC, VP oder Ersthelfer. Teilnehmer sehen sie bei der Anmeldung als Karten mit deiner Kurzbeschreibung und können mehrere wählen.</p>
