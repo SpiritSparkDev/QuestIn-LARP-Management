@@ -227,6 +227,7 @@ function allColumns() {
     { id: 'extras', label: 'Extras', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.extrasText ?? '') },
     { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
     { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-inline', render: renderPaymentStatusCell },
+    { id: 'registered', label: 'Angemeldet am', track: '120px', render: (p) => (p.registeredAt ? escapeHtml(new Date(p.registeredAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })) : '') },
     { id: 'status', label: 'Status', track: '130px', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(statusLabel(p.status, p.conPayer))}</span>` },
     { id: 'actions', label: 'Aktionen', locked: true, track: eventEnded() ? 'minmax(210px, 1.3fr)' : 'minmax(110px, 0.7fr)', cls: 'cell-actions', render: (p) => renderCheckinCell(p) + renderCheckoutCell(p) },
     ...(canOverride ? [{ id: 'override', label: 'Override', track: '150px', render: renderOverrideCell }] : []),

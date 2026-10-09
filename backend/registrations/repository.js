@@ -684,7 +684,7 @@ export async function maybePromoteFromWaitlist(eventId) {
     // No limit at all: nobody can be waiting because of one (a manual waitlist entry stays what it is).
     if (state.limits.total === null && state.limits.sc === null && state.limits.nsc === null) return [];
     const { rows: waiting } = await client.query(
-      "SELECT user_id, con_role FROM registrations WHERE event_id = $1 AND status = 'waitlisted' ORDER BY created_at ASC",
+      "SELECT user_id, con_role FROM registrations WHERE event_id = $1 AND status = 'waitlisted' ORDER BY COALESCE(waitlisted_at, created_at) ASC",
       [eventId]
     );
     const promoted = [];
@@ -739,7 +739,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
   const otKeys = (viewer?.group?.accountFields ?? []).filter((key) => key !== 'group');
 
   const { rows: registrations } = await query(
-    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.nsc_data AS reg_nsc_data, rc.nsc_data AS char_nsc_data, r.flags, r.checked_in_at, r.checked_out_at,
+    `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.nsc_data AS reg_nsc_data, rc.nsc_data AS char_nsc_data, r.flags, r.created_at, r.checked_in_at, r.checked_out_at,
             r.amount_due_cents, r.paid_at, r.transfer_notified_at, r.con_payer, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, r.lodging_id, r.lodging_details, lodging.name AS lodging_name, latest_payment.method AS payment_method,
             latest_payment.refund_amount_cents, latest_payment.refunded_at,
             r.waiver_version_accepted, r.waiver_accepted_at,
@@ -813,6 +813,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       nscCharacterId: r.nsc_character_id,
       nscData: r.char_nsc_data ?? r.reg_nsc_data,
       flags: r.flags,
+      registeredAt: r.created_at,
       checkedInAt: r.checked_in_at,
       checkedOutAt: r.checked_out_at,
       amountDueCents: r.amount_due_cents,
@@ -1043,19 +1044,13 @@ export async function cancelRegistration(eventId, userId) {
 }
 
 export async function setStatus(eventId, userId, status, expectedStatus) {
-  // A manual override moving a counted registration back to 'waitlisted'
-  // means it's rejoining the waitlist NOW, not whenever it originally
-  // registered. maybePromoteFromWaitlist promotes oldest-created_at-first,
-  // so without this the rejoining row would keep its old created_at from
-  // its original registration and could jump ahead of (or, worse, be
-  // immediately re-selected over) people who have genuinely been waiting
-  // since before it was demoted -- created_at has no other reader (see
-  // maybePromoteFromWaitlist's ORDER BY), so resetting it here is safe.
+  // A manual override moving a counted registration back to 'waitlisted' means it rejoins the waitlist NOW:
+  // waitlisted_at (not created_at, which stays the original registration time) decides the promotion order.
   const rejoinsWaitlist = status === 'waitlisted' && COUNTED_STATUSES.includes(expectedStatus);
   const { rows } = await query(
     `UPDATE registrations SET
        status = $4,
-       created_at = CASE WHEN $5 THEN now() ELSE created_at END,
+       waitlisted_at = CASE WHEN $5 THEN now() WHEN $4 = 'waitlisted' THEN waitlisted_at ELSE NULL END,
        checked_in_at = CASE
          WHEN $4 IN ('pending', 'confirmed', 'cancelled', 'waitlisted') THEN NULL
          WHEN $4 = 'checked_in' AND checked_in_at IS NULL THEN now()

@@ -27,6 +27,7 @@ export function buildParticipantsCsv(participants, { otFields, viewer }) {
     { label: 'Rolle', value: (p) => CON_ROLE_LABELS[p.conRole] ?? p.conRole },
     { label: 'Sonderrollen', value: (p) => (p.flags ?? []).join(', ') },
     { label: 'Status', value: (p) => statusLabel(p.status, p.conPayer) },
+    { label: 'Angemeldet am', value: (p) => dateTime(p.registeredAt) },
     { label: 'Con-Zahler', value: (p) => (p.conPayer ? 'Ja' : 'Nein') },
     { label: 'Teilnahmegruppe', value: (p) => p.priceGroup },
     { label: 'Extras', value: (p) => p.extrasText ?? '' },
