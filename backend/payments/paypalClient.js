@@ -8,9 +8,10 @@ const ORDER_ID = /^[A-Za-z0-9-]{5,64}$/;
 // null while PayPal is not fully configured (or on the offline Con instance).
 export async function getPaypalConfig() {
   if (isOffline()) return null;
-  const { paypalClientId, paypalSecret, paypalSandbox } = await getPaymentSettingsForUse();
+  const { paypalClientId, paypalSecret, paypalSandbox, paypalEnabled } = await getPaymentSettingsForUse();
   if (!paypalClientId || !paypalSecret) return null;
-  return { clientId: paypalClientId, secret: paypalSecret, base: paypalSandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com' };
+  // `enabled` is the admin's switch: it only decides whether NEW orders start (returns of running ones still book).
+  return { enabled: paypalEnabled, clientId: paypalClientId, secret: paypalSecret, base: paypalSandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com' };
 }
 
 export function isPaypalOrderId(value) {

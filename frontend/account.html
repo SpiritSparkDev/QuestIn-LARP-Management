@@ -619,6 +619,7 @@
       <button type="button" id="payment-card-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">credit_card</span><span>Per Kreditkarte</span></button>
       <button type="button" id="payment-klarna-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">shopping_bag</span><span>Per Klarna</span></button>
       <button type="button" id="payment-sepa-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance</span><span>Per SEPA-Lastschrift</span></button>
+      <button type="button" id="payment-paypalme-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">payments</span><span>Per PayPal (privates Konto)</span></button>
       <button type="button" id="payment-sumup-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">contactless</span><span>Per SumUp (Karte, Apple Pay, Google Pay)</span></button>
       <button type="button" id="payment-stripe-bank-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance</span><span>Per Banküberweisung (automatisch bestätigt)</span></button>
       <button type="button" id="payment-bank-btn" class="btn-ghost" hidden><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span>Überweisungsinformationen anzeigen</span></button>
@@ -1032,7 +1033,7 @@
       // The admin decides whether the bank transfer offers a QR code.
       // Only methods the admin has set up are offered.
       const show = (id, on) => { document.getElementById(id).hidden = !on; };
-      ["payment-transfer-btn", "payment-paypaldirect-btn", "payment-paypal-btn", "payment-card-btn", "payment-klarna-btn", "payment-sepa-btn", "payment-stripe-bank-btn", "payment-bank-btn", "payment-girocode-btn", "payment-sumup-btn"].forEach((id) => show(id, false));
+      ["payment-transfer-btn", "payment-paypaldirect-btn", "payment-paypal-btn", "payment-card-btn", "payment-klarna-btn", "payment-sepa-btn", "payment-stripe-bank-btn", "payment-bank-btn", "payment-girocode-btn", "payment-sumup-btn", "payment-paypalme-btn"].forEach((id) => show(id, false));
       document.getElementById("payment-none-hint").hidden = true;
       document.getElementById("payment-transfer-note").hidden = true;
       try {
@@ -1051,15 +1052,19 @@
         document.querySelector("#payment-paypal-btn span:last-child").textContent = paypalOn ? "Per PayPal (über Stripe)" : "Per PayPal zahlen";
         show("payment-bank-btn", bankOn);
         const reported = payingRegistration?.transferNotifiedAt;
-        show("payment-transfer-btn", bankOn && !reported);
+        paypalMeUrl = typeof paymentSettings.paypalMeUrl === "string" && paymentSettings.paypalMeUrl.startsWith("https://") ? paymentSettings.paypalMeUrl : "";
+        show("payment-paypalme-btn", Boolean(paypalMeUrl));
+        const manualOn = bankOn || Boolean(paypalMeUrl);
+        show("payment-transfer-btn", manualOn && !reported);
+        document.querySelector("#payment-transfer-btn span:last-child").textContent = bankOn ? "Ich habe überwiesen" : "Ich habe bezahlt";
         const note = document.getElementById("payment-transfer-note");
-        note.hidden = !(bankOn && reported);
+        note.hidden = !(manualOn && reported);
         if (reported) note.textContent = `Überweisung gemeldet am ${new Date(reported).toLocaleDateString("de-DE")}. Die Orga prüft den Zahlungseingang.`;
         show("payment-girocode-btn", bankOn && paymentSettings.bankQrEnabled !== false);
         show("payment-sumup-btn", paymentSettings.sumupEnabled === true);
         const contact = document.getElementById("payment-contact");
         contact.textContent = paymentSettings.contactEmail ? ` (${paymentSettings.contactEmail})` : "";
-        document.getElementById("payment-none-hint").hidden = stripeOn || bankOn || paypalOn || paymentSettings.sumupEnabled === true;
+        document.getElementById("payment-none-hint").hidden = stripeOn || bankOn || paypalOn || Boolean(paypalMeUrl) || paymentSettings.sumupEnabled === true;
       } catch {
         // Settings unavailable: better to say so than to offer methods that may not work.
         document.getElementById("payment-none-hint").hidden = false;
@@ -1085,6 +1090,13 @@
     document.getElementById("payment-sepa-btn").addEventListener("click", () => startCheckout("sepa_debit"));
     document.getElementById("payment-card-btn").addEventListener("click", () => startCheckout("card"));
     document.getElementById("payment-sumup-btn").addEventListener("click", () => startCheckout("sumup"));
+    // Private PayPal account (PayPal.Me): the amount goes into the link; the Orga confirms by hand.
+    let paypalMeUrl = "";
+    document.getElementById("payment-paypalme-btn").addEventListener("click", () => {
+      const amount = (payingRegistration.amountDueCents / 100).toFixed(2);
+      window.open(`${paypalMeUrl}/${amount}EUR`, "_blank", "noopener");
+      notify("Klicke danach hier im Fenster auf „Ich habe bezahlt“, damit die Orga Bescheid weiß.", "success");
+    });
     document.getElementById("payment-transfer-btn").addEventListener("click", async () => {
       try {
         await api.post(`/events/${payingEventId}/registrations/${currentUserId}/transfer-notice`, {});

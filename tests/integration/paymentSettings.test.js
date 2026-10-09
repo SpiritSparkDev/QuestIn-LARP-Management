@@ -100,13 +100,13 @@ test('GET /payment-settings returns only bank fields to any logged-in user', asy
     const { cookie: adminCookie } = await makeUserAndSession('admin');
     await fetch(`http://localhost:${port}/admin/settings/payments`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
-      body: JSON.stringify({ stripeSecretKey: 'sk_should_never_leak', bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.' }),
+      body: JSON.stringify({ stripeSecretKey: 'sk_should_never_leak', stripeEnabled: true, bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.', bankEnabled: true }),
     });
     const { cookie: memberCookie } = await makeUserAndSession('mitglied');
     const res = await fetch(`http://localhost:${port}/payment-settings`, { headers: { Cookie: memberCookie } });
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.', bankQrEnabled: true, contactEmail: null, stripeMethods: ['card', 'paypal', 'bank_transfer'], sumupEnabled: false, paypalEnabled: false });
+    assert.deepEqual(body, { bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.', bankQrEnabled: true, contactEmail: null, stripeMethods: ['card', 'paypal', 'bank_transfer'], sumupEnabled: false, paypalEnabled: false, paypalMeUrl: null });
     await fetch(`http://localhost:${port}/admin/settings/payments`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
       body: JSON.stringify({ bankQrEnabled: false }),
@@ -140,7 +140,9 @@ test('PayPal credentials: secret is never returned, paypalEnabled needs both; St
 
     assert.equal((await put({ paypalClientId: 'client-id-1' })).status, 200);
     assert.equal((await shown()).paypalEnabled, false); // secret still missing
-    const saved = await (await put({ paypalSecret: 'paypal-secret-never-leak', paypalSandbox: true })).json();
+    assert.equal((await put({ paypalSecret: 'paypal-secret-never-leak', paypalSandbox: true })).status, 200);
+    assert.equal((await shown()).paypalEnabled, false); // credentials alone do not make it live: the switch is off
+    const saved = await (await put({ paypalEnabled: true })).json();
     assert.equal(saved.hasPaypalSecret, true);
     assert.equal(saved.paypalSandbox, true);
     assert.ok(!JSON.stringify(saved).includes('paypal-secret-never-leak'));
@@ -149,9 +151,45 @@ test('PayPal credentials: secret is never returned, paypalEnabled needs both; St
     assert.ok(!JSON.stringify(forMember).includes('paypal-secret-never-leak'));
     assert.ok(!JSON.stringify(forMember).includes('client-id-1'));
 
-    await put({ stripeSecretKey: 'sk_methods_test' });
+    await put({ stripeSecretKey: 'sk_methods_test', stripeEnabled: true });
     assert.equal((await put({ stripeMethods: ['klarna', 'sepa_debit'] })).status, 200);
     assert.deepEqual((await shown()).stripeMethods, ['klarna', 'sepa_debit']);
+  } finally {
+    server.close();
+  }
+});
+
+test('switches: saved credentials stay offline until switched on; PayPal.Me link only as a plain paypal.me link', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { cookie: memberCookie } = await makeUserAndSession('mitglied');
+    const put = (body) => fetch(`http://localhost:${port}/admin/settings/payments`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: adminCookie }, body: JSON.stringify(body),
+    });
+    const shown = async () => (await fetch(`http://localhost:${port}/payment-settings`, { headers: { Cookie: memberCookie } })).json();
+
+    assert.equal((await put({ stripeEnabled: 'yes' })).status, 400);
+    for (const bad of ['http://paypal.me/x', 'https://evil.example/paypal.me/x', 'javascript:alert(1)', 'https://paypal.me/x/../y', 'https://paypal.me.evil.com/x']) {
+      assert.equal((await put({ paypalMeUrl: bad })).status, 400, bad);
+    }
+
+    await put({ stripeSecretKey: 'sk_switch_test', stripeEnabled: false, bankIban: 'DE02100100100006820101', bankEnabled: false, paypalMeUrl: 'https://paypal.me/PakyrionCon', paypalMeEnabled: false });
+    let live = await shown();
+    assert.deepEqual(live.stripeMethods, []);
+    assert.equal(live.bankIban, null);
+    assert.equal(live.paypalMeUrl, null);
+    const admin = await (await fetch(`http://localhost:${port}/admin/settings/payments`, { headers: { Cookie: adminCookie } })).json();
+    assert.equal(admin.bankIban, 'DE02100100100006820101'); // still stored and editable
+
+    await put({ stripeEnabled: true, bankEnabled: true, paypalMeEnabled: true });
+    live = await shown();
+    assert.ok(live.stripeMethods.length > 0);
+    assert.equal(live.bankIban, 'DE02100100100006820101');
+    assert.equal(live.paypalMeUrl, 'https://paypal.me/PakyrionCon');
+    await put({ paypalMeUrl: '' });
+    assert.equal((await shown()).paypalMeUrl, null);
   } finally {
     server.close();
   }

@@ -70,7 +70,8 @@ async function createCheckoutSession({
   if (method === 'sumup') return createSumupSession({ eventId, userId, amountDueCents, successUrl, productLabel });
   if (method === 'paypal_direct') return createPaypalSession({ eventId, userId, amountDueCents, successUrl, cancelUrl, productLabel });
   // Only the Stripe methods the admin switched on can be started.
-  if (!(await getPaymentSettingsForUse()).stripeMethods.includes(method)) return null;
+  const stripeSettings = await getPaymentSettingsForUse();
+  if (!stripeSettings.stripeEnabled || !stripeSettings.stripeMethods.includes(method)) return null;
   const stripe = await getStripeClient();
   if (!stripe) return null;
   const event = await getEvent(eventId);
@@ -172,6 +173,7 @@ router.get('/public/registrations/:token', async ({ params }) => {
       onlineAvailable: (await firstOnlineMethod()) !== null,
       transferNotifiedAt: (await query('SELECT transfer_notified_at FROM registrations WHERE event_id = $1 AND user_id = $2', [registration.eventId, registration.userId])).rows[0]?.transfer_notified_at ?? null,
       contactEmail: bank.contactEmail,
+      paypalMeUrl: bank.paypalMeUrl,
       bank: bank.bankIban ? {
         iban: bank.bankIban, bic: bank.bankBic, accountHolder: bank.bankAccountHolder, qrEnabled: bank.bankQrEnabled,
         reference: buildPaymentReference(registration.eventId, registration.userId, { code: event.code, firstName: rows[0]?.first_name, lastName: rows[0]?.last_name }),
@@ -211,11 +213,12 @@ async function noOnlinePaymentMessage() {
 
 // The guest payment page has no method picker: it takes the first online method that is set up.
 async function firstOnlineMethod() {
-  const stripeMethods = (await getStripeClient()) ? (await getPaymentSettingsForUse()).stripeMethods : [];
+  const forUse = await getPaymentSettingsForUse();
+  const stripeMethods = forUse.stripeEnabled && (await getStripeClient()) ? forUse.stripeMethods : [];
   const candidates = [
     ['card', stripeMethods.includes('card')],
-    ['paypal_direct', Boolean(await getPaypalConfig())],
-    ['sumup', Boolean(await getSumupConfig())],
+    ['paypal_direct', Boolean((await getPaypalConfig())?.enabled)],
+    ['sumup', Boolean((await getSumupConfig())?.enabled)],
     ['paypal', stripeMethods.includes('paypal')],
     ['klarna', stripeMethods.includes('klarna')],
     ['bank_transfer', stripeMethods.includes('bank_transfer')],
@@ -309,7 +312,7 @@ router.post('/events/:eventId/registrations/:userId/transfer-notice', requireAut
 // never from the browser: the only input is the order id, which PayPal made up.
 async function createPaypalSession({ eventId, userId, amountDueCents, successUrl, cancelUrl, productLabel }) {
   const config = await getPaypalConfig();
-  if (!config) return null;
+  if (!config?.enabled) return null;
   const event = await getEvent(eventId);
   const base = await baseUrl();
   const { orderId, approveUrl } = await createPaypalOrder(config, {
@@ -385,7 +388,7 @@ router.get('/payments/overdue-transfers', requireAuth(requireMenu('mitglieder')(
 // SumUp hosted checkout. The returned object only needs `.url`, like a Stripe session.
 async function createSumupSession({ eventId, userId, amountDueCents, successUrl, productLabel }) {
   const config = await getSumupConfig();
-  if (!config) return null;
+  if (!config?.enabled) return null;
   const event = await getEvent(eventId);
   // Unique per attempt; the webhook reads eventId/userId back from it.
   const reference = `${eventId}:${userId}:${crypto.randomBytes(4).toString('hex')}`;

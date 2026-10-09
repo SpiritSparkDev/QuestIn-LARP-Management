@@ -688,7 +688,7 @@ test('POST transfer-notice flags an open registration, is idempotent, refuses st
 test('POST checkout-session refuses a Stripe method the admin has not switched on', async () => {
   await withTestServer(async (port) => {
     const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
-    await setPaymentSettings({ stripeSecretKey: 'sk_test_unused', stripeMethods: ['card'] });
+    await setPaymentSettings({ stripeSecretKey: 'sk_test_unused', stripeEnabled: true, stripeMethods: ['card'] });
     const eventId = await makeEvent();
     const userId = await makeUser();
     await makeRegistration(eventId, userId);
@@ -704,7 +704,7 @@ test('POST checkout-session refuses a Stripe method the admin has not switched o
 
 test('PayPal return: books only a COMPLETED capture of this registration that covers the due amount, once', async () => {
   const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
-  await setPaymentSettings({ paypalClientId: 'cid', paypalSecret: 'secret' });
+  await setPaymentSettings({ paypalClientId: 'cid', paypalSecret: 'secret', paypalEnabled: true });
   const eventId = await makeEvent();
   const userId = await makeUser();
   await makeRegistration(eventId, userId);
@@ -786,7 +786,7 @@ test('guest page: without an online method it still gets the bank data, can repo
   const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
   const { setGuestPaymentToken } = await import('../../backend/payments/repository.js');
   await query('UPDATE payment_settings SET stripe_secret_key_enc = NULL, paypal_client_id = NULL, paypal_secret_enc = NULL, sumup_api_key_enc = NULL');
-  await setPaymentSettings({ bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.', contactEmail: 'orga@example.com' });
+  await setPaymentSettings({ bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.', bankEnabled: true, contactEmail: 'orga@example.com' });
   const eventId = await makeEvent();
   await query("UPDATE events SET code = 'T17/2027' WHERE id = $1", [eventId]);
   const userId = await makeUser();
@@ -843,7 +843,7 @@ test('reported transfers: staff can reset them, others cannot; overdue ones (3+ 
 
 test('SumUp webhook: wrong secret is 404; only a PAID, covering, matching checkout books the payment', async () => {
   const { setPaymentSettings, getPaymentSettingsForUse } = await import('../../backend/paymentSettings/repository.js');
-  await setPaymentSettings({ sumupApiKey: 'sumup_test_key', sumupMerchantCode: 'MTEST' });
+  await setPaymentSettings({ sumupApiKey: 'sumup_test_key', sumupMerchantCode: 'MTEST', sumupEnabled: true });
   const { sumupWebhookSecret } = await getPaymentSettingsForUse();
   const eventId = await makeEvent();
   const userId = await makeUser();
@@ -886,6 +886,8 @@ test('SumUp webhook: wrong secret is 404; only a PAID, covering, matching checko
 });
 
 test.after(async () => {
+  // payment_settings is one global row shared by every test file: leave it clean for the next one.
+  await query('DELETE FROM payment_settings');
   await query('UPDATE app_settings SET tavern_enabled = false');
   // payments.confirmed_by has no ON DELETE action, and a single multi-row
   // DELETE FROM users doesn't guarantee the registrations->payments cascade

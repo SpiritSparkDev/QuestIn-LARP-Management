@@ -39,14 +39,21 @@
     </div>
     <button type="button" id="retry-button" style="display:none;">Zur Bezahlung</button>
     <div id="bank-panel" style="display:none;">
-      <h3>Per Überweisung zahlen</h3>
+      <h3 id="bank-panel-title">Per Überweisung zahlen</h3>
+      <div id="bank-panel-details">
       <p class="lede">Zu zahlen: <strong id="bank-amount"></strong></p>
       <p>IBAN: <strong id="bank-iban"></strong></p>
       <p id="bank-bic-row">BIC: <span id="bank-bic"></span></p>
       <p>Kontoinhaber: <span id="bank-holder"></span></p>
       <p>Verwendungszweck: <strong id="bank-reference"></strong></p>
       <div id="bank-qr-wrap" style="display:none;"><canvas id="bank-qr-canvas"></canvas><p class="sub">Girocode: mit der Banking-App scannen.</p></div>
+      </div>
       <button type="button" id="bank-transfer-btn">Ich habe überwiesen</button>
+    </div>
+    <div id="paypalme-panel" style="display:none;">
+      <h3>Per PayPal zahlen</h3>
+      <p class="sub">Die Zahlung geht an ein privates PayPal-Konto. Klicke danach auf „Ich habe bezahlt“.</p>
+      <a id="paypalme-link" class="btn" target="_blank" rel="noopener noreferrer">Bei PayPal bezahlen</a>
     </div>
     <div id="save-link-panel" class="note-box" style="display:none;">
       <span class="material-symbols-outlined" aria-hidden="true">bookmark</span>
@@ -108,8 +115,22 @@ function showSaveLink(registration) {
 // Bank data of the open payment; shown when no online method exists or the online payment did not work out.
 function showBank(registration) {
   const bank = registration.payment?.bank;
-  if (!bank) return;
+  const paypalMe = registration.payment?.paypalMeUrl;
+  if (!bank && !paypalMe) return;
   const euro = `${(registration.amountDueCents / 100).toFixed(2).replace('.', ',')} €`;
+  if (paypalMe && paypalMe.startsWith('https://')) {
+    document.getElementById('paypalme-link').href = `${paypalMe}/${(registration.amountDueCents / 100).toFixed(2)}EUR`;
+    document.getElementById('paypalme-panel').style.display = '';
+  }
+  document.getElementById('bank-transfer-btn').textContent = bank ? 'Ich habe überwiesen' : 'Ich habe bezahlt';
+  if (!bank) {
+    if (registration.payment.transferNotifiedAt) document.getElementById('bank-transfer-btn').style.display = 'none';
+    document.getElementById('bank-panel-details').style.display = 'none';
+    document.getElementById('bank-panel').style.display = '';
+    document.getElementById('bank-panel-title').style.display = 'none';
+    showSaveLink(registration);
+    return;
+  }
   document.getElementById('bank-amount').textContent = euro;
   document.getElementById('bank-iban').textContent = bank.iban;
   document.getElementById('bank-bic').textContent = bank.bic ?? '';
@@ -211,8 +232,8 @@ if (!token) {
       showBank(registration);
     } else if (open && registration.payment?.onlineAvailable) {
       await startCheckout();
-    } else if (open && registration.payment?.bank) {
-      messageEl.textContent = 'Du kannst per Überweisung zahlen:';
+    } else if (open && (registration.payment?.bank || registration.payment?.paypalMeUrl)) {
+      messageEl.textContent = registration.payment.bank ? 'Du kannst per Überweisung zahlen:' : 'Du kannst per PayPal zahlen:';
       showBank(registration);
     } else if (open) {
       const mail = registration.payment?.contactEmail;

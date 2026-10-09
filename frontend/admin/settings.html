@@ -271,6 +271,10 @@
               Teilnehmende sehen.
             </p>
             <form id="stripe-settings-form">
+              <label class="switch-row"
+                ><input type="checkbox" class="switch" name="stripeEnabled" />
+                Stripe anbieten (live schalten)</label
+              >
               <input
                 id="stripe-secret-key"
                 name="stripeSecretKey"
@@ -312,6 +316,10 @@
               unter „Apps &amp; Credentials“ (Typ „Live“, zum Testen „Sandbox“).
             </p>
             <form id="paypal-settings-form">
+              <label class="switch-row"
+                ><input type="checkbox" class="switch" name="paypalEnabled" />
+                PayPal anbieten (live schalten)</label
+              >
               <input id="paypal-client-id" name="paypalClientId" type="text" autocomplete="off" />
               <label for="paypal-client-id">Client-ID</label>
               <input
@@ -333,6 +341,27 @@
             </form>
           </div>
           <div class="card form-pad">
+            <h2>PayPal (privates Konto)</h2>
+            <p class="sub">
+              Für ein privates PayPal-Konto ohne Händler-Zugang. Teilnehmende
+              zahlen über deinen PayPal.Me-Link, der Betrag ist schon
+              eingetragen. PayPal meldet die Zahlung nicht zurück: Du siehst sie
+              in deinem Konto und bestätigst sie selbst im Check-In.
+            </p>
+            <form id="paypalme-settings-form">
+              <label class="switch-row"
+                ><input type="checkbox" class="switch" name="paypalMeEnabled" />
+                PayPal-Link anbieten (live schalten)</label
+              >
+              <input id="paypal-me-url" name="paypalMeUrl" type="url" placeholder="https://paypal.me/DeinName" />
+              <label for="paypal-me-url">PayPal.Me-Link</label>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
+            </form>
+          </div>
+          <div class="card form-pad">
             <h2>SumUp</h2>
             <p class="sub">
               Teilnehmende zahlen auf der SumUp-Bezahlseite (Karte, Apple Pay,
@@ -342,6 +371,10 @@
               machst du im SumUp-Dashboard und trägst sie hier im Check-In ein.
             </p>
             <form id="sumup-settings-form">
+              <label class="switch-row"
+                ><input type="checkbox" class="switch" name="sumupEnabled" />
+                SumUp anbieten (live schalten)</label
+              >
               <input
                 id="sumup-api-key"
                 name="sumupApiKey"
@@ -365,6 +398,10 @@
               Zahlung bestätigst du selbst im Check-In.
             </p>
             <form id="bank-settings-form">
+              <label class="switch-row"
+                ><input type="checkbox" class="switch" name="bankEnabled" />
+                Überweisung anbieten (live schalten)</label
+              >
               <div
                 style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px"
               >
@@ -981,6 +1018,7 @@
       const sumupForm = document.getElementById("sumup-settings-form");
       const paypalForm = document.getElementById("paypal-settings-form");
       const contactForm = document.getElementById("contact-settings-form");
+      const paypalMeForm = document.getElementById("paypalme-settings-form");
 
       async function loadPaymentSettings() {
         const settings = await api.get("/admin/settings/payments");
@@ -992,6 +1030,12 @@
         sumupForm.elements.sumupMerchantCode.value = settings.sumupMerchantCode ?? "";
         paypalForm.elements.paypalClientId.value = settings.paypalClientId ?? "";
         contactForm.elements.contactEmail.value = settings.contactEmail ?? "";
+        stripeForm.elements.stripeEnabled.checked = settings.stripeEnabled === true;
+        paypalForm.elements.paypalEnabled.checked = settings.paypalEnabled === true;
+        sumupForm.elements.sumupEnabled.checked = settings.sumupEnabled === true;
+        bankForm.elements.bankEnabled.checked = settings.bankEnabled === true;
+        paypalMeForm.elements.paypalMeEnabled.checked = settings.paypalMeEnabled === true;
+        paypalMeForm.elements.paypalMeUrl.value = settings.paypalMeUrl ?? "";
         paypalForm.elements.paypalSandbox.checked = settings.paypalSandbox === true;
         paypalForm.elements.paypalSecret.placeholder = settings.hasPaypalSecret
           ? "Gesetzt — leer lassen, um es zu behalten"
@@ -1030,6 +1074,7 @@
       stripeForm.addEventListener("submit", (event) =>
         savePaymentSettings(event, {
           ...Object.fromEntries(new FormData(stripeForm)),
+          stripeEnabled: stripeForm.elements.stripeEnabled.checked,
           stripeMethods: [...document.querySelectorAll("[data-stripe-method]")].filter((b) => b.checked).map((b) => b.dataset.stripeMethod),
         }),
       );
@@ -1041,14 +1086,19 @@
           paypalClientId: paypalForm.elements.paypalClientId.value,
           paypalSecret: paypalForm.elements.paypalSecret.value,
           paypalSandbox: paypalForm.elements.paypalSandbox.checked,
+          paypalEnabled: paypalForm.elements.paypalEnabled.checked,
         }),
       );
       sumupForm.addEventListener("submit", (event) =>
-        savePaymentSettings(event, Object.fromEntries(new FormData(sumupForm))),
+        savePaymentSettings(event, { ...Object.fromEntries(new FormData(sumupForm)), sumupEnabled: sumupForm.elements.sumupEnabled.checked }),
+      );
+      paypalMeForm.addEventListener("submit", (event) =>
+        savePaymentSettings(event, { paypalMeUrl: paypalMeForm.elements.paypalMeUrl.value, paypalMeEnabled: paypalMeForm.elements.paypalMeEnabled.checked }),
       );
       bankForm.addEventListener("submit", (event) =>
         savePaymentSettings(event, {
           ...Object.fromEntries(new FormData(bankForm)),
+          bankEnabled: bankForm.elements.bankEnabled.checked,
           bankQrEnabled: bankForm.elements.bankQrEnabled.checked,
         }),
       );

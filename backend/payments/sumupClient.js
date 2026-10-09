@@ -7,9 +7,10 @@ const CHECKOUT_ID = /^[A-Za-z0-9-]{1,64}$/;
 // null while SumUp is not fully configured (or on the offline Con instance).
 export async function getSumupConfig() {
   if (isOffline()) return null;
-  const { sumupApiKey, sumupMerchantCode, sumupWebhookSecret } = await getPaymentSettingsForUse();
+  const { sumupApiKey, sumupMerchantCode, sumupWebhookSecret, sumupEnabled } = await getPaymentSettingsForUse();
   if (!sumupApiKey || !sumupMerchantCode || !sumupWebhookSecret) return null;
-  return { apiKey: sumupApiKey, merchantCode: sumupMerchantCode, webhookSecret: sumupWebhookSecret };
+  // `enabled` is the admin's switch: it only decides whether NEW checkouts start (the webhook must keep working).
+  return { apiKey: sumupApiKey, merchantCode: sumupMerchantCode, webhookSecret: sumupWebhookSecret, enabled: sumupEnabled };
 }
 
 async function call(config, path, init = {}) {
