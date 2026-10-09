@@ -64,7 +64,9 @@ test('log: character created/deleted and manual payment are recorded, profile ed
     const json = (cookie, method, path, body) => fetch(base + path, { method, headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: body && JSON.stringify(body) });
     const actions = async () => (await (await json(admin.cookie, 'GET', '/audit?limit=1000')).json()).map((e) => e.action);
 
-    const paymentsBefore = (await actions()).filter((a) => a === 'payment.received').length;
+    // Counted through the action filter: the unfiltered newest-1000 window shifts as other tests add log rows.
+    const paymentCount = async () => (await (await json(admin.cookie, 'GET', '/audit?action=payment.received&limit=1000')).json()).length;
+    const paymentsBefore = await paymentCount();
     const created = await (await json(player.cookie, 'POST', '/characters', { name: 'Logbert', data: {} })).json();
     await json(player.cookie, 'PATCH', '/account', { nickname: 'Neuer Rufname' });
     await json(player.cookie, 'DELETE', `/characters/${created.id}`);
@@ -78,7 +80,7 @@ test('log: character created/deleted and manual payment are recorded, profile ed
     const seen = await actions();
     assert.ok(seen.includes('character.created'));
     assert.ok(seen.includes('character.deleted'));
-    assert.equal(seen.filter((a) => a === 'payment.received').length - paymentsBefore, 1, 'a repeated click must not log a second payment');
+    assert.equal((await paymentCount()) - paymentsBefore, 1, 'a repeated click must not log a second payment');
     assert.equal(seen.some((a) => a.includes('account.') || a.includes('profile')), false, 'profile edits stay out of the log');
   });
 });

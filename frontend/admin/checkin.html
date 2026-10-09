@@ -662,7 +662,7 @@ function renderConRoleCell(p) {
     ? iconAction(`data-change-role="${escapeHtml(p.userId)}"`, 'manage_accounts', 'Rolle ändern')
     : '';
   const nscInfo = p.conRole === 'nsc'
-    ? `<span class="sub">${p.characters?.[0]?.name ? `Fester NSC: ${escapeHtml(p.characters[0].name)}` : 'Springer'}</span>`
+    ? `<span class="tag" title="${p.characters?.[0]?.name ? 'Fester NSC-Charakter' : 'Kein fester Charakter: springt bei Bedarf ein'}">${p.characters?.[0]?.name ? `Fester NSC: ${escapeHtml(p.characters[0].name)}` : 'Springer'}</span>`
     : '';
   return `<strong>${escapeHtml(label)}</strong>${badge}${nscInfo}${changeButton}`;
 }
@@ -694,9 +694,9 @@ function renderPaymentStatusCell(p) {
     if (p.refundedAt) {
       const fullyRefunded = p.refundAmountCents >= p.amountDueCents;
       const refundNote = fullyRefunded ? 'Vollständig erstattet' : `Teilerstattet: ${(p.refundAmountCents / 100).toFixed(2)} €`;
-      return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <span class="sub">${refundNote}</span> ${iconAction(`data-mark-unpaid="${escapeHtml(p.userId)}"`, 'undo', 'Zahlung zurücksetzen')}`;
+      return `<span class="status-pill status-paid">Bezahlt (${escapeHtml(label)})</span> <span class="sub">${refundNote}</span> ${iconAction(`data-mark-unpaid="${escapeHtml(p.userId)}"`, 'undo', 'Zahlung zurücksetzen')}`;
     }
-    return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> ${iconAction(`data-refund="${escapeHtml(p.userId)}"`, 'currency_exchange', 'Erstatten')} ${iconAction(`data-mark-unpaid="${escapeHtml(p.userId)}"`, 'undo', 'Zahlung zurücksetzen')}`;
+    return `<span class="status-pill status-paid">Bezahlt (${escapeHtml(label)})</span> ${iconAction(`data-refund="${escapeHtml(p.userId)}"`, 'currency_exchange', 'Erstatten')} ${iconAction(`data-mark-unpaid="${escapeHtml(p.userId)}"`, 'undo', 'Zahlung zurücksetzen')}`;
   }
   const openLabel = p.conPayer ? 'Zahlt vor Ort' : 'Offen';
   const notified = p.transferNotifiedAt ? ` <span class="status-pill status-waitlisted" title="Gemeldet am ${escapeHtml(new Date(p.transferNotifiedAt).toLocaleString('de-DE'))}">Überweisung gemeldet</span> ${iconAction(`data-reset-transfer="${escapeHtml(p.userId)}"`, 'notifications_off', 'Meldung zurücksetzen (kein Zahlungseingang)')}` : '';

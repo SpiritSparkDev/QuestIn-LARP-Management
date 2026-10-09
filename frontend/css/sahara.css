@@ -2177,6 +2177,12 @@ tbody tr:last-child td {
   color: var(--success);
 }
 
+/* "Bezahlt" is always green (also the dot in the member list) */
+.status-paid {
+  background: #dceee0;
+  color: var(--success);
+}
+
 .status-checked_out {
   background: var(--secondary-container);
   color: var(--secondary);
@@ -5537,4 +5543,49 @@ select.status-select {
   border-radius: 50%;
   background: #2e9e4f;
   vertical-align: middle;
+}
+
+/* Loading screen: the configured logo exactly in the middle, the spinner just below it.
+   The uploaded logo is requested from first paint; pages with a logo URL set --loader-logo
+   (see branding.js). Without any logo only the spinner shows. */
+.page-loader::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(280px, 64vw);
+  height: 150px;
+  transform: translate(-50%, -50%);
+  background: var(--loader-logo, url(/app-settings/logo)) center / contain no-repeat;
+}
+
+.page-loader .page-loader-spinner {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 110px);
+  margin-left: -18px;
+}
+
+/* 404 / 503 pages */
+.error-page {
+  text-align: center;
+}
+
+.error-code {
+  margin: 0;
+  font-family: "EB Garamond", serif;
+  font-size: 4.5rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--primary);
+}
+
+.error-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.error-actions a {
+  text-decoration: none;
 }

@@ -343,36 +343,45 @@ async function findPaypalOrder(req) {
   return rows[0] ?? null;
 }
 
-// Captures an approved order and books it. Returns true when the payment is booked.
+// PayPal's reason codes for a failed capture, in words a participant can act on.
+const PAYPAL_ISSUE_MESSAGES = {
+  INSTRUMENT_DECLINED: 'Die Zahlungsart wurde abgelehnt. Bitte versuche es mit einer anderen Karte oder einem anderen Weg.',
+  PAYER_ACTION_REQUIRED: 'PayPal braucht noch eine Bestätigung von dir (z. B. 3-D-Secure). Bitte versuche es erneut.',
+  ORDER_NOT_APPROVED: 'Die Zahlung wurde bei PayPal nicht freigegeben.',
+  TRANSACTION_REFUSED: 'PayPal hat die Zahlung abgelehnt.',
+  PAYER_CANNOT_PAY: 'Mit diesem Konto kann nicht bezahlt werden.',
+};
+
+// Captures an approved order and books it. Returns { booked, issues }: `issues` are PayPal's codes when it refused.
 async function bookPaypalOrder(order) {
-  if (order.captured_at) return true;
+  if (order.captured_at) return { booked: true };
   try {
     const config = await getPaypalConfig();
-    if (!config) return false;
+    if (!config) return { booked: false };
     const capture = completedCapture(await capturePaypalOrder(config, order.order_id));
     const { rows } = await query('SELECT amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [order.event_id, order.user_id]);
     const due = rows[0]?.amount_due_cents;
     // Only a completed capture for this very registration that covers the open amount counts.
     if (!capture || capture.customId !== `${order.event_id}:${order.user_id}` || due == null || capture.amountCents < due) {
       logger.error('paypal payment not booked (not completed, wrong reference or amount below due)', { orderId: order.order_id, due, captured: capture?.amountCents });
-      return false;
+      return { booked: false };
     }
     await recordSuccessfulStripePayment({
       eventId: order.event_id, userId: order.user_id, method: 'paypal', provider: 'paypal',
       amountCents: capture.amountCents, providerReference: `paypal:${capture.id}`,
     });
     await query('UPDATE paypal_orders SET captured_at = now() WHERE order_id = $1', [order.order_id]);
-    return true;
+    return { booked: true };
   } catch (err) {
-    logger.error('paypal booking failed', { error: err.message, orderId: order.order_id });
-    return false;
+    logger.error('paypal booking failed', { error: err.message, status: err.status, issues: err.issues, orderId: order.order_id });
+    return { booked: false, issues: err.issues ?? [] };
   }
 }
 
 router.get('/paypal/return', async ({ req }) => {
   const order = await findPaypalOrder(req);
   if (!order) return redirectTo(`${await baseUrl()}/account.html#anmelden`);
-  return redirectTo((await bookPaypalOrder(order)) ? order.success_url : order.cancel_url);
+  return redirectTo((await bookPaypalOrder(order)).booked ? order.success_url : order.cancel_url);
 });
 
 // PayPal's own buttons (their script in the browser): the browser only ever asks for "an order for this
@@ -414,8 +423,10 @@ router.post('/paypal/capture', async ({ req }) => {
   if (body === null || !isPaypalOrderId(body.orderId)) return { status: 400, body: { error: 'invalid order' } };
   const { rows } = await query('SELECT order_id, event_id, user_id, success_url, cancel_url, captured_at FROM paypal_orders WHERE order_id = $1', [body.orderId]);
   if (rows.length === 0) return { status: 404, body: { error: 'order not found' } };
-  const booked = await bookPaypalOrder(rows[0]);
-  return booked ? { status: 200, body: { booked: true } } : { status: 409, body: { error: 'Die Zahlung konnte nicht verbucht werden. Falls bei PayPal Geld abgebucht wurde, melde dich bei der Orga.' } };
+  const { booked, issues = [] } = await bookPaypalOrder(rows[0]);
+  if (booked) return { status: 200, body: { booked: true } };
+  const known = issues.map((code) => PAYPAL_ISSUE_MESSAGES[code]).find(Boolean);
+  return { status: 409, body: { error: known ?? 'Die Zahlung konnte nicht verbucht werden. Falls bei PayPal Geld abgebucht wurde, melde dich bei der Orga.', issues } };
 });
 
 router.get('/paypal/cancel', async ({ req }) => {

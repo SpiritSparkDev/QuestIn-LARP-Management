@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Wartungsarbeiten – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
+  <div class="folio folio--narrow error-page">
+    <p class="error-code">503</p>
+    <h1 class="text-center">Wir sind gleich wieder da</h1>
+    <p class="lede text-center">Gerade laufen Wartungsarbeiten. Bitte versuche es in ein paar Minuten noch einmal. Deine Daten sind sicher.</p>
+    <div class="error-actions"><button type="button" id="reload">Neu laden</button></div>
+  </div>
+</div>
+<script type="module">
+import { applyBranding } from '/js/branding.js';
+applyBranding();
+document.getElementById('reload').addEventListener('click', () => window.location.reload());
+// Comes back on its own once the maintenance is over.
+setTimeout(() => window.location.reload(), 60000);
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { logger } from './logger.js';
 import { router } from './routes.js';
 import { serveStaticFile } from './staticFiles.js';
+import { renderErrorPage } from './errorPages.js';
 import './auth/register.js';
 import './auth/login.js';
 import './auth/passwordReset.js';
@@ -64,12 +65,59 @@ import { checkWriteGuard } from './instanceAuthority/guard.js';
 // here would create an ESM cycle); this re-export is for the app entry point only.
 export { router };
 
+// Maintenance mode (MAINTENANCE_MODE=1 in the environment, switch it off by removing it and restarting):
+// pages answer with the 503 page, the API with a 503 JSON. Assets, branding and /health stay available
+// so the page looks right and monitoring keeps working.
+const maintenanceOn = () => ['1', 'true', 'yes', 'on'].includes(String(process.env.MAINTENANCE_MODE ?? '').toLowerCase());
+const ASSET_EXTENSIONS = new Set(['.css', '.js', '.woff2', '.png', '.webp', '.svg', '.ico']);
+const wantsHtml = (req, pathname) => pathname === '/' || pathname.endsWith('.html') || ['/checkin', '/taverne'].includes(pathname)
+  || (String(req.headers.accept ?? '').includes('text/html') && !path.extname(pathname));
+
+async function sendErrorPage(req, res, status, pageFile, headers = {}) {
+  const file = await serveStaticFile(pageFile);
+  if (!file) {
+    res.writeHead(status, { 'Content-Type': 'application/json', ...headers });
+    res.end(JSON.stringify({ error: status === 503 ? 'maintenance' : 'not found' }));
+    return;
+  }
+  res.writeHead(status, { 'Content-Type': file.contentType, 'Cache-Control': 'no-store', ...headers });
+  res.end(req.method === 'HEAD' ? undefined : file.data);
+}
+
+// A browser that opened an API address directly (Accept: text/html, no assets) gets a readable page instead
+// of raw JSON. fetch() calls of our own pages send Accept: */* and keep getting JSON.
+const browserNavigation = (req, pathname) => (req.method === 'GET' || req.method === 'HEAD')
+  && String(req.headers.accept ?? '').includes('text/html') && !path.extname(pathname);
+
+async function sendGenericErrorPage(res, status, headers = {}) {
+  const page = await renderErrorPage(status);
+  if (!page) return false;
+  res.writeHead(status, { ...headers, 'Content-Type': page.contentType, 'Cache-Control': 'no-store' });
+  res.end(page.data);
+  return true;
+}
+
 async function handleRequest(req, res) {
   const requestId = crypto.randomUUID();
   const start = Date.now();
   const { pathname } = new URL(req.url, 'http://localhost');
   const logPath = pathname.replace(/^(\/webhooks\/sumup\/|\/public\/registrations\/)[^/]+/, '$1[redacted]');
   res.setHeader('X-Request-Id', requestId);
+
+  if (maintenanceOn() && pathname !== '/health') {
+    const isGet = req.method === 'GET' || req.method === 'HEAD';
+    const isAsset = ASSET_EXTENSIONS.has(path.extname(pathname)) || (isGet && pathname.startsWith('/app-settings'));
+    if (!(isGet && isAsset)) {
+      if (isGet && wantsHtml(req, pathname)) {
+        await sendErrorPage(req, res, 503, '/503.html', { 'Retry-After': '600' });
+      } else {
+        res.writeHead(503, { 'Content-Type': 'application/json', 'Retry-After': '600' });
+        res.end(JSON.stringify({ error: 'Wartungsarbeiten: bitte in ein paar Minuten noch einmal versuchen.', maintenance: true }));
+      }
+      logger.info('request', { requestId, method: req.method, path: logPath, status: 503, durationMs: Date.now() - start });
+      return;
+    }
+  }
 
   // The embeddable ticket widget (frontend/widget.js) calls /public/* from
   // other websites. Those endpoints are unauthenticated and never read
@@ -94,6 +142,11 @@ async function handleRequest(req, res) {
         return;
       }
     }
+    if (req.method === 'GET' && wantsHtml(req, pathname)) {
+      await sendErrorPage(req, res, 404, '/404.html');
+      logger.info('request', { requestId, method: req.method, path: logPath, status: 404, durationMs: Date.now() - start });
+      return;
+    }
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'not found', requestId }));
     logger.info('request', { requestId, method: req.method, path: logPath, status: 404, durationMs: Date.now() - start });
@@ -103,6 +156,10 @@ async function handleRequest(req, res) {
   try {
     const result = await checkWriteGuard(req.method, pathname) ?? await match.handler({ req, params: match.params, requestId });
     const status = result?.status ?? 200;
+    if (status >= 400 && !result?.isBinary && browserNavigation(req, pathname) && await sendGenericErrorPage(res, status, result?.headers)) {
+      logger.info('request', { requestId, method: req.method, path: logPath, status, durationMs: Date.now() - start });
+      return;
+    }
     if (result?.isBinary) {
       res.writeHead(status, result?.headers);
       res.end(result.body);
@@ -116,6 +173,7 @@ async function handleRequest(req, res) {
     const CLIENT_ERROR_CODES = new Set(['22P02', '22P05', '22007', '22008']);
     const status = CLIENT_ERROR_CODES.has(err.code) ? 400 : 500;
     logger.error('request failed', { requestId, method: req.method, path: logPath, status, durationMs: Date.now() - start, error: err.message, stack: err.stack });
+    if (!res.headersSent && browserNavigation(req, pathname) && await sendGenericErrorPage(res, status)) return;
     if (!res.headersSent) {
       const body = status === 400
         ? { error: 'invalid request', requestId }

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{{heading}} – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
+  <div class="folio folio--narrow error-page">
+    <p class="error-code">{{code}}</p>
+    <h1 class="text-center">{{heading}}</h1>
+    <p class="lede text-center">{{text}}</p>
+    <div class="error-actions">{{actions}}</div>
+  </div>
+</div>
+<script type="module">
+import { applyBranding } from '/js/branding.js';
+applyBranding();
+document.getElementById('reload')?.addEventListener('click', () => window.location.reload());
+</script>
+</body>
+</html>

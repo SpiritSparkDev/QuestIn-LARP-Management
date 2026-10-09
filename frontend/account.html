@@ -1060,7 +1060,11 @@
               notify(err.message, "error");
             }
           },
-          onError: () => notify("Bei PayPal ist etwas schiefgegangen. Bitte versuche es erneut.", "error"),
+          onError: (err) => {
+            console.error("PayPal:", err);
+            notify("Bei PayPal ist etwas schiefgegangen. Bitte versuche es erneut oder nimm einen anderen Weg.", "error");
+          },
+          onCancel: () => notify("Die Zahlung wurde abgebrochen.", "error"),
         }).render(container);
       } catch (err) {
         wrap.hidden = true;

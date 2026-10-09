@@ -65,6 +65,8 @@ export async function applyBranding() {
     brandName.childNodes[0].textContent = settings.appTitle;
   }
 
+  if (!settings.hasUploadedLogo && settings.logoUrl) document.documentElement.style.setProperty('--loader-logo', `url(${JSON.stringify(settings.logoUrl)})`);
+
   const seal = document.querySelector('.brand-seal');
   if (seal && (settings.hasUploadedLogo || settings.logoUrl)) {
     const img = document.createElement('img');
