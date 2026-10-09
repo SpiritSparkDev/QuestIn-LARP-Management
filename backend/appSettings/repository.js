@@ -104,6 +104,18 @@ export async function setAppSettings({
   return getAppSettings();
 }
 
+// Which con roles count against the participant limits of an event (see registrations/capacity.js).
+export async function getCapacityRoles() {
+  const { rows } = await query('SELECT capacity_counted_roles FROM app_settings LIMIT 1');
+  return rows[0]?.capacity_counted_roles ?? ['sc', 'nsc', 'ticket'];
+}
+
+export async function setCapacityRoles(roles) {
+  const id = await ensureSettingsRow();
+  await query('UPDATE app_settings SET capacity_counted_roles = $2 WHERE id = $1', [id, roles]);
+  return getCapacityRoles();
+}
+
 async function ensureSettingsRow() {
   const { rows } = await query('SELECT id FROM app_settings LIMIT 1');
   if (rows.length > 0) return rows[0].id;

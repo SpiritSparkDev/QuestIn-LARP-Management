@@ -12,7 +12,7 @@ import { s3Storage } from '../storage/s3.js';
 // Credentials live in one encrypted block (backup_settings); the API never returns secrets.
 export const TARGETS = ['local', 's3', 'sftp'];
 const SECRET_FIELDS = { s3: ['secretAccessKey'], sftp: ['password', 'privateKey'] };
-const EMPTY = { s3: {}, sftp: {} };
+const EMPTY = { s3: {}, sftp: {}, schedule: {} };
 
 export function localDir() {
   return path.resolve(process.env.BACKUP_LOCAL_DIR || './backups');
@@ -39,7 +39,65 @@ export async function getBackupSettings() {
       delete masked[target][field];
     }
   }
+  // The schedule never returns its passphrase (only that one is stored).
+  const { passphrase, ...schedule } = config.schedule ?? {};
+  masked.schedule = { ...schedule, hasPassphrase: Boolean(passphrase) };
   return masked;
+}
+
+const SCOPES = ['participants', 'events', 'all'];
+
+// Validates the user-editable parts of the schedule; a blank passphrase keeps the stored one. Run state
+// (lastRunAt ...) is only ever written by the scheduler itself.
+function mergeSchedule(current, input) {
+  if (input === undefined) return current;
+  const next = { ...current };
+  if (input.enabled !== undefined) next.enabled = input.enabled === true;
+  if (input.every !== undefined) {
+    if (!['day', 'week'].includes(input.every)) throw new Error('every must be day or week');
+    next.every = input.every;
+  }
+  if (input.time !== undefined) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.time)) throw new Error('time must look like 03:15');
+    next.time = input.time;
+  }
+  if (input.weekday !== undefined) {
+    if (!Number.isInteger(input.weekday) || input.weekday < 0 || input.weekday > 6) throw new Error('weekday must be 0-6');
+    next.weekday = input.weekday;
+  }
+  if (input.scope !== undefined) {
+    if (!SCOPES.includes(input.scope)) throw new Error('scope must be participants, events or all');
+    next.scope = input.scope;
+  }
+  if (input.targets !== undefined) {
+    if (!Array.isArray(input.targets) || input.targets.some((t) => !TARGETS.includes(t))) throw new Error('targets must be a list of: ' + TARGETS.join(', '));
+    next.targets = [...new Set(input.targets)];
+  }
+  if (input.keep !== undefined) {
+    if (!Number.isInteger(input.keep) || input.keep < 1 || input.keep > 365) throw new Error('keep must be 1-365');
+    next.keep = input.keep;
+  }
+  if (typeof input.passphrase === 'string' && input.passphrase) {
+    if (input.passphrase.length < 8) throw new Error('Das Passwort der geplanten Sicherung muss mindestens 8 Zeichen haben.');
+    next.passphrase = input.passphrase;
+  }
+  if (next.enabled) {
+    if (!next.passphrase) throw new Error('Für die geplante Sicherung ist ein Passwort nötig (die Datei enthält personenbezogene Daten).');
+    if (!(next.targets ?? []).length) throw new Error('Wähle mindestens ein Ziel für die geplante Sicherung.');
+    // Switched on just now: the first run is the next slot, not "immediately because today's slot has passed".
+    if (!current.enabled) next.lastRunAt = new Date().toISOString();
+  }
+  return next;
+}
+
+// Run state written by the scheduler (kept out of mergeSchedule so users cannot set it).
+export async function saveScheduleState(patch) {
+  const current = await getBackupSettingsForUse();
+  const next = { ...current, schedule: { ...current.schedule, ...patch } };
+  const blob = encryptField(JSON.stringify(next));
+  const { rows } = await query('SELECT id FROM backup_settings LIMIT 1');
+  if (rows.length === 0) await query('INSERT INTO backup_settings (config_enc) VALUES ($1)', [blob]);
+  else await query('UPDATE backup_settings SET config_enc = $1, updated_at = now() WHERE id = $2', [blob, rows[0].id]);
 }
 
 // A blank secret keeps the stored one (same convention as the storage settings).
@@ -52,6 +110,7 @@ export async function setBackupSettings(input) {
       if (!input?.[target]?.[field]) next[target][field] = current[target][field];
     }
   }
+  next.schedule = mergeSchedule(current.schedule ?? {}, input?.schedule);
   const blob = encryptField(JSON.stringify(next));
   const { rows } = await query('SELECT id FROM backup_settings LIMIT 1');
   if (rows.length === 0) await query('INSERT INTO backup_settings (config_enc) VALUES ($1)', [blob]);

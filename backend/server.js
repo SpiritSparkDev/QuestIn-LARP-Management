@@ -6,6 +6,7 @@ import { logger } from './logger.js';
 import { router } from './routes.js';
 import { serveStaticFile } from './staticFiles.js';
 import { renderErrorPage } from './errorPages.js';
+import { startBackupScheduler } from './backup/schedule.js';
 import './auth/register.js';
 import './auth/login.js';
 import './auth/passwordReset.js';
@@ -191,6 +192,7 @@ export function createServer() {
 // Offline: no jobs at all -- reminders/automation would mail or delete in parallel to the online instance.
 export function startBackgroundJobs() {
   if (isOffline()) return [];
+  startBackupScheduler();
   const runCleanup = () => runDueAutoDeletions().catch((err) => logger.error('privacy cleanup failed', { error: err.message }));
   const every = 6 * 60 * 60 * 1000;
   return [

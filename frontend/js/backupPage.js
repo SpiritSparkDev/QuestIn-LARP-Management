@@ -42,7 +42,7 @@ async function loadHistory() {
   document.querySelector('#backup-history tbody').innerHTML = rows.length ? rows.map((r) => {
     const what = r.action === 'backup.restored'
       ? `Eingespielt (${(r.details?.parts ?? []).map((p) => PART_LABELS[p]).join(', ')})`
-      : `Erstellt: ${SCOPE_LABELS[r.details?.scope] ?? '–'} → ${(r.details?.targets ?? ['download']).map((t) => TARGET_LABELS[t]).join(', ')}`;
+      : `${r.details?.scheduled ? 'Automatisch erstellt' : 'Erstellt'}: ${SCOPE_LABELS[r.details?.scope] ?? '–'} → ${(r.details?.targets ?? ['download']).map((t) => TARGET_LABELS[t]).join(', ')}`;
     return `<tr>
       <td>${escapeHtml(new Date(r.createdAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</td>
       <td>${escapeHtml(r.actorName ?? '–')}</td>
@@ -93,6 +93,40 @@ document.querySelectorAll('[data-test]').forEach((button) => button.addEventList
     notify(result.ok ? 'Verbindung funktioniert.' : `Fehlgeschlagen: ${result.error}`, result.ok ? 'success' : 'error');
   } catch (err) { notify(err.message, 'error'); }
 }));
+
+// ---- Zeitplan ----
+const STATUS_LABELS = { ok: 'erfolgreich', partial: 'nicht überall zugestellt', error: 'fehlgeschlagen', running: 'läuft' };
+
+function fillSchedule(s = {}) {
+  $('sch-enabled').checked = Boolean(s.enabled);
+  $('sch-every').value = s.every ?? 'day';
+  $('sch-weekday').value = String(s.weekday ?? 1);
+  $('sch-time').value = s.time ?? '03:00';
+  $('sch-scope').value = s.scope ?? 'all';
+  $('sch-keep').value = s.keep ?? 14;
+  $('sch-passphrase').value = '';
+  $('sch-passphrase-label').textContent = `Passwort für die Dateien (mind. 8 Zeichen)${s.hasPassphrase ? ' – gespeichert, leer lassen zum Behalten' : ''}`;
+  document.querySelectorAll('#sch-targets input').forEach((i) => { i.checked = (s.targets ?? []).includes(i.value); });
+  $('sch-weekday').closest('div').hidden = $('sch-every').value !== 'week';
+  $('sch-status').textContent = s.lastRunAt
+    ? `Letzter Lauf: ${new Date(s.lastRunAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} – ${STATUS_LABELS[s.lastStatus] ?? '–'}${s.lastError ? ` (${s.lastError})` : ''}`
+    : 'Noch kein automatischer Lauf.';
+}
+$('sch-every').addEventListener('change', () => { $('sch-weekday').closest('div').hidden = $('sch-every').value !== 'week'; });
+
+$('schedule-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    const saved = await api.put('/backup/settings', { schedule: {
+      enabled: $('sch-enabled').checked, every: $('sch-every').value, weekday: Number($('sch-weekday').value),
+      time: $('sch-time').value, scope: $('sch-scope').value, keep: Number($('sch-keep').value),
+      passphrase: $('sch-passphrase').value,
+      targets: [...document.querySelectorAll('#sch-targets input:checked')].map((i) => i.value),
+    } });
+    fillSchedule(saved.schedule);
+    notify('Zeitplan gespeichert.', 'success');
+  } catch (err) { notify(err.message, 'error'); }
+});
 
 // ---- Sicherung erstellen ----
 $('backup-form').addEventListener('submit', async (event) => {
@@ -182,7 +216,9 @@ try {
   const account = await api.get('/account');
   $('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   $('sidebar-user-info').innerHTML = renderSidebarUser(account);
-  fillSettings(await api.get('/backup/settings'));
+  const settings = await api.get('/backup/settings');
+  fillSettings(settings);
+  fillSchedule(settings.schedule);
   await loadHistory();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

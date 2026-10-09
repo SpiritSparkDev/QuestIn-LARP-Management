@@ -4,9 +4,12 @@ import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELECT_COLUMNS = `id, name, event_date, end_date, code, capacity, hard_capacity, low_seats_notice, low_seats_from, payments_open, color, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at,
+const SELECT_COLUMNS = `id, name, event_date, end_date, code, capacity, hard_capacity, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity, low_seats_notice, low_seats_from, payments_open, color, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at,
   (low_seats_notice AND (SELECT count(*) FROM registrations r WHERE r.event_id = events.id AND r.status IN ('pending', 'confirmed', 'checked_in', 'checked_out'))
-    BETWEEN COALESCE(low_seats_from, capacity) AND COALESCE(hard_capacity, capacity) - 1) AS low_seats`;
+    BETWEEN COALESCE(low_seats_from, capacity) AND COALESCE(hard_capacity, capacity) - 1) AS low_seats,
+  -- "Nur noch wenige Plätze" per role: planned places used up, hard limit not reached yet
+  (low_seats_notice AND sc_capacity IS NOT NULL AND (SELECT count(*) FROM registrations r WHERE r.event_id = events.id AND r.status IN ('pending', 'confirmed', 'checked_in', 'checked_out') AND r.con_role = 'sc') BETWEEN sc_capacity AND COALESCE(sc_hard_capacity, sc_capacity) - 1) AS low_seats_sc,
+  (low_seats_notice AND nsc_capacity IS NOT NULL AND (SELECT count(*) FROM registrations r WHERE r.event_id = events.id AND r.status IN ('pending', 'confirmed', 'checked_in', 'checked_out') AND r.con_role = 'nsc') BETWEEN nsc_capacity AND COALESCE(nsc_hard_capacity, nsc_capacity) - 1) AS low_seats_nsc`;
 
 // Trims, drops empty strings, and deduplicates while preserving first-seen
 // order -- the admin-facing comma-separated textfield can easily produce
@@ -90,12 +93,12 @@ function normalizeText(value) {
   return value.trim() === '' ? null : value;
 }
 
-export async function createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url, flag_details, end_date, hard_capacity, low_seats_notice, low_seats_from, payments_open, color)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url, flag_details, end_date, hard_capacity, low_seats_notice, low_seats_from, payments_open, color, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
      RETURNING ${SELECT_COLUMNS}`,
-    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), JSON.stringify(normalizeExtras(extras)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl), JSON.stringify(normalizeFlagDetails(flagDetails, flags)), endDate || null, hardCapacity ?? null, Boolean(lowSeatsNotice), lowSeatsFrom ?? null, Boolean(paymentsOpen), normalizeText(color)]
+    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), JSON.stringify(normalizeExtras(extras)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl), JSON.stringify(normalizeFlagDetails(flagDetails, flags)), endDate || null, hardCapacity ?? null, Boolean(lowSeatsNotice), lowSeatsFrom ?? null, Boolean(paymentsOpen), normalizeText(color), scCapacity ?? null, scHardCapacity ?? null, nscCapacity ?? null, nscHardCapacity ?? null]
   );
   return rows[0];
 }
@@ -123,7 +126,7 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { privacyDeletion, endDate, name, eventDate, code, capacity, clearCapacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, flagRenames, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function updateEvent(id, { privacyDeletion, endDate, name, eventDate, code, capacity, clearCapacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, flagRenames, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   // code/capacity are the fields a caller can legitimately want to CLEAR
   // (empty string / "unbegrenzt") rather than just omit -- COALESCE alone
   // can't tell those apart, since both arrive as a falsy value. $6/$7
@@ -167,7 +170,11 @@ export async function updateEvent(id, { privacyDeletion, endDate, name, eventDat
        low_seats_notice = COALESCE($27, low_seats_notice),
        low_seats_from = CASE WHEN $28 THEN $29 ELSE low_seats_from END,
        payments_open = COALESCE($30, payments_open),
-       color = CASE WHEN $31 THEN $32 ELSE color END
+       color = CASE WHEN $31 THEN $32 ELSE color END,
+       sc_capacity = CASE WHEN $33 THEN $34 ELSE sc_capacity END,
+       sc_hard_capacity = CASE WHEN $35 THEN $36 ELSE sc_hard_capacity END,
+       nsc_capacity = CASE WHEN $37 THEN $38 ELSE nsc_capacity END,
+       nsc_hard_capacity = CASE WHEN $39 THEN $40 ELSE nsc_hard_capacity END
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
     [
@@ -189,6 +196,10 @@ export async function updateEvent(id, { privacyDeletion, endDate, name, eventDat
       lowSeatsFrom !== undefined, lowSeatsFrom ?? null,
       paymentsOpen === undefined ? null : Boolean(paymentsOpen),
       color !== undefined, normalizeText(color),
+      scCapacity !== undefined, scCapacity ?? null,
+      scHardCapacity !== undefined, scHardCapacity ?? null,
+      nscCapacity !== undefined, nscCapacity ?? null,
+      nscHardCapacity !== undefined, nscHardCapacity ?? null,
     ]
   );
   return rows[0] ?? null;

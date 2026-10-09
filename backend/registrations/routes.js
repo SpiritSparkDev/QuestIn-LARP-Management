@@ -319,7 +319,7 @@ router.put('/events/:id/registrations/:userId/con-role', requireAuth(async ({ re
     if (err.code === 'INVALID_CHARACTER_DATA') return { status: 400, body: { error: 'invalid character data', details: err.details } };
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 404, body: { error: err.message } };
     if (err.code === 'CHARACTER_FORBIDDEN') return { status: 403, body: { error: err.message } };
-    if (err.code === 'CHARACTER_ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
+    if (err.code === 'CHARACTER_ALREADY_REGISTERED' || err.code === 'CAPACITY_FULL') return { status: 409, body: { error: err.message } };
     throw err;
   }
 }));

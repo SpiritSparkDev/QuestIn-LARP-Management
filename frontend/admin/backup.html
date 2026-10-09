@@ -98,6 +98,28 @@
       <div class="save-bar"><button type="submit">Einstellungen speichern</button></div>
     </form>
 
+    <form id="schedule-form" class="card form-pad">
+      <h2>Automatische Sicherung</h2>
+      <p class="sub">Der Server erstellt die Sicherung selbst, zur gewählten Uhrzeit (Berliner Zeit), und legt sie in den gewählten Zielen ab. Im Server-Ordner bleiben nur die neuesten Dateien erhalten. Das Passwort wird verschlüsselt auf dem Server gespeichert – ohne es kann nicht automatisch gesichert werden.</p>
+      <label><input type="checkbox" id="sch-enabled"> Automatische Sicherung aktiv</label>
+      <div class="field-grid">
+        <div><select id="sch-every"><option value="day">Täglich</option><option value="week">Wöchentlich</option></select><label for="sch-every">Rhythmus</label></div>
+        <div><select id="sch-weekday"><option value="1">Montag</option><option value="2">Dienstag</option><option value="3">Mittwoch</option><option value="4">Donnerstag</option><option value="5">Freitag</option><option value="6">Samstag</option><option value="0">Sonntag</option></select><label for="sch-weekday">Wochentag</label></div>
+        <div><input id="sch-time" type="time" value="03:00"><label for="sch-time">Uhrzeit</label></div>
+        <div><select id="sch-scope"><option value="participants">Teilnehmende</option><option value="events">Events</option><option value="all">Alles</option></select><label for="sch-scope">Inhalt</label></div>
+        <div><input id="sch-keep" type="number" min="1" max="365" value="14"><label for="sch-keep">Server-Ordner: so viele behalten</label></div>
+        <div><input id="sch-passphrase" type="password" minlength="8" autocomplete="new-password"><label for="sch-passphrase" id="sch-passphrase-label">Passwort für die Dateien (mind. 8 Zeichen)</label></div>
+      </div>
+      <h3>Wohin?</h3>
+      <div class="backup-targets" id="sch-targets">
+        <label><input type="checkbox" value="local"> Server-Ordner</label>
+        <label><input type="checkbox" value="s3"> S3-Speicher</label>
+        <label><input type="checkbox" value="sftp"> SFTP-Server</label>
+      </div>
+      <p class="sub" id="sch-status"></p>
+      <div class="save-bar"><button type="submit">Zeitplan speichern</button></div>
+    </form>
+
     <form id="restore-form" class="card form-pad">
       <h2>Backup einspielen</h2>
       <p class="sub">Die Daten aus der Datei werden mit dem aktuellen Stand <strong>zusammengeführt</strong>: Fehlendes wird angelegt, Vorhandenes mit dem Stand der Datei überschrieben. Es wird nichts gelöscht. Schlägt etwas fehl, bleibt alles unverändert. Passwörter sind nicht Teil des Backups – neu angelegte Konten setzen ihr Passwort über „Passwort vergessen" neu.</p>

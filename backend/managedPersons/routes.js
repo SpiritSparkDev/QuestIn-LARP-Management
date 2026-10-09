@@ -2,6 +2,7 @@ import { router } from '../routes.js';
 import { requireAuth, requireGroupManager } from '../middleware/authenticate.js';
 import { readJsonBody } from '../httpBody.js';
 import { isValidEmail } from '../validation.js';
+import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { filterToAllowedFields } from '../members/routes.js';
 import { createCharacter } from '../characters/repository.js';
 import {
@@ -46,10 +47,24 @@ router.get('/managed-persons/:id', requireAuth(async ({ params, user }) => {
   return { status: 200, body: person };
 }));
 
+// A manager acts for the people they manage, like the person would in their own account: every account field
+// may be set (just like PATCH /account), only the role ('group') never.
+const editableFieldsOf = async () => (await getAccountFieldSchema()).map((field) => field.key);
+
+// A form that submits every field also sends the blank ones; a blank value for a field the caller may not set
+// is no attempt to set it, so it is dropped instead of rejected. A filled one still is rejected.
+async function dropBlankForbidden(fields, allowed) {
+  const forbidden = new Set(await filterToAllowedFields(fields, allowed));
+  const blank = (v) => v === '' || v === null || v === undefined || (Array.isArray(v) && v.length === 0);
+  return Object.fromEntries(Object.entries(fields).filter(([key, value]) => !(forbidden.has(key) && blank(value))));
+}
+
 router.post('/managed-persons', requireGroupManager(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { email, firstName = '', lastName = '', nickname, characterName, ...otFields } = body;
+  const { email, firstName = '', lastName = '', nickname, characterName, ...rawOtFields } = body;
+  const allowed = await editableFieldsOf();
+  const otFields = await dropBlankForbidden(rawOtFields, allowed);
   // A person needs just one handle: a nickname, a full name or a character name.
   const charName = typeof characterName === 'string' ? characterName.trim() : '';
   if (!nickname && !(firstName && lastName) && !charName) {
@@ -59,7 +74,7 @@ router.post('/managed-persons', requireGroupManager(async ({ req, user }) => {
     return { status: 400, body: { error: 'invalid email format' } };
   }
 
-  const disallowed = await filterToAllowedFields(otFields, user.group.accountFields);
+  const disallowed = await filterToAllowedFields(otFields, allowed);
   if (disallowed.length > 0) {
     return { status: 400, body: { error: `not permitted to set: ${disallowed.join(', ')}` } };
   }
@@ -78,13 +93,15 @@ router.post('/managed-persons', requireGroupManager(async ({ req, user }) => {
 }));
 
 router.patch('/managed-persons/:id', requireGroupManager(async ({ req, params, user }) => {
-  const body = await readJsonBody(req);
-  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const rawBody = await readJsonBody(req);
+  if (rawBody === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const allowed = await editableFieldsOf();
+  const body = await dropBlankForbidden(rawBody, allowed);
   if (body.email && !isValidEmail(body.email)) {
     return { status: 400, body: { error: 'invalid email format' } };
   }
 
-  const disallowed = await filterToAllowedFields(body, user.group.accountFields);
+  const disallowed = await filterToAllowedFields(body, allowed);
   if (disallowed.length > 0) {
     return { status: 400, body: { error: `not permitted to set: ${disallowed.join(', ')}` } };
   }

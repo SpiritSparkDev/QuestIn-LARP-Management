@@ -124,6 +124,29 @@
             <p class="settings-hint">Änderungen werden sofort gespeichert.</p>
           </div>
           <div class="card form-pad">
+            <h2>Teilnehmerlimit: welche Rollen zählen mit?</h2>
+            <p class="sub">
+              Nur angehakte Rollen zählen gegen die Teilnehmergrenzen eines Events
+              (Gesamtgrenze sowie getrennte Grenze für SC und NSC). Nicht angehakte
+              Rollen können sich immer anmelden und nehmen keinen Platz weg.
+              Standard: SC, NSC und Direktanmeldungen zählen, Helfer, Hilfs-Orga und
+              Orga nicht.
+            </p>
+            <form id="capacity-roles-form">
+              <div class="checkbox-group">
+              <label><input type="checkbox" data-capacity-role="sc" /> SC (Spielercharaktere)</label>
+              <label><input type="checkbox" data-capacity-role="nsc" /> NSC</label>
+              <label><input type="checkbox" data-capacity-role="ticket" /> Direktanmeldungen (Tickets)</label>
+              <label><input type="checkbox" data-capacity-role="helfer" /> Helfer</label>
+              <label><input type="checkbox" data-capacity-role="hilfs_orga" /> Hilfs-Orga</label>
+              <label><input type="checkbox" data-capacity-role="orga" /> Orga</label>
+              </div>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+              </div>
+            </form>
+          </div>
+          <div class="card form-pad">
             <h2>Charaktere durchsuchen</h2>
             <p class="sub">
               Schaltet die öffentliche "Charaktere anderer Spieler
@@ -1109,6 +1132,25 @@
           bankQrEnabled: bankForm.elements.bankQrEnabled.checked,
         }),
       );
+
+      const capacityRolesForm = document.getElementById("capacity-roles-form");
+      async function loadCapacityRoles() {
+        const { roles } = await api.get("/admin/settings/capacity-roles");
+        capacityRolesForm.querySelectorAll("[data-capacity-role]").forEach((box) => {
+          box.checked = roles.includes(box.dataset.capacityRole);
+        });
+      }
+      capacityRolesForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const roles = [...capacityRolesForm.querySelectorAll("[data-capacity-role]")].filter((b) => b.checked).map((b) => b.dataset.capacityRole);
+        try {
+          await api.put("/admin/settings/capacity-roles", { roles });
+          notify("Gespeichert. Wartende rücken nach, wo jetzt Platz ist.", "success");
+        } catch (err) {
+          notify(err.message, "error");
+        }
+      });
+      loadCapacityRoles().catch((err) => notify(err.message, "error"));
 
       document
         .getElementById("waitlist-auto-promote-toggle")

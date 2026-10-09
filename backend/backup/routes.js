@@ -3,11 +3,12 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { query } from '../db.js';
-import { seal, open } from '../offlinePackage/container.js';
+import { open } from '../offlinePackage/container.js';
 import { logAudit } from '../audit/repository.js';
 import { logger } from '../logger.js';
-import { buildBackup, describeBackup, restoreBackup } from './dump.js';
-import { TARGETS, deliver, testTarget, getBackupSettings, setBackupSettings } from './targets.js';
+import { describeBackup, restoreBackup } from './dump.js';
+import { TARGETS, testTarget, getBackupSettings, setBackupSettings } from './targets.js';
+import { createAndDeliver } from './schedule.js';
 
 const MIN_PASSPHRASE = 8;
 const MAX_RESTORE_BODY_BYTES = 300 * 1024 * 1024;
@@ -26,7 +27,11 @@ router.get('/backup/settings', requireAuth(requireAdminGroup(async () => ({ stat
 router.put('/backup/settings', requireAuth(requireAdminGroup(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  await setBackupSettings(body);
+  try {
+    await setBackupSettings(body);
+  } catch (err) {
+    return { status: 400, body: { error: err.message } };
+  }
   await logAudit({ actorId: user.id, action: 'backup.settings_changed', details: {} });
   return { status: 200, body: await getBackupSettings() };
 })));
@@ -57,20 +62,7 @@ router.post('/backup/export', requireAuth(requireAdminGroup(async ({ req, user }
   const requested = Array.isArray(body.targets) && body.targets.length ? body.targets : ['download'];
   if (requested.some((t) => t !== 'download' && !TARGETS.includes(t))) return { status: 400, body: { error: 'unknown target' } };
 
-  const backup = await buildBackup(body.scope);
-  const file = seal(backup, body.passphrase);
-  const stamp = backup.manifest.createdAt.slice(0, 16).replace(/[-:T]/g, '');
-  const filename = `questin-backup-${body.scope}-${stamp}.qbak`;
-
-  const results = [];
-  for (const target of requested.filter((t) => t !== 'download')) {
-    try {
-      results.push({ target, ok: true, detail: await deliver(target, filename, file) });
-    } catch (err) {
-      logger.error('backup delivery failed', { target, error: err.message });
-      results.push({ target, ok: false, detail: err.message });
-    }
-  }
+  const { backup, file, filename, results } = await createAndDeliver({ scope: body.scope, passphrase: body.passphrase, targets: requested });
   await logAudit({ actorId: user.id, action: 'backup.created', details: { scope: body.scope, counts: backup.manifest.counts, targets: requested, failed: results.filter((r) => !r.ok).map((r) => r.target) } });
 
   if (!requested.includes('download')) return { status: 200, body: { filename, results } };

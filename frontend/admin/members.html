@@ -59,11 +59,15 @@
               <label for="member-filter-kind">Kontoart</label>
             </div>
             <div>
+              <select id="member-filter-participation"></select>
+              <label for="member-filter-participation">SC / NSC / Sonderrollen</label>
+            </div>
+            <div>
               <select id="member-filter-event"></select>
               <label for="member-filter-event">Event</label>
             </div>
             <div>
-              <select id="member-filter-registration" disabled>
+              <select id="member-filter-registration">
                 <option value="">Egal</option>
                 <option value="registered">Angemeldet oder bestätigt (ohne abgesagt)</option>
                 <option value="none">Nicht angemeldet</option>
@@ -73,7 +77,7 @@
                 <option value="waitlisted">Warteliste</option>
                 <option value="cancelled">Abgesagt</option>
               </select>
-              <label for="member-filter-registration">Anmeldung zum Event</label>
+              <label for="member-filter-registration">Anmeldestatus</label>
             </div>
             <div>
               <select id="member-sort"></select>
@@ -109,9 +113,9 @@
                 <th data-sort="name" data-col="name">Name</th>
                 <th data-sort="email" data-col="email">E-Mail</th>
                 <th data-sort="group" data-col="role">Rolle</th>
-                <th data-col="participation">SC / NSC / Sonderrollen</th>
-                <th data-col="event">Event</th>
-                <th data-sort="status" data-col="status">Status</th>
+                <th data-sort="participation" data-col="participation">SC / NSC / Sonderrollen</th>
+                <th data-sort="event" data-col="event">Event</th>
+                <th data-sort="status" data-col="status">Status (Anmeldung)</th>
                 <th></th>
               </tr>
             </thead>
@@ -143,6 +147,14 @@
             </div>
             <div id="detail-fields"></div>
             <div class="save-bar"><button type="button" id="detail-save">Konto speichern</button> <button type="button" id="detail-abort" class="btn-ghost">Abbrechen</button></div>
+            <details id="merge-box" hidden>
+              <summary>Doppeltes Konto zusammenführen</summary>
+              <p class="sub">Wähle das Konto, das <strong>in dieses hier</strong> aufgehen soll. Seine Anmeldungen, Charaktere, Dateien und Zahlungen wandern hierher, leere Kontofelder werden aufgefüllt, danach wird es gelöscht. Das kann nicht rückgängig gemacht werden.</p>
+              <select id="merge-source"></select>
+              <label for="merge-source">Konto, das aufgelöst wird</label>
+              <p class="sub" id="merge-preview"></p>
+              <button type="button" id="merge-run" class="btn-secondary" disabled>Zusammenführen</button>
+            </details>
           </div>
           <div class="tab-panel" id="detail-tab-chars" hidden>
             <div id="detail-characters"></div>
@@ -259,11 +271,11 @@
     let currentSearch = '';
 
     // ---- Filter, search and sort (all client-side on the loaded list) ----
-    const SORT_LABELS = { name: 'Name', email: 'E-Mail', group: 'Rolle', status: 'Status' };
+    const SORT_LABELS = { name: 'Name', email: 'E-Mail', group: 'Rolle', participation: 'SC / NSC / Sonderrollen', event: 'Event', status: 'Anmeldestatus' };
     const STATUS_RANK = { active: 0, invited: 1, deactivated: 2 };
     const PREFS_KEY = 'memberListPrefs';
     let viewMembers = [];
-    let prefs = { group: '', kind: '', event: '', registration: '', sort: 'name', dir: 'asc' };
+    let prefs = { group: '', kind: '', event: '', registration: '', participation: '', sort: 'name', dir: 'asc' };
     try {
       prefs = { ...prefs, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {}) };
     } catch {
@@ -322,6 +334,7 @@
       groupFilter.innerHTML = `<option value="">Alle Rollen</option>${groups.map((g) => `<option value="${escapeHtml(g)}"${g === prefs.group ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('')}`;
       kindFilter.value = prefs.kind;
       refreshEventFilter();
+      refreshParticipationFilter();
       sortSelect.value = `${prefs.sort}:${prefs.dir}`;
     }
 
@@ -332,20 +345,39 @@
     function refreshEventFilter() {
       if (prefs.event && !allEvents.some((e) => e.id === prefs.event)) prefs.event = '';
       eventFilter.innerHTML = `<option value="">Alle Events</option>${allEvents.map((e) => `<option value="${escapeHtml(e.id)}"${e.id === prefs.event ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}`;
-      registrationFilter.disabled = !prefs.event;
-      registrationFilter.value = prefs.event ? prefs.registration : '';
+      registrationFilter.value = prefs.registration;
     }
 
-    // "Egal" with an event chosen means no registration filter; the other
-    // choices need the chosen event (the select stays disabled without one).
+    // Anmeldestatus: for the chosen event, or -- without one -- over all of the person's registrations
+    // ("Angemeldet": any non-cancelled one, "Nicht angemeldet": none at all).
     function memberMatchesRegistration(m) {
-      if (!prefs.event || !prefs.registration) return true;
-      const reg = (m.registrations ?? []).find((r) => r.eventId === prefs.event);
+      if (!prefs.registration) return true;
+      const regs = shownRegs(m);
       switch (prefs.registration) {
-        case 'registered': return Boolean(reg) && reg.status !== 'cancelled';
-        case 'none': return !reg;
-        default: return reg?.status === prefs.registration;
+        case 'registered': return regs.some((r) => r.status !== 'cancelled');
+        case 'none': return regs.length === 0;
+        default: return regs.some((r) => r.status === prefs.registration);
       }
+    }
+
+    // SC / NSC / Sonderrollen: the roles and flags that actually occur in the list.
+    const participationFilter = document.getElementById('member-filter-participation');
+    function refreshParticipationFilter() {
+      const values = new Set();
+      for (const m of viewMembers) for (const r of m.registrations ?? []) {
+        values.add(`role:${r.conRole}`);
+        for (const f of r.flags ?? []) values.add(`flag:${f}`);
+      }
+      const label = (v) => (v.startsWith('role:') ? (CON_ROLE_LABELS[v.slice(5)] ?? v.slice(5)) : v.slice(5));
+      const sorted = [...values].sort((a, b) => label(a).localeCompare(label(b), 'de'));
+      if (prefs.participation && !values.has(prefs.participation)) prefs.participation = '';
+      participationFilter.innerHTML = `<option value="">Alle</option>${sorted.map((v) => `<option value="${escapeHtml(v)}"${v === prefs.participation ? ' selected' : ''}>${escapeHtml(label(v))}</option>`).join('')}`;
+    }
+
+    function memberMatchesParticipation(m) {
+      if (!prefs.participation) return true;
+      const [kind, value] = [prefs.participation.slice(0, prefs.participation.indexOf(':')), prefs.participation.slice(prefs.participation.indexOf(':') + 1)];
+      return shownRegs(m).some((r) => r.status !== 'cancelled' && (kind === 'role' ? r.conRole === value : (r.flags ?? []).includes(value)));
     }
 
     const memberMatchesKind = (m) => {
@@ -364,7 +396,10 @@
       switch (prefs.sort) {
         case 'email': return m.email ?? '';
         case 'group': return m.group?.name ?? '';
-        case 'status': return String(STATUS_RANK[m.status] ?? 9);
+        case 'participation': return participationLabels(m).join(', ');
+        case 'event': return shownRegs(m).map((r) => allEvents.find((e) => e.id === r.eventId)?.code || eventNameOf(r.eventId)).join(', ');
+        // Registration status in its natural order (Warteliste ... Abgesagt); no registration sinks to the bottom.
+        case 'status': { const regs = shownRegs(m); return regs.length ? String(Math.min(...regs.map((r) => STATUS_ORDER.indexOf(r.status))) + 10) : ''; }
         default: return `${m.lastName ?? ''} ${m.firstName ?? ''} ${m.name ?? ''}`;
       }
     }
@@ -375,6 +410,7 @@
         if (prefs.group && m.group?.name !== prefs.group) return false;
         if (!memberMatchesKind(m)) return false;
         if (!memberMatchesRegistration(m)) return false;
+        if (!memberMatchesParticipation(m)) return false;
         if (!term) return true;
         return [m.name, m.nickname, m.email, m.group?.name, m.managedBy?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
       });
@@ -392,7 +428,7 @@
     }
 
     function updateMemberSummary(shown) {
-      const filtersActive = Boolean(prefs.group || prefs.kind || (prefs.event && prefs.registration) || currentSearch.trim());
+      const filtersActive = Boolean(prefs.group || prefs.kind || prefs.event || prefs.registration || prefs.participation || currentSearch.trim());
       document.getElementById('member-count').textContent = filtersActive
         ? `${shown} von ${viewMembers.length} Mitgliedern`
         : `${viewMembers.length} Mitglieder`;
@@ -577,12 +613,10 @@
     kindFilter.addEventListener('change', () => { prefs.kind = kindFilter.value; savePrefs(); renderMembers(); });
     eventFilter.addEventListener('change', () => {
       prefs.event = eventFilter.value;
-      if (!prefs.event) prefs.registration = '';
-      registrationFilter.disabled = !prefs.event;
-      registrationFilter.value = prefs.event ? prefs.registration : '';
       savePrefs();
       renderMembers();
     });
+    participationFilter.addEventListener('change', () => { prefs.participation = participationFilter.value; savePrefs(); renderMembers(); });
     registrationFilter.addEventListener('change', () => { prefs.registration = registrationFilter.value; savePrefs(); renderMembers(); });
     sortSelect.addEventListener('change', () => {
       [prefs.sort, prefs.dir] = sortSelect.value.split(':');
@@ -599,12 +633,13 @@
       });
     });
     document.getElementById('member-filter-reset').addEventListener('click', () => {
-      prefs = { group: '', kind: '', event: '', registration: '', sort: 'name', dir: 'asc' };
+      prefs = { group: '', kind: '', event: '', registration: '', participation: '', sort: 'name', dir: 'asc' };
       currentSearch = '';
       searchInput.value = '';
       groupFilter.value = '';
       kindFilter.value = '';
       refreshEventFilter();
+      refreshParticipationFilter();
       sortSelect.value = 'name:asc';
       savePrefs();
       renderMembers();
@@ -653,6 +688,7 @@
     let canOverrideCheckin = false;
     // Only admins and moderators may create characters in other people's accounts.
     let canCreateForOthers = false;
+    let isAdminViewer = false;
     let editingMemberId = null;
     let currentView = 'active';
     let myUserId = null;
@@ -1064,6 +1100,7 @@
             <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${(r.flags ?? []).length ? ` <span class="sub">Sonderrollen: ${escapeHtml(r.flags.join(', '))}</span>` : ''}${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Charakter: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span></p>
             ${r.conRole === 'nsc' ? renderNscSummary(r.nscData) : ''}
             <div class="action-row">
+              ${canOverrideCheckin ? `<label class="sub">Rolle <select data-reg-role="${escapeHtml(r.eventId)}" data-prev-role="${escapeHtml(r.conRole)}" data-character="${escapeHtml(r.characterId ?? '')}" aria-label="Rolle ändern">${[['sc', 'SC'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga'], ['ticket', 'Direktanmeldung']].map(([key, label]) => `<option value="${key}" ${key === r.conRole ? 'selected' : ''}>${label}</option>`).join('')}</select></label>` : ''}
               ${canOverrideCheckin ? `<label class="sub">Status <select data-reg-status="${escapeHtml(r.eventId)}" data-prev-status="${escapeHtml(r.status)}" aria-label="Status ändern">${STATUS_ORDER.map((st) => `<option value="${st}" ${st === r.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[st])}</option>`).join('')}</select></label>` : ''}
               ${editableFields.length || eventFlagsOf(r.eventId).length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
             </div>
@@ -1095,6 +1132,23 @@
         renderCharactersTab(refreshed);
         await loadMembers();
       };
+      // SC <-> NSC and crew roles; the server checks the target limit (SC / NSC / total) and frees the old place.
+      detailRegistrations.querySelectorAll('[data-reg-role]').forEach((select) => select.addEventListener('change', async () => {
+        const previousRole = select.dataset.prevRole;
+        const conRole = select.value;
+        if (!confirm(`Rolle von „${previousRole}“ auf „${conRole}“ ändern?`)) {
+          select.value = previousRole;
+          return;
+        }
+        try {
+          // The character stays with the registration where the new role allows one.
+          await api.put(`/events/${select.dataset.regRole}/registrations/${editingMemberId}/con-role`, { conRole, characterId: ['sc', 'nsc'].includes(conRole) ? (select.dataset.character || undefined) : undefined });
+          notify('Rolle geändert.', 'success');
+        } catch (err) {
+          notify(err.message, 'error');
+        }
+        await reloadMember();
+      }));
       detailRegistrations.querySelectorAll('[data-reg-status]').forEach((select) => select.addEventListener('change', async () => {
         const previousStatus = select.dataset.prevStatus;
         const status = select.value;
@@ -1234,8 +1288,54 @@
         detailGroupWrap.style.display = 'none';
       }
 
+      setupMergeBox(member);
       detailDialog.showModal();
     }
+
+    // ---- Doppelte Konten zusammenführen (nur Admin) ----
+    const mergeBox = document.getElementById('merge-box');
+    const mergeSource = document.getElementById('merge-source');
+    const mergePreview = document.getElementById('merge-preview');
+    const mergeRun = document.getElementById('merge-run');
+
+    function setupMergeBox(member) {
+      mergeBox.hidden = !isAdminViewer;
+      mergeBox.open = false;
+      mergePreview.textContent = '';
+      mergeRun.disabled = true;
+      if (!isAdminViewer) return;
+      mergeSource.innerHTML = '<option value="">– bitte wählen –</option>' + viewMembers
+        .filter((m) => m.id !== member.id)
+        .sort((a, b) => fullName(a).localeCompare(fullName(b), 'de'))
+        .map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(fullName(m))}${m.email ? ` · ${escapeHtml(m.email)}` : ''}</option>`).join('');
+    }
+
+    mergeSource.addEventListener('change', async () => {
+      mergeRun.disabled = true;
+      mergePreview.textContent = '';
+      if (!mergeSource.value) return;
+      try {
+        const p = await api.get(`/members/merge-preview?keepId=${encodeURIComponent(editingMemberId)}&dropId=${encodeURIComponent(mergeSource.value)}`);
+        mergePreview.textContent = `Wandert hierher: ${p.registrations} Anmeldung(en), ${p.characters} Charakter(e), ${p.files} Datei(en), ${p.payments} Zahlung(en).`
+          + (p.conflicts.length ? ` Nicht möglich: Beide sind für ${p.conflicts.join(', ')} angemeldet – zuerst eine Anmeldung entfernen.` : '');
+        mergeRun.disabled = p.conflicts.length > 0;
+      } catch (err) { notify(err.message, 'error'); }
+    });
+
+    mergeRun.addEventListener('click', async () => {
+      const label = mergeSource.selectedOptions[0]?.textContent;
+      if (!mergeSource.value || !confirm(`„${label}“ wirklich in dieses Konto zusammenführen und danach löschen? Das kann nicht rückgängig gemacht werden.`)) return;
+      mergeRun.disabled = true;
+      try {
+        await api.post('/members/merge', { keepId: editingMemberId, dropId: mergeSource.value });
+        notify('Konten zusammengeführt.', 'success');
+        await loadMembers();
+        await openDetail(editingMemberId);
+      } catch (err) {
+        notify(err.message, 'error');
+        mergeRun.disabled = false;
+      }
+    });
 
     for (const id of ['detail-cancel', 'detail-abort']) {
       document.getElementById(id).addEventListener('click', () => {
@@ -1408,6 +1508,7 @@
       myAccountFields = account.accountFields ?? [];
       canOverrideCheckin = account.canOverrideCheckinStatus === true;
       canCreateForOthers = ['admin', 'moderator'].includes(account.group.key);
+      isAdminViewer = account.group.key === 'admin';
       document.getElementById('member-export').hidden = account.canExportMembers !== true;
       document.getElementById('member-import').hidden = account.group.key !== 'admin';
       myUserId = account.id;

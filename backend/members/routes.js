@@ -12,6 +12,7 @@ import { getEvent, listEvents } from '../events/repository.js';
 import { readJsonBody } from '../httpBody.js';
 import { listMembers, getMember, reactivateMember, deleteMember } from './repository.js';
 import { updateMemberAudited, deactivateChecked } from './actions.js';
+import { previewMerge, mergeAccounts } from './merge.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
 import { sendInvitationEmail, sendVerificationEmail, sendPasswordResetEmail, baseUrl } from '../auth/mailer.js';
 import { getAppSettings } from '../appSettings/repository.js';
@@ -158,6 +159,15 @@ router.post('/members/import', requireAuth(requireAdminGroup(async ({ req, user 
   return { status: 200, body: { applied: true, summary, rows: publicRows, ignoredColumns, invitations: toMail.length, emailed } };
 })));
 
+router.get('/members/merge-preview', requireAuth(requireAdminGroup(async ({ req }) => {
+  const { searchParams } = new URL(req.url, 'http://localhost');
+  const keepId = searchParams.get('keepId');
+  const dropId = searchParams.get('dropId');
+  if (!keepId || !dropId || keepId === dropId) return { status: 400, body: { error: 'Bitte zwei verschiedene Konten angeben.' } };
+  const preview = await previewMerge(keepId, dropId);
+  return preview ? { status: 200, body: preview } : { status: 404, body: { error: 'Konto nicht gefunden.' } };
+})));
+
 router.get('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ params, user }) => {
   const member = await getMember(params.id);
   if (!member) return { status: 404, body: { error: 'member not found' } };
@@ -201,6 +211,18 @@ router.post('/members/:id/reactivate', requireAuth(requireMenu('mitglieder')(asy
   const reactivated = await reactivateMember(params.id);
   if (!reactivated) return { status: 404, body: { error: 'member not found' } };
   return { status: 200, body: { reactivated: true } };
+})));
+
+// Merge a duplicate account into another one (admin only): the second account's registrations, characters, files and
+// payments move to the first, then it is deleted. The preview lists what would move and what blocks the merge.
+router.post('/members/merge', requireAuth(requireAdminGroup(async ({ req, user }) => {
+  const body = await readJsonBody(req);
+  if (!body || typeof body.keepId !== 'string' || typeof body.dropId !== 'string') return { status: 400, body: { error: 'keepId und dropId sind erforderlich.' } };
+  if (body.dropId.toLowerCase() === user.id.toLowerCase()) return { status: 400, body: { error: 'Das eigene Konto kann nicht in ein anderes zusammengeführt werden.' } };
+  const result = await mergeAccounts(body.keepId, body.dropId);
+  if (result.error) return { status: result.status, body: { error: result.error } };
+  await logAudit({ actorId: user.id, action: 'members.merged', subjectUserId: body.keepId, details: { mergedEmail: result.merged.dropEmail, mergedName: result.merged.dropName, registrations: result.merged.registrations } });
+  return { status: 200, body: result.merged };
 })));
 
 router.delete('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ params, user }) => {

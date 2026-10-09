@@ -968,10 +968,6 @@ document.getElementById('role-save').addEventListener('click', async () => {
   const payload = { conRole, flags };
   if (conRole === 'sc' || conRole === 'nsc') {
     payload.characterId = roleCharacterSelect.value || undefined;
-    if (conRole === 'sc' && !payload.characterId) {
-      notify('Für Teilnehmer (SC) wird ein Charakter benötigt.', 'error');
-      return;
-    }
     if (conRole === 'nsc') payload.nscData = collectNscFields(document.getElementById('role-nsc-fields'), nscSchema, canOverride);
   }
   if (conRole === 'sc' && p?.conRole === 'sc') {

@@ -85,6 +85,15 @@
         <label for="event-capacity">Plätze (geplant) <span style="opacity:0.6;font-size:12px;">optional, leer = unbegrenzt</span></label>
         <input id="event-hard-capacity" name="hardCapacity" type="number" min="1" placeholder="wie geplant">
         <label for="event-hard-capacity">Harte Obergrenze <span style="opacity:0.6;font-size:12px;">optional, ab hier gilt die Warteliste (leer = geplante Plätze)</span></label>
+        <p class="sub" style="margin-top:12px;">Zusätzlich getrennte Grenzen für SC und NSC. Die Gesamtgrenze oben gilt weiter; ein Platz muss in der Gesamtgrenze <em>und</em> in der Grenze der eigenen Rolle frei sein. Welche Rollen mitzählen, legst du unter Einstellungen fest (Helfer und Orga standardmäßig nicht).</p>
+        <input id="event-sc-capacity" name="scCapacity" type="number" min="1" placeholder="unbegrenzt">
+        <label for="event-sc-capacity">SC: Plätze (geplant) <span style="opacity:0.6;font-size:12px;">optional</span></label>
+        <input id="event-sc-hard-capacity" name="scHardCapacity" type="number" min="1" placeholder="wie geplant">
+        <label for="event-sc-hard-capacity">SC: Harte Obergrenze <span style="opacity:0.6;font-size:12px;">optional, ab hier Warteliste</span></label>
+        <input id="event-nsc-capacity" name="nscCapacity" type="number" min="1" placeholder="unbegrenzt">
+        <label for="event-nsc-capacity">NSC: Plätze (geplant) <span style="opacity:0.6;font-size:12px;">optional</span></label>
+        <input id="event-nsc-hard-capacity" name="nscHardCapacity" type="number" min="1" placeholder="wie geplant">
+        <label for="event-nsc-hard-capacity">NSC: Harte Obergrenze <span style="opacity:0.6;font-size:12px;">optional, ab hier Warteliste</span></label>
         <label><input type="checkbox" id="event-low-seats-notice" name="lowSeatsNotice"> Hinweis „Nur noch wenige Plätze verfügbar“ anzeigen</label>
         <input id="event-low-seats-from" name="lowSeatsFrom" type="number" min="1" placeholder="ab geplanter Platzzahl">
         <label for="event-low-seats-from">ab … belegten Plätzen <span style="opacity:0.6;font-size:12px;">leer = ab geplanter Platzzahl</span></label>
@@ -794,6 +803,10 @@ function startEdit(eventData) {
   form.elements.code.value = eventData.code ?? '';
   form.elements.capacity.value = eventData.capacity ?? '';
   form.elements.hardCapacity.value = eventData.hard_capacity ?? '';
+  form.elements.scCapacity.value = eventData.sc_capacity ?? '';
+  form.elements.scHardCapacity.value = eventData.sc_hard_capacity ?? '';
+  form.elements.nscCapacity.value = eventData.nsc_capacity ?? '';
+  form.elements.nscHardCapacity.value = eventData.nsc_hard_capacity ?? '';
   form.elements.lowSeatsNotice.checked = Boolean(eventData.low_seats_notice);
   form.elements.paymentsOpen.checked = Boolean(eventData.payments_open);
   setEventColor(eventData.color);
@@ -874,6 +887,10 @@ form.addEventListener('submit', async (event) => {
     capacity: capacityValue ? Number(capacityValue) : null,
     clearCapacity: true,
     hardCapacity: form.elements.hardCapacity.value ? Number(form.elements.hardCapacity.value) : null,
+    scCapacity: form.elements.scCapacity.value ? Number(form.elements.scCapacity.value) : null,
+    scHardCapacity: form.elements.scHardCapacity.value ? Number(form.elements.scHardCapacity.value) : null,
+    nscCapacity: form.elements.nscCapacity.value ? Number(form.elements.nscCapacity.value) : null,
+    nscHardCapacity: form.elements.nscHardCapacity.value ? Number(form.elements.nscHardCapacity.value) : null,
     lowSeatsNotice: form.elements.lowSeatsNotice.checked,
     paymentsOpen: form.elements.paymentsOpen.checked,
     color: eventColorSet ? form.elements.color.value : null,

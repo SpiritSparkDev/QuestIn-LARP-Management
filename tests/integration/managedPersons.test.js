@@ -128,7 +128,7 @@ test('a foreign account cannot read or edit another account\'s managed person (4
   }
 });
 
-test('PATCH /managed-persons/:id rejects an OT field the caller isn\'t permitted to set themselves', async () => {
+test('PATCH /managed-persons/:id lets a manager set any account field of their person, but never the role', async () => {
   const server = createServer().listen(0);
   try {
     const { port } = server.address();
@@ -140,14 +140,45 @@ test('PATCH /managed-persons/:id rejects an OT field the caller isn\'t permitted
     });
     const { id } = await createRes.json();
 
-    // 'mitglied' lacks 'medicalNotes' in its default accountFields (same
-    // fixture assumption /members/invite's existing tests already rely on).
+    // A manager acts for the people they manage: every account field may be set (like in the own account) ...
     const res = await fetch(`http://localhost:${port}/managed-persons/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ medicalNotes: 'sollte nicht ankommen' }),
+      body: JSON.stringify({ medicalNotes: 'Allergie: Nüsse' }),
     });
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 200);
+    // ... only the role never.
+    const asAdmin = await fetch(`http://localhost:${port}/managed-persons/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ group: 'admin' }),
+    });
+    assert.equal(asAdmin.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test('a form that submits every field works; only a filled role field is rejected', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('mitglied');
+    const send = (method, path, body) => fetch(`http://localhost:${port}${path}`, { method, headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body) });
+    // The data form submits every field, also the blank ones the manager's group may not set.
+    const blanks = { medicalNotes: '', phone: '', address: '', birthdate: null };
+
+    const created = await send('POST', '/managed-persons', { firstName: 'Leer', lastName: 'Felder', ...blanks });
+    assert.equal(created.status, 201);
+    const { id } = await created.json();
+
+    const patched = await send('PATCH', `/managed-persons/${id}`, { nickname: 'Neuer Rufname', ...blanks });
+    assert.equal(patched.status, 200);
+    assert.equal((await patched.json()).nickname, 'Neuer Rufname');
+
+    assert.equal((await send('PATCH', `/managed-persons/${id}`, { medicalNotes: 'echter Wert' })).status, 200);
+    assert.equal((await send('PATCH', `/managed-persons/${id}`, { group: 'admin' })).status, 400);
+    assert.equal((await send('POST', '/managed-persons', { firstName: 'Mit', lastName: 'Wert', group: 'admin' })).status, 400);
   } finally {
     server.close();
   }

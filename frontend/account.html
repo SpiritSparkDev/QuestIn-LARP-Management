@@ -90,7 +90,7 @@
                   <span class="group-feature-text">
                     <span class="group-feature-kicker">Für LARP-Gruppen</span>
                     <span class="group-feature-title">Gruppe oder weitere Charaktere anmelden</span>
-                    <span class="group-feature-desc">Melde Freunde, Familie oder deine ganze Gruppe gemeinsam an und verwalte Daten, Charaktere und Tickets an einem Ort.</span>
+                    <span class="group-feature-desc">Melde Freunde, Familie oder deine ganze Gruppe gemeinsam an und verwalte Daten, Charaktere und Tickets an einem Ort. Die Personen brauchen dafür keine E-Mail-Adresse und kein eigenes Konto.</span>
                   </span>
                   <input type="checkbox" id="dashboard-managed-persons-checkbox" class="group-feature-switch" role="switch">
                 </label>
@@ -140,6 +140,25 @@
         <div class="tab-panel" id="gruppe-tab" hidden>
           <h1>Gruppe</h1>
           <p class="sub">Deine Gruppe verwalten, einstellen und Leute einladen.</p>
+          <div class="card form-pad" id="group-enable-card" hidden>
+            <h2>Gruppe anmelden</h2>
+            <p class="sub">
+              Hier meldest du Familie, Freunde oder deine ganze Gruppe gemeinsam an. Die Personen brauchen dafür
+              <strong>keine E-Mail-Adresse und kein eigenes Konto</strong>, ein Name genügt. Schalte die Funktion ein, um loszulegen.
+            </p>
+            <label class="group-feature">
+              <span class="group-feature-icon" aria-hidden="true">⚔</span>
+              <span class="group-feature-text">
+                <span class="group-feature-kicker">Für LARP-Gruppen</span>
+                <span class="group-feature-title">Gruppen-Funktion einschalten</span>
+                <span class="group-feature-desc">Danach legst du Personen an, wählst ihre Charaktere und meldest alle zusammen an.</span>
+              </span>
+              <input type="checkbox" id="group-enable-checkbox" class="group-feature-switch" role="switch">
+            </label>
+            <p class="sub">
+              Hat dir eine Gruppenleitung einen Einladungslink geschickt, öffne ihn einfach. Das geht auch ohne den Schalter.
+            </p>
+          </div>
               <div class="group-steps" id="dashboard-managed-persons-section">
                 <div class="tabs" id="group-tabs">
                   <button type="button" class="tab-btn active" data-tab="group-members-tab">Gruppe</button>
@@ -148,6 +167,18 @@
                 </div>
                 <div class="tab-panel card form-pad" id="group-members-tab">
                   <h2>Mitglieder &amp; Anmeldung</h2>
+                  <div class="note-box" id="group-howto">
+                    <span class="material-symbols-outlined" aria-hidden="true">info</span>
+                    <div>
+                      <p><strong>So funktioniert die Gruppen-Anmeldung</strong></p>
+                      <ol>
+                        <li>Lege jede Person an. Ein Name genügt, <strong>E-Mail-Adresse und eigenes Konto sind nicht nötig</strong>.</li>
+                        <li>Hinterlege den Charakter der Person, oder reiche ihn später nach.</li>
+                        <li>Melde die Personen an: einzeln über ihre Karte oder alle auf einmal mit „Ganze Gruppe anmelden“.</li>
+                      </ol>
+                      <p class="sub">Eine angelegte Person gehört schon zu deiner Gruppe, ist aber <strong>noch nicht für ein Event angemeldet</strong>. Das steht in der Zeile „Anmeldung“ auf ihrer Karte.</p>
+                    </div>
+                  </div>
                   <p class="sub" id="group-members-tab-intro">Alle in deiner Gruppe: von dir angelegte Personen und eingeladene Verwalter mit ihren Personen. Melde sie über ihre Karte an – oder alle auf einmal.</p>
                   <p><button type="button" id="group-bulk-btn">Ganze Gruppe anmelden</button></p>
                   <div id="managed-persons-list"></div>
@@ -254,16 +285,16 @@
                   <div id="managed-person-create" class="field-grid">
                     <form class="card form-pad" data-managed-create="person">
                       <h4>Person anlegen</h4>
-                      <p class="sub">Für Mitspielende, Kinder oder andere Personen ohne eigenen Account.</p>
+                      <p class="sub">Für Mitspielende, Kinder oder andere Personen ohne eigenen Account. Ein Name genügt, eine E-Mail-Adresse brauchst du nicht.</p>
                       <div><input id="create-person-name" name="name" type="text" required><label for="create-person-name">Name</label></div>
-                      <div><input id="create-person-email" name="email" type="email"><label for="create-person-email">E-Mail (optional)</label></div>
+                      <div><input id="create-person-email" name="email" type="email"><label for="create-person-email">E-Mail (nur nötig, wenn die Person später selbst ein Konto bekommen soll)</label></div>
                       <button type="submit">Person anlegen</button>
                     </form>
                     <form class="card form-pad" data-managed-create="character">
                       <h4>Charakter anlegen</h4>
                       <p class="sub">Legt einen Spielercharakter samt Person dahinter an.</p>
                       <div><input id="create-character-name" name="name" type="text" required><label for="create-character-name">Name</label></div>
-                      <div><input id="create-character-email" name="email" type="email"><label for="create-character-email">E-Mail (optional)</label></div>
+                      <div><input id="create-character-email" name="email" type="email"><label for="create-character-email">E-Mail (nur nötig, wenn die Person später selbst ein Konto bekommen soll)</label></div>
                       <button type="submit">Charakter anlegen</button>
                     </form>
                   </div>
@@ -314,6 +345,17 @@
 
             <div class="save-bar"><button type="submit">Speichern</button></div>
           </form>
+
+          <div class="card form-pad" id="password-card">
+            <h2>Passwort ändern</h2>
+            <p class="sub">Wähle ein neues Passwort (mindestens 8 Zeichen). Danach bist du auf deinen anderen Geräten abgemeldet.</p>
+            <form id="password-form" autocomplete="off">
+              <div><input id="password-current" name="currentPassword" type="password" autocomplete="current-password" required><label for="password-current">Aktuelles Passwort</label></div>
+              <div><input id="password-new" name="newPassword" type="password" autocomplete="new-password" minlength="8" required><label for="password-new">Neues Passwort</label></div>
+              <div><input id="password-repeat" name="repeat" type="password" autocomplete="new-password" minlength="8" required><label for="password-repeat">Neues Passwort wiederholen</label></div>
+              <div class="save-bar"><button type="submit">Passwort ändern</button></div>
+            </form>
+          </div>
 
           <div class="card form-pad">
             <h2>Meine Dateien</h2>
@@ -1335,8 +1377,8 @@
     let managedPersons = [];
 
     function managedPersonStatusLabel(p) {
-      if (!p.email) return "Platzhalter (keine E-Mail hinterlegt)";
-      return "Platzhalter";
+      if (!p.email) return "Ohne eigenes Konto (keine E-Mail nötig)";
+      return "Ohne eigenes Konto";
     }
 
     // No managed persons yet: the whole section stays behind an opt-in
@@ -1367,6 +1409,11 @@
         if (setGroupMenuEnabled(true)) renderNav();
       }
       document.getElementById("dashboard-managed-persons-toggle").style.display = hasAny || navAccount?.groupMemberOnly ? "none" : "";
+      // Group tab: the full view once the feature is in use or switched on, otherwise just the switch.
+      const groupOn = hasAny || navAccount?.groupMemberOnly || groupMenuEnabled();
+      document.getElementById("group-enable-card").hidden = groupOn;
+      document.getElementById("dashboard-managed-persons-section").hidden = !groupOn;
+      document.getElementById("group-enable-checkbox").checked = false;
       const summary = document.getElementById("dashboard-group-summary");
       summary.style.display = hasAny ? "" : "none";
       const parts = [`${managedPersons.length} verwaltete ${managedPersons.length === 1 ? "Person" : "Personen"}`];
@@ -1378,12 +1425,50 @@
     document.getElementById("dashboard-managed-persons-checkbox").addEventListener("change", (event) => {
       setGroupMenuEnabled(event.target.checked);
       renderNav();
+      updateManagedPersonsDashboardVisibility();
       goToTab(event.target.checked ? "gruppe" : "dashboard");
+    });
+    document.getElementById("group-enable-checkbox").addEventListener("change", (event) => {
+      if (!event.target.checked) return;
+      setGroupMenuEnabled(true);
+      document.getElementById("dashboard-managed-persons-checkbox").checked = true;
+      renderNav();
+      updateManagedPersonsDashboardVisibility();
     });
     document.getElementById("dashboard-group-link").addEventListener("click", () => goToTab("gruppe"));
 
+    document.getElementById("password-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      if (form.elements.newPassword.value !== form.elements.repeat.value) {
+        notify("Die beiden neuen Passwörter stimmen nicht überein.", "error");
+        return;
+      }
+      try {
+        await api.put("/account/password", { currentPassword: form.elements.currentPassword.value, newPassword: form.elements.newPassword.value });
+        form.reset();
+        notify("Passwort geändert.", "success");
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
     let managedPersonCharacters = {};
+    let managedPersonRegistrations = {};
     let ownCardsHtml = "";
+
+    // Where this person is registered. Independent of the character list: a registration can exist without
+    // a character yet ("Charakter folgt"), then the character card alone says "Noch keinem Event zugeordnet".
+    function registrationLines(personId) {
+      const regs = managedPersonRegistrations[personId];
+      if (regs === undefined) return '<p class="sub mp-empty">Wird geladen …</p>';
+      if (regs.length === 0) return '<p class="sub mp-empty">Für kein Event angemeldet.</p>';
+      return regs.map((r) => {
+        const role = CON_ROLE_LABELS[r.conRole] ?? r.conRole;
+        const character = ["sc", "nsc"].includes(r.conRole) ? (r.characterName ? ` · ${escapeHtml(r.characterName)}` : " · Charakter folgt") : "";
+        return `<p class="mp-char"><span class="mp-char-name">${escapeHtml(r.eventName)}</span><span class="mp-char-status">${escapeHtml(role)}${character} · <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(statusLabel(r.status, r.conPayer))}</span></span></p>`;
+      }).join("");
+    }
 
     function renderManagedPersonsList() {
       updateManagedPersonsDashboardVisibility();
@@ -1409,7 +1494,11 @@
           <h3>${escapeHtml(p.name)}</h3>
           <p class="sub">${escapeHtml(managedPersonStatusLabel(p))}</p>
         </div>
-        <span class="mp-origin" title="Von dir angelegt – du verwaltest diese Person"><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>Angelegt</span>
+        <span class="mp-origin" title="Von dir angelegt, du verwaltest diese Person. Angelegt heißt noch nicht angemeldet: siehe Zeile Anmeldung."><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>Angelegt</span>
+      </div>
+      <div class="mp-chars">
+        <span class="mp-chars-label">Anmeldung</span>
+        ${registrationLines(p.id)}
       </div>
       <div class="mp-chars">
         <span class="mp-chars-label">Charaktere</span>
@@ -1762,12 +1851,12 @@
           api.get(`/managed-persons/${p.id}/characters`).catch(() => []),
           api.get(`/managed-persons/${p.id}/registrations`).catch(() => []),
         ]);
-        return { ...p, chars, registered: regs.some((r) => r.eventId === eventId) };
+        return { ...p, chars, registration: regs.find((r) => r.eventId === eventId) ?? null };
       }));
       box.innerHTML = bulkRows.length === 0
         ? '<p class="sub">Noch keine Personen in der Gruppe.</p>'
         : bulkRows.map((p, i) => {
-          if (p.registered) return `<div class="claim-result"><div class="claim-result-info"><strong>${escapeHtml(p.name)}</strong><span class="sub">Bereits angemeldet</span></div></div>`;
+          if (p.registration) return `<div class="claim-result"><div class="claim-result-info"><strong>${escapeHtml(p.name)}</strong><span class="sub">Bereits angemeldet: ${escapeHtml(statusLabel(p.registration.status, p.registration.conPayer))}${["sc", "nsc"].includes(p.registration.conRole) && !p.registration.characterName ? ", Charakter folgt" : ""}</span></div></div>`;
           return `<div class="claim-result"><div class="claim-result-info"><span><input type="checkbox" data-bulk-person="${i}" checked> <strong>${escapeHtml(p.name)}</strong></span></div><select data-bulk-char="${i}">${p.chars.length ? "" : '<option value="">Charakter folgt später</option>'}${p.chars.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join("")}</select></div>`;
         }).join("");
     }
@@ -1878,14 +1967,15 @@
       renderManagedPersonsList();
       // Characters arrive after the first paint so a slow/failed lookup
       // never hides the persons themselves.
-      const lists = await Promise.all(
-        managedPersons.map((p) =>
-          api.get(`/managed-persons/${p.id}/characters`).catch(() => []),
-        ),
-      );
+      const [lists, registrationLists] = await Promise.all([
+        Promise.all(managedPersons.map((p) => api.get(`/managed-persons/${p.id}/characters`).catch(() => []))),
+        Promise.all(managedPersons.map((p) => api.get(`/managed-persons/${p.id}/registrations`).catch(() => []))),
+      ]);
       managedPersonCharacters = {};
+      managedPersonRegistrations = {};
       managedPersons.forEach((p, i) => {
         managedPersonCharacters[p.id] = lists[i];
+        managedPersonRegistrations[p.id] = registrationLists[i];
       });
       renderManagedPersonsList();
     }
@@ -2134,7 +2224,7 @@
     otFieldsContainer.addEventListener("change", applyPriceGroupSuggestion);
     window.addEventListener("hashchange", applyPriceGroupSuggestion);
     // SC/NSC is part of the rules: look again after the role cards have switched.
-    document.querySelectorAll("#registration-role-tabs .role-card").forEach((btn) => btn.addEventListener("click", () => setTimeout(applyPriceGroupSuggestion, 0)));
+    document.querySelectorAll("#registration-role-tabs .role-card").forEach((btn) => btn.addEventListener("click", () => setTimeout(() => { applyPriceGroupSuggestion(); updateEventStatusBadge(); }, 0)));
 
     // Bookable extras of the selected event (hut, vehicle pitch, ...).
     const registrationExtrasContainer = document.getElementById("registration-extras");
@@ -2216,7 +2306,9 @@
     const eventStatusBadge = document.getElementById("event-status-badge");
     function updateEventStatusBadge() {
       const event = events.find((e) => e.id === eventSelect.value);
-      document.getElementById("event-low-seats-badge").hidden = !(event?.is_active && event.low_seats);
+      // Few places left overall, or in the limit of the chosen role (SC / NSC).
+      const roleLow = isNscRoleSelected() ? event?.low_seats_nsc : event?.low_seats_sc;
+      document.getElementById("event-low-seats-badge").hidden = !(event?.is_active && (event.low_seats || roleLow));
       if (!event) {
         eventStatusBadge.textContent = "";
         eventStatusBadge.className = "badge";
@@ -3372,7 +3464,8 @@
       accountForm.elements.nickname.value = account.nickname ?? "";
       document.getElementById("keepDataConsent").checked = account.keepDataConsent === true;
       accountSchema = await api.get("/account-schema");
-      managedPersonSchema = accountSchema.filter((field) => account.accountFields.includes(field.key));
+      // The manager acts for their people: every account field (the server only keeps the role closed).
+      managedPersonSchema = accountSchema;
       accountOtFieldsContainer.innerHTML = accountSchema
         .map((field) => renderAccountFieldInput(field, account[field.key], {
           sealedBadge: ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>',

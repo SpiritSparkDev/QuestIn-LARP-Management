@@ -5,8 +5,11 @@ import { readJsonBody } from '../httpBody.js';
 import {
   getAppSettings, setAppSettings, getUploadedLogo, setLogo, clearLogo,
   getUploadedTicketBackground, setTicketBackground, clearTicketBackground,
-  getUploadedBackgroundImage, setBackgroundImage, clearBackgroundImage,
+  getUploadedBackgroundImage, setBackgroundImage, clearBackgroundImage, getCapacityRoles, setCapacityRoles,
 } from './repository.js';
+import { ALL_CON_ROLES } from '../registrations/capacity.js';
+import { maybePromoteFromWaitlist } from '../registrations/repository.js';
+import { query } from '../db.js';
 import { sendComingSoonReminders } from '../comingSoon/notify.js';
 
 const ALLOWED_THEME_MODES = ['light', 'dark'];
@@ -36,6 +39,21 @@ router.get('/app-settings', async () => {
   const settings = await getAppSettings();
   return { status: 200, body: settings };
 });
+
+// Admin: which con roles count against the participant limits (default SC, NSC and direct registrations).
+router.get('/admin/settings/capacity-roles', requireAuth(requireAdminGroup(async () => ({ status: 200, body: { roles: await getCapacityRoles(), all: ALL_CON_ROLES } }))));
+
+router.put('/admin/settings/capacity-roles', requireAuth(requireAdminGroup(async ({ req }) => {
+  const body = await readJsonBody(req);
+  if (body === null || !Array.isArray(body.roles) || body.roles.some((role) => !ALL_CON_ROLES.includes(role))) {
+    return { status: 400, body: { error: `roles must be a list of: ${ALL_CON_ROLES.join(', ')}` } };
+  }
+  const roles = await setCapacityRoles([...new Set(body.roles)]);
+  // Fewer counted roles can free places: let the waiting people move up everywhere.
+  const { rows } = await query("SELECT DISTINCT event_id FROM registrations WHERE status = 'waitlisted'");
+  for (const row of rows) await maybePromoteFromWaitlist(row.event_id);
+  return { status: 200, body: { roles } };
+})));
 
 router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) => {
   const body = await readJsonBody(req);

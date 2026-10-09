@@ -156,10 +156,23 @@ function validateLimits({ capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom }
   return null;
 }
 
+// Separate limits for SC and NSC (planned places + hard limit each), same rules as the total.
+function validateRoleLimits(limits) {
+  for (const role of ['sc', 'nsc']) {
+    const planned = limits[`${role}Capacity`];
+    const hard = limits[`${role}HardCapacity`];
+    const bad = (v) => v !== undefined && v !== null && (!Number.isInteger(v) || v < 1);
+    if (bad(planned) || bad(hard)) return `${role}Capacity and ${role}HardCapacity must be positive integers or null`;
+    if (hard != null && planned == null) return `${role}HardCapacity requires ${role}Capacity`;
+    if (hard != null && hard < planned) return `${role}HardCapacity must be >= ${role}Capacity`;
+  }
+  return null;
+}
+
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
+  const { name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
@@ -168,6 +181,8 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   }
   const limitError = validateLimits({ capacity: capacity ?? null, hardCapacity: hardCapacity ?? null, lowSeatsNotice, lowSeatsFrom });
   if (limitError) return { status: 400, body: { error: limitError } };
+  const roleLimitError = validateRoleLimits({ scCapacity, scHardCapacity, nscCapacity, nscHardCapacity });
+  if (roleLimitError) return { status: 400, body: { error: roleLimitError } };
   if (paymentsOpen !== undefined && typeof paymentsOpen !== 'boolean') return { status: 400, body: { error: 'paymentsOpen must be a boolean' } };
   const labelError = validateLabel({ color });
   if (labelError) return { status: 400, body: { error: labelError } };
@@ -188,7 +203,7 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   if (endDateError) return { status: 400, body: { error: endDateError } };
   const urlError = validateMapUrls({ mapsUrl, osmUrl });
   if (urlError) return { status: 400, body: { error: urlError } };
-  const event = await createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
+  const event = await createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
   return { status: 201, body: event };
 })));
 
@@ -237,6 +252,13 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
     lowSeatsNotice: body.lowSeatsNotice, lowSeatsFrom: body.lowSeatsFrom,
   });
   if (limitError) return { status: 400, body: { error: limitError } };
+  const roleLimitError = validateRoleLimits({
+    scCapacity: body.scCapacity !== undefined ? body.scCapacity : before.sc_capacity,
+    scHardCapacity: body.scHardCapacity !== undefined ? body.scHardCapacity : before.sc_hard_capacity,
+    nscCapacity: body.nscCapacity !== undefined ? body.nscCapacity : before.nsc_capacity,
+    nscHardCapacity: body.nscHardCapacity !== undefined ? body.nscHardCapacity : before.nsc_hard_capacity,
+  });
+  if (roleLimitError) return { status: 400, body: { error: roleLimitError } };
   if (body.paymentsOpen !== undefined && typeof body.paymentsOpen !== 'boolean') return { status: 400, body: { error: 'paymentsOpen must be a boolean' } };
   const labelError = validateLabel(body);
   if (labelError) return { status: 400, body: { error: labelError } };
@@ -251,9 +273,9 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   }
   const event = await updateEvent(params.id, body);
 
-  const effective = (c) => (c === null ? Infinity : c);
-  const limitOf = (e) => effective(e.hard_capacity ?? e.capacity);
-  if (limitOf(event) > limitOf(before)) {
+  // Any limit may have grown (total, SC or NSC): let waiting people move up wherever there is room now.
+  const limitFields = ['capacity', 'hard_capacity', 'sc_capacity', 'sc_hard_capacity', 'nsc_capacity', 'nsc_hard_capacity'];
+  if (limitFields.some((field) => event[field] !== before[field])) {
     await maybePromoteFromWaitlist(params.id);
   }
   return { status: 200, body: await getEvent(params.id) };

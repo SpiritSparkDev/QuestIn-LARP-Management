@@ -17,6 +17,7 @@ import { validateCharacterData } from '../events/schemaValidation.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { updateCharacter } from '../characters/repository.js';
 import { logAudit } from '../audit/repository.js';
+import { COUNTED_STATUSES, loadCapacity, capacityBlock, withAdded, withRemoved, BLOCK_MESSAGES } from './capacity.js';
 
 // 'ticket' = a self-service guest ticket bought via the external ticket
 // widget (backend/guestRegistrations/routes.js) -- no character, distinct
@@ -202,7 +203,7 @@ function resolvePriceGroup(event, priceGroup) {
   };
 }
 
-export const COUNTED_STATUSES = ['pending', 'confirmed', 'checked_in', 'checked_out'];
+export { COUNTED_STATUSES };
 
 // One bed in one of the event's lodgings (add-on "Unterkünfte"; the lodgings
 // themselves are managed in backend/lodging).
@@ -357,16 +358,9 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
 
   try {
     const registration = await withTransaction(async (client) => {
-      const { rows: eventRows } = await client.query('SELECT COALESCE(hard_capacity, capacity) AS capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
-      const capacity = eventRows[0]?.capacity ?? null;
-      let status = 'pending';
-      if (capacity !== null) {
-        const { rows: countRows } = await client.query(
-          'SELECT count(*)::int AS count FROM registrations WHERE event_id = $1 AND status = ANY($2::text[])',
-          [eventId, COUNTED_STATUSES]
-        );
-        if (countRows[0].count >= capacity) status = 'waitlisted';
-      }
+      // Total limit and the SC / NSC limit; roles that do not count (crew) never wait.
+      const capacityState = await loadCapacity((sql, params) => client.query(sql, params), eventId, { lockEvent: true });
+      const status = capacityBlock(capacityState, conRole) ? 'waitlisted' : 'pending';
       await assertExtrasCapacity(client, event, resolvedExtras);
       // Waitlisted people don't hold a bed (they would take one at promotion).
       const lodging = status === 'waitlisted' ? { lodging: null, lodgingCents: 0, details: null } : requestedLodging;
@@ -564,7 +558,7 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
   // but resolveFlags rejecting any non-empty request in that case is the
   // safe default either way).
   const event = await getEvent(eventId);
-  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId);
+  const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId, { allowMissingSc: true });
   const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId, resolvedCharacterId);
   const resolvedNscData = await resolveNscData(conRole, nscData);
 
@@ -587,6 +581,20 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
     resolvedFlags = currentFlagsRows[0]?.flags ?? [];
   }
 
+  // A role change moves the person between the limits: the target limit must have room (this registration
+  // leaves its old one first), and the old role's place is free for the waitlist afterwards.
+  const { rows: before } = await query('SELECT con_role, status FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+  const roleChanged = before.length > 0 && before[0].con_role !== conRole;
+  if (roleChanged && COUNTED_STATUSES.includes(before[0].status)) {
+    const state = await loadCapacity((sql, params) => query(sql, params), eventId);
+    const block = capacityBlock(withRemoved(state, before[0].con_role), conRole);
+    if (block) {
+      const err = new Error(`${BLOCK_MESSAGES[block]} Der Wechsel zu „${conRole}“ ist erst möglich, wenn dort ein Platz frei wird.`);
+      err.code = 'CAPACITY_FULL';
+      throw err;
+    }
+  }
+
   const { rows } = await query(
     `UPDATE registrations SET con_role = $3, character_id = $4, nsc_available = $5, nsc_character_id = $6, flags = $7,
        nsc_data = CASE WHEN $3 <> 'nsc' OR $4::uuid IS NOT NULL THEN '{}'::jsonb WHEN $8::boolean THEN $9::jsonb ELSE nsc_data END
@@ -600,6 +608,7 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
     throw err;
   }
   if (resolvedCharacterId && resolvedNscData) await writeNscDataToCharacter(resolvedCharacterId, userId, resolvedNscData, requestingUser);
+  if (roleChanged) await maybePromoteFromWaitlist(eventId);
   return rows[0];
 }
 
@@ -669,29 +678,24 @@ export async function maybePromoteFromWaitlist(eventId) {
   if (!waitlistAutoPromote) return;
 
   const promotedUserIds = await withTransaction(async (client) => {
-    const { rows: eventRows } = await client.query('SELECT COALESCE(hard_capacity, capacity) AS capacity FROM events WHERE id = $1 FOR UPDATE', [eventId]);
-    const capacity = eventRows[0]?.capacity ?? null;
-    if (capacity === null) return [];
-
+    // Oldest first, but each person only moves up if THEIR limit has room: a waiting NSC must not
+    // block an SC (or the other way round) when only one of the two limits is full.
+    let state = await loadCapacity((sql, params) => client.query(sql, params), eventId, { lockEvent: true });
+    // No limit at all: nobody can be waiting because of one (a manual waitlist entry stays what it is).
+    if (state.limits.total === null && state.limits.sc === null && state.limits.nsc === null) return [];
+    const { rows: waiting } = await client.query(
+      "SELECT user_id, con_role FROM registrations WHERE event_id = $1 AND status = 'waitlisted' ORDER BY created_at ASC",
+      [eventId]
+    );
     const promoted = [];
-    for (;;) {
-      const { rows: countRows } = await client.query(
-        'SELECT count(*)::int AS count FROM registrations WHERE event_id = $1 AND status = ANY($2::text[])',
-        [eventId, COUNTED_STATUSES]
-      );
-      if (countRows[0].count >= capacity) break;
-
-      const { rows: nextRows } = await client.query(
-        "SELECT user_id FROM registrations WHERE event_id = $1 AND status = 'waitlisted' ORDER BY created_at ASC LIMIT 1",
-        [eventId]
-      );
-      if (nextRows.length === 0) break;
-
+    for (const candidate of waiting) {
+      if (capacityBlock(state, candidate.con_role)) continue;
       await client.query(
         "UPDATE registrations SET status = 'pending' WHERE event_id = $1 AND user_id = $2 AND status = 'waitlisted'",
-        [eventId, nextRows[0].user_id]
+        [eventId, candidate.user_id]
       );
-      promoted.push(nextRows[0].user_id);
+      state = withAdded(state, candidate.con_role);
+      promoted.push(candidate.user_id);
     }
     return promoted;
   });
