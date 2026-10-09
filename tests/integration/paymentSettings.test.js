@@ -106,7 +106,7 @@ test('GET /payment-settings returns only bank fields to any logged-in user', asy
     const res = await fetch(`http://localhost:${port}/payment-settings`, { headers: { Cookie: memberCookie } });
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.', bankQrEnabled: true, contactEmail: null, stripeMethods: ['card', 'paypal', 'bank_transfer'], sumupEnabled: false, paypalEnabled: false, paypalMeUrl: null });
+    assert.deepEqual(body, { bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.', bankQrEnabled: true, contactEmail: null, stripeMethods: ['card', 'paypal', 'bank_transfer'], sumupEnabled: false, paypalEnabled: false, paypalButtonsClientId: null, paypalMeUrl: null });
     await fetch(`http://localhost:${port}/admin/settings/payments`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
       body: JSON.stringify({ bankQrEnabled: false }),

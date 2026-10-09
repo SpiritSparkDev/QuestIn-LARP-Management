@@ -331,6 +331,11 @@
               />
               <label for="paypal-secret">Secret</label>
               <label
+                ><input type="checkbox" id="paypal-buttons" name="paypalButtonsEnabled" />
+                PayPal-Buttons zusätzlich auf unserer Seite zeigen (lädt ein
+                Skript von PayPal)</label
+              >
+              <label
                 ><input type="checkbox" id="paypal-sandbox" name="paypalSandbox" />
                 Sandbox (Testmodus, es wird kein echtes Geld bewegt)</label
               >
@@ -1032,6 +1037,7 @@
         contactForm.elements.contactEmail.value = settings.contactEmail ?? "";
         stripeForm.elements.stripeEnabled.checked = settings.stripeEnabled === true;
         paypalForm.elements.paypalEnabled.checked = settings.paypalEnabled === true;
+        paypalForm.elements.paypalButtonsEnabled.checked = settings.paypalButtonsEnabled === true;
         sumupForm.elements.sumupEnabled.checked = settings.sumupEnabled === true;
         bankForm.elements.bankEnabled.checked = settings.bankEnabled === true;
         paypalMeForm.elements.paypalMeEnabled.checked = settings.paypalMeEnabled === true;
@@ -1087,6 +1093,7 @@
           paypalSecret: paypalForm.elements.paypalSecret.value,
           paypalSandbox: paypalForm.elements.paypalSandbox.checked,
           paypalEnabled: paypalForm.elements.paypalEnabled.checked,
+          paypalButtonsEnabled: paypalForm.elements.paypalButtonsEnabled.checked,
         }),
       );
       sumupForm.addEventListener("submit", (event) =>

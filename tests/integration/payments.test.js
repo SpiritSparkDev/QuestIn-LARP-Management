@@ -729,6 +729,68 @@ test('PayPal order asks for the PayPal login first and sends the exact amount in
   }
 });
 
+test('PayPal buttons: order only when switched on and for the right person; capture books once and only a covering payment', async () => {
+  const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
+  await setPaymentSettings({ paypalClientId: 'cid-public', paypalSecret: 'secret', paypalEnabled: true, paypalButtonsEnabled: false });
+  const eventId = await makeEvent();
+  const userId = await makeUser();
+  const strangerId = await makeUser();
+  await makeRegistration(eventId, userId);
+  await setAmountDue(eventId, userId, 4500);
+
+  const realFetch = globalThis.fetch;
+  let created;
+  let captureBody;
+  globalThis.fetch = (url, init) => {
+    const u = String(url);
+    if (u.includes('/v1/oauth2/token')) return Promise.resolve(new Response(JSON.stringify({ access_token: 'tok' }), { status: 200 }));
+    if (u.endsWith('/v2/checkout/orders')) {
+      created = JSON.parse(init.body);
+      return Promise.resolve(new Response(JSON.stringify({ id: 'BTNORDER0001', links: [] }), { status: 201 }));
+    }
+    if (u.includes('/v2/checkout/orders/BTNORDER')) return Promise.resolve(new Response(JSON.stringify(captureBody), { status: 200 }));
+    return realFetch(url, init);
+  };
+  try {
+    await withTestServer(async (port) => {
+      const settingsFor = async (c) => (await realFetch(`http://localhost:${port}/payment-settings`, { headers: { Cookie: c } })).json();
+      const makeOrder = (c) => realFetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/paypal-order`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: c }, body: '{}' });
+      const owner = await makeSession(userId);
+
+      assert.equal((await makeOrder(owner)).status, 409); // buttons not switched on
+      assert.equal((await settingsFor(owner)).paypalButtonsClientId, null);
+
+      await setPaymentSettings({ paypalButtonsEnabled: true });
+      assert.equal((await settingsFor(owner)).paypalButtonsClientId, 'cid-public');
+      assert.equal((await makeOrder(await makeSession(strangerId))).status, 403);
+
+      const ok = await makeOrder(owner);
+      assert.equal(ok.status, 200);
+      assert.equal((await ok.json()).orderId, 'BTNORDER0001');
+      assert.equal(created.payment_source, undefined); // no redirect for the buttons
+      assert.equal(created.purchase_units[0].amount.value, '45.00');
+
+      const capture = (orderId) => realFetch(`http://localhost:${port}/paypal/capture`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) });
+      const paid = async () => (await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].paid_at;
+      assert.equal((await capture('not a valid id!')).status, 400);
+      assert.equal((await capture('UNKNOWNORDER1')).status, 404);
+
+      captureBody = { status: 'COMPLETED', purchase_units: [{ custom_id: `${eventId}:${userId}`, payments: { captures: [{ id: 'CAPB1', status: 'COMPLETED', amount: { currency_code: 'EUR', value: '10.00' } }] } }] };
+      assert.equal((await capture('BTNORDER0001')).status, 409);
+      assert.equal(await paid(), null);
+
+      captureBody.purchase_units[0].payments.captures[0].amount.value = '45.00';
+      assert.equal((await capture('BTNORDER0001')).status, 200);
+      assert.notEqual(await paid(), null);
+      assert.equal((await capture('BTNORDER0001')).status, 200); // idempotent
+      assert.equal((await query('SELECT count(*)::int AS n FROM payments WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].n, 1);
+    });
+  } finally {
+    globalThis.fetch = realFetch;
+    await query('UPDATE payment_settings SET paypal_client_id = NULL, paypal_secret_enc = NULL, paypal_enabled = false, paypal_buttons_enabled = false');
+  }
+});
+
 test('PayPal return: books only a COMPLETED capture of this registration that covers the due amount, once', async () => {
   const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
   await setPaymentSettings({ paypalClientId: 'cid', paypalSecret: 'secret', paypalEnabled: true });

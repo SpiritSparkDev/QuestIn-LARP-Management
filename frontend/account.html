@@ -614,6 +614,7 @@
     <p class="lede">Zu zahlen: <strong id="payment-dialog-amount"></strong></p>
     <div class="payment-methods">
       <p id="payment-none-hint" class="sub" hidden>Aktuell ist keine Zahlungsmethode eingerichtet. Bitte melde dich bei der Orga<span id="payment-contact"></span>.</p>
+      <div id="paypal-buttons-wrap" hidden><p class="sub">Direkt mit PayPal, Lastschrift oder Karte:</p><div id="paypal-button-container"></div></div>
       <button type="button" id="payment-paypaldirect-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span><span>Per PayPal zahlen</span></button>
       <button type="button" id="payment-paypal-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span><span>Per PayPal zahlen</span></button>
       <button type="button" id="payment-card-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">credit_card</span><span>Per Kreditkarte</span></button>
@@ -1024,6 +1025,49 @@
     let payingEventId = null;
     let payingRegistration = null;
 
+    // PayPal's own buttons (their script). The browser only asks us for "an order for this registration" and
+    // reports "approved"; amount, owner and booking stay on our server.
+    let paypalSdkPromise = null;
+    function loadPaypalSdk(clientId) {
+      if (!paypalSdkPromise) {
+        paypalSdkPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=EUR&intent=capture&components=buttons&locale=de_DE`;
+          script.onload = () => resolve(window.paypal);
+          script.onerror = () => { paypalSdkPromise = null; reject(new Error("PayPal konnte nicht geladen werden.")); };
+          document.head.append(script);
+        });
+      }
+      return paypalSdkPromise;
+    }
+    async function renderPaypalButtons(clientId) {
+      const wrap = document.getElementById("paypal-buttons-wrap");
+      const container = document.getElementById("paypal-button-container");
+      container.innerHTML = "";
+      wrap.hidden = false;
+      try {
+        const paypal = await loadPaypalSdk(clientId);
+        await paypal.Buttons({
+          style: { layout: "vertical", shape: "rect", label: "pay" },
+          createOrder: async () => (await api.post(`/events/${payingEventId}/registrations/${currentUserId}/paypal-order`, {})).orderId,
+          onApprove: async (data) => {
+            try {
+              await api.post("/paypal/capture", { orderId: data.orderID });
+              paymentDialog.close();
+              notify("Danke! Deine Zahlung ist eingegangen.", "success");
+              await loadRegistrations();
+            } catch (err) {
+              notify(err.message, "error");
+            }
+          },
+          onError: () => notify("Bei PayPal ist etwas schiefgegangen. Bitte versuche es erneut.", "error"),
+        }).render(container);
+      } catch (err) {
+        wrap.hidden = true;
+        notify(err.message, "error");
+      }
+    }
+
     async function openPaymentDialog(eventId, registration) {
       payingEventId = eventId;
       payingRegistration = registration;
@@ -1036,6 +1080,7 @@
       ["payment-transfer-btn", "payment-paypaldirect-btn", "payment-paypal-btn", "payment-card-btn", "payment-klarna-btn", "payment-sepa-btn", "payment-stripe-bank-btn", "payment-bank-btn", "payment-girocode-btn", "payment-sumup-btn", "payment-paypalme-btn"].forEach((id) => show(id, false));
       document.getElementById("payment-none-hint").hidden = true;
       document.getElementById("payment-transfer-note").hidden = true;
+      document.getElementById("paypal-buttons-wrap").hidden = true;
       try {
         const paymentSettings = await api.get("/payment-settings");
         const stripeMethods = paymentSettings.stripeMethods ?? [];
@@ -1048,6 +1093,7 @@
         show("payment-klarna-btn", stripeMethods.includes("klarna"));
         show("payment-sepa-btn", stripeMethods.includes("sepa_debit"));
         show("payment-paypaldirect-btn", paypalOn);
+        if (paymentSettings.paypalButtonsClientId) renderPaypalButtons(paymentSettings.paypalButtonsClientId);
         // Two PayPal rows need telling apart; a single one is just "Per PayPal zahlen".
         document.querySelector("#payment-paypal-btn span:last-child").textContent = paypalOn ? "Per PayPal (über Stripe)" : "Per PayPal zahlen";
         show("payment-bank-btn", bankOn);
@@ -1064,7 +1110,7 @@
         show("payment-sumup-btn", paymentSettings.sumupEnabled === true);
         const contact = document.getElementById("payment-contact");
         contact.textContent = paymentSettings.contactEmail ? ` (${paymentSettings.contactEmail})` : "";
-        document.getElementById("payment-none-hint").hidden = stripeOn || bankOn || paypalOn || Boolean(paypalMeUrl) || paymentSettings.sumupEnabled === true;
+        document.getElementById("payment-none-hint").hidden = stripeOn || bankOn || paypalOn || Boolean(paymentSettings.paypalButtonsClientId) || Boolean(paypalMeUrl) || paymentSettings.sumupEnabled === true;
       } catch {
         // Settings unavailable: better to say so than to offer methods that may not work.
         document.getElementById("payment-none-hint").hidden = false;

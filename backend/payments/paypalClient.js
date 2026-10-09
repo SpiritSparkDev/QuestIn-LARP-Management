@@ -55,7 +55,8 @@ async function call(config, path, { method = 'GET', body, requestId } = {}) {
 }
 
 // Returns { orderId, approveUrl }.
-export async function createPaypalOrder(config, { reference, amountCents, description, returnUrl, cancelUrl, requestId }) {
+// `sdk`: for PayPal's buttons -- the payer approves inside the PayPal window of the script, no return URLs.
+export async function createPaypalOrder(config, { reference, amountCents, description, returnUrl, cancelUrl, requestId, sdk = false }) {
   const order = await call(config, '/v2/checkout/orders', {
     method: 'POST',
     requestId,
@@ -66,18 +67,18 @@ export async function createPaypalOrder(config, { reference, amountCents, descri
         description: description.slice(0, 127),
         amount: { currency_code: 'EUR', value: (amountCents / 100).toFixed(2) },
       }],
-      payment_source: {
+      ...(sdk ? {} : { payment_source: {
         paypal: {
           // LOGIN: PayPal login first (guest card/bank entry stays available there). With the default PayPal may
           // show the guest form alone, so people with a PayPal account would not find their wallet.
           experience_context: { return_url: returnUrl, cancel_url: cancelUrl, user_action: 'PAY_NOW', shipping_preference: 'NO_SHIPPING', landing_page: 'LOGIN' },
         },
-      },
+      } }),
     },
   });
   const link = (order.links ?? []).find((l) => l.rel === 'payer-action') ?? (order.links ?? []).find((l) => l.rel === 'approve');
-  if (!order.id || !link?.href) throw new Error('PayPal order has no approval link');
-  return { orderId: order.id, approveUrl: link.href };
+  if (!order.id || (!sdk && !link?.href)) throw new Error('PayPal order has no approval link');
+  return { orderId: order.id, approveUrl: link?.href ?? null };
 }
 
 export function getPaypalOrder(config, orderId) {

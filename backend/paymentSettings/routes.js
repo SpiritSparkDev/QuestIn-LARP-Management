@@ -6,7 +6,7 @@ import { getPaymentSettings, setPaymentSettings, getBankInfo, STRIPE_METHODS } f
 
 // A plain PayPal.Me link: every participant's browser opens it.
 const PAYPAL_ME = /^https:\/\/(www\.)?paypal\.me\/[A-Za-z0-9._-]{1,50}$/;
-const SWITCHES = ['stripeEnabled', 'paypalEnabled', 'sumupEnabled', 'bankEnabled', 'paypalMeEnabled'];
+const SWITCHES = ['stripeEnabled', 'paypalEnabled', 'sumupEnabled', 'bankEnabled', 'paypalMeEnabled', 'paypalButtonsEnabled'];
 
 router.get('/admin/settings/payments', requireAuth(requireAdminGroup(async () => {
   const settings = await getPaymentSettings();
@@ -16,7 +16,7 @@ router.get('/admin/settings/payments', requireAuth(requireAdminGroup(async () =>
 router.put('/admin/settings/payments', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled } = body;
+  const { stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled } = body;
   if (SWITCHES.some((key) => body[key] !== undefined && typeof body[key] !== 'boolean')) {
     return { status: 400, body: { error: `${SWITCHES.join(', ')} must be booleans` } };
   }
@@ -34,7 +34,7 @@ router.put('/admin/settings/payments', requireAuth(requireAdminGroup(async ({ re
     || (paypalSandbox !== undefined && typeof paypalSandbox !== 'boolean')) {
     return { status: 400, body: { error: 'invalid PayPal settings' } };
   }
-  const saved = await setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled });
+  const saved = await setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled });
   return { status: 200, body: saved };
 })));
 

@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { getStripeClient } from './stripeClient.js';
 import { getSumupConfig, createSumupCheckout, getSumupCheckout } from './sumupClient.js';
 import { getPaypalConfig, createPaypalOrder, capturePaypalOrder, completedCapture, isPaypalOrderId } from './paypalClient.js';
-import { getPaymentSettingsForUse, getBankInfo } from '../paymentSettings/repository.js';
+import { getPaymentSettingsForUse, getPaymentSettings, getBankInfo } from '../paymentSettings/repository.js';
 import { buildPaymentReference } from './reference.js';
 import { canRegisterFor } from '../managedPersons/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
@@ -342,31 +342,79 @@ async function findPaypalOrder(req) {
   return rows[0] ?? null;
 }
 
-router.get('/paypal/return', async ({ req }) => {
-  const order = await findPaypalOrder(req);
-  if (!order) return redirectTo(`${await baseUrl()}/account.html#anmelden`);
-  if (order.captured_at) return redirectTo(order.success_url);
+// Captures an approved order and books it. Returns true when the payment is booked.
+async function bookPaypalOrder(order) {
+  if (order.captured_at) return true;
   try {
     const config = await getPaypalConfig();
-    if (!config) return redirectTo(order.cancel_url);
+    if (!config) return false;
     const capture = completedCapture(await capturePaypalOrder(config, order.order_id));
     const { rows } = await query('SELECT amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [order.event_id, order.user_id]);
     const due = rows[0]?.amount_due_cents;
     // Only a completed capture for this very registration that covers the open amount counts.
     if (!capture || capture.customId !== `${order.event_id}:${order.user_id}` || due == null || capture.amountCents < due) {
       logger.error('paypal payment not booked (not completed, wrong reference or amount below due)', { orderId: order.order_id, due, captured: capture?.amountCents });
-      return redirectTo(order.cancel_url);
+      return false;
     }
     await recordSuccessfulStripePayment({
       eventId: order.event_id, userId: order.user_id, method: 'paypal', provider: 'paypal',
       amountCents: capture.amountCents, providerReference: `paypal:${capture.id}`,
     });
     await query('UPDATE paypal_orders SET captured_at = now() WHERE order_id = $1', [order.order_id]);
-    return redirectTo(order.success_url);
+    return true;
   } catch (err) {
-    logger.error('paypal return failed', { error: err.message, orderId: order.order_id });
-    return redirectTo(order.cancel_url);
+    logger.error('paypal booking failed', { error: err.message, orderId: order.order_id });
+    return false;
   }
+}
+
+router.get('/paypal/return', async ({ req }) => {
+  const order = await findPaypalOrder(req);
+  if (!order) return redirectTo(`${await baseUrl()}/account.html#anmelden`);
+  return redirectTo((await bookPaypalOrder(order)) ? order.success_url : order.cancel_url);
+});
+
+// PayPal's own buttons (their script in the browser): the browser only ever asks for "an order for this
+// registration" and later says "this order was approved". Amount, owner and booking stay on our side.
+async function createPaypalButtonsOrder(eventId, userId) {
+  const config = await getPaypalConfig();
+  const { paypalButtonsEnabled } = await getPaymentSettings();
+  if (!config?.enabled || !paypalButtonsEnabled) return { status: 409, error: 'PayPal-Buttons sind nicht eingeschaltet.' };
+  const event = await getEvent(eventId);
+  if (!event?.payments_open) return { status: 409, error: 'Zahlungen sind für dieses Event noch nicht freigegeben.' };
+  const { rows } = await query('SELECT amount_due_cents, paid_at, con_payer FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+  if (rows.length === 0) return { status: 404, error: 'registration not found' };
+  if (rows[0].con_payer) return { status: 409, error: 'Als Con-Zahler bezahlst du vor Ort beim Check-In.' };
+  if (rows[0].amount_due_cents == null || rows[0].amount_due_cents <= 0) return { status: 400, error: 'Für diese Anmeldung ist kein Betrag hinterlegt.' };
+  if (rows[0].paid_at) return { status: 409, error: 'Bereits bezahlt.' };
+  const { orderId } = await createPaypalOrder(config, {
+    reference: `${eventId}:${userId}`,
+    amountCents: rows[0].amount_due_cents,
+    description: `Teilnahmegebühr – ${event.name ?? 'Event'}`,
+    requestId: crypto.randomUUID(),
+    sdk: true,
+  });
+  const base = await baseUrl();
+  await query(
+    'INSERT INTO paypal_orders (order_id, event_id, user_id, amount_cents, success_url, cancel_url) VALUES ($1, $2, $3, $4, $5, $6)',
+    [orderId, eventId, userId, rows[0].amount_due_cents, `${base}/account.html?payment=success#anmelden`, `${base}/account.html?payment=cancelled#anmelden`]
+  );
+  return { orderId };
+}
+
+router.post('/events/:eventId/registrations/:userId/paypal-order', requireAuth(async ({ params, user }) => {
+  if (params.userId !== user.id && !(await canRegisterFor(params.userId, user.id))) return { status: 403, body: { error: 'forbidden' } };
+  const result = await createPaypalButtonsOrder(params.eventId, params.userId);
+  return result.orderId ? { status: 200, body: { orderId: result.orderId } } : { status: result.status, body: { error: result.error } };
+}));
+
+router.post('/paypal/capture', async ({ req }) => {
+  const body = await readJsonBody(req);
+  if (body === null || !isPaypalOrderId(body.orderId)) return { status: 400, body: { error: 'invalid order' } };
+  const { rows } = await query('SELECT order_id, event_id, user_id, success_url, cancel_url, captured_at FROM paypal_orders WHERE order_id = $1', [body.orderId]);
+  if (rows.length === 0) return { status: 404, body: { error: 'order not found' } };
+  const booked = await bookPaypalOrder(rows[0]);
+  return booked ? { status: 200, body: { booked: true } } : { status: 409, body: { error: 'Die Zahlung konnte nicht verbucht werden. Falls bei PayPal Geld abgebucht wurde, melde dich bei der Orga.' } };
 });
 
 router.get('/paypal/cancel', async ({ req }) => {

@@ -14,11 +14,11 @@ export async function getPaymentSettings() {
             bank_iban, bank_bic, bank_account_holder, bank_qr_enabled,
             sumup_api_key_enc IS NOT NULL AS has_sumup_api_key, sumup_merchant_code,
             paypal_secret_enc IS NOT NULL AS has_paypal_secret, paypal_client_id, paypal_sandbox, stripe_methods, contact_email,
-            stripe_enabled, paypal_enabled, sumup_enabled, bank_enabled, paypal_me_url, paypal_me_enabled
+            stripe_enabled, paypal_enabled, sumup_enabled, bank_enabled, paypal_me_url, paypal_me_enabled, paypal_buttons_enabled
      FROM payment_settings LIMIT 1`
   );
   if (rows.length === 0) {
-    return { hasStripeSecretKey: false, hasStripeWebhookSecret: false, bankIban: null, bankBic: null, bankAccountHolder: null, bankQrEnabled: true, hasSumupApiKey: false, sumupMerchantCode: null, hasPaypalSecret: false, paypalClientId: null, paypalSandbox: false, stripeMethods: DEFAULT_STRIPE_METHODS, contactEmail: null, stripeEnabled: false, paypalEnabled: false, sumupEnabled: false, bankEnabled: false, paypalMeUrl: null, paypalMeEnabled: false };
+    return { hasStripeSecretKey: false, hasStripeWebhookSecret: false, bankIban: null, bankBic: null, bankAccountHolder: null, bankQrEnabled: true, hasSumupApiKey: false, sumupMerchantCode: null, hasPaypalSecret: false, paypalClientId: null, paypalSandbox: false, stripeMethods: DEFAULT_STRIPE_METHODS, contactEmail: null, stripeEnabled: false, paypalEnabled: false, sumupEnabled: false, bankEnabled: false, paypalMeUrl: null, paypalMeEnabled: false, paypalButtonsEnabled: false };
   }
   return {
     hasStripeSecretKey: rows[0].has_stripe_secret_key,
@@ -40,6 +40,7 @@ export async function getPaymentSettings() {
     bankEnabled: rows[0].bank_enabled,
     paypalMeUrl: rows[0].paypal_me_url,
     paypalMeEnabled: rows[0].paypal_me_enabled,
+    paypalButtonsEnabled: rows[0].paypal_buttons_enabled,
   };
 }
 
@@ -57,6 +58,8 @@ export async function getBankInfo() {
     stripeMethods: s.stripeEnabled && s.hasStripeSecretKey && online ? s.stripeMethods : [],
     sumupEnabled: s.sumupEnabled && s.hasSumupApiKey && Boolean(s.sumupMerchantCode) && online,
     paypalEnabled: s.paypalEnabled && s.hasPaypalSecret && Boolean(s.paypalClientId) && online,
+    // The client id is public by design (PayPal's script needs it in the browser); never the secret.
+    paypalButtonsClientId: s.paypalButtonsEnabled && s.paypalEnabled && s.hasPaypalSecret && online ? s.paypalClientId : null,
     paypalMeUrl: s.paypalMeEnabled && s.paypalMeUrl ? s.paypalMeUrl : null,
   };
 }
@@ -91,7 +94,7 @@ export async function getPaymentSettingsForUse() {
   };
 }
 
-export async function setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled }) {
+export async function setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled }) {
   const id = await ensureSettingsRow();
   const stripeSecretKeyEnc = stripeSecretKey ? encryptField(stripeSecretKey) : null;
   const stripeWebhookSecretEnc = stripeWebhookSecret ? encryptField(stripeWebhookSecret) : null;
@@ -120,7 +123,8 @@ export async function setPaymentSettings({ stripeSecretKey, stripeWebhookSecret,
        sumup_enabled = COALESCE($19, sumup_enabled),
        bank_enabled = COALESCE($20, bank_enabled),
        paypal_me_url = CASE WHEN $21 THEN $22 ELSE paypal_me_url END,
-       paypal_me_enabled = COALESCE($23, paypal_me_enabled)
+       paypal_me_enabled = COALESCE($23, paypal_me_enabled),
+       paypal_buttons_enabled = COALESCE($24, paypal_buttons_enabled)
      WHERE id = $1`,
     [id, stripeSecretKeyEnc, stripeWebhookSecretEnc, bankIban ?? null, bankBic ?? null, bankAccountHolder ?? null, typeof bankQrEnabled === 'boolean' ? bankQrEnabled : null,
       sumupApiKeyEnc, typeof sumupMerchantCode === 'string' && sumupMerchantCode.trim() ? sumupMerchantCode.trim() : null, sumupWebhookSecretEnc,
@@ -128,7 +132,8 @@ export async function setPaymentSettings({ stripeSecretKey, stripeWebhookSecret,
       typeof paypalSandbox === 'boolean' ? paypalSandbox : null, Array.isArray(stripeMethods) ? stripeMethods : null,
       typeof contactEmail === 'string', contactEmail?.trim() || null,
       ...[stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled].map((v) => (typeof v === 'boolean' ? v : null)),
-      typeof paypalMeUrl === 'string', paypalMeUrl?.trim() || null, typeof paypalMeEnabled === 'boolean' ? paypalMeEnabled : null]
+      typeof paypalMeUrl === 'string', paypalMeUrl?.trim() || null, typeof paypalMeEnabled === 'boolean' ? paypalMeEnabled : null,
+      typeof paypalButtonsEnabled === 'boolean' ? paypalButtonsEnabled : null]
   );
   return getPaymentSettings();
 }
