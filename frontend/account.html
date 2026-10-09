@@ -842,6 +842,12 @@
       ${infoButtons ? `<div class="event-info-buttons">${infoButtons}</div>` : ""}`;
       document.getElementById("dashboard-book-btn").hidden = !registration;
       card.querySelector("#dashboard-register-btn")?.addEventListener("click", () => goToTab("anmelden"));
+      const ctaCard = card.querySelector(".event-cta");
+      if (ctaCard) {
+        api.get("/app-settings").then(({ hasUploadedTicketBackground }) => {
+          if (hasUploadedTicketBackground) ctaCard.style.setProperty("--ticket-bg-image", 'url("/app-settings/ticket-background")');
+        }).catch(() => {});
+      }
       card.querySelectorAll("[data-info]").forEach((button) => {
         button.addEventListener("click", () => {
           if (button.dataset.info === "directions") {
