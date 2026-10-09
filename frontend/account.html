@@ -1064,6 +1064,7 @@
         }).render(container);
       } catch (err) {
         wrap.hidden = true;
+        document.getElementById("payment-paypaldirect-btn").hidden = false;
         notify(err.message, "error");
       }
     }
@@ -1092,7 +1093,8 @@
         show("payment-stripe-bank-btn", stripeMethods.includes("bank_transfer"));
         show("payment-klarna-btn", stripeMethods.includes("klarna"));
         show("payment-sepa-btn", stripeMethods.includes("sepa_debit"));
-        show("payment-paypaldirect-btn", paypalOn);
+        // The buttons replace the redirect button; if their script cannot load, the redirect comes back.
+        show("payment-paypaldirect-btn", paypalOn && !paymentSettings.paypalButtonsClientId);
         if (paymentSettings.paypalButtonsClientId) renderPaypalButtons(paymentSettings.paypalButtonsClientId);
         // Two PayPal rows need telling apart; a single one is just "Per PayPal zahlen".
         document.querySelector("#payment-paypal-btn span:last-child").textContent = paypalOn ? "Per PayPal (über Stripe)" : "Per PayPal zahlen";
