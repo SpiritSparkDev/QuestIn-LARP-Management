@@ -828,7 +828,7 @@
         <span class="badge badge-active">Event aktiv</span>
         ${codeBox}
       </div>
-      <div class="event-subcards">
+      <div class="event-subcards${registration ? "" : " event-subcards--cta"}">
         <div class="event-subcard">
           <h3><span class="material-symbols-outlined" aria-hidden="true">schedule</span> Zeit</h3>
           <div class="event-time-row">
@@ -836,10 +836,12 @@
             <p class="event-date event-date-large"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span> ${escapeHtml(formatEventDate(activeEvent.event_date))}</p>
           </div>
         </div>
+        ${registration ? "" : `<div class="event-cta"><button type="button" id="dashboard-register-btn">Für ${escapeHtml(activeEvent.name)} anmelden</button></div>`}
         ${locationBlock}
       </div>
-      ${registration ? "" : '<p>Du bist noch nicht angemeldet.</p>'}
       ${infoButtons ? `<div class="event-info-buttons">${infoButtons}</div>` : ""}`;
+      document.getElementById("dashboard-book-btn").hidden = !registration;
+      card.querySelector("#dashboard-register-btn")?.addEventListener("click", () => goToTab("anmelden"));
       card.querySelectorAll("[data-info]").forEach((button) => {
         button.addEventListener("click", () => {
           if (button.dataset.info === "directions") {
