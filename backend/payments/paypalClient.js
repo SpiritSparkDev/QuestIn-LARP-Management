@@ -68,7 +68,9 @@ export async function createPaypalOrder(config, { reference, amountCents, descri
       }],
       payment_source: {
         paypal: {
-          experience_context: { return_url: returnUrl, cancel_url: cancelUrl, user_action: 'PAY_NOW', shipping_preference: 'NO_SHIPPING' },
+          // LOGIN: PayPal login first (guest card/bank entry stays available there). With the default PayPal may
+          // show the guest form alone, so people with a PayPal account would not find their wallet.
+          experience_context: { return_url: returnUrl, cancel_url: cancelUrl, user_action: 'PAY_NOW', shipping_preference: 'NO_SHIPPING', landing_page: 'LOGIN' },
         },
       },
     },

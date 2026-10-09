@@ -702,6 +702,33 @@ test('POST checkout-session refuses a Stripe method the admin has not switched o
   await query("UPDATE payment_settings SET stripe_methods = '{card,paypal,bank_transfer}'");
 });
 
+test('PayPal order asks for the PayPal login first and sends the exact amount in EUR', async () => {
+  const { createPaypalOrder } = await import('../../backend/payments/paypalClient.js');
+  const realFetch = globalThis.fetch;
+  let orderBody;
+  globalThis.fetch = (url, init) => {
+    const u = String(url);
+    if (u.includes('/v1/oauth2/token')) return Promise.resolve(new Response(JSON.stringify({ access_token: 'tok' }), { status: 200 }));
+    if (u.endsWith('/v2/checkout/orders')) {
+      orderBody = JSON.parse(init.body);
+      return Promise.resolve(new Response(JSON.stringify({ id: 'ORDER12345', links: [{ rel: 'payer-action', href: 'https://paypal.example/approve' }] }), { status: 201 }));
+    }
+    return realFetch(url, init);
+  };
+  try {
+    const out = await createPaypalOrder(
+      { clientId: 'c', secret: 's', base: 'https://api-m.sandbox.paypal.com' },
+      { reference: 'e:u', amountCents: 4550, description: 'Teilnahmegebühr', returnUrl: 'https://app.test/paypal/return', cancelUrl: 'https://app.test/paypal/cancel', requestId: 'req-1' },
+    );
+    assert.equal(out.approveUrl, 'https://paypal.example/approve');
+    assert.equal(orderBody.purchase_units[0].amount.value, '45.50');
+    assert.equal(orderBody.purchase_units[0].amount.currency_code, 'EUR');
+    assert.equal(orderBody.payment_source.paypal.experience_context.landing_page, 'LOGIN');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test('PayPal return: books only a COMPLETED capture of this registration that covers the due amount, once', async () => {
   const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
   await setPaymentSettings({ paypalClientId: 'cid', paypalSecret: 'secret', paypalEnabled: true });
