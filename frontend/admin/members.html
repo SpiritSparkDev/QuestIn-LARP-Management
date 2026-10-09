@@ -689,6 +689,8 @@
     // Only admins and moderators may create characters in other people's accounts.
     let canCreateForOthers = false;
     let isAdminViewer = false;
+    let lodgingEnabled = false;
+    let lodgingsByEvent = new Map();
     let editingMemberId = null;
     let currentView = 'active';
     let myUserId = null;
@@ -1100,7 +1102,7 @@
             <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${(r.flags ?? []).length ? ` <span class="sub">Sonderrollen: ${escapeHtml(r.flags.join(', '))}</span>` : ''}${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Charakter: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span>${r.registeredAt ? ` <span class="sub">angemeldet am ${escapeHtml(new Date(r.registeredAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</span>` : ''}</p>
             ${r.conRole === 'nsc' ? renderNscSummary(r.nscData) : ''}
             <div class="action-row">
-              ${canOverrideCheckin ? `<label class="sub">Rolle <select data-reg-role="${escapeHtml(r.eventId)}" data-prev-role="${escapeHtml(r.conRole)}" data-character="${escapeHtml(r.characterId ?? '')}" aria-label="Rolle ändern">${[['sc', 'SC'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga'], ['ticket', 'Direktanmeldung']].map(([key, label]) => `<option value="${key}" ${key === r.conRole ? 'selected' : ''}>${label}</option>`).join('')}</select></label>` : ''}
+              ${lodgingSelectHtml(r)}${canOverrideCheckin ? `<label class="sub">Rolle <select data-reg-role="${escapeHtml(r.eventId)}" data-prev-role="${escapeHtml(r.conRole)}" data-character="${escapeHtml(r.characterId ?? '')}" aria-label="Rolle ändern">${[['sc', 'SC'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga'], ['ticket', 'Direktanmeldung']].map(([key, label]) => `<option value="${key}" ${key === r.conRole ? 'selected' : ''}>${label}</option>`).join('')}</select></label>` : ''}
               ${canOverrideCheckin ? `<label class="sub">Status <select data-reg-status="${escapeHtml(r.eventId)}" data-prev-status="${escapeHtml(r.status)}" aria-label="Status ändern">${STATUS_ORDER.map((st) => `<option value="${st}" ${st === r.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[st])}</option>`).join('')}</select></label>` : ''}
               ${editableFields.length || eventFlagsOf(r.eventId).length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
             </div>
@@ -1146,6 +1148,27 @@
           notify('Rolle geändert.', 'success');
         } catch (err) {
           notify(err.message, 'error');
+        }
+        await reloadMember();
+      }));
+      detailRegistrations.querySelectorAll('[data-reg-lodging]').forEach((select) => select.addEventListener('change', async () => {
+        const put = (lodgingDetails) => api.put(`/events/${select.dataset.regLodging}/registrations/${editingMemberId}/lodging`, { lodgingId: select.value || null, ...(lodgingDetails ? { lodgingDetails } : {}) });
+        try {
+          try {
+            await put();
+          } catch (err) {
+            // A tent pitch needs IT or OT if the person has no tent yet.
+            if (!/IT oder OT/.test(err.message)) throw err;
+            const tentType = (prompt('Zelt auf diesem Zeltplatz: „it“ (Spielwelt) oder „ot“?') ?? '').trim().toLowerCase();
+            if (!['it', 'ot'].includes(tentType)) throw err;
+            await put({ tentType });
+          }
+          notify('Unterkunft geändert.', 'success');
+          await loadLodgingsFor(await api.get(`/members/${editingMemberId}`));
+        } catch (err) {
+          notify(err.message, 'error');
+          select.value = select.dataset.prev;
+          return;
         }
         await reloadMember();
       }));
@@ -1263,9 +1286,28 @@
       });
     }
 
+    // Lodgings of the events the member is registered for (add-on "Unterkünfte"), so staff can move them.
+    async function loadLodgingsFor(member) {
+      lodgingsByEvent = new Map();
+      if (!lodgingEnabled) return;
+      await Promise.all((member.registrations ?? []).map(async (r) => {
+        lodgingsByEvent.set(r.eventId, await api.get(`/events/${r.eventId}/lodgings?own=1`).catch(() => []));
+      }));
+    }
+
+    function lodgingSelectHtml(r) {
+      const lodgings = lodgingsByEvent.get(r.eventId) ?? [];
+      if (!lodgingEnabled || !lodgings.length || r.status === 'cancelled') return '';
+      return `<label class="sub">Unterkunft <select data-reg-lodging="${escapeHtml(r.eventId)}" data-prev="${escapeHtml(r.lodgingId ?? '')}" aria-label="Unterkunft verschieben"><option value="">– keine –</option>${lodgings.map((l) => {
+        const full = !l.unlimited && l.free === 0 && l.id !== r.lodgingId;
+        return `<option value="${escapeHtml(l.id)}" ${l.id === r.lodgingId ? 'selected' : ''} ${full ? 'disabled' : ''}>${escapeHtml(l.name)}${full ? ' (voll)' : ''}</option>`;
+      }).join('')}</select></label>`;
+    }
+
     async function openDetail(memberId) {
       const member = await api.get(`/members/${memberId}`);
       editingMemberId = memberId;
+      await loadLodgingsFor(member);
       detailTitle.textContent = `Mitglied bearbeiten: ${member.name}`;
       buildDetailFieldInputs(detailFields, member);
 
@@ -1509,6 +1551,7 @@
       canOverrideCheckin = account.canOverrideCheckinStatus === true;
       canCreateForOthers = ['admin', 'moderator'].includes(account.group.key);
       isAdminViewer = account.group.key === 'admin';
+      lodgingEnabled = account.lodgingEnabled === true && ['admin', 'moderator'].includes(account.group.key);
       document.getElementById('member-export').hidden = account.canExportMembers !== true;
       document.getElementById('member-import').hidden = account.group.key !== 'admin';
       myUserId = account.id;
