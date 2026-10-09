@@ -1,24 +1,30 @@
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
-import { requireMenu } from '../middleware/authorize.js';
+import { requireMenu, requireAnyMenu } from '../middleware/authorize.js';
 import { readJsonBody, readRawBody } from '../httpBody.js';
 import { logger } from '../logger.js';
 import { query } from '../db.js';
 import { displayName } from '../displayName.js';
 import { getEvent } from '../events/repository.js';
 import { baseUrl, getTransporterAndFrom, sendPaymentReminderEmail } from '../auth/mailer.js';
+import crypto from 'node:crypto';
 import { getStripeClient } from './stripeClient.js';
-import { getPaymentSettingsForUse } from '../paymentSettings/repository.js';
+import { getSumupConfig, createSumupCheckout, getSumupCheckout } from './sumupClient.js';
+import { getPaypalConfig, createPaypalOrder, capturePaypalOrder, completedCapture, isPaypalOrderId } from './paypalClient.js';
+import { getPaymentSettingsForUse, getBankInfo } from '../paymentSettings/repository.js';
+import { buildPaymentReference } from './reference.js';
 import { canRegisterFor } from '../managedPersons/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { topUpFromStripe, findActiveAccountForUser } from '../tavern/repository.js';
 import {
-  setAmountDue, setDiscount, markPaidManually, markUnpaid, recordSuccessfulStripePayment,
+  setAmountDue, setDiscount, markPaidManually, markTransferNotified, clearTransferNotified, listOverdueTransfers, markUnpaid, recordSuccessfulStripePayment,
   getRegistrationByPaymentToken, refundPayment, listUnpaidRegistrationsForEvent, setGuestPaymentToken,
 } from './repository.js';
 
-const CHECKOUT_METHODS = ['card', 'paypal', 'bank_transfer'];
-const CHECKOUT_METHOD_ERROR = 'method must be one of: card, paypal, bank_transfer';
+const CHECKOUT_METHODS = ['card', 'paypal', 'bank_transfer', 'klarna', 'sepa_debit', 'sumup', 'paypal_direct'];
+const CHECKOUT_METHOD_ERROR = `method must be one of: ${CHECKOUT_METHODS.join(', ')}`;
+// The only methods whose ledger entry the tavern top-up knows (see TAVERN_LEDGER_METHODS).
+const TAVERN_STRIPE_METHODS = ['card', 'paypal', 'bank_transfer'];
 
 // Stripe bank transfer (customer_balance) is a delayed-notification method
 // that requires an existing Customer on the Checkout Session; a fresh
@@ -49,6 +55,8 @@ function stripeMethodForSession(session) {
   const types = session.payment_method_types ?? [];
   if (types.includes('customer_balance')) return 'stripe_bank_transfer';
   if (types.includes('paypal')) return 'stripe_paypal';
+  if (types.includes('klarna')) return 'stripe_klarna';
+  if (types.includes('sepa_debit')) return 'stripe_sepa_debit';
   return 'stripe_card';
 }
 
@@ -59,6 +67,10 @@ async function createCheckoutSession({
   eventId, userId, method, amountDueCents, successUrl, cancelUrl,
   clientReferenceId = `${eventId}:${userId}`, productLabel = 'Teilnahmegebühr',
 }) {
+  if (method === 'sumup') return createSumupSession({ eventId, userId, amountDueCents, successUrl, productLabel });
+  if (method === 'paypal_direct') return createPaypalSession({ eventId, userId, amountDueCents, successUrl, cancelUrl, productLabel });
+  // Only the Stripe methods the admin switched on can be started.
+  if (!(await getPaymentSettingsForUse()).stripeMethods.includes(method)) return null;
   const stripe = await getStripeClient();
   if (!stripe) return null;
   const event = await getEvent(eventId);
@@ -89,22 +101,26 @@ router.post('/events/:eventId/registrations/:userId/checkout-session', requireAu
   }
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  if (!CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
+  if (body.method !== 'auto' && !CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
 
   const { rows } = await query(
     'SELECT amount_due_cents, paid_at, con_payer FROM registrations WHERE event_id = $1 AND user_id = $2',
     [params.eventId, params.userId]
   );
   if (rows.length === 0) return { status: 404, body: { error: 'registration not found' } };
+  if (!(await getEvent(params.eventId))?.payments_open) return { status: 409, body: { error: 'Zahlungen sind für dieses Event noch nicht freigegeben.' } };
   if (rows[0].con_payer) return { status: 409, body: { error: 'Als Con-Zahler bezahlst du vor Ort beim Check-In.' } };
   if (rows[0].amount_due_cents == null) return { status: 400, body: { error: 'Für diese Anmeldung ist kein Betrag hinterlegt.' } };
   if (rows[0].paid_at) return { status: 409, body: { error: 'Bereits bezahlt.' } };
+
+  const method = body.method === 'auto' ? await firstOnlineMethod() : body.method;
+  if (!method) return { status: 409, body: { error: await noOnlinePaymentMessage() } };
 
   const resolvedBaseUrl = await baseUrl();
   const session = await createCheckoutSession({
     eventId: params.eventId,
     userId: params.userId,
-    method: body.method,
+    method,
     amountDueCents: rows[0].amount_due_cents,
     successUrl: `${resolvedBaseUrl}/account.html?payment=success#anmelden`,
     cancelUrl: `${resolvedBaseUrl}/account.html?payment=cancelled#anmelden`,
@@ -146,6 +162,22 @@ router.get('/public/registrations/:token', async ({ params }) => {
       conPayer: registration.conPayer && !registration.paidAt,
     };
   }
+  // Open amount: what the page needs to pay -- an online method if one is set up, always the bank data.
+  const open = !registration.paidAt && registration.amountDueCents > 0 && !registration.conPayer && Boolean(event?.payments_open);
+  let payment = null;
+  if (open) {
+    const bank = await getBankInfo();
+    const { rows } = await query('SELECT first_name, last_name FROM users WHERE id = $1', [registration.userId]);
+    payment = {
+      onlineAvailable: (await firstOnlineMethod()) !== null,
+      transferNotifiedAt: (await query('SELECT transfer_notified_at FROM registrations WHERE event_id = $1 AND user_id = $2', [registration.eventId, registration.userId])).rows[0]?.transfer_notified_at ?? null,
+      contactEmail: bank.contactEmail,
+      bank: bank.bankIban ? {
+        iban: bank.bankIban, bic: bank.bankBic, accountHolder: bank.bankAccountHolder, qrEnabled: bank.bankQrEnabled,
+        reference: buildPaymentReference(registration.eventId, registration.userId, { code: event.code, firstName: rows[0]?.first_name, lastName: rows[0]?.last_name }),
+      } : null,
+    };
+  }
   return {
     status: 200,
     body: {
@@ -153,29 +185,68 @@ router.get('/public/registrations/:token', async ({ params }) => {
       amountDueCents: registration.amountDueCents,
       paid: Boolean(registration.paidAt),
       ticket,
+      payment,
     },
   };
 });
 
+// "Ich habe überwiesen" for a guest: the token proves who they are.
+router.post('/public/registrations/:token/transfer-notice', async ({ params }) => {
+  const registration = await getRegistrationByPaymentToken(params.token);
+  if (!registration) return { status: 404, body: { error: 'Ungültiger Link.' } };
+  if (new Date(registration.paymentTokenExpiresAt) < new Date()) {
+    return { status: 410, body: { error: 'Dieser Zahlungslink ist abgelaufen.' } };
+  }
+  if (!(await getEvent(registration.eventId))?.payments_open) return { status: 409, body: { error: 'Zahlungen sind für dieses Event noch nicht freigegeben.' } };
+  const notifiedAt = await markTransferNotified(registration.eventId, registration.userId, registration.userId);
+  if (!notifiedAt) return { status: 409, body: { error: 'Für diese Anmeldung ist keine offene Zahlung hinterlegt.' } };
+  return { status: 200, body: { transferNotifiedAt: notifiedAt } };
+});
+
+// "Please ask the Orga", with the address if one is set.
+async function noOnlinePaymentMessage() {
+  const { contactEmail } = await getBankInfo();
+  return `Aktuell ist keine Online-Zahlung eingerichtet. Bitte melde dich bei der Orga${contactEmail ? ` (${contactEmail})` : ''}.`;
+}
+
+// The guest payment page has no method picker: it takes the first online method that is set up.
+async function firstOnlineMethod() {
+  const stripeMethods = (await getStripeClient()) ? (await getPaymentSettingsForUse()).stripeMethods : [];
+  const candidates = [
+    ['card', stripeMethods.includes('card')],
+    ['paypal_direct', Boolean(await getPaypalConfig())],
+    ['sumup', Boolean(await getSumupConfig())],
+    ['paypal', stripeMethods.includes('paypal')],
+    ['klarna', stripeMethods.includes('klarna')],
+    ['bank_transfer', stripeMethods.includes('bank_transfer')],
+    ['sepa_debit', stripeMethods.includes('sepa_debit')],
+  ];
+  return candidates.find(([, available]) => available)?.[0] ?? null;
+}
+
 router.post('/public/registrations/:token/checkout-session', async ({ req, params }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  if (!CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
+  if (body.method !== 'auto' && !CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
 
   const registration = await getRegistrationByPaymentToken(params.token);
   if (!registration) return { status: 404, body: { error: 'Ungültiger Link.' } };
   if (new Date(registration.paymentTokenExpiresAt) < new Date()) {
     return { status: 410, body: { error: 'Dieser Zahlungslink ist abgelaufen.' } };
   }
+  if (!(await getEvent(registration.eventId))?.payments_open) return { status: 409, body: { error: 'Zahlungen sind für dieses Event noch nicht freigegeben.' } };
   if (registration.conPayer) return { status: 409, body: { error: 'Als Con-Zahler bezahlst du vor Ort beim Check-In.' } };
   if (registration.amountDueCents == null) return { status: 400, body: { error: 'Für diese Anmeldung ist kein Betrag hinterlegt.' } };
   if (registration.paidAt) return { status: 409, body: { error: 'Bereits bezahlt.' } };
+
+  const method = body.method === 'auto' ? await firstOnlineMethod() : body.method;
+  if (!method) return { status: 409, body: { error: await noOnlinePaymentMessage() } };
 
   const resolvedBaseUrl = await baseUrl();
   const session = await createCheckoutSession({
     eventId: registration.eventId,
     userId: registration.userId,
-    method: body.method,
+    method,
     amountDueCents: registration.amountDueCents,
     successUrl: `${resolvedBaseUrl}/guest-payment.html?token=${params.token}&payment=success`,
     cancelUrl: `${resolvedBaseUrl}/guest-payment.html?token=${params.token}&payment=cancelled`,
@@ -198,6 +269,8 @@ router.post('/tavern/my-topup-session', requireAuth(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (!CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
+  // SumUp and direct PayPal book registration fees only; the tavern ledger knows just these Stripe methods.
+  if (!TAVERN_STRIPE_METHODS.includes(body.method)) return { status: 400, body: { error: 'Das Tavernenkonto lässt sich nur per Karte, PayPal oder Banküberweisung (Stripe) aufladen.' } };
   if (!Number.isInteger(body.amountCents) || body.amountCents < TAVERN_TOPUP_MIN_CENTS || body.amountCents > TAVERN_TOPUP_MAX_CENTS) {
     return { status: 400, body: { error: 'Der Betrag muss zwischen 5 und 200 Euro liegen.' } };
   }
@@ -219,6 +292,160 @@ router.post('/tavern/my-topup-session', requireAuth(async ({ req, user }) => {
   if (!session) return { status: 502, body: { error: 'Zahlungen sind aktuell nicht konfiguriert.' } };
   return { status: 200, body: { url: session.url } };
 }));
+
+router.post('/events/:eventId/registrations/:userId/transfer-notice', requireAuth(async ({ params, user }) => {
+  if (params.userId !== user.id && !(await canRegisterFor(params.userId, user.id))) {
+    return { status: 403, body: { error: 'forbidden' } };
+  }
+  if (!(await getEvent(params.eventId))?.payments_open) return { status: 409, body: { error: 'Zahlungen sind für dieses Event noch nicht freigegeben.' } };
+  const notifiedAt = await markTransferNotified(params.eventId, params.userId, user.id);
+  if (!notifiedAt) return { status: 409, body: { error: 'Für diese Anmeldung ist keine offene Zahlung hinterlegt.' } };
+  return { status: 200, body: { transferNotifiedAt: notifiedAt } };
+}));
+
+// PayPal (direct, without Stripe). The payer approves on PayPal and comes back to
+// /paypal/return, where the order is captured and booked. Everything that matters
+// (amount, who, which event) comes from our own paypal_orders row and PayPal's answer,
+// never from the browser: the only input is the order id, which PayPal made up.
+async function createPaypalSession({ eventId, userId, amountDueCents, successUrl, cancelUrl, productLabel }) {
+  const config = await getPaypalConfig();
+  if (!config) return null;
+  const event = await getEvent(eventId);
+  const base = await baseUrl();
+  const { orderId, approveUrl } = await createPaypalOrder(config, {
+    reference: `${eventId}:${userId}`,
+    amountCents: amountDueCents,
+    description: `${productLabel} – ${event?.name ?? 'Event'}`,
+    returnUrl: `${base}/paypal/return`,
+    cancelUrl: `${base}/paypal/cancel`,
+    requestId: crypto.randomUUID(),
+  });
+  await query(
+    'INSERT INTO paypal_orders (order_id, event_id, user_id, amount_cents, success_url, cancel_url) VALUES ($1, $2, $3, $4, $5, $6)',
+    [orderId, eventId, userId, amountDueCents, successUrl, cancelUrl]
+  );
+  return { url: approveUrl };
+}
+
+const redirectTo = (location) => ({ status: 302, headers: { Location: location }, body: {} });
+
+async function findPaypalOrder(req) {
+  const orderId = new URL(req.url, 'http://localhost').searchParams.get('token');
+  if (!isPaypalOrderId(orderId)) return null;
+  const { rows } = await query(
+    'SELECT order_id, event_id, user_id, success_url, cancel_url, captured_at FROM paypal_orders WHERE order_id = $1',
+    [orderId]
+  );
+  return rows[0] ?? null;
+}
+
+router.get('/paypal/return', async ({ req }) => {
+  const order = await findPaypalOrder(req);
+  if (!order) return redirectTo(`${await baseUrl()}/account.html#anmelden`);
+  if (order.captured_at) return redirectTo(order.success_url);
+  try {
+    const config = await getPaypalConfig();
+    if (!config) return redirectTo(order.cancel_url);
+    const capture = completedCapture(await capturePaypalOrder(config, order.order_id));
+    const { rows } = await query('SELECT amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [order.event_id, order.user_id]);
+    const due = rows[0]?.amount_due_cents;
+    // Only a completed capture for this very registration that covers the open amount counts.
+    if (!capture || capture.customId !== `${order.event_id}:${order.user_id}` || due == null || capture.amountCents < due) {
+      logger.error('paypal payment not booked (not completed, wrong reference or amount below due)', { orderId: order.order_id, due, captured: capture?.amountCents });
+      return redirectTo(order.cancel_url);
+    }
+    await recordSuccessfulStripePayment({
+      eventId: order.event_id, userId: order.user_id, method: 'paypal', provider: 'paypal',
+      amountCents: capture.amountCents, providerReference: `paypal:${capture.id}`,
+    });
+    await query('UPDATE paypal_orders SET captured_at = now() WHERE order_id = $1', [order.order_id]);
+    return redirectTo(order.success_url);
+  } catch (err) {
+    logger.error('paypal return failed', { error: err.message, orderId: order.order_id });
+    return redirectTo(order.cancel_url);
+  }
+});
+
+router.get('/paypal/cancel', async ({ req }) => {
+  const order = await findPaypalOrder(req);
+  return redirectTo(order?.cancel_url ?? `${await baseUrl()}/account.html#anmelden`);
+});
+
+// Staff with the member list or the check-in: undo "Ich habe überwiesen" when no money arrived.
+router.delete('/events/:eventId/registrations/:userId/transfer-notice', requireAuth(requireAnyMenu('mitglieder', 'checkin')(async ({ params, user }) => {
+  if (!(await clearTransferNotified(params.eventId, params.userId, user.id))) return { status: 404, body: { error: 'Keine gemeldete Überweisung.' } };
+  return { status: 200, body: { cleared: true } };
+})));
+
+// Dashboard reminder: reported transfers that are still unbooked after three days.
+router.get('/payments/overdue-transfers', requireAuth(requireMenu('mitglieder')(async () => {
+  return { status: 200, body: await listOverdueTransfers(3) };
+})));
+
+// SumUp hosted checkout. The returned object only needs `.url`, like a Stripe session.
+async function createSumupSession({ eventId, userId, amountDueCents, successUrl, productLabel }) {
+  const config = await getSumupConfig();
+  if (!config) return null;
+  const event = await getEvent(eventId);
+  // Unique per attempt; the webhook reads eventId/userId back from it.
+  const reference = `${eventId}:${userId}:${crypto.randomBytes(4).toString('hex')}`;
+  const checkout = await createSumupCheckout(config, {
+    reference,
+    amountCents: amountDueCents,
+    description: `${productLabel} – ${event?.name ?? 'Event'}`,
+    returnUrl: `${await baseUrl()}/webhooks/sumup/${config.webhookSecret}`,
+    redirectUrl: successUrl,
+  });
+  return { url: checkout.hosted_checkout_url };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function secretsMatch(given, expected) {
+  const a = Buffer.from(String(given));
+  const b = Buffer.from(String(expected));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// Called by SumUp after a checkout changed. Two independent checks keep it safe:
+// the secret in the URL, and -- more importantly -- the payment is only booked
+// after re-reading the checkout from SumUp's API with our own key, so a forged
+// call can at most make us look something up.
+router.post('/webhooks/sumup/:secret', async ({ req, params }) => {
+  const config = await getSumupConfig();
+  // Same answer for "not configured" and "wrong secret": nothing to probe.
+  if (!config || !secretsMatch(params.secret, config.webhookSecret)) return { status: 404, body: { error: 'not found' } };
+  const body = await readJsonBody(req);
+  const checkoutId = body?.id;
+  let checkout;
+  try {
+    checkout = await getSumupCheckout(config, checkoutId);
+  } catch (err) {
+    logger.error('sumup webhook: could not read checkout', { error: err.message });
+    return { status: 502, body: { error: 'checkout lookup failed' } };
+  }
+  if (checkout.status !== 'PAID' || checkout.merchant_code !== config.merchantCode || checkout.currency !== 'EUR') {
+    return { status: 200, body: { received: true } };
+  }
+  const [eventId, userId] = String(checkout.checkout_reference ?? '').split(':');
+  if (!UUID.test(eventId ?? '') || !UUID.test(userId ?? '')) return { status: 200, body: { received: true } };
+  const paidCents = Math.round(Number(checkout.amount) * 100);
+  try {
+    const { rows } = await query('SELECT amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    // Only a payment that covers the open amount ends the open balance.
+    if (rows.length === 0 || rows[0].amount_due_cents == null || paidCents < rows[0].amount_due_cents) {
+      logger.error('sumup payment not booked (amount below due or no registration)', { checkoutId, eventId, userId, paidCents });
+      return { status: 200, body: { received: true } };
+    }
+    await recordSuccessfulStripePayment({
+      eventId, userId, method: 'sumup', provider: 'sumup',
+      amountCents: paidCents, providerReference: `sumup:${checkout.id}`,
+    });
+  } catch (err) {
+    logger.error('failed to record sumup payment', { error: err.message, eventId, userId, checkoutId });
+  }
+  return { status: 200, body: { received: true } };
+});
 
 router.post('/webhooks/stripe', async ({ req }) => {
   const rawBody = await readRawBody(req);
@@ -253,6 +480,13 @@ router.post('/webhooks/stripe', async ({ req }) => {
       }
     } else if (eventId && userId) {
       try {
+        // The session was priced when it was created; the amount due may have grown since (extras booked later).
+        const { rows: dueRows } = await query('SELECT amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+        const due = dueRows[0]?.amount_due_cents;
+        if (due == null || session.currency !== 'eur' || session.amount_total < due) {
+          logger.error('stripe payment not booked (amount below due, wrong currency or no registration)', { eventId, userId, sessionId: session.id, paid: session.amount_total, due });
+          return { status: 200, body: { received: true } };
+        }
         await recordSuccessfulStripePayment({
           eventId, userId,
           method: stripeMethodForSession(session),
@@ -334,7 +568,7 @@ router.post('/events/:eventId/registrations/:userId/refund', requireAuth(require
   }
 
   let stripeRefundId = null;
-  if (payment.method === 'stripe_card' || payment.method === 'stripe_paypal') {
+  if (['stripe_card', 'stripe_paypal', 'stripe_klarna', 'stripe_sepa_debit'].includes(payment.method)) {
     if (!payment.stripe_payment_intent_id) {
       return {
         status: 409,

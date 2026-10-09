@@ -76,6 +76,9 @@ test('lodging add-on: setup, booking, sold-out, visibility, switching and locks'
     assert.equal(carolView[0].free, 0);
     assert.deepEqual(carolView[0].occupants, []);
     assert.deepEqual((await (await getLodgings(admin.cookie)).json())[0].occupants.map((o) => o.name).sort(), ['Alice Test', 'Bob Test']);
+    // The registration form (?own=1) does not hand staff the real names either: only their own group, by IT name.
+    const ownView = await (await fetch(`${base}/events/${eventId}/lodgings?own=1`, { headers: json(admin.cookie) })).json();
+    assert.deepEqual(ownView[0].occupants, []);
     // Someone who belongs to a group shows up with the character (IT) name only.
     const { rows: held } = await query("INSERT INTO characters (user_id, name) VALUES ($1, 'Bobs Held') RETURNING id", [bob.userId]);
     await query('UPDATE registrations SET character_id = $2, con_role = $4 WHERE event_id = $1 AND user_id = $3', [eventId, held[0].id, bob.userId, 'sc']);

@@ -38,6 +38,7 @@
     <div class="stat-row">
       <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Gesamt</div></div>
       <div class="stat"><div class="stat-num forest" id="stat-checked-in">0</div><div class="stat-label">Eingecheckt</div></div>
+      <div class="stat" title="Teilnehmende, die „Ich habe überwiesen“ geklickt haben und noch nicht als bezahlt markiert sind"><div class="stat-num" id="stat-transfer">0</div><div class="stat-label">Überweisung gemeldet</div></div>
       <div class="stat">
         <div class="stat-label" id="scan-mode-label">QR-Scan</div>
         <div class="toggle-group toggle-group-sm" role="group" aria-labelledby="scan-mode-label">
@@ -155,6 +156,7 @@ const message = document.getElementById('message');
 const searchInput = document.getElementById('participant-search');
 const statTotal = document.getElementById('stat-total');
 const statCheckedIn = document.getElementById('stat-checked-in');
+const statTransfer = document.getElementById('stat-transfer');
 
 const DEFAULT_HOTKEYS = { confirm: 'Enter', cancel: 'Escape', scan: ' ' };
 const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga', ticket: 'Direktanmeldung' };
@@ -662,7 +664,7 @@ function renderConRoleCell(p) {
   return `<div><strong>${escapeHtml(label)}</strong>${badge}</div>${nscInfo}${changeButton}`;
 }
 
-const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', stripe_bank_transfer: 'Überweisung (Stripe)', bank_transfer: 'Überweisung' };
+const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', sumup: 'SumUp', paypal: 'PayPal', stripe_klarna: 'Klarna', stripe_sepa_debit: 'SEPA-Lastschrift', stripe_bank_transfer: 'Überweisung (Stripe)', bank_transfer: 'Überweisung' };
 
 function renderAmountDueCell(p) {
   if (!p.userId) return '';
@@ -694,7 +696,8 @@ function renderPaymentStatusCell(p) {
     return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <button type="button" class="btn-ghost btn-sm" data-refund="${escapeHtml(p.userId)}">Erstatten</button> <button type="button" class="btn-ghost btn-sm" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
   }
   const openLabel = p.conPayer ? 'Zahlt vor Ort' : 'Offen';
-  return `<span class="status-pill status-pending">${openLabel}</span> <button type="button" class="btn-ghost btn-sm" data-mark-paid="${escapeHtml(p.userId)}">Als bezahlt markieren</button>`;
+  const notified = p.transferNotifiedAt ? ` <span class="status-pill status-waitlisted" title="Gemeldet am ${escapeHtml(new Date(p.transferNotifiedAt).toLocaleString('de-DE'))}">Überweisung gemeldet</span> <button type="button" class="btn-ghost btn-sm" data-reset-transfer="${escapeHtml(p.userId)}" title="Meldung zurücksetzen (kein Zahlungseingang)">Zurücksetzen</button>` : '';
+  return `<span class="status-pill status-pending">${openLabel}</span>${notified} <button type="button" class="btn-ghost btn-sm" data-mark-paid="${escapeHtml(p.userId)}">Als bezahlt markieren</button>`;
 }
 
 searchInput.addEventListener('input', () => {
@@ -744,6 +747,7 @@ function renderParticipants(participants, eventId) {
 
   statTotal.textContent = participants.length;
   statCheckedIn.textContent = participants.filter((p) => p.status === 'checked_in').length;
+  statTransfer.textContent = participants.filter((p) => p.transferNotifiedAt && !p.paidAt).length;
 
   listBody.querySelectorAll('[data-checkin]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -780,6 +784,17 @@ function renderParticipants(participants, eventId) {
   });
   listBody.querySelectorAll('[data-mark-paid]').forEach((button) => {
     button.addEventListener('click', () => setPaymentStatus(eventId, button.dataset.markPaid, true));
+  });
+  listBody.querySelectorAll('[data-reset-transfer]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!confirm('Meldung „Ich habe überwiesen“ zurücksetzen? Mach das, wenn kein Zahlungseingang da ist.')) return;
+      try {
+        await api.delete(`/events/${eventId}/registrations/${button.dataset.resetTransfer}/transfer-notice`);
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+      await loadParticipants(eventId);
+    });
   });
   listBody.querySelectorAll('[data-mark-unpaid]').forEach((button) => {
     button.addEventListener('click', () => setPaymentStatus(eventId, button.dataset.markUnpaid, false));

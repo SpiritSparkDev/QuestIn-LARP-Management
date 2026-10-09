@@ -48,7 +48,7 @@ async function makeUser() {
 
 async function makeEvent() {
   const { rows } = await query(
-    "INSERT INTO events (name, event_date, is_active) VALUES ('Payments Repo Test Con', '2027-08-01', true) RETURNING id"
+    "INSERT INTO events (name, event_date, is_active, payments_open) VALUES ('Payments Repo Test Con', '2027-08-01', true, true) RETURNING id"
   );
   return rows[0].id;
 }
@@ -158,6 +158,23 @@ test('POST checkout-session rejects a registration with no amount due', async ()
   });
 });
 
+test('POST checkout-session is refused while the event has payments_open off', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    await query('UPDATE events SET payments_open = false WHERE id = $1', [eventId]);
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 1000);
+    const cookie = await makeSession(userId);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/checkout-session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ method: 'card' }),
+    });
+    assert.equal(res.status, 409);
+  });
+});
+
 test('POST checkout-session rejects a caller who is not the registration owner', async () => {
   await withTestServer(async (port) => {
     const eventId = await makeEvent();
@@ -233,7 +250,7 @@ test('POST /webhooks/stripe marks the registration paid on a validly-signed chec
 
     const payload = JSON.stringify({
       id: 'evt_test_1', type: 'checkout.session.completed',
-      data: { object: { id: 'cs_test_webhook_1', client_reference_id: `${eventId}:${userId}`, amount_total: 2500, payment_method_types: ['card'], payment_status: 'paid' } },
+      data: { object: { id: 'cs_test_webhook_1', client_reference_id: `${eventId}:${userId}`, amount_total: 2500, currency: 'eur', payment_method_types: ['card'], payment_status: 'paid' } },
     });
     // Stripe's own test helper for generating a locally-valid signature --
     // no network call, matches how Stripe's docs recommend testing webhook
@@ -269,7 +286,7 @@ test('a Stripe bank transfer is only booked paid on async_payment_succeeded, not
     await makeRegistration(eventId, userId);
     await setAmountDue(eventId, userId, 4000);
     const session = {
-      id: `cs_test_bt_${crypto.randomUUID()}`, client_reference_id: `${eventId}:${userId}`, amount_total: 4000,
+      id: `cs_test_bt_${crypto.randomUUID()}`, client_reference_id: `${eventId}:${userId}`, amount_total: 4000, currency: 'eur',
       payment_method_types: ['customer_balance'], payment_status: 'unpaid',
     };
 
@@ -606,6 +623,266 @@ test('POST /tavern/my-topup-session validates add-on switch, amount, account and
     await setTavernLocked(account.id, true);
     assert.equal((await post({ amountCents: 2000, method: 'card' })).status, 409);
   });
+});
+
+test('POST /webhooks/stripe does not mark paid when the session paid less than is due now', async () => {
+  await withTestServer(async (port) => {
+    await configureStripeSettings(port, 'whsec_test_secret');
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 5000); // grew after the session (e.g. extras) was created
+    const res = await postSignedStripeEvent(port, 'whsec_test_secret', 'checkout.session.completed', {
+      id: `cs_test_low_${crypto.randomUUID()}`, client_reference_id: `${eventId}:${userId}`, amount_total: 4000, currency: 'eur',
+      payment_method_types: ['card'], payment_status: 'paid',
+    });
+    assert.equal(res.status, 200);
+    const { rows } = await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.equal(rows[0].paid_at, null);
+  });
+});
+
+test('tavern top-up refuses methods the tavern ledger does not know (SumUp, direct PayPal, Klarna)', async () => {
+  await withTestServer(async (port) => {
+    await query('UPDATE app_settings SET tavern_enabled = true');
+    const userId = await makeUser();
+    const res = await fetch(`http://localhost:${port}/tavern/my-topup-session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: await makeSession(userId) },
+      body: JSON.stringify({ method: 'sumup', amountCents: 1000 }),
+    });
+    assert.equal(res.status, 400);
+    for (const method of ['paypal_direct', 'klarna', 'sepa_debit']) {
+      const other = await fetch(`http://localhost:${port}/tavern/my-topup-session`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: await makeSession(userId) },
+        body: JSON.stringify({ method, amountCents: 1000 }),
+      });
+      assert.equal(other.status, 400, method);
+    }
+  });
+});
+
+test('POST transfer-notice flags an open registration, is idempotent, refuses strangers and paid registrations', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 3000);
+    const strangerId = await makeUser();
+    const post = (cookie) => fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/transfer-notice`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: '{}' });
+
+    assert.equal((await post(await makeSession(strangerId))).status, 403);
+    const own = await makeSession(userId);
+    assert.equal((await post(own)).status, 200);
+    const first = (await query('SELECT transfer_notified_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].transfer_notified_at;
+    assert.ok(first);
+    assert.equal((await post(own)).status, 200);
+    const again = (await query('SELECT transfer_notified_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].transfer_notified_at;
+    assert.equal(again.getTime(), first.getTime());
+    assert.equal((await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].paid_at, null);
+
+    await query('UPDATE registrations SET paid_at = now() WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.equal((await post(own)).status, 409);
+  });
+});
+
+test('POST checkout-session refuses a Stripe method the admin has not switched on', async () => {
+  await withTestServer(async (port) => {
+    const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
+    await setPaymentSettings({ stripeSecretKey: 'sk_test_unused', stripeMethods: ['card'] });
+    const eventId = await makeEvent();
+    const userId = await makeUser();
+    await makeRegistration(eventId, userId);
+    await setAmountDue(eventId, userId, 2000);
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/checkout-session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: await makeSession(userId) },
+      body: JSON.stringify({ method: 'klarna' }),
+    });
+    assert.equal(res.status, 502); // "not configured" -- nothing was sent to Stripe
+  });
+  await query("UPDATE payment_settings SET stripe_methods = '{card,paypal,bank_transfer}'");
+});
+
+test('PayPal return: books only a COMPLETED capture of this registration that covers the due amount, once', async () => {
+  const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
+  await setPaymentSettings({ paypalClientId: 'cid', paypalSecret: 'secret' });
+  const eventId = await makeEvent();
+  const userId = await makeUser();
+  await makeRegistration(eventId, userId);
+  await setAmountDue(eventId, userId, 4500);
+  const mkOrder = async (id) => query(
+    "INSERT INTO paypal_orders (order_id, event_id, user_id, amount_cents, success_url, cancel_url) VALUES ($1, $2, $3, 4500, 'http://app.test/ok', 'http://app.test/no')",
+    [id, eventId, userId]
+  );
+  const completed = (over = {}) => ({
+    status: 'COMPLETED',
+    purchase_units: [{ custom_id: `${eventId}:${userId}`, payments: { captures: [{ id: 'CAP1', status: 'COMPLETED', amount: { currency_code: 'EUR', value: '45.00' } }] } }],
+    ...over,
+  });
+
+  const realFetch = globalThis.fetch;
+  let order;
+  globalThis.fetch = (url, init) => {
+    const u = String(url);
+    if (u.includes('paypal.com/v1/oauth2/token')) return Promise.resolve(new Response(JSON.stringify({ access_token: 'tok' }), { status: 200 }));
+    if (u.includes('paypal.com/v2/checkout/orders')) return Promise.resolve(new Response(JSON.stringify(order), { status: 200 }));
+    return realFetch(url, init);
+  };
+  try {
+    await withTestServer(async (port) => {
+      const ret = (token) => realFetch(`http://localhost:${port}/paypal/return?token=${token}`, { redirect: 'manual' });
+      const paid = async () => (await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].paid_at;
+
+      // unknown / malformed token: nothing happens
+      assert.equal((await ret('UNKNOWNORDER1')).status, 302);
+      assert.equal((await ret('bad token!')).status, 302);
+
+      const cases = [
+        ['PENDINGORDER1', completed({ status: 'APPROVED' })],
+        ['WRONGREFORD1', completed({ purchase_units: [{ custom_id: 'someone:else', payments: { captures: [{ id: 'C', status: 'COMPLETED', amount: { currency_code: 'EUR', value: '45.00' } }] } }] })],
+        ['LOWAMOUNTORD', completed({ purchase_units: [{ custom_id: `${eventId}:${userId}`, payments: { captures: [{ id: 'C', status: 'COMPLETED', amount: { currency_code: 'EUR', value: '10.00' } }] } }] })],
+        ['WRONGCURRORD', completed({ purchase_units: [{ custom_id: `${eventId}:${userId}`, payments: { captures: [{ id: 'C', status: 'COMPLETED', amount: { currency_code: 'USD', value: '45.00' } }] } }] })],
+      ];
+      for (const [id, body] of cases) {
+        await mkOrder(id);
+        order = body;
+        const res = await ret(id);
+        assert.equal(res.headers.get('location'), 'http://app.test/no', id);
+        assert.equal(await paid(), null, `must not book ${id}`);
+      }
+
+      await mkOrder('GOODORDER123');
+      order = completed();
+      const ok = await ret('GOODORDER123');
+      assert.equal(ok.headers.get('location'), 'http://app.test/ok');
+      assert.notEqual(await paid(), null);
+      assert.equal((await ret('GOODORDER123')).headers.get('location'), 'http://app.test/ok'); // idempotent
+      const { rows } = await query('SELECT method FROM payments WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+      assert.deepEqual(rows.map((r) => r.method), ['paypal']);
+    });
+  } finally {
+    globalThis.fetch = realFetch;
+    await query('UPDATE payment_settings SET paypal_client_id = NULL, paypal_secret_enc = NULL, stripe_secret_key_enc = NULL');
+  }
+});
+
+test('guest checkout "auto" says so when no online method is set up, and still validates the method', async () => {
+  const { setGuestPaymentToken } = await import('../../backend/payments/repository.js');
+  await query('UPDATE payment_settings SET stripe_secret_key_enc = NULL, paypal_client_id = NULL, paypal_secret_enc = NULL, sumup_api_key_enc = NULL');
+  const eventId = await makeEvent();
+  const userId = await makeUser();
+  await makeRegistration(eventId, userId);
+  await setAmountDue(eventId, userId, 2000);
+  const { token } = await setGuestPaymentToken(eventId, userId, 60_000);
+  await withTestServer(async (port) => {
+    const post = (method) => fetch(`http://localhost:${port}/public/registrations/${token}/checkout-session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method }),
+    });
+    assert.equal((await post('auto')).status, 409);
+    assert.equal((await post('bitcoin')).status, 400);
+  });
+});
+
+test('guest page: without an online method it still gets the bank data, can report a transfer, and the hint names the contact address', async () => {
+  const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
+  const { setGuestPaymentToken } = await import('../../backend/payments/repository.js');
+  await query('UPDATE payment_settings SET stripe_secret_key_enc = NULL, paypal_client_id = NULL, paypal_secret_enc = NULL, sumup_api_key_enc = NULL');
+  await setPaymentSettings({ bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.', contactEmail: 'orga@example.com' });
+  const eventId = await makeEvent();
+  await query("UPDATE events SET code = 'T17/2027' WHERE id = $1", [eventId]);
+  const userId = await makeUser();
+  await makeRegistration(eventId, userId);
+  await setAmountDue(eventId, userId, 2000);
+  const { token } = await setGuestPaymentToken(eventId, userId, 60_000);
+  await withTestServer(async (port) => {
+    const info = await (await fetch(`http://localhost:${port}/public/registrations/${token}`)).json();
+    assert.equal(info.payment.onlineAvailable, false);
+    assert.equal(info.payment.bank.iban, 'DE02100100100006820101');
+    assert.match(info.payment.bank.reference, /^T17\/2027 /);
+    assert.equal(info.payment.contactEmail, 'orga@example.com');
+    const auto = await fetch(`http://localhost:${port}/public/registrations/${token}/checkout-session`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'auto' }) });
+    assert.equal(auto.status, 409);
+    assert.match((await auto.json()).error, /orga@example\.com/);
+    const notice = (t) => fetch(`http://localhost:${port}/public/registrations/${t}/transfer-notice`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal((await notice('not-a-token')).status, 404);
+    assert.equal((await notice(token)).status, 200);
+    assert.ok((await query('SELECT transfer_notified_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].transfer_notified_at);
+  });
+  await query('UPDATE payment_settings SET contact_email = NULL');
+});
+
+test('reported transfers: staff can reset them, others cannot; overdue ones (3+ days, unpaid) are listed for the member menu only', async () => {
+  const eventId = await makeEvent();
+  const userId = await makeUser();
+  await makeRegistration(eventId, userId);
+  await setAmountDue(eventId, userId, 3000);
+  await query("UPDATE registrations SET transfer_notified_at = now() - interval '4 days' WHERE event_id = $1 AND user_id = $2", [eventId, userId]);
+  const { rows: adminRows } = await query(
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Pay', 'Admin', (SELECT id FROM groups WHERE key = 'admin'), true) RETURNING id",
+    [`payments-repo-${crypto.randomUUID()}@example.com`]
+  );
+  const adminCookie = await makeSession(adminRows[0].id);
+  const staff = await makeCheckinGroupUserAndSession();
+
+  await withTestServer(async (port) => {
+    const url = `http://localhost:${port}/events/${eventId}/registrations/${userId}/transfer-notice`;
+    const overdue = (cookie) => fetch(`http://localhost:${port}/payments/overdue-transfers`, { headers: { Cookie: cookie } });
+
+    assert.equal((await overdue(await makeSession(userId))).status, 403);
+    assert.equal((await overdue(staff.cookie)).status, 403); // check-in staff has no member menu
+    const list = await (await overdue(adminCookie)).json();
+    assert.ok(list.some((t) => t.userId === userId));
+
+    assert.equal((await fetch(url, { method: 'DELETE', headers: { Cookie: await makeSession(userId) } })).status, 403);
+    assert.equal((await fetch(url, { method: 'DELETE', headers: { Cookie: staff.cookie } })).status, 200);
+    assert.equal((await fetch(url, { method: 'DELETE', headers: { Cookie: adminCookie } })).status, 404); // already cleared
+    assert.ok(!(await (await overdue(adminCookie)).json()).some((t) => t.userId === userId));
+    // the person may report again
+    assert.equal((await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: await makeSession(userId) }, body: '{}' })).status, 200);
+  });
+});
+
+test('SumUp webhook: wrong secret is 404; only a PAID, covering, matching checkout books the payment', async () => {
+  const { setPaymentSettings, getPaymentSettingsForUse } = await import('../../backend/paymentSettings/repository.js');
+  await setPaymentSettings({ sumupApiKey: 'sumup_test_key', sumupMerchantCode: 'MTEST' });
+  const { sumupWebhookSecret } = await getPaymentSettingsForUse();
+  const eventId = await makeEvent();
+  const userId = await makeUser();
+  await makeRegistration(eventId, userId);
+  await setAmountDue(eventId, userId, 4500);
+
+  const realFetch = globalThis.fetch;
+  let checkout;
+  globalThis.fetch = (url, init) => String(url).startsWith('https://api.sumup.com/')
+    ? Promise.resolve(new Response(JSON.stringify(checkout), { status: 200 }))
+    : realFetch(url, init);
+  try {
+    await withTestServer(async (port) => {
+      const hit = (secret) => realFetch(`http://localhost:${port}/webhooks/sumup/${secret}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 'co-1' }),
+      });
+      const paid = async () => (await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].paid_at;
+      const base = { id: 'co-1', status: 'PAID', merchant_code: 'MTEST', currency: 'EUR', amount: 45, checkout_reference: `${eventId}:${userId}:abcd1234` };
+
+      assert.equal((await hit('wrong-secret')).status, 404);
+      assert.equal(await paid(), null);
+
+      for (const bad of [{ status: 'PENDING' }, { merchant_code: 'OTHER' }, { currency: 'USD' }, { amount: 10 }, { checkout_reference: 'not-a-reference' }]) {
+        checkout = { ...base, ...bad };
+        assert.equal((await hit(sumupWebhookSecret)).status, 200);
+        assert.equal(await paid(), null, `must not book for ${JSON.stringify(bad)}`);
+      }
+
+      checkout = base;
+      assert.equal((await hit(sumupWebhookSecret)).status, 200);
+      assert.notEqual(await paid(), null);
+      assert.equal((await hit(sumupWebhookSecret)).status, 200); // idempotent
+      const { rows } = await query("SELECT method FROM payments WHERE event_id = $1 AND user_id = $2", [eventId, userId]);
+      assert.deepEqual(rows.map((r) => r.method), ['sumup']);
+    });
+  } finally {
+    globalThis.fetch = realFetch;
+    await query('UPDATE payment_settings SET sumup_api_key_enc = NULL, sumup_merchant_code = NULL, sumup_webhook_secret_enc = NULL');
+  }
 });
 
 test.after(async () => {

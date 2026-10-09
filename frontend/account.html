@@ -53,6 +53,8 @@
 
               <div class="card" id="dashboard-account-hint" style="display:none;"></div>
 
+              <div class="card" id="dashboard-transfer-reminder" hidden></div>
+
               <div class="card" id="dashboard-event-card"></div>
 
               <div class="card tavern-dash" id="dashboard-tavern-card" hidden></div>
@@ -359,6 +361,12 @@
                   </div>
                 </dialog>
 
+                <div id="all-registered-card" class="card" hidden>
+                  <h2>Du bist angemeldet</h2>
+                  <p class="sub" id="all-registered-text"></p>
+                  <p class="sub">Angaben ändern, Unterkunft wählen oder dich abmelden kannst du in der Karte rechts. Ist deine Anmeldung schon bestätigt, prüft die Orga die Abmeldung manuell, auch eine Erstattung der Ticketgebühr.</p>
+                </div>
+
                 <div id="registration-card" class="card">
                   <p class="eyebrow">Kodex der Anmeldung</p>
                   <h2>Neu anmelden</h2>
@@ -592,12 +600,19 @@
   <dialog id="payment-dialog">
     <h3>Zahlung</h3>
     <p class="lede">Zu zahlen: <strong id="payment-dialog-amount"></strong></p>
-    <div class="dialog-actions">
-      <button type="button" id="payment-paypal-btn">Per PayPal</button>
-      <button type="button" id="payment-card-btn">Per Kreditkarte</button>
-      <button type="button" id="payment-stripe-bank-btn">Per Banküberweisung (automatisch bestätigt)</button>
-      <button type="button" id="payment-bank-btn" class="btn-ghost">Überweisungsinformationen anzeigen</button>
-      <button type="button" id="payment-girocode-btn" class="btn-ghost">Girocode anzeigen</button>
+    <div class="payment-methods">
+      <p id="payment-none-hint" class="sub" hidden>Aktuell ist keine Zahlungsmethode eingerichtet. Bitte melde dich bei der Orga<span id="payment-contact"></span>.</p>
+      <button type="button" id="payment-paypaldirect-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span><span>Per PayPal zahlen</span></button>
+      <button type="button" id="payment-paypal-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span><span>Per PayPal zahlen</span></button>
+      <button type="button" id="payment-card-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">credit_card</span><span>Per Kreditkarte</span></button>
+      <button type="button" id="payment-klarna-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">shopping_bag</span><span>Per Klarna</span></button>
+      <button type="button" id="payment-sepa-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance</span><span>Per SEPA-Lastschrift</span></button>
+      <button type="button" id="payment-sumup-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">contactless</span><span>Per SumUp (Karte, Apple Pay, Google Pay)</span></button>
+      <button type="button" id="payment-stripe-bank-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance</span><span>Per Banküberweisung (automatisch bestätigt)</span></button>
+      <button type="button" id="payment-bank-btn" class="btn-ghost" hidden><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span>Überweisungsinformationen anzeigen</span></button>
+      <button type="button" id="payment-girocode-btn" class="btn-ghost" hidden><span class="material-symbols-outlined" aria-hidden="true">qr_code_2</span><span>Girocode anzeigen</span></button>
+      <p id="payment-transfer-note" class="sub" hidden></p>
+      <button type="button" id="payment-transfer-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">check_circle</span><span>Ich habe überwiesen</span></button>
     </div>
     <div id="payment-bank-info" style="display:none;">
       <p>IBAN: <span id="payment-bank-iban"></span></p>
@@ -768,7 +783,15 @@
             ${active.locked ? '<span class="status-pill status-cancelled">Gesperrt</span>' : ""}
           </div>
           ${active.locked ? "" : '<button type="button" id="tavern-topup-btn">Aufladen</button>'}`;
-        document.getElementById("tavern-topup-btn")?.addEventListener("click", () => tavernTopupDialog.showModal());
+        document.getElementById("tavern-topup-btn")?.addEventListener("click", async () => {
+          try {
+            const enabled = (await api.get("/payment-settings")).stripeMethods ?? [];
+            tavernTopupDialog.querySelectorAll("[data-tavern-method]").forEach((b) => { b.hidden = !enabled.includes(b.dataset.tavernMethod); });
+          } catch {
+            // Settings unavailable: leave the buttons as they are.
+          }
+          tavernTopupDialog.showModal();
+        });
         card.hidden = false;
       } catch {
         card.hidden = true;
@@ -822,13 +845,21 @@
         </div>
       </div>`
         : "";
+      const mustPay = registration && !registration.conPayer && !registration.paidAt && registration.amountDueCents > 0 && registration.status !== "cancelled" && registration.status !== "waitlisted";
+      const ctaBlock = !registration
+        ? `<div class="event-cta"><span class="event-cta-eyebrow">Noch nicht angemeldet</span><button type="button" id="dashboard-register-btn">Für ${escapeHtml(activeEvent.name)} anmelden</button></div>`
+        : `<div class="event-cta"><span class="event-cta-eyebrow">${registration.status === "waitlisted" ? "Warteliste" : registration.status === "cancelled" ? "Abgesagt" : "Anmeldung"}</span>
+          <p class="event-cta-title">${registration.status === "waitlisted" ? `Auf der Warteliste für ${escapeHtml(activeEvent.name)}` : registration.status === "cancelled" ? `Anmeldung für ${escapeHtml(activeEvent.name)} abgesagt` : `Für ${escapeHtml(activeEvent.name)} angemeldet`}</p>
+          ${registration.transferNotifiedAt && !registration.paidAt ? `<p class="sub">Überweisung gemeldet. Die Orga prüft den Zahlungseingang.</p>` : ""}
+          ${registration.status === "pending" && !registration.conPayer && !registration.paidAt && registration.amountDueCents == null ? `<p class="sub">Zahlung: Die Orga legt deinen Betrag noch fest.</p>` : ""}
+          ${mustPay && activeEvent.payments_open ? `<p class="sub">Zahlung offen: ${formatEuro(registration.amountDueCents)}</p><button type="button" id="dashboard-pay-btn">Jetzt bezahlen</button>` : ""}</div>`;
       card.innerHTML = `<div class="event-card-head">
         <h2>${escapeHtml(activeEvent.name)}</h2>
         ${statusPill}
         <span class="badge badge-active">Event aktiv</span>
         ${codeBox}
       </div>
-      <div class="event-subcards${registration ? "" : " event-subcards--cta"}">
+      <div class="event-subcards event-subcards--cta">
         <div class="event-subcard">
           <h3><span class="material-symbols-outlined" aria-hidden="true">schedule</span> Zeit</h3>
           <div class="event-time-row">
@@ -836,12 +867,13 @@
             <p class="event-date event-date-large"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span> ${escapeHtml(formatEventDate(activeEvent.event_date))}</p>
           </div>
         </div>
-        ${registration ? "" : `<div class="event-cta"><button type="button" id="dashboard-register-btn">Für ${escapeHtml(activeEvent.name)} anmelden</button></div>`}
+        ${ctaBlock}
         ${locationBlock}
       </div>
       ${infoButtons ? `<div class="event-info-buttons">${infoButtons}</div>` : ""}`;
       document.getElementById("dashboard-book-btn").hidden = !registration;
       card.querySelector("#dashboard-register-btn")?.addEventListener("click", () => goToTab("anmelden"));
+      card.querySelector("#dashboard-pay-btn")?.addEventListener("click", () => openPaymentDialog(activeEvent.id, registration));
       const ctaCard = card.querySelector(".event-cta");
       if (ctaCard) {
         api.get("/app-settings").then(({ hasUploadedTicketBackground }) => {
@@ -964,7 +996,8 @@
       const hint = document.getElementById("ticket-payment-hint");
       const payButton = document.getElementById("ticket-pay-btn");
       hint.style.display = gated ? "" : "none";
-      payButton.style.display = gated && !noAmount ? "" : "none";
+      const paymentsOpen = Boolean(events.find((e) => e.id === eventId)?.payments_open);
+      payButton.style.display = gated && !noAmount && paymentsOpen ? "" : "none";
       if (noAmount) {
         hint.textContent = "Dein Ticket erscheint, sobald der Betrag festgelegt und die Zahlung bestätigt ist.";
       } else if (gated) {
@@ -978,12 +1011,47 @@
     let payingEventId = null;
     let payingRegistration = null;
 
-    function openPaymentDialog(eventId, registration) {
+    async function openPaymentDialog(eventId, registration) {
       payingEventId = eventId;
       payingRegistration = registration;
       document.getElementById("payment-dialog-amount").textContent = formatEuro(registration.amountDueCents);
       document.getElementById("payment-bank-info").style.display = "none";
       document.getElementById("payment-girocode-wrap").style.display = "none";
+      // The admin decides whether the bank transfer offers a QR code.
+      // Only methods the admin has set up are offered.
+      const show = (id, on) => { document.getElementById(id).hidden = !on; };
+      ["payment-transfer-btn", "payment-paypaldirect-btn", "payment-paypal-btn", "payment-card-btn", "payment-klarna-btn", "payment-sepa-btn", "payment-stripe-bank-btn", "payment-bank-btn", "payment-girocode-btn", "payment-sumup-btn"].forEach((id) => show(id, false));
+      document.getElementById("payment-none-hint").hidden = true;
+      document.getElementById("payment-transfer-note").hidden = true;
+      try {
+        const paymentSettings = await api.get("/payment-settings");
+        const stripeMethods = paymentSettings.stripeMethods ?? [];
+        const stripeOn = stripeMethods.length > 0;
+        const paypalOn = paymentSettings.paypalEnabled === true;
+        const bankOn = Boolean(paymentSettings.bankIban);
+        show("payment-paypal-btn", stripeMethods.includes("paypal"));
+        show("payment-card-btn", stripeMethods.includes("card"));
+        show("payment-stripe-bank-btn", stripeMethods.includes("bank_transfer"));
+        show("payment-klarna-btn", stripeMethods.includes("klarna"));
+        show("payment-sepa-btn", stripeMethods.includes("sepa_debit"));
+        show("payment-paypaldirect-btn", paypalOn);
+        // Two PayPal rows need telling apart; a single one is just "Per PayPal zahlen".
+        document.querySelector("#payment-paypal-btn span:last-child").textContent = paypalOn ? "Per PayPal (über Stripe)" : "Per PayPal zahlen";
+        show("payment-bank-btn", bankOn);
+        const reported = payingRegistration?.transferNotifiedAt;
+        show("payment-transfer-btn", bankOn && !reported);
+        const note = document.getElementById("payment-transfer-note");
+        note.hidden = !(bankOn && reported);
+        if (reported) note.textContent = `Überweisung gemeldet am ${new Date(reported).toLocaleDateString("de-DE")}. Die Orga prüft den Zahlungseingang.`;
+        show("payment-girocode-btn", bankOn && paymentSettings.bankQrEnabled !== false);
+        show("payment-sumup-btn", paymentSettings.sumupEnabled === true);
+        const contact = document.getElementById("payment-contact");
+        contact.textContent = paymentSettings.contactEmail ? ` (${paymentSettings.contactEmail})` : "";
+        document.getElementById("payment-none-hint").hidden = stripeOn || bankOn || paypalOn || paymentSettings.sumupEnabled === true;
+      } catch {
+        // Settings unavailable: better to say so than to offer methods that may not work.
+        document.getElementById("payment-none-hint").hidden = false;
+      }
       paymentDialog.showModal();
     }
 
@@ -1000,7 +1068,21 @@
     }
 
     document.getElementById("payment-paypal-btn").addEventListener("click", () => startCheckout("paypal"));
+    document.getElementById("payment-paypaldirect-btn").addEventListener("click", () => startCheckout("paypal_direct"));
+    document.getElementById("payment-klarna-btn").addEventListener("click", () => startCheckout("klarna"));
+    document.getElementById("payment-sepa-btn").addEventListener("click", () => startCheckout("sepa_debit"));
     document.getElementById("payment-card-btn").addEventListener("click", () => startCheckout("card"));
+    document.getElementById("payment-sumup-btn").addEventListener("click", () => startCheckout("sumup"));
+    document.getElementById("payment-transfer-btn").addEventListener("click", async () => {
+      try {
+        await api.post(`/events/${payingEventId}/registrations/${currentUserId}/transfer-notice`, {});
+        paymentDialog.close();
+        notify("Danke! Die Orga wurde informiert und prüft den Zahlungseingang.", "success");
+        await loadRegistrations();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
     document.getElementById("payment-stripe-bank-btn").addEventListener("click", () => startCheckout("bank_transfer"));
 
     document.getElementById("payment-bank-btn").addEventListener("click", async () => {
@@ -2004,7 +2086,7 @@
       }
       let lodgings = [];
       try {
-        lodgings = await api.get(`/events/${eventId}/lodgings`);
+        lodgings = await api.get(`/events/${eventId}/lodgings?own=1`);
       } catch {
         lodgings = [];
       }
@@ -2155,6 +2237,7 @@
     async function loadEvents() {
       events = await api.get("/events");
       populateEventOptions();
+      updateRegistrationCardVisibility();
     }
 
     async function loadCharacters() {
@@ -2255,6 +2338,22 @@
       }
     });
 
+    // Once every event that can be registered for has a registration, the
+    // sign-up form has nothing left to offer -- show a short note instead.
+    function updateRegistrationCardVisibility() {
+      const open = events.filter((e) => canEditCharacters || e.is_active);
+      const free = open.filter((e) => !currentRegistrations.some((r) => r.eventId === e.id));
+      const allDone = open.length > 0 && free.length === 0;
+      document.getElementById("registration-card").hidden = allDone;
+      document.getElementById("all-registered-card").hidden = !allDone;
+      const cancelled = open.length === 1 && currentRegistrations.find((r) => r.eventId === open[0].id)?.status === "cancelled";
+      document.getElementById("all-registered-text").textContent = cancelled
+        ? `Du hast dich von „${open[0].name}“ abgemeldet. Wende dich an die Orga, falls du doch teilnehmen möchtest.`
+        : open.length === 1
+        ? `Für „${open[0].name}“ bist du bereits angemeldet.`
+        : `Du bist für alle ${open.length} offenen Events angemeldet.`;
+    }
+
     async function loadRegistrations() {
       console.log("Loading registrations");
       const registrations = await api.get("/registrations");
@@ -2262,6 +2361,7 @@
 
       renderDashboardEventCard();
       renderActiveRegistrationPanel();
+      updateRegistrationCardVisibility();
     }
 
     function labelForRegisteredAs(r) {
@@ -2321,7 +2421,7 @@
       if (lodgingEnabled && registration.status !== "cancelled" && registration.status !== "waitlisted") {
         let eventLodgings = [];
         try {
-          eventLodgings = await api.get(`/events/${activeEvent.id}/lodgings`);
+          eventLodgings = await api.get(`/events/${activeEvent.id}/lodgings?own=1`);
         } catch {
           eventLodgings = [];
         }
@@ -2355,7 +2455,7 @@
       document.getElementById("active-registration-edit-btn").onclick = () =>
         openEditOtDialog(activeEvent.id);
       const unregisterBtn = document.getElementById("active-registration-unregister-btn");
-      if (registration.status === "pending" || registration.status === "waitlisted") {
+      if (["pending", "waitlisted", "confirmed"].includes(registration.status)) {
         unregisterBtn.style.display = "";
         unregisterBtn.onclick = () => unregister(activeEvent.id);
       } else {
@@ -2402,9 +2502,14 @@
     });
 
     async function unregister(eventId) {
-      if (!confirm("Wirklich von diesem Event abmelden?")) return;
+      const confirmed = currentRegistrations.find((r) => r.eventId === eventId)?.status === "confirmed";
+      const question = confirmed
+        ? "Wirklich abmelden? Deine Anmeldung ist bereits bestätigt. Die Orga prüft die Abmeldung manuell, auch eine mögliche Erstattung der Ticketgebühr."
+        : "Wirklich von diesem Event abmelden?";
+      if (!confirm(question)) return;
       try {
-        await api.delete(`/events/${eventId}/register`);
+        const { manualReview } = await api.delete(`/events/${eventId}/register`);
+        if (manualReview) notify("Du bist abgemeldet. Die Orga prüft das manuell und meldet sich wegen einer möglichen Erstattung.", "success");
         await loadRegistrations();
       } catch (err) {
         notify(err.message, "error");
@@ -3117,10 +3222,29 @@
       }
     });
 
+    // Staff with the member list: reported transfers nobody has booked after three days.
+    async function loadTransferReminder(account) {
+      if (!account.menus?.includes("mitglieder")) return;
+      const card = document.getElementById("dashboard-transfer-reminder");
+      try {
+        const list = await api.get("/payments/overdue-transfers");
+        card.hidden = list.length === 0;
+        if (list.length === 0) return;
+        const days = (iso) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+        card.innerHTML = `<h3>Überweisungen prüfen</h3>
+          <p class="sub">Diese Personen haben vor mehr als drei Tagen „Ich habe überwiesen“ gemeldet, aber es ist keine Zahlung gebucht. Schau im Bankkonto nach und markiere die Zahlung im Check-In als bezahlt. Ist nichts eingegangen, setze die Meldung in den Mitgliedern zurück.</p>
+          <ul>${list.map((t) => `<li>${escapeHtml(t.name)} · ${escapeHtml(t.eventName)} · seit ${days(t.notifiedAt)} Tagen</li>`).join("")}</ul>
+          <a class="btn-secondary" href="/admin/members.html">Zu den Mitgliedern</a>`;
+      } catch {
+        // The reminder is a convenience; the dashboard works without it.
+      }
+    }
+
     try {
       const account = await api.get("/account");
       if (!window.location.hash) window.location.hash = "dashboard";
       navAccount = account;
+      loadTransferReminder(account);
       if (account.groupMemberOnly) {
         // Plain members only see who is in their group and can leave it.
         for (const id of ["group-tabs", "group-bulk-btn", "group-members-tab-intro"]) document.getElementById(id)?.setAttribute("hidden", "");

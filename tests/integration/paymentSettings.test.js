@@ -106,7 +106,52 @@ test('GET /payment-settings returns only bank fields to any logged-in user', asy
     const res = await fetch(`http://localhost:${port}/payment-settings`, { headers: { Cookie: memberCookie } });
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.' });
+    assert.deepEqual(body, { bankIban: 'DE02100100100006820101', bankBic: 'PBNKDEFF', bankAccountHolder: 'Pakyrion e.V.', bankQrEnabled: true, contactEmail: null, stripeMethods: ['card', 'paypal', 'bank_transfer'], sumupEnabled: false, paypalEnabled: false });
+    await fetch(`http://localhost:${port}/admin/settings/payments`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ bankQrEnabled: false }),
+    });
+    const off = await (await fetch(`http://localhost:${port}/payment-settings`, { headers: { Cookie: memberCookie } })).json();
+    assert.equal(off.bankQrEnabled, false);
+    assert.equal(off.bankIban, 'DE02100100100006820101');
+  } finally {
+    server.close();
+  }
+});
+
+test('PayPal credentials: secret is never returned, paypalEnabled needs both; Stripe methods are validated and filtered', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { cookie: memberCookie } = await makeUserAndSession('mitglied');
+    const put = (body) => fetch(`http://localhost:${port}/admin/settings/payments`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: adminCookie }, body: JSON.stringify(body),
+    });
+    const shown = async () => (await fetch(`http://localhost:${port}/payment-settings`, { headers: { Cookie: memberCookie } })).json();
+
+    assert.equal((await put({ stripeMethods: ['card', 'bitcoin'] })).status, 400);
+    assert.equal((await put({ paypalSandbox: 'yes' })).status, 400);
+    assert.equal((await put({ contactEmail: 'kein mail' })).status, 400);
+    assert.equal((await put({ contactEmail: 'orga@example.com' })).status, 200);
+    assert.equal((await shown()).contactEmail, 'orga@example.com');
+    assert.equal((await put({ contactEmail: '' })).status, 200);
+    assert.equal((await shown()).contactEmail, null);
+
+    assert.equal((await put({ paypalClientId: 'client-id-1' })).status, 200);
+    assert.equal((await shown()).paypalEnabled, false); // secret still missing
+    const saved = await (await put({ paypalSecret: 'paypal-secret-never-leak', paypalSandbox: true })).json();
+    assert.equal(saved.hasPaypalSecret, true);
+    assert.equal(saved.paypalSandbox, true);
+    assert.ok(!JSON.stringify(saved).includes('paypal-secret-never-leak'));
+    const forMember = await shown();
+    assert.equal(forMember.paypalEnabled, true);
+    assert.ok(!JSON.stringify(forMember).includes('paypal-secret-never-leak'));
+    assert.ok(!JSON.stringify(forMember).includes('client-id-1'));
+
+    await put({ stripeSecretKey: 'sk_methods_test' });
+    assert.equal((await put({ stripeMethods: ['klarna', 'sepa_debit'] })).status, 200);
+    assert.deepEqual((await shown()).stripeMethods, ['klarna', 'sepa_debit']);
   } finally {
     server.close();
   }

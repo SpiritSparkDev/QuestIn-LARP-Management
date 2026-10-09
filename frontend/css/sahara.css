@@ -1821,6 +1821,12 @@ button:hover {
   background: var(--primary-deep);
 }
 
+/* Links styled as buttons: the global a:hover colour would match the hover background. */
+a.btn:hover,
+a.btn-seal:hover {
+  color: var(--on-primary);
+}
+
 .btn-ghost,
 .btn-secondary {
   background: none;
@@ -5306,22 +5312,27 @@ dialog.mode-dialog input[type="password"], dialog.mode-dialog input[type="url"],
 
 /* Dashboard: not yet registered -> the sign-up button sits between Zeit and Ort */
 .event-subcards--cta {
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
 }
 
+/* Ticket-like (not a dashed "create" card): same height as Zeit/Ort, solid
+   tinted panel with the uploaded ticket background behind the button. */
 .event-cta {
   position: relative;
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding: 36px 28px;
-  background: var(--surface-container-lowest);
-  border: 1px solid var(--outline-variant);
-  border-radius: 16px;
+  gap: 14px;
+  padding: 20px;
+  text-align: center;
+  background: var(--primary-container);
+  border: 1px solid var(--primary);
+  border-radius: 12px;
   overflow: hidden;
 }
 
-/* Same uploaded ticket background as the ticket card, a bit stronger */
 .event-cta::before {
   content: "";
   position: absolute;
@@ -5329,15 +5340,26 @@ dialog.mode-dialog input[type="password"], dialog.mode-dialog input[type="url"],
   background-image: var(--ticket-bg-image, none);
   background-size: cover;
   background-position: center;
-  opacity: 0.25;
+  opacity: 0.3;
 }
 
 .event-cta > * {
   position: relative;
 }
 
+.event-cta-eyebrow {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary-deep);
+}
+
 .event-cta button {
-  font-size: 1.15rem;
+  /* 80 % deckend (Text bleibt voll lesbar), leichter Verlauf von oben nach unten */
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--primary) 80%, transparent), color-mix(in srgb, var(--primary-deep) 80%, transparent));
+  width: 100%;
+  white-space: normal;
+  font-size: 1.05rem;
   padding: 18px 28px;
   box-shadow: 0 4px 14px var(--shadow);
 }
@@ -5346,4 +5368,150 @@ dialog.mode-dialog input[type="password"], dialog.mode-dialog input[type="url"],
   .event-subcards--cta {
     grid-template-columns: 1fr;
   }
+}
+
+.event-cta-title {
+  margin: 0;
+  font-family: "EB Garamond", serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+/* Icon-only action buttons (member list) */
+.btn-icon {
+  padding: 6px;
+  line-height: 1;
+}
+
+.btn-icon .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.help-item {
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.help-item summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font-weight: 600;
+}
+
+.help-item p {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+}
+
+/* Compact status dropdown in table cells (member list) */
+select.status-select {
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 24px 4px 8px;
+  font-size: 13px;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.reg-line {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+/* Event label with its colour (member list) */
+.event-chip {
+  --chip: var(--outline);
+  padding: 2px 8px;
+  border-left: 4px solid var(--chip);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--chip) 16%, transparent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Member list: slim rows -- action icons stay on one line, tighter cell padding */
+#member-list td,
+#member-list th {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+#member-list td:last-child {
+  white-space: nowrap;
+  width: 1%;
+}
+
+#member-list td:last-child .btn-icon {
+  vertical-align: middle;
+}
+
+#member-list .badge {
+  white-space: nowrap;
+}
+
+/* Event form: QR code identifier and colour on one line */
+.event-code-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.event-code-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.event-color-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-color-field input[type="color"] {
+  width: 48px;
+  height: 40px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+/* Payment dialog: one method per row, icon in front */
+.payment-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.payment-methods button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  text-align: left;
+}
+
+.payment-methods button .material-symbols-outlined {
+  font-size: 22px;
+}
+
+#payment-dialog {
+  width: min(460px, 92vw);
+}
+
+/* Dashboard: air between the stacked cards and before "Meine Charaktere" / "Gruppe" */
+#dashboard-tab .dashboard-main > .card {
+  margin-top: 0;
+  margin-bottom: 24px;
+}
+
+#dashboard-tab .dashboard-split {
+  margin-top: 32px;
 }

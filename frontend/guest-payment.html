@@ -38,11 +38,31 @@
       </div>
     </div>
     <button type="button" id="retry-button" style="display:none;">Zur Bezahlung</button>
+    <div id="bank-panel" style="display:none;">
+      <h3>Per Überweisung zahlen</h3>
+      <p class="lede">Zu zahlen: <strong id="bank-amount"></strong></p>
+      <p>IBAN: <strong id="bank-iban"></strong></p>
+      <p id="bank-bic-row">BIC: <span id="bank-bic"></span></p>
+      <p>Kontoinhaber: <span id="bank-holder"></span></p>
+      <p>Verwendungszweck: <strong id="bank-reference"></strong></p>
+      <div id="bank-qr-wrap" style="display:none;"><canvas id="bank-qr-canvas"></canvas><p class="sub">Girocode: mit der Banking-App scannen.</p></div>
+      <button type="button" id="bank-transfer-btn">Ich habe überwiesen</button>
+    </div>
+    <div id="save-link-panel" class="note-box" style="display:none;">
+      <span class="material-symbols-outlined" aria-hidden="true">bookmark</span>
+      <div>
+        <p><strong>Bitte speichere dir den Link zu dieser Seite.</strong> Mit diesem Link kommst du schnell wieder an dein Ticket, falls du die Seite schließt.</p>
+        <p class="sub">Sobald dein Zahlungseingang bestätigt ist, bekommst du eine E-Mail. Falls du keine E-Mail-Adresse angegeben hast, wende dich bitte an die Orga<span id="save-link-contact"></span>.</p>
+        <input type="text" id="save-link-url" readonly aria-label="Link zu dieser Seite">
+        <button type="button" id="save-link-copy" class="btn-secondary">Link kopieren</button>
+      </div>
+    </div>
   </div>
 </div>
 <script type="module">
 import { api } from '/js/api.js';
 import { applyBranding } from '/js/branding.js';
+import { buildEpcQrPayload } from '/js/epcQr.js';
 applyBranding();
 
 const params = new URLSearchParams(window.location.search);
@@ -53,7 +73,7 @@ const retryButton = document.getElementById('retry-button');
 
 async function startCheckout() {
   try {
-    const result = await api.post(`/public/registrations/${token}/checkout-session`, { method: 'card' });
+    const result = await api.post(`/public/registrations/${token}/checkout-session`, { method: 'auto' });
     window.location.href = result.url;
   } catch (err) {
     messageEl.textContent = err.message;
@@ -61,6 +81,65 @@ async function startCheckout() {
     retryButton.style.display = '';
   }
 }
+
+// While a payment is open: the page address to keep, and a warning when the tab is about to close.
+function showSaveLink(registration) {
+  const mail = registration.payment?.contactEmail;
+  document.getElementById('save-link-contact').textContent = mail ? ` (${mail})` : '';
+  const input = document.getElementById('save-link-url');
+  input.value = window.location.origin + window.location.pathname + `?token=${encodeURIComponent(token)}`;
+  document.getElementById('save-link-copy').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch {
+      input.select();
+      document.execCommand('copy');
+    }
+    document.getElementById('save-link-copy').textContent = 'Kopiert!';
+  };
+  document.getElementById('save-link-panel').style.display = '';
+  // Browsers show their own generic text here; the notice above is what explains it.
+  window.addEventListener('beforeunload', (event) => {
+    event.preventDefault();
+    event.returnValue = '';
+  });
+}
+
+// Bank data of the open payment; shown when no online method exists or the online payment did not work out.
+function showBank(registration) {
+  const bank = registration.payment?.bank;
+  if (!bank) return;
+  const euro = `${(registration.amountDueCents / 100).toFixed(2).replace('.', ',')} €`;
+  document.getElementById('bank-amount').textContent = euro;
+  document.getElementById('bank-iban').textContent = bank.iban;
+  document.getElementById('bank-bic').textContent = bank.bic ?? '';
+  document.getElementById('bank-bic-row').style.display = bank.bic ? '' : 'none';
+  document.getElementById('bank-holder').textContent = bank.accountHolder ?? '';
+  document.getElementById('bank-reference').textContent = bank.reference;
+  if (bank.qrEnabled) {
+    renderQrToCanvas(buildEpcQrPayload({ iban: bank.iban, bic: bank.bic, name: bank.accountHolder, amountCents: registration.amountDueCents, reference: bank.reference }), document.getElementById('bank-qr-canvas'));
+    document.getElementById('bank-qr-wrap').style.display = '';
+  }
+  document.getElementById('bank-panel').style.display = '';
+  if (registration.payment.transferNotifiedAt) {
+    document.getElementById('bank-transfer-btn').style.display = 'none';
+    messageEl.textContent = `Überweisung gemeldet am ${new Date(registration.payment.transferNotifiedAt).toLocaleDateString('de-DE')}. Die Orga prüft den Zahlungseingang, danach erscheint hier dein Ticket.`;
+    messageEl.className = 'success';
+  }
+  showSaveLink(registration);
+}
+
+document.getElementById('bank-transfer-btn').addEventListener('click', async () => {
+  try {
+    await api.post(`/public/registrations/${token}/transfer-notice`, {});
+    document.getElementById('bank-transfer-btn').style.display = 'none';
+    messageEl.textContent = 'Danke! Die Orga wurde informiert und prüft den Zahlungseingang. Sobald er bestätigt ist, erscheint hier dein Ticket.';
+    messageEl.className = 'success';
+  } catch (err) {
+    messageEl.textContent = err.message;
+    messageEl.className = 'error';
+  }
+});
 
 function renderQrToCanvas(text, canvas) {
   const qr = qrcode(0, 'M');
@@ -128,9 +207,16 @@ if (!token) {
       messageEl.className = 'success';
     } else if (payment === 'cancelled') {
       messageEl.textContent = 'Die Zahlung wurde abgebrochen.';
-      retryButton.style.display = '';
-    } else if (open) {
+      retryButton.style.display = registration.payment?.onlineAvailable ? '' : 'none';
+      showBank(registration);
+    } else if (open && registration.payment?.onlineAvailable) {
       await startCheckout();
+    } else if (open && registration.payment?.bank) {
+      messageEl.textContent = 'Du kannst per Überweisung zahlen:';
+      showBank(registration);
+    } else if (open) {
+      const mail = registration.payment?.contactEmail;
+      messageEl.textContent = `Aktuell ist keine Zahlungsmethode eingerichtet. Bitte melde dich bei der Orga${mail ? ` (${mail})` : ''}.`;
     } else {
       messageEl.textContent = 'Für dieses Event ist noch kein Ticket verfügbar.';
     }

@@ -97,8 +97,8 @@ router.post('/events/:id/registrations/:userId', requireAuth(async ({ req, param
 
 router.delete('/events/:id/register', requireAuth(async ({ params, user }) => {
   try {
-    await unregisterFromEvent(user.id, params.id);
-    return { status: 200, body: { unregistered: true } };
+    const { manualReview } = await unregisterFromEvent(user.id, params.id);
+    return { status: 200, body: { unregistered: true, manualReview } };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
     if (err.code === 'CANNOT_UNREGISTER') return { status: 409, body: { error: err.message } };

@@ -8,7 +8,7 @@ import { filterCharacterFields } from '../characters/visibility.js';
 import { listOpenInvitationsForEvent } from '../invitations/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../registrationFields.js';
-import { sendRegistrationOtFieldsChangedEmail, sendWaitlistedEmail, sendWaitlistPromotedEmail, getTransporterAndFrom } from '../auth/mailer.js';
+import { sendRegistrationOtFieldsChangedEmail, sendRegistrationWithdrawnOrgaEmail, sendWaitlistedEmail, sendWaitlistPromotedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { buildPaymentReference } from '../payments/reference.js';
@@ -558,12 +558,22 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
   return rows[0];
 }
 
+// Pending/waitlisted registrations are simply deleted. A confirmed one (money
+// may have been paid) is set to 'cancelled' instead and the Orga is mailed to
+// review it -- refunds are handled manually. Returns { manualReview }.
 export async function unregisterFromEvent(userId, eventId) {
   const { rows: existingRows } = await query(
-    'SELECT status FROM registrations WHERE user_id = $1 AND event_id = $2',
+    'SELECT status, paid_at, amount_due_cents FROM registrations WHERE user_id = $1 AND event_id = $2',
     [userId, eventId]
   );
   const previousStatus = existingRows[0]?.status;
+
+  if (previousStatus === 'confirmed') {
+    await setStatus(eventId, userId, 'cancelled', 'confirmed');
+    await logAudit({ actorId: userId, action: 'registration.cancelled', subjectUserId: userId, details: { eventId, self: true, paid: Boolean(existingRows[0].paid_at) } });
+    notifyWithdrawn(userId, eventId, existingRows[0]);
+    return { manualReview: true };
+  }
 
   const { rowCount } = await query(
     "DELETE FROM registrations WHERE user_id = $1 AND event_id = $2 AND status IN ('pending', 'waitlisted')",
@@ -583,6 +593,25 @@ export async function unregisterFromEvent(userId, eventId) {
   if (previousStatus === 'pending') {
     await maybePromoteFromWaitlist(eventId);
   }
+  return { manualReview: false };
+}
+
+// Fire-and-forget like the other Orga notifications; never throws.
+function notifyWithdrawn(userId, eventId, reg) {
+  (async () => {
+    try {
+      const event = await getEvent(eventId);
+      const { rows } = await query('SELECT first_name, last_name, nickname FROM users WHERE id = $1', [userId]);
+      const userName = displayName({ firstName: rows[0]?.first_name, lastName: rows[0]?.last_name, nickname: rows[0]?.nickname });
+      const paymentInfo = reg.paid_at ? 'Die Anmeldung war bereits bezahlt.' : 'Die Anmeldung war noch nicht als bezahlt markiert.';
+      const transport = await getTransporterAndFrom();
+      for (const to of await resolveOtFieldsChangeRecipients(eventId)) {
+        await sendRegistrationWithdrawnOrgaEmail(to, { userName, eventName: event?.name ?? 'Unbekanntes Event', paymentInfo }, transport);
+      }
+    } catch (err) {
+      logger.error('failed to send withdrawn notification', { error: err.message, userId, eventId });
+    }
+  })();
 }
 
 // Promotes as many waitlisted registrations as now fit under `capacity`,
@@ -662,7 +691,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
 
   const { rows: registrations } = await query(
     `SELECT r.user_id, u.first_name, u.last_name, u.nickname, r.status, r.con_role, r.nsc_available, r.nsc_character_id, r.nsc_data AS reg_nsc_data, rc.nsc_data AS char_nsc_data, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at, r.con_payer, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, r.lodging_id, r.lodging_details, lodging.name AS lodging_name, latest_payment.method AS payment_method,
+            r.amount_due_cents, r.paid_at, r.transfer_notified_at, r.con_payer, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, r.lodging_id, r.lodging_details, lodging.name AS lodging_name, latest_payment.method AS payment_method,
             latest_payment.refund_amount_cents, latest_payment.refunded_at,
             r.waiver_version_accepted, r.waiver_accepted_at,
             u.account_data_enc, r.registration_data_enc
@@ -739,6 +768,7 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       checkedOutAt: r.checked_out_at,
       amountDueCents: r.amount_due_cents,
       paidAt: r.paid_at,
+      transferNotifiedAt: r.transfer_notified_at,
       conPayer: r.con_payer,
       priceGroup: r.price_group,
       priceTier: r.price_tier,
@@ -823,11 +853,12 @@ export async function getScanLookup(eventId, userId) {
 
 export async function listRegistrationsForUser(userId) {
   const { rows } = await query(
-    `SELECT r.event_id, e.name AS event_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.nsc_data AS reg_nsc_data, c.nsc_data AS char_nsc_data, r.flags, r.checked_in_at, r.checked_out_at,
-            r.amount_due_cents, r.paid_at, r.price_group, r.price_tier, r.waiver_version_accepted, r.waiver_accepted_at, r.extras, r.extras_cents, r.lodging_id, r.lodging_cents, r.lodging_details, lodging.name AS lodging_name,
+    `SELECT r.event_id, e.name AS event_name, e.code AS event_code, u.first_name AS user_first_name, u.last_name AS user_last_name, e.event_date, r.status, r.con_role, r.character_id, r.nsc_available, r.nsc_character_id, r.nsc_data AS reg_nsc_data, c.nsc_data AS char_nsc_data, r.flags, r.checked_in_at, r.checked_out_at,
+            r.amount_due_cents, r.paid_at, r.transfer_notified_at, r.price_group, r.price_tier, r.waiver_version_accepted, r.waiver_accepted_at, r.extras, r.extras_cents, r.lodging_id, r.lodging_cents, r.lodging_details, lodging.name AS lodging_name,
             r.registration_data_enc, r.con_payer, c.name AS character_name, nc.name AS nsc_character_name
      FROM registrations r
      JOIN events e ON e.id = r.event_id
+     JOIN users u ON u.id = r.user_id
      LEFT JOIN characters c ON c.id = r.character_id
      LEFT JOIN characters nc ON nc.id = r.nsc_character_id
      LEFT JOIN event_lodgings lodging ON lodging.id = r.lodging_id
@@ -852,6 +883,7 @@ export async function listRegistrationsForUser(userId) {
     checkedOutAt: r.checked_out_at,
     amountDueCents: r.amount_due_cents,
     paidAt: r.paid_at,
+    transferNotifiedAt: r.transfer_notified_at,
     conPayer: r.con_payer,
     priceGroup: r.price_group,
     priceTier: r.price_tier,
@@ -863,7 +895,7 @@ export async function listRegistrationsForUser(userId) {
     lodgingDetails: r.lodging_details,
     waiverVersionAccepted: r.waiver_version_accepted,
     waiverAcceptedAt: r.waiver_accepted_at,
-    paymentReference: buildPaymentReference(r.event_id, userId),
+    paymentReference: buildPaymentReference(r.event_id, userId, { code: r.event_code, firstName: r.user_first_name, lastName: r.user_last_name }),
     ...decryptFieldBlob(r.registration_data_enc),
   }));
 }

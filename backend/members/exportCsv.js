@@ -7,7 +7,7 @@ export const isSensitiveField = (field) => field.sensitive === true || SENSITIVE
 
 const STATUS_LABELS = { active: 'Aktiv', deactivated: 'Deaktiviert', invited: 'Eingeladen' };
 const REGISTRATION_LABELS = {
-  notified: 'Benachrichtigt', pending: 'Angemeldet, noch nicht bezahlt', confirmed: 'Bestätigt', checked_in: 'Eingecheckt',
+  notified: 'Benachrichtigt', pending: 'Angemeldet', confirmed: 'Bestätigt', checked_in: 'Eingecheckt',
   checked_out: 'Ausgecheckt', cancelled: 'Abgesagt', waitlisted: 'Warteliste',
 };
 

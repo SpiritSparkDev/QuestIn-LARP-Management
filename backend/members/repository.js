@@ -52,13 +52,13 @@ export async function listMembers(includeDeactivated = false) {
   // Each member's event registrations (event + status only), so the list can
   // be filtered by registration without a request per member.
   const { rows: registrationRows } = await query(
-    'SELECT user_id, event_id, status, con_payer, con_role, flags FROM registrations WHERE user_id = ANY($1::uuid[])',
+    'SELECT user_id, event_id, status, con_payer, con_role, flags, paid_at, transfer_notified_at FROM registrations WHERE user_id = ANY($1::uuid[])',
     [members.map((m) => m.id)]
   );
   const byUser = new Map();
   for (const r of registrationRows) {
     if (!byUser.has(r.user_id)) byUser.set(r.user_id, []);
-    byUser.get(r.user_id).push({ eventId: r.event_id, status: r.status, conPayer: r.con_payer, conRole: r.con_role, flags: r.flags });
+    byUser.get(r.user_id).push({ eventId: r.event_id, status: r.status, conPayer: r.con_payer, conRole: r.con_role, flags: r.flags, paidAt: r.paid_at, transferNotifiedAt: r.transfer_notified_at });
   }
   return members.map((m) => ({ ...m, registrations: byUser.get(m.id) ?? [] }));
 }

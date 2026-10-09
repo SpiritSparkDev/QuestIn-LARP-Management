@@ -36,6 +36,7 @@
         <button type="button" id="invite-open">Neues Mitglied anlegen</button>
         <div class="toggle-group toggle-group-sm" style="margin:16px 0 0;">
           <button type="button" class="toggle-btn active" data-view="active">Aktive Mitglieder</button>
+          <button type="button" class="toggle-btn" data-view="invited">Eingeladene Mitglieder</button>
           <button type="button" class="toggle-btn" data-view="deactivated">Deaktivierte Mitglieder</button>
         </div>
         <div class="card" style="margin-top:16px;">
@@ -66,7 +67,7 @@
                 <option value="">Egal</option>
                 <option value="registered">Angemeldet oder bestätigt (ohne abgesagt)</option>
                 <option value="none">Nicht angemeldet</option>
-                <option value="pending">Angemeldet, noch nicht bezahlt</option>
+                <option value="pending">Angemeldet</option>
                 <option value="confirmed">Bestätigt (bezahlt)</option>
                 <option value="checked_in">Eingecheckt</option>
                 <option value="waitlisted">Warteliste</option>
@@ -95,16 +96,22 @@
             <button type="button" class="btn-secondary btn-sm" data-bulk="registration" hidden>Anmeldestatus …</button>
             <button type="button" id="bulk-clear" class="btn-ghost btn-sm">Auswahl aufheben</button>
           </div>
+          <details id="column-settings" class="member-column-settings">
+            <summary>Spalten ein- und ausblenden</summary>
+            <div id="column-checkboxes" class="checkbox-group"></div>
+            <p class="sub">Gilt nur für dich und wird in diesem Browser gespeichert.</p>
+          </details>
           <div class="table-scroll">
           <table id="member-list">
             <thead>
               <tr>
                 <th><input type="checkbox" id="member-select-all" aria-label="Alle angezeigten auswählen"></th>
-                <th data-sort="name">Name</th>
-                <th data-sort="email">E-Mail</th>
-                <th data-sort="group">Rolle</th>
-                <th>SC / NSC / Sonderrollen</th>
-                <th data-sort="status">Status</th>
+                <th data-sort="name" data-col="name">Name</th>
+                <th data-sort="email" data-col="email">E-Mail</th>
+                <th data-sort="group" data-col="role">Rolle</th>
+                <th data-col="participation">SC / NSC / Sonderrollen</th>
+                <th data-col="event">Event</th>
+                <th data-sort="status" data-col="status">Status</th>
                 <th></th>
               </tr>
             </thead>
@@ -222,6 +229,7 @@
     import { notify } from '/js/notifications.js';
     import { renderNscFields, collectNscFields } from '/js/nscFields.js';
     import { formatFieldValue } from '/js/formFields.js';
+    import { suggestPriceGroup, PARTICIPATION_FIELDS } from '/js/priceGroupRules.js';
     import { renderFlagCards, collectFlagCards, bindFlagCards } from '/js/flagCards.js';
     import { renderExtrasPicker, collectExtras, wireExtrasTotal, extrasSummary } from '/js/extrasPicker.js';
     initSidebarToggle();
@@ -260,6 +268,36 @@
       prefs = { ...prefs, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {}) };
     } catch {
       // No stored preferences (or storage unavailable) -- defaults apply.
+    }
+
+    // Per-user column choice (key includes the account id, so another login in
+    // the same browser keeps its own). Hidden columns are stored, so new
+    // columns show up by default.
+    const MEMBER_COLUMNS = [['name', 'Name'], ['email', 'E-Mail'], ['role', 'Rolle'], ['participation', 'SC / NSC / Sonderrollen'], ['event', 'Event'], ['status', 'Status']];
+    function initColumnSettings(userId) {
+      const key = `memberColumnsHidden:${userId}`;
+      let hidden = [];
+      try {
+        hidden = JSON.parse(localStorage.getItem(key)) ?? [];
+      } catch {
+        // No stored choice -- all columns visible.
+      }
+      const box = document.getElementById('column-checkboxes');
+      const style = document.head.appendChild(document.createElement('style'));
+      const apply = () => {
+        style.textContent = hidden.map((c) => `#member-list [data-col="${c}"] { display: none; }`).join(' ');
+      };
+      box.innerHTML = MEMBER_COLUMNS.map(([c, label]) => `<label><input type="checkbox" data-column="${c}"${hidden.includes(c) ? '' : ' checked'}> ${escapeHtml(label)}</label>`).join('');
+      box.addEventListener('change', () => {
+        hidden = [...box.querySelectorAll('[data-column]')].filter((b) => !b.checked).map((b) => b.dataset.column);
+        try {
+          localStorage.setItem(key, JSON.stringify(hidden));
+        } catch {
+          // Storage unavailable -- the choice just isn't remembered.
+        }
+        apply();
+      });
+      apply();
     }
 
     function savePrefs() {
@@ -674,9 +712,7 @@
     async function loadMembers() {
       listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
       const members = await api.get(`/members${currentView === 'deactivated' ? '?includeDeactivated=true' : ''}`);
-      const visible = currentView === 'deactivated'
-        ? members.filter((m) => m.status === 'deactivated')
-        : members.filter((m) => m.status !== 'deactivated');
+      const visible = members.filter((m) => m.status === currentView);
 
       viewMembers = visible;
       refreshGroupFilterOptions();
@@ -725,33 +761,82 @@
     });
     document.getElementById('nsc-overview-close').addEventListener('click', () => document.getElementById('nsc-overview-dialog').close());
 
+    // Same status override as in Check-In: one dropdown per registration of
+    // the member (only the one for the chosen event, if the filter has one).
+    // Registrations shown in the list: only the chosen event's, if the filter has one.
+    const shownRegs = (m) => (m.registrations ?? []).filter((r) => !prefs.event || r.eventId === prefs.event);
+    const eventNameOf = (id) => allEvents.find((e) => e.id === id)?.name ?? '';
+
+    // "Event" column: one line per registration, lines align with the Status column.
+    function renderEventCell(m) {
+      return shownRegs(m).map((r) => {
+        const ev = allEvents.find((e) => e.id === r.eventId);
+        const chipStyle = ev?.color && /^#[0-9a-fA-F]{6}$/.test(ev.color) ? ` style="--chip:${ev.color}"` : '';
+        return `<div class="reg-line"><span class="event-chip" title="${escapeHtml(ev?.name ?? '')}"${chipStyle}>${escapeHtml(ev?.code || ev?.name || '')}</span></div>`;
+      }).join('');
+    }
+
+    // Status column: one dropdown per registration; a button if there is none yet.
+    function renderOverrideCell(m) {
+      const regs = shownRegs(m);
+      if (regs.length === 0) {
+        const hasOpenEvent = allEvents.some((e) => (!prefs.event || e.id === prefs.event) && !(m.registrations ?? []).some((r) => r.eventId === e.id));
+        return canCreateForOthers && hasOpenEvent
+          ? `<button type="button" class="btn-sm btn-secondary" data-register="${escapeHtml(m.id)}">Anmelden</button>`
+          : '';
+      }
+      if (!canOverrideCheckin) return regs.map((r) => `<div class="reg-line">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</div>`).join('');
+      return regs.map((r) => {
+        const name = eventNameOf(r.eventId);
+        const notified = r.transferNotifiedAt && !r.paidAt
+          ? ` <span class="status-pill status-waitlisted" title="Gemeldet am ${escapeHtml(new Date(r.transferNotifiedAt).toLocaleString('de-DE'))}: Bankeingang erwartet">Überweisung gemeldet</span><button type="button" class="btn-ghost btn-icon btn-sm" data-reset-transfer="${escapeHtml(m.id)}" data-event="${escapeHtml(r.eventId)}" title="Meldung zurücksetzen (kein Zahlungseingang)" aria-label="Meldung zurücksetzen"><span class="material-symbols-outlined" aria-hidden="true">undo</span></button>`
+          : '';
+        return `<div class="reg-line"><select class="status-select" data-override="${escapeHtml(m.id)}" data-event="${escapeHtml(r.eventId)}" data-prev-status="${escapeHtml(r.status)}" aria-label="Anmeldestatus ändern: ${escapeHtml(name)}">${STATUS_ORDER.map((st) => `<option value="${st}" ${st === r.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[st])}</option>`).join('')}</select>${notified}</div>`;
+      }).join('');
+    }
+
+    async function overrideMemberStatus(userId, eventId, status, previousStatus) {
+      const diff = STATUS_ORDER.indexOf(status) - STATUS_ORDER.indexOf(previousStatus);
+      if ((diff < 0 || diff > 1 || status === 'cancelled') && !confirm(diff < 0 ? 'Bist du sicher? Dies setzt den Status zurück.' : status === 'cancelled' ? 'Diese Anmeldung wirklich absagen?' : 'Bist du sicher? Dies überspringt einen Schritt.')) {
+        await loadMembers();
+        return;
+      }
+      try {
+        await api.put(`/events/${eventId}/checkin/${userId}`, { status, previousStatus });
+        notify('Status geändert.', 'success');
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+      await loadMembers();
+    }
+
     function renderMembers() {
       const visible = filteredAndSortedMembers();
       listBody.innerHTML = visible.length ? visible.map((m) => {
         let statusCell;
         let actionsCell;
         const accessLinkBtn = m.status === 'active' && !m.isGuest
-          ? `<button type="button" class="btn-sm btn-ghost" data-access-link="${m.id}">Zugriffslink anzeigen</button>`
+          ? `<button type="button" class="btn-sm btn-ghost btn-icon" data-access-link="${m.id}" title="Zugriffslink anzeigen" aria-label="Zugriffslink anzeigen"><span class="material-symbols-outlined" aria-hidden="true">key</span></button>`
           : '';
         const guestBadge = m.managedBy
           ? ` <span class="badge badge-inactive" title="Wird von ${escapeHtml(m.managedBy.name)} verwaltet">Verwaltet von ${escapeHtml(m.managedBy.name)}</span>`
           : (m.isGuest ? ` <span class="badge badge-inactive">Direktanmeldung</span>` : '');
         // A managed person without an e-mail can't be sent a link; their manager converts them.
         const conversionLinkBtn = m.isGuest && m.email
-          ? `<button type="button" class="btn-sm btn-ghost" data-generate-conversion-link="${m.id}">Konvertierungslink erzeugen</button>`
+          ? `<button type="button" class="btn-sm btn-ghost btn-icon" data-generate-conversion-link="${m.id}" title="Konvertierungslink erzeugen" aria-label="Konvertierungslink erzeugen"><span class="material-symbols-outlined" aria-hidden="true">sync_alt</span></button>`
           : '';
         if (m.status === 'active') {
-          statusCell = `<span class="badge badge-active">Aktiv</span>${guestBadge}`;
+          statusCell = `${canOverrideCheckin || canCreateForOthers ? renderOverrideCell(m) : ''}`;
           const deactivateBtn = m.id === myUserId
             ? ''
-            : `<button type="button" class="btn-sm btn-ghost" data-deactivate="${m.id}">Deaktivieren</button>`;
-          actionsCell = `<button type="button" class="btn-sm btn-ghost" data-edit="${m.id}">Bearbeiten</button> ${deactivateBtn} ${conversionLinkBtn} ${accessLinkBtn}`;
+            : `<button type="button" class="btn-sm btn-ghost btn-icon" data-deactivate="${m.id}" title="Deaktivieren" aria-label="Deaktivieren"><span class="material-symbols-outlined" aria-hidden="true">person_off</span></button>`;
+          actionsCell = `<button type="button" class="btn-sm btn-ghost btn-icon" data-edit="${m.id}" title="Bearbeiten" aria-label="Bearbeiten"><span class="material-symbols-outlined" aria-hidden="true">edit</span></button> ${deactivateBtn} ${conversionLinkBtn} ${accessLinkBtn}`;
         } else if (m.status === 'deactivated') {
-          statusCell = `<span class="badge badge-inactive">Deaktiviert</span>`;
+          statusCell = '';
           actionsCell = `<button type="button" class="btn-sm btn-ghost" data-reactivate="${m.id}">Reaktivieren</button>
          <button type="button" class="btn-sm btn-ghost" data-delete="${m.id}">Löschen</button>`;
         } else {
-          statusCell = `<span class="badge badge-inactive">Eingeladen${m.expired ? ' (abgelaufen)' : ''}</span>`;
+          statusCell = m.expired ? '<span class="badge badge-inactive">Einladung abgelaufen</span>' : '';
           actionsCell = `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>
          <button type="button" class="btn-sm btn-ghost" data-cancel-invite="${m.id}">Absagen</button>`;
         }
@@ -761,14 +846,15 @@
         const selectable = m.status !== 'invited' && m.id !== myUserId;
         return `<tr>
     <td>${selectable ? `<input type="checkbox" data-select="${m.id}" aria-label="Auswählen"${selected.has(m.id) ? ' checked' : ''}>` : ''}</td>
-    <td>${escapeHtml(fullName(m))}${discordBadge}</td>
-    <td>${escapeHtml(m.email)}</td>
-    <td>${escapeHtml(m.group?.name ?? '–')}</td>
-    <td>${escapeHtml(participationLabels(m).join(', ') || '–')}</td>
-    <td>${statusCell}</td>
+    <td data-col="name">${escapeHtml(fullName(m))}${discordBadge}${m.email ? guestBadge : ''}</td>
+    <td data-col="email">${m.email ? escapeHtml(m.email) : guestBadge}</td>
+    <td data-col="role">${escapeHtml(m.group?.name ?? '–')}</td>
+    <td data-col="participation">${escapeHtml(participationLabels(m).join(', ') || '–')}</td>
+    <td data-col="event">${renderEventCell(m)}</td>
+    <td data-col="status">${statusCell}</td>
     <td>${actionsCell}</td>
   </tr>`;
-      }).join('') : '<tr><td colspan="7" class="sub">Keine Mitglieder gefunden.</td></tr>';
+      }).join('') : '<tr><td colspan="8" class="sub">Keine Mitglieder gefunden.</td></tr>';
 
       // Only what is still shown stays selected: changing filter or search clears the rest.
       const shownIds = new Set(visible.map((m) => m.id));
@@ -781,6 +867,29 @@
         });
       });
       updateBulkBar();
+      listBody.querySelectorAll('[data-override]').forEach((select) => {
+        select.addEventListener('change', () => overrideMemberStatus(select.dataset.override, select.dataset.event, select.value, select.dataset.prevStatus));
+      });
+      listBody.querySelectorAll('[data-reset-transfer]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          if (!confirm('Meldung „Ich habe überwiesen“ zurücksetzen? Mach das, wenn kein Zahlungseingang da ist. Die Person kann dann erneut melden.')) return;
+          try {
+            await api.delete(`/events/${button.dataset.event}/registrations/${button.dataset.resetTransfer}/transfer-notice`);
+            notify('Meldung zurückgesetzt.', 'success');
+          } catch (err) {
+            notify(err.message, 'error');
+          }
+          await loadMembers();
+        });
+      });
+      listBody.querySelectorAll('[data-register]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          await openDetail(button.dataset.register);
+          showDetailTab('detail-tab-regs');
+          const eventSelect = document.getElementById('reg-event');
+          if (eventSelect && prefs.event) eventSelect.value = prefs.event;
+        });
+      });
       listBody.querySelectorAll('[data-edit]').forEach((button) => {
         button.addEventListener('click', () => openDetail(button.dataset.edit));
       });
@@ -1060,8 +1169,13 @@
         wireExtrasTotal(extrasWrap, event?.extras ?? []);
         const groups = event?.pricing?.groups ?? [];
         document.getElementById('reg-price-wrap').innerHTML = groups.length
-          ? `<select id="reg-price">${groups.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select><label for="reg-price">Preisgruppe</label>`
+          ? `<select id="reg-price">${groups.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('')}</select><label for="reg-price">Teilnahmegruppe</label>`
           : '';
+        // Same pre-selection as in the participant's own form: the event's rules (SC/NSC, age ...).
+        const suggested = groups.length
+          ? suggestPriceGroup(event.pricing, { account: member, participation: { conRole: role === 'nsc' ? 'NSC' : role === 'sc' ? 'SC' : undefined } }, { account: accountSchema, participation: PARTICIPATION_FIELDS }, event.event_date)
+          : null;
+        if (suggested) document.getElementById('reg-price').value = suggested;
       };
       form.elements['reg-event'].addEventListener('change', refreshOptions);
       form.elements['reg-role'].addEventListener('change', refreshOptions);
@@ -1207,6 +1321,7 @@
     }
 
     async function showAccessLink(id) {
+      if (!confirm('Zugriffslink wirklich erzeugen und anzeigen? Mit dem Link kann sich die Person ohne Passwort anmelden.')) return;
       try {
         const result = await api.get(`/members/${id}/access-link`);
         showAccessLinkBox(result.link, id);
@@ -1216,6 +1331,7 @@
     }
 
     async function generateConversionLink(id) {
+      if (!confirm('Konvertierungslink wirklich erzeugen?')) return;
       try {
         const result = await api.post(`/members/${id}/generate-conversion-link`, {});
         showInviteLink(result.link);
@@ -1290,6 +1406,7 @@
       document.getElementById('member-export').hidden = account.canExportMembers !== true;
       document.getElementById('member-import').hidden = account.group.key !== 'admin';
       myUserId = account.id;
+      initColumnSettings(account.id);
       accountSchema = await api.get('/account-schema');
       registrationSchema = await api.get('/registration-schema');
       nscSchema = await api.get('/nsc-schema').catch(() => []);

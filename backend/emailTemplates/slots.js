@@ -53,6 +53,16 @@ export const EMAIL_SLOTS = [
     ],
   },
   {
+    key: 'registration_withdrawn_orga',
+    label: 'Orga-Hinweis: Bestätigte Anmeldung zurückgezogen',
+    supportsAccount: false,
+    extraFields: [
+      { key: 'userName', label: 'Name des Mitglieds' },
+      { key: 'eventName', label: 'Eventname' },
+      { key: 'paymentInfo', label: 'Zahlungsstand (Text)' },
+    ],
+  },
+  {
     key: 'nsc_dialog_staff',
     label: 'Orga-Hinweis: Neue Nachricht im NSC-Dialog',
     supportsAccount: false,
@@ -100,6 +110,15 @@ export const EMAIL_SLOTS = [
     extraFields: [
       { key: 'eventName', label: 'Eventname' },
       { key: 'link', label: 'Bestätigungs-/Zahlungslink' },
+    ],
+  },
+  {
+    key: 'payment_received',
+    label: 'Zahlung eingegangen',
+    supportsAccount: true,
+    extraFields: [
+      { key: 'eventName', label: 'Eventname' },
+      { key: 'link', label: 'Link zum Ticket' },
     ],
   },
   {

@@ -2,6 +2,9 @@ import crypto from 'node:crypto';
 import { query, withTransaction } from '../db.js';
 import { displayName } from '../displayName.js';
 import { logAudit } from '../audit/repository.js';
+import { logger } from '../logger.js';
+import { baseUrl, sendPaymentReceivedEmail } from '../auth/mailer.js';
+import { getEvent } from '../events/repository.js';
 
 function mapRegistrationRow(r) {
   return { userId: r.user_id, eventId: r.event_id, amountDueCents: r.amount_due_cents, paidAt: r.paid_at };
@@ -89,7 +92,10 @@ export async function markPaidManually(eventId, userId, confirmedByUserId) {
     );
     return mapRegistrationRow(rows[0]);
   });
-  if (booked !== null) await logAudit({ actorId: confirmedByUserId, action: 'payment.received', subjectUserId: userId, details: { eventId, provider: 'manual', method: 'bank_transfer', amountCents: booked, kind: 'registration' } });
+  if (booked !== null) {
+    await logAudit({ actorId: confirmedByUserId, action: 'payment.received', subjectUserId: userId, details: { eventId, provider: 'manual', method: 'bank_transfer', amountCents: booked, kind: 'registration' } });
+    notifyPaymentReceived(eventId, userId);
+  }
   return result;
 }
 
@@ -146,7 +152,30 @@ export async function getRegistrationByPaymentToken(token) {
 // instead of a duplicate payments row or a paid_at that jumps forward.
 // PAYMENT LOG: every new payment source (PayPal, a second Stripe flow, ...) must call logPaymentReceived
 // with its own `provider` once the payment is booked -- see docs/log-ereignisse.md.
-export async function recordSuccessfulStripePayment({ eventId, userId, method, amountCents, providerReference, stripePaymentIntentId }) {
+// "Zahlung eingegangen" mail with the way to the ticket. Fire-and-forget: a mail problem must never
+// undo or block a booked payment. People without an e-mail address (some guests, managed persons) get none.
+function notifyPaymentReceived(eventId, userId) {
+  (async () => {
+    try {
+      const { rows } = await query(
+        `SELECT u.email, u.is_guest, r.payment_token, r.payment_token_expires_at
+         FROM users u JOIN registrations r ON r.user_id = u.id AND r.event_id = $2 WHERE u.id = $1`,
+        [userId, eventId]
+      );
+      const row = rows[0];
+      if (!row?.email) return;
+      const tokenValid = row.payment_token && new Date(row.payment_token_expires_at) > new Date();
+      const base = await baseUrl();
+      const url = row.is_guest && tokenValid ? `${base}/guest-payment.html?token=${row.payment_token}` : `${base}/account.html#dashboard`;
+      await sendPaymentReceivedEmail(row.email, { eventName: (await getEvent(eventId))?.name ?? 'Event', url, userId });
+    } catch (err) {
+      logger.error('failed to send payment-received mail', { error: err.message, eventId, userId });
+    }
+  })();
+}
+
+// Despite the name also books other online providers (`provider`), e.g. SumUp.
+export async function recordSuccessfulStripePayment({ eventId, userId, method, amountCents, providerReference, stripePaymentIntentId, provider = 'stripe' }) {
   let recorded = false;
   await withTransaction(async (client) => {
     const { rows: existing } = await client.query(
@@ -171,7 +200,54 @@ export async function recordSuccessfulStripePayment({ eventId, userId, method, a
     );
     recorded = true;
   });
-  if (recorded) await logPaymentReceived({ userId, eventId, provider: 'stripe', method, amountCents, reference: providerReference });
+  if (recorded) {
+    await logPaymentReceived({ userId, eventId, provider, method, amountCents, reference: providerReference });
+    notifyPaymentReceived(eventId, userId);
+  }
+}
+
+// "Ich habe überwiesen": only a flag for staff, it never marks anything paid.
+// Returns false if there is nothing to notify about (paid, free, Con-Zahler, no registration).
+export async function markTransferNotified(eventId, userId, actorId) {
+  const { rows } = await query(
+    `UPDATE registrations SET transfer_notified_at = COALESCE(transfer_notified_at, now())
+     WHERE event_id = $1 AND user_id = $2 AND paid_at IS NULL AND amount_due_cents > 0 AND NOT con_payer
+     RETURNING transfer_notified_at`,
+    [eventId, userId]
+  );
+  if (rows.length === 0) return null;
+  await logAudit({ actorId, action: 'payment.transfer_notified', subjectUserId: userId, details: { eventId } });
+  return rows[0].transfer_notified_at;
+}
+
+// Staff cleared the flag because no money arrived: the person can report again.
+export async function clearTransferNotified(eventId, userId, actorId) {
+  const { rows } = await query(
+    'UPDATE registrations SET transfer_notified_at = NULL WHERE event_id = $1 AND user_id = $2 AND transfer_notified_at IS NOT NULL RETURNING user_id',
+    [eventId, userId]
+  );
+  if (rows.length === 0) return false;
+  await logAudit({ actorId, action: 'payment.transfer_reset', subjectUserId: userId, details: { eventId } });
+  return true;
+}
+
+// Reported transfers that still have no booked payment after `days` days: staff should look at the bank account.
+export async function listOverdueTransfers(days = 3) {
+  const { rows } = await query(
+    `SELECT r.event_id, r.user_id, r.transfer_notified_at, e.name AS event_name, u.first_name, u.last_name, u.nickname
+     FROM registrations r JOIN users u ON u.id = r.user_id JOIN events e ON e.id = r.event_id
+     WHERE r.transfer_notified_at IS NOT NULL AND r.transfer_notified_at < now() - make_interval(days => $1)
+       AND r.paid_at IS NULL AND r.status <> 'cancelled'
+     ORDER BY r.transfer_notified_at`,
+    [days]
+  );
+  return rows.map((r) => ({
+    eventId: r.event_id,
+    userId: r.user_id,
+    eventName: r.event_name,
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
+    notifiedAt: r.transfer_notified_at,
+  }));
 }
 
 export function logPaymentReceived({ userId, eventId = null, provider, method, amountCents, reference = null, kind = 'registration' }) {

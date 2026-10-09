@@ -68,6 +68,7 @@ async function handleRequest(req, res) {
   const requestId = crypto.randomUUID();
   const start = Date.now();
   const { pathname } = new URL(req.url, 'http://localhost');
+  const logPath = pathname.replace(/^(\/webhooks\/sumup\/|\/public\/registrations\/)[^/]+/, '$1[redacted]');
   res.setHeader('X-Request-Id', requestId);
 
   // The embeddable ticket widget (frontend/widget.js) calls /public/* from
@@ -89,13 +90,13 @@ async function handleRequest(req, res) {
       if (file) {
         res.writeHead(200, { 'Content-Type': file.contentType });
         res.end(file.data);
-        logger.info('request', { requestId, method: req.method, path: pathname, status: 200, durationMs: Date.now() - start });
+        logger.info('request', { requestId, method: req.method, path: logPath, status: 200, durationMs: Date.now() - start });
         return;
       }
     }
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'not found', requestId }));
-    logger.info('request', { requestId, method: req.method, path: pathname, status: 404, durationMs: Date.now() - start });
+    logger.info('request', { requestId, method: req.method, path: logPath, status: 404, durationMs: Date.now() - start });
     return;
   }
 
@@ -110,11 +111,11 @@ async function handleRequest(req, res) {
       res.writeHead(status, { 'Content-Type': 'application/json', ...result?.headers });
       res.end(payload);
     }
-    logger.info('request', { requestId, method: req.method, path: pathname, status, durationMs: Date.now() - start });
+    logger.info('request', { requestId, method: req.method, path: logPath, status, durationMs: Date.now() - start });
   } catch (err) {
     const CLIENT_ERROR_CODES = new Set(['22P02', '22P05', '22007', '22008']);
     const status = CLIENT_ERROR_CODES.has(err.code) ? 400 : 500;
-    logger.error('request failed', { requestId, method: req.method, path: pathname, status, durationMs: Date.now() - start, error: err.message, stack: err.stack });
+    logger.error('request failed', { requestId, method: req.method, path: logPath, status, durationMs: Date.now() - start, error: err.message, stack: err.stack });
     if (!res.headersSent) {
       const body = status === 400
         ? { error: 'invalid request', requestId }

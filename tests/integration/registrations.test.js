@@ -116,6 +116,25 @@ test('a participant can register and unregister for an event', async () => {
   });
 });
 
+test('unregistering a confirmed registration cancels it and flags manual review', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const characterId = await makeCharacter(port, cookie);
+    await fetch(`http://localhost:${port}/events/${eventId}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ conRole: 'sc', characterId }),
+    });
+    await query("UPDATE registrations SET status = 'confirmed' WHERE user_id = $1 AND event_id = $2", [userId, eventId]);
+
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/register`, { method: 'DELETE', headers: { Cookie: cookie } });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).manualReview, true);
+    const { rows } = await query('SELECT status FROM registrations WHERE user_id = $1 AND event_id = $2', [userId, eventId]);
+    assert.equal(rows[0].status, 'cancelled');
+  });
+});
+
 test('listed registrations include payment fields', async () => {
   await withTestServer(async (port) => {
     const { userId, cookie } = await makeUserAndSession();

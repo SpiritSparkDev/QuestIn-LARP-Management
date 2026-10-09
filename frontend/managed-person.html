@@ -556,7 +556,7 @@
       }
       let lodgings = [];
       try {
-        lodgings = await api.get(`/events/${eventId}/lodgings`);
+        lodgings = await api.get(`/events/${eventId}/lodgings?own=1`);
       } catch {
         lodgings = [];
       }
@@ -697,7 +697,7 @@
 
     async function payForRegistration(eventId) {
       try {
-        const { url } = await api.post(`/events/${eventId}/registrations/${managedPersonId}/checkout-session`, { method: "card" });
+        const { url } = await api.post(`/events/${eventId}/registrations/${managedPersonId}/checkout-session`, { method: "auto" });
         window.location.href = url;
       } catch (err) {
         notify(err.message, "error");

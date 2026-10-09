@@ -538,6 +538,22 @@ test('event end date: stored, cleared, and rejected when before the start', asyn
   });
 });
 
+test('colour validates, round-trip and can be cleared', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: admin.cookie };
+    const post = (body) => fetch(`http://localhost:${port}/events`, { method: 'POST', headers, body: JSON.stringify({ name: 'Kuerzel-Con', eventDate: '2027-09-02', ...body }) });
+    assert.equal((await post({ color: 'red' })).status, 400);
+    const res = await post({ color: '#aa5500' });
+    assert.equal(res.status, 201);
+    const ev = await res.json();
+    assert.equal(ev.color, '#aa5500');
+    const put = (body) => fetch(`http://localhost:${port}/events/${ev.id}`, { method: 'PUT', headers, body: JSON.stringify(body) });
+    const cleared = await (await put({ color: null })).json();
+    assert.equal(cleared.color, null);
+  });
+});
+
 test('hardCapacity and low-seats settings validate and round-trip; lowSeats flag follows the threshold', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUserAndSession('admin');

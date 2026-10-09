@@ -265,12 +265,12 @@
           </div>
           <div class="tab-panel grid col2 settings-panel" id="settings-tab-zahlungen" hidden>
           <div class="card form-pad">
-            <h2>Zahlungen</h2>
+            <h2>Stripe</h2>
             <p class="sub">
-              Stripe verarbeitet PayPal- und Kreditkartenzahlungen. Für die
-              manuelle Überweisung werden Kontodaten angezeigt.
+              Stripe bündelt viele Zahlungsarten. Wähle unten, welche
+              Teilnehmende sehen.
             </p>
-            <form id="payment-settings-form">
+            <form id="stripe-settings-form">
               <input
                 id="stripe-secret-key"
                 name="stripeSecretKey"
@@ -287,6 +287,84 @@
               <label for="stripe-webhook-secret"
                 >Stripe Webhook Signing Secret</label
               >
+              <div class="checkbox-group" id="stripe-methods">
+                <label><input type="checkbox" data-stripe-method="card" /> Kreditkarte (inkl. Apple Pay, Google Pay)</label>
+                <label><input type="checkbox" data-stripe-method="paypal" /> PayPal</label>
+                <label><input type="checkbox" data-stripe-method="bank_transfer" /> Banküberweisung (automatisch bestätigt)</label>
+                <label><input type="checkbox" data-stripe-method="klarna" /> Klarna</label>
+                <label><input type="checkbox" data-stripe-method="sepa_debit" /> SEPA-Lastschrift</label>
+              </div>
+              <p class="sub">
+                Jede Methode muss auch in deinem Stripe-Dashboard aktiviert sein.
+              </p>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
+            </form>
+          </div>
+          <div class="card form-pad">
+            <h2>PayPal</h2>
+            <p class="sub">
+              Zahlung direkt über PayPal, unabhängig von Stripe. Die Zahlung
+              wird automatisch bestätigt, sobald die Person bei PayPal bezahlt
+              hat. Client-ID und Secret erzeugst du im PayPal-Entwicklerportal
+              unter „Apps &amp; Credentials“ (Typ „Live“, zum Testen „Sandbox“).
+            </p>
+            <form id="paypal-settings-form">
+              <input id="paypal-client-id" name="paypalClientId" type="text" autocomplete="off" />
+              <label for="paypal-client-id">Client-ID</label>
+              <input
+                id="paypal-secret"
+                name="paypalSecret"
+                type="password"
+                autocomplete="off"
+                placeholder="Leer lassen, um das bestehende Secret zu behalten"
+              />
+              <label for="paypal-secret">Secret</label>
+              <label
+                ><input type="checkbox" id="paypal-sandbox" name="paypalSandbox" />
+                Sandbox (Testmodus, es wird kein echtes Geld bewegt)</label
+              >
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
+            </form>
+          </div>
+          <div class="card form-pad">
+            <h2>SumUp</h2>
+            <p class="sub">
+              Teilnehmende zahlen auf der SumUp-Bezahlseite (Karte, Apple Pay,
+              Google Pay). Die Zahlung wird automatisch bestätigt. Den
+              API-Schlüssel erzeugst du im SumUp-Entwicklerportal, den
+              Merchant-Code findest du in deinem SumUp-Konto. Erstattungen
+              machst du im SumUp-Dashboard und trägst sie hier im Check-In ein.
+            </p>
+            <form id="sumup-settings-form">
+              <input
+                id="sumup-api-key"
+                name="sumupApiKey"
+                type="password"
+                autocomplete="off"
+                placeholder="Leer lassen, um den bestehenden Key zu behalten"
+              />
+              <label for="sumup-api-key">SumUp API-Schlüssel</label>
+              <input id="sumup-merchant-code" name="sumupMerchantCode" type="text" />
+              <label for="sumup-merchant-code">Merchant-Code</label>
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
+            </form>
+          </div>
+          <div class="card form-pad">
+            <h2>Manuelle Banküberweisung</h2>
+            <p class="sub">
+              Diese Kontodaten sehen Teilnehmende im Zahlungsdialog. Die
+              Zahlung bestätigst du selbst im Check-In.
+            </p>
+            <form id="bank-settings-form">
               <div
                 style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px"
               >
@@ -305,6 +383,26 @@
                 type="text"
               />
               <label for="bank-account-holder">Kontoinhaber</label>
+              <label
+                ><input type="checkbox" id="bank-qr-enabled" name="bankQrEnabled" />
+                QR-Code (Girocode) zum Bezahlen anzeigen</label
+              >
+              <div class="settings-actions">
+                <button type="submit">Speichern</button>
+                <span class="settings-state" aria-live="polite"></span>
+              </div>
+            </form>
+          </div>
+          <div class="card form-pad">
+            <h2>Kontakt bei Zahlungsfragen</h2>
+            <p class="sub">
+              Diese E-Mail-Adresse steht in den Hinweisen „Bitte melde dich bei
+              der Orga“, z. B. wenn gerade keine Zahlungsmethode eingerichtet
+              ist.
+            </p>
+            <form id="contact-settings-form">
+              <input id="contact-email" name="contactEmail" type="email" placeholder="orga@beispiel.de" />
+              <label for="contact-email">E-Mail der Orga</label>
               <div class="settings-actions">
                 <button type="submit">Speichern</button>
                 <span class="settings-state" aria-live="polite"></span>
@@ -878,39 +976,82 @@
         }
       });
 
-      const paymentSettingsForm = document.getElementById(
-        "payment-settings-form",
-      );
+      const stripeForm = document.getElementById("stripe-settings-form");
+      const bankForm = document.getElementById("bank-settings-form");
+      const sumupForm = document.getElementById("sumup-settings-form");
+      const paypalForm = document.getElementById("paypal-settings-form");
+      const contactForm = document.getElementById("contact-settings-form");
 
       async function loadPaymentSettings() {
         const settings = await api.get("/admin/settings/payments");
-        paymentSettingsForm.elements.bankIban.value = settings.bankIban ?? "";
-        paymentSettingsForm.elements.bankBic.value = settings.bankBic ?? "";
-        paymentSettingsForm.elements.bankAccountHolder.value =
+        bankForm.elements.bankIban.value = settings.bankIban ?? "";
+        bankForm.elements.bankBic.value = settings.bankBic ?? "";
+        bankForm.elements.bankAccountHolder.value =
           settings.bankAccountHolder ?? "";
-        paymentSettingsForm.elements.stripeSecretKey.placeholder =
+        bankForm.elements.bankQrEnabled.checked = settings.bankQrEnabled !== false;
+        sumupForm.elements.sumupMerchantCode.value = settings.sumupMerchantCode ?? "";
+        paypalForm.elements.paypalClientId.value = settings.paypalClientId ?? "";
+        contactForm.elements.contactEmail.value = settings.contactEmail ?? "";
+        paypalForm.elements.paypalSandbox.checked = settings.paypalSandbox === true;
+        paypalForm.elements.paypalSecret.placeholder = settings.hasPaypalSecret
+          ? "Gesetzt — leer lassen, um es zu behalten"
+          : "Noch nicht gesetzt";
+        document.querySelectorAll("[data-stripe-method]").forEach((box) => {
+          box.checked = (settings.stripeMethods ?? []).includes(box.dataset.stripeMethod);
+        });
+        sumupForm.elements.sumupApiKey.placeholder = settings.hasSumupApiKey
+          ? "Gesetzt — leer lassen, um ihn zu behalten"
+          : "Noch nicht gesetzt";
+        stripeForm.elements.stripeSecretKey.placeholder =
           settings.hasStripeSecretKey
             ? "Gesetzt — leer lassen, um ihn zu behalten"
             : "Leer lassen, um den bestehenden Key zu behalten";
-        paymentSettingsForm.elements.stripeWebhookSecret.placeholder =
+        stripeForm.elements.stripeWebhookSecret.placeholder =
           settings.hasStripeWebhookSecret
             ? "Gesetzt — leer lassen, um es zu behalten"
             : "Leer lassen, um das bestehende Secret zu behalten";
       }
 
-      paymentSettingsForm.addEventListener("submit", async (event) => {
+      // Each card saves only its own fields; the server keeps everything omitted.
+      async function savePaymentSettings(event, data) {
         event.preventDefault();
-        const data = Object.fromEntries(new FormData(paymentSettingsForm));
         try {
           await api.put("/admin/settings/payments", data);
           notify("Gespeichert.", "success");
-          paymentSettingsForm.elements.stripeSecretKey.value = "";
-          paymentSettingsForm.elements.stripeWebhookSecret.value = "";
+          stripeForm.elements.stripeSecretKey.value = "";
+          stripeForm.elements.stripeWebhookSecret.value = "";
+          sumupForm.elements.sumupApiKey.value = "";
+          paypalForm.elements.paypalSecret.value = "";
           await loadPaymentSettings();
         } catch (err) {
           notify(err.message, "error");
         }
-      });
+      }
+      stripeForm.addEventListener("submit", (event) =>
+        savePaymentSettings(event, {
+          ...Object.fromEntries(new FormData(stripeForm)),
+          stripeMethods: [...document.querySelectorAll("[data-stripe-method]")].filter((b) => b.checked).map((b) => b.dataset.stripeMethod),
+        }),
+      );
+      contactForm.addEventListener("submit", (event) =>
+        savePaymentSettings(event, { contactEmail: contactForm.elements.contactEmail.value }),
+      );
+      paypalForm.addEventListener("submit", (event) =>
+        savePaymentSettings(event, {
+          paypalClientId: paypalForm.elements.paypalClientId.value,
+          paypalSecret: paypalForm.elements.paypalSecret.value,
+          paypalSandbox: paypalForm.elements.paypalSandbox.checked,
+        }),
+      );
+      sumupForm.addEventListener("submit", (event) =>
+        savePaymentSettings(event, Object.fromEntries(new FormData(sumupForm))),
+      );
+      bankForm.addEventListener("submit", (event) =>
+        savePaymentSettings(event, {
+          ...Object.fromEntries(new FormData(bankForm)),
+          bankQrEnabled: bankForm.elements.bankQrEnabled.checked,
+        }),
+      );
 
       document
         .getElementById("waitlist-auto-promote-toggle")

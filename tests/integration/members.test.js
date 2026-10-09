@@ -97,7 +97,7 @@ test('GET /members includes each member\'s event registrations (event and status
 
     const members = await (await fetch(`http://localhost:${port}/members`, { headers: { Cookie: cookie } })).json();
     const entry = members.find((m) => m.id === member.userId);
-    assert.deepEqual(entry.registrations, [{ eventId: ev[0].id, status: 'confirmed', conPayer: false, conRole: 'helfer', flags: [] }]);
+    assert.deepEqual(entry.registrations, [{ eventId: ev[0].id, status: 'confirmed', conPayer: false, conRole: 'helfer', flags: [], paidAt: null, transferNotifiedAt: null }]);
     const other = members.find((m) => m.id !== member.userId && m.status === 'active');
     assert.ok(Array.isArray(other.registrations));
   } finally {

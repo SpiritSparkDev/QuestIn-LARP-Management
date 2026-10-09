@@ -96,7 +96,6 @@ export function buildTestDataset() {
     const lastName = slot && i % 2 === 0 ? familyNameOfGroup[slot.groupIndex] : lastNames[(i + GROUPS.length) % lastNames.length];
     const role = ROLES_BY_INDEX(i);
     const status = STATUS_BY_INDEX(i, role);
-    const isChild = slot && !slot.isOwner && i % 6 === 3;
     const characterName = `${characterNames[i % characterNames.length]}${rng() < 0.45 ? ` ${CHARACTER_EPITHETS[Math.floor(rng() * CHARACTER_EPITHETS.length)]}` : ''}`;
     persons.push({
       index: i,
@@ -111,13 +110,18 @@ export function buildTestDataset() {
       isGuest: Boolean(slot && !slot.isOwner) || (!slot && i % 9 === 0),
       role,
       status,
-      priceGroup: isChild ? 'Kinder' : 'Erwachsene',
+      // Teilnahmegruppe as the event's rules would pick it: NSC pay the NSC price, everyone else the player price.
+      priceGroup: role === 'nsc' || role === 'helfer' || role === 'orga' || role === 'hilfs_orga' ? 'NSC' : 'Spieler',
       flags: [
         ...(i % 8 === 2 ? ['GSC'] : []),
         ...(i % 10 === 6 ? ['VP'] : []),
         ...(i % 12 === 11 ? ['Ersthelfer'] : []),
       ],
       paid: status === 'checked_in' || (status === 'confirmed' && i % 3 !== 0),
+      // How a paid registration was paid (rotates through the methods the tool knows).
+      paymentMethod: ['stripe_card', 'stripe_paypal', 'stripe_bank_transfer', 'bank_transfer', 'sumup', 'paypal'][i % 6],
+      // Open, unpaid and the person already clicked "Ich habe überwiesen".
+      transferNotified: status === 'pending' && i % 4 === 0,
       characterName,
       hasNscCharacter: role === 'nsc' || i % 9 === 4,
     });
@@ -129,15 +133,24 @@ export function buildTestDataset() {
       code: 'TEST/2027',
       flags: ['GSC', 'VP', 'Ersthelfer'],
       capacity: 80,
+      hardCapacity: 85,
+      lowSeatsNotice: true,
+      paymentsOpen: true,
+      color: '#2e7d32',
       address: 'Burg Ravenmoor\nNebelweg 1\n12345 Teststadt',
       directions: 'Dies ist ein fiktives Event für den Test-Modus. Von der Autobahn nehmen Sie die Ausfahrt "Teststadt" und folgen Sie der Beschilderung "Burg Ravenmoor".',
       briefing: 'Fiktiver Plot: Ein dichter Nebel zieht über Ravenmoor auf und die Burgbewohner verschwinden nacheinander. Wer steckt dahinter?',
       pricing: {
-        groups: ['Erwachsene', 'Kinder'],
+        groups: ['Spieler', 'NSC'],
+        // Which group is pre-selected at registration, by participation (SC/NSC).
+        groupRules: {
+          Spieler: [{ source: 'participation', field: 'conRole', op: 'eq', value: 'SC' }],
+          NSC: [{ source: 'participation', field: 'conRole', op: 'eq', value: 'NSC' }],
+        },
         tiers: [
-          { name: 'Frühbucher', until: '2027-01-01', amounts: { Erwachsene: 24500, Kinder: 14500 } },
-          { name: 'Normal', until: '2027-07-01', amounts: { Erwachsene: 25500, Kinder: 16000 } },
-          { name: 'Conzahler', until: null, amounts: { Erwachsene: 27500, Kinder: 18000 } },
+          { name: 'Frühbucher', until: '2027-01-01', conPayer: false, amounts: { Spieler: 20000, NSC: 18000 } },
+          { name: 'Normal', until: '2027-07-01', conPayer: false, amounts: { Spieler: 22500, NSC: 20000 } },
+          { name: 'Conzahler', until: null, conPayer: true, amounts: { Spieler: 25000, NSC: 22000 } },
         ],
       },
     },

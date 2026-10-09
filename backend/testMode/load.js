@@ -111,9 +111,9 @@ export async function loadTestData() {
     const { rows: activeRows } = await query('SELECT 1 FROM events WHERE is_active LIMIT 1');
     const { event } = dataset;
     const { rows: eventRows } = await query(
-      `INSERT INTO events (name, event_date, code, capacity, flags, pricing, directions, briefing, address, is_active, is_test)
-       VALUES ($1, '2027-12-11', $2, $3, $4, $5, $6, $7, $8, $9, true) RETURNING id`,
-      [event.name, event.code, event.capacity, event.flags, JSON.stringify(event.pricing), event.directions, event.briefing, event.address, activeRows.length === 0]
+      `INSERT INTO events (name, event_date, code, capacity, hard_capacity, low_seats_notice, payments_open, color, flags, pricing, directions, briefing, address, is_active, is_test)
+       VALUES ($1, '2027-12-11', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true) RETURNING id`,
+      [event.name, event.code, event.capacity, event.hardCapacity, event.lowSeatsNotice, event.paymentsOpen, event.color, event.flags, JSON.stringify(event.pricing), event.directions, event.briefing, event.address, activeRows.length === 0]
     );
     const eventId = eventRows[0].id;
 
@@ -154,16 +154,24 @@ export async function loadTestData() {
       const createdAt = new Date(Date.now() - (dataset.persons.length - p.index) * 3_600_000);
       await query(
         `INSERT INTO registrations (user_id, event_id, con_role, character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents,
-                                    registration_data_enc, status, paid_at, checked_in_at, waiver_version_accepted, waiver_accepted_at, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15)`,
+                                    registration_data_enc, status, paid_at, checked_in_at, waiver_version_accepted, waiver_accepted_at, created_at, transfer_notified_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
         [
           userId, eventId, p.role, characterId, p.flags, p.priceGroup, tier.name, listCents,
           encryptRegistrationBlob(regData), p.status,
           p.paid ? createdAt : null,
           p.status === 'checked_in' ? new Date() : null,
           settings.waiverText ? settings.waiverVersion : null, settings.waiverText ? createdAt : null, createdAt,
+          p.transferNotified ? new Date(createdAt.getTime() + 3_600_000) : null,
         ]
       );
+      // A booked payment for everyone marked paid, so the check-in shows how they paid.
+      if (p.paid) {
+        await query(
+          `INSERT INTO payments (user_id, event_id, method, amount_cents, provider_reference, created_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [userId, eventId, p.paymentMethod, listCents, p.paymentMethod === 'bank_transfer' ? null : `test:${eventId}:${p.index}`, createdAt]
+        );
+      }
       if (p.status === 'waitlisted') waitlistPosition += 1;
     }
 

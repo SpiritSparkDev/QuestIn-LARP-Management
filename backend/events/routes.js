@@ -141,6 +141,11 @@ function validateFlagExtras({ flagDetails, flagRenames }) {
   return null;
 }
 
+function validateLabel({ color }) {
+  if (color != null && color !== '' && !/^#[0-9a-fA-F]{6}$/.test(color)) return 'color must be a hex colour like #aa5500';
+  return null;
+}
+
 function validateLimits({ capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom }) {
   const bad = (v) => v !== undefined && v !== null && (!Number.isInteger(v) || v < 1);
   if (bad(hardCapacity)) return 'hardCapacity must be a positive integer or null';
@@ -154,7 +159,7 @@ function validateLimits({ capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom }
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
+  const { name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
@@ -163,6 +168,9 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   }
   const limitError = validateLimits({ capacity: capacity ?? null, hardCapacity: hardCapacity ?? null, lowSeatsNotice, lowSeatsFrom });
   if (limitError) return { status: 400, body: { error: limitError } };
+  if (paymentsOpen !== undefined && typeof paymentsOpen !== 'boolean') return { status: 400, body: { error: 'paymentsOpen must be a boolean' } };
+  const labelError = validateLabel({ color });
+  if (labelError) return { status: 400, body: { error: labelError } };
   if (flags !== undefined && (!Array.isArray(flags) || flags.some((f) => typeof f !== 'string'))) {
     return { status: 400, body: { error: 'flags must be an array of strings' } };
   }
@@ -180,7 +188,7 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   if (endDateError) return { status: 400, body: { error: endDateError } };
   const urlError = validateMapUrls({ mapsUrl, osmUrl });
   if (urlError) return { status: 400, body: { error: urlError } };
-  const event = await createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
+  const event = await createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
   return { status: 201, body: event };
 })));
 
@@ -229,6 +237,9 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
     lowSeatsNotice: body.lowSeatsNotice, lowSeatsFrom: body.lowSeatsFrom,
   });
   if (limitError) return { status: 400, body: { error: limitError } };
+  if (body.paymentsOpen !== undefined && typeof body.paymentsOpen !== 'boolean') return { status: 400, body: { error: 'paymentsOpen must be a boolean' } };
+  const labelError = validateLabel(body);
+  if (labelError) return { status: 400, body: { error: labelError } };
   // An extra that is already booked can't disappear -- registrations refer to it.
   if (body.extras !== undefined) {
     const keptIds = new Set(body.extras.map((e) => e.id).filter(Boolean));

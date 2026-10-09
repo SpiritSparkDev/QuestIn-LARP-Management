@@ -122,6 +122,14 @@ export async function sendCharacterDeletedOrgaEmail(to, { userName, characterNam
   return deliver(transporter, from, to, rendered);
 }
 
+export async function sendRegistrationWithdrawnOrgaEmail(to, { userName, eventName, paymentInfo }, { transporter, from }) {
+  const rendered = await renderSlotEmail('registration_withdrawn_orga', () => ({
+    subject: `Abmeldung: ${userName} (${eventName})`,
+    body: `${userName} hat sich von "${eventName}" abgemeldet (Anmeldung war bestätigt). ${paymentInfo} Bitte manuell prüfen, insbesondere eine Erstattung der Ticketgebühr.`,
+  }), { extra: { userName, eventName, paymentInfo } });
+  return deliver(transporter, from, to, rendered);
+}
+
 export async function sendWaitlistedEmail(to, { eventName, userId }, { transporter, from }) {
   const rendered = await renderSlotEmail('waitlisted', () => ({
     subject: `Warteliste: ${eventName}`,
@@ -158,6 +166,15 @@ export async function sendGuestTicketEmail(to, { eventName, paymentToken, userId
         ? `Deine Anmeldung für "${eventName}" ist eingegangen. Du bist als Con-Zahler angemeldet und bezahlst vor Ort beim Check-In. Dein Ticket findest du hier: ${url}`
         : `Deine Anmeldung für "${eventName}" ist eingegangen. Falls die Bezahlung gerade nicht geklappt hat oder du sie später abschließen möchtest, geht es hier weiter – nach der Zahlung findest du dort auch dein Ticket: ${url}`,
   }), { userId, extra: { eventName, link: url, conPayer, free } });
+  return deliver(transporter, from, to, rendered);
+}
+
+export async function sendPaymentReceivedEmail(to, { eventName, url, userId }) {
+  const { transporter, from } = await getTransporterAndFrom();
+  const rendered = await renderSlotEmail('payment_received', () => ({
+    subject: `Zahlung eingegangen: ${eventName}`,
+    body: `Wir haben deine Zahlung für "${eventName}" erhalten, danke! Dein Ticket findest du hier: ${url}`,
+  }), { userId, extra: { eventName, link: url } });
   return deliver(transporter, from, to, rendered);
 }
 

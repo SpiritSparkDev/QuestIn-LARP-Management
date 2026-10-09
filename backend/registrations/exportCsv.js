@@ -3,7 +3,7 @@ import { isSensitiveField } from '../members/exportCsv.js';
 
 const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', hilfs_orga: 'Hilfs-Orga', ticket: 'Direktanmeldung' };
 const STATUS_LABELS = {
-  notified: 'Benachrichtigt', pending: 'Angemeldet, noch nicht bezahlt', confirmed: 'Bestätigt', checked_in: 'Eingecheckt',
+  notified: 'Benachrichtigt', pending: 'Angemeldet', confirmed: 'Bestätigt', checked_in: 'Eingecheckt',
   checked_out: 'Ausgecheckt', cancelled: 'Abgesagt', waitlisted: 'Warteliste',
 };
 // "Angemeldet, Con-Zahler": registered, will pay at the con (not approved/paid yet).
@@ -12,7 +12,7 @@ function statusLabel(status, conPayer) {
   if (status === 'pending') return 'Angemeldet, Con-Zahler';
   return ['confirmed', 'checked_in', 'checked_out'].includes(status) ? `${STATUS_LABELS[status]}, Con-Zahler` : (STATUS_LABELS[status] ?? status);
 }
-const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', bank_transfer: 'Überweisung', stripe_bank_transfer: 'Überweisung (Stripe)' };
+const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', bank_transfer: 'Überweisung', sumup: 'SumUp', paypal: 'PayPal', stripe_klarna: 'Klarna', stripe_sepa_debit: 'SEPA-Lastschrift', stripe_bank_transfer: 'Überweisung (Stripe)' };
 
 const euros = (cents) => (cents == null ? '' : (cents / 100).toFixed(2).replace('.', ','));
 const dateTime = (value) => (value ? new Date(value).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }) : '');
