@@ -710,7 +710,9 @@ searchInput.addEventListener('input', () => {
 // apply to this participant's current status/permissions.
 
 function renderCheckinCell(p) {
-  if (p.status === 'notified') return '';
+  // Open invitation without a matching person (e.g. a deleted test account):
+  // the only way out of the list is withdrawing the invitation.
+  if (p.status === 'notified') return canOverride && p.invitationId ? `<button type="button" class="btn-ghost btn-sm" data-cancel-invitation="${escapeHtml(p.invitationId)}">Einladung zurückziehen</button>` : '';
   const ready = p.status === 'confirmed' || (p.status === 'pending' && p.conPayer);
   return `<button type="button" class="btn btn-sm" data-checkin="${p.userId}" ${ready ? '' : 'disabled'}>Check-In</button>`;
 }
@@ -748,6 +750,17 @@ function renderParticipants(participants, eventId) {
       const p = participantsById.get(button.dataset.checkin);
       if (!confirmPaid(p)) return;
       checkInWithConfirmation(eventId, button.dataset.checkin, !p?.paidAt);
+    });
+  });
+  listBody.querySelectorAll('[data-cancel-invitation]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!confirm('Einladung zurückziehen? Die Person verschwindet aus dieser Liste.')) return;
+      try {
+        await api.post(`/members/invitations/${button.dataset.cancelInvitation}/cancel`, {});
+        await loadParticipants(eventId);
+      } catch (err) {
+        notify(err.message, 'error');
+      }
     });
   });
   listBody.querySelectorAll('[data-checkout]').forEach((button) => {
