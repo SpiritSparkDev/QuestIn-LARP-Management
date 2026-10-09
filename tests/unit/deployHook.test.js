@@ -2,12 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const script = new URL('../../scripts/deploy-hook.sh', import.meta.url).pathname;
+const root = fileURLToPath(new URL('../../', import.meta.url));
 
 function run(env) {
   return new Promise((resolve) => {
-    const child = spawn('sh', [script], { env: { PATH: process.env.PATH, ...env } });
+    const child = spawn('sh', ['scripts/deploy-hook.sh'], { cwd: root, env: { PATH: process.env.PATH, ...env } });
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { out += d; });
