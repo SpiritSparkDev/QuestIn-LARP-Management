@@ -7,6 +7,11 @@
 <link rel="stylesheet" href="/css/fonts.css">
 <link rel="stylesheet" href="/css/sahara.css">
 <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+<style>
+/* Several forms on this page: each button stays in its own card instead of all sharing the fixed bottom bar. */
+.content:has(.save-bar) { padding-bottom: 48px; }
+.card .save-bar { position: static; padding: 12px 0 0; border-top: 0; box-shadow: none; background: none; backdrop-filter: none; justify-content: flex-start; }
+</style>
 </head>
 <body>
 <div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
