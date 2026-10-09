@@ -187,6 +187,13 @@ test('lodging add-on: free tent pitches need size and IT/OT, beds ignore tent de
 
     const participants = await (await fetch(`${base}/events/${eventId}/participants`, { headers: json(admin.cookie) })).json();
     assert.equal(participants.find((p) => p.userId === dora.userId).lodgingName, 'Zeltwiese (4,0 × 3,0 m, IT)');
+    assert.equal(participants.find((p) => p.userId === dora.userId).lodgingId, pitch.id);
+
+    // Staff moves Dora to the other pitch: her tent carries over; moving out works too.
+    const move = (userId, lodgingId) => fetch(`${base}/events/${eventId}/registrations/${userId}/lodging`, { method: 'PUT', headers: json(admin.cookie), body: JSON.stringify({ lodgingId }) });
+    assert.equal((await move(dora.userId, meadow.id)).status, 200);
+    assert.deepEqual((await query('SELECT lodging_details FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, dora.userId])).rows[0].lodging_details, { lengthCm: 400, widthCm: 300, tentType: 'it' });
+    assert.equal((await move(dora.userId, null)).status, 200);
   });
 });
 

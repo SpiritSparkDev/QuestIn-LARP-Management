@@ -165,6 +165,8 @@ const ASSIGNABLE_CON_ROLES = [['sc', 'Teilnehmer (SC)'], ['nsc', 'NSC'], ['helfe
 let currentSearch = '';
 let canOverride = false;
 let lodgingEnabled = false;
+let canMoveLodging = false;
+let eventLodgings = [];
 let canManageMembers = false;
 let events = [];
 const eventEnded = () => Boolean(events.find((e) => e.id === eventSelect.value)?.ended_at);
@@ -223,7 +225,7 @@ function allColumns() {
     };
   });
   const rest = [
-    ...(lodgingEnabled ? [{ id: 'lodging', label: 'Unterkunft', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.lodgingName ?? '') }] : []),
+    ...(lodgingEnabled ? [{ id: 'lodging', label: 'Unterkunft', track: canMoveLodging ? 'minmax(170px, 1.2fr)' : 'minmax(110px, 1fr)', render: renderLodgingCell }] : []),
     { id: 'extras', label: 'Extras', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.extrasText ?? '') },
     { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
     { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-inline', render: renderPaymentStatusCell },
@@ -687,6 +689,37 @@ function renderAmountDueCell(p) {
   </div>`;
 }
 
+// Staff can move a person to another lodging (or out of it); everyone else just sees the name.
+function renderLodgingCell(p) {
+  if (!canMoveLodging || !p.userId || ['cancelled', 'notified'].includes(p.status) || eventLodgings.length === 0) return escapeHtml(p.lodgingName ?? '');
+  const options = eventLodgings.map((l) => {
+    const full = !l.unlimited && l.free === 0 && l.id !== p.lodgingId;
+    return `<option value="${escapeHtml(l.id)}" ${l.id === p.lodgingId ? 'selected' : ''} ${full ? 'disabled' : ''}>${escapeHtml(l.name)}${full ? ' (voll)' : ''}</option>`;
+  }).join('');
+  return `<select data-move-lodging="${escapeHtml(p.userId)}" data-prev="${escapeHtml(p.lodgingId ?? '')}" aria-label="Unterkunft verschieben"><option value="">– keine –</option>${options}</select>`;
+}
+
+async function moveLodging(eventId, userId, lodgingId, select) {
+  const put = (lodgingDetails) => api.put(`/events/${eventId}/registrations/${userId}/lodging`, { lodgingId: lodgingId || null, ...(lodgingDetails ? { lodgingDetails } : {}) });
+  try {
+    try {
+      await put();
+    } catch (err) {
+      // A tent pitch needs IT or OT if the person has no tent yet.
+      if (!/IT oder OT/.test(err.message)) throw err;
+      const tentType = (prompt('Zelt auf diesem Zeltplatz: „it“ (Spielwelt) oder „ot“?') ?? '').trim().toLowerCase();
+      if (!['it', 'ot'].includes(tentType)) throw err;
+      await put({ tentType });
+    }
+    notify('Unterkunft geändert.', 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+    select.value = select.dataset.prev;
+    return;
+  }
+  await loadParticipants(eventId);
+}
+
 function renderPaymentStatusCell(p) {
   if (!p.userId) return '';
   if (p.amountDueCents == null) return '<span class="sub">–</span>';
@@ -734,6 +767,7 @@ function renderCheckoutCell(p) {
 async function loadParticipants(eventId) {
   listBody.innerHTML = '<div class="grid-row"><div class="grid-cell" style="grid-column:1/-1;">Wird geladen …</div></div>';
   const participants = await api.get(`/events/${eventId}/participants`);
+  if (canMoveLodging) eventLodgings = await api.get(`/events/${eventId}/lodgings?own=1`).catch(() => []);
   participantsById = new Map(participants.map((p) => [p.userId, p]));
   // People already checked in (and then out) sink to the bottom so the
   // still-open arrivals stay at the top. Array.sort is stable, so everyone
@@ -776,6 +810,9 @@ function renderParticipants(participants, eventId) {
   });
   listBody.querySelectorAll('[data-override]').forEach((select) => {
     select.addEventListener('change', () => overrideStatus(eventId, select.dataset.override, select.value, select.dataset.prevStatus));
+  });
+  listBody.querySelectorAll('[data-move-lodging]').forEach((select) => {
+    select.addEventListener('change', () => moveLodging(eventId, select.dataset.moveLodging, select.value, select));
   });
   listBody.querySelectorAll('[data-change-role]').forEach((button) => {
     button.addEventListener('click', () => openRoleDialog(button.dataset.changeRole));
@@ -1090,6 +1127,7 @@ try {
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
   canOverride = !!account.canOverrideCheckinStatus;
   lodgingEnabled = account.lodgingEnabled === true;
+  canMoveLodging = lodgingEnabled && ['admin', 'moderator'].includes(account.group?.key);
   document.getElementById('checkin-export').hidden = account.canExportMembers !== true;
   canManageMembers = (account.menus ?? []).includes('mitglieder');
   canEndEvents = (account.menus ?? []).includes('events');

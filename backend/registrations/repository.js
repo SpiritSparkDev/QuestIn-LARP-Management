@@ -455,6 +455,10 @@ export async function updateRegistrationLodging(eventId, userId, lodgingId, { st
   const event = await getEvent(eventId);
   if (!event) throw extrasError('EVENT_NOT_FOUND', 'event not found');
   const settings = await getAppSettings();
+  // Staff moving someone to another tent pitch: the tent the person already registered carries over.
+  if (staff && details === undefined) {
+    details = (await query('SELECT lodging_details FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0]?.lodging_details ?? undefined;
+  }
   const resolved = await resolveLodging(eventId, settings.lodgingEnabled, lodgingId, details);
   return withTransaction(async (client) => {
     await client.query('SELECT 1 FROM events WHERE id = $1 FOR UPDATE', [eventId]);
