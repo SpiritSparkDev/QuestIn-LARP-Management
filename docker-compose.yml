@@ -28,6 +28,12 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       UPLOADS_DIR: /app/uploads
       NODE_ENV: production
+      # The app only listens on 127.0.0.1 behind the Plesk/nginx proxy (1 hop): read the visitor's address from
+      # X-Forwarded-For, otherwise the rate limits count all visitors together. Set 0 if no proxy is in front.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      # 1 = the per-address limits (login, registration, password reset, guest registration ...) are off.
+      # Set RATE_LIMIT_DISABLED=0 in .env to switch them back on.
+      RATE_LIMIT_DISABLED: ${RATE_LIMIT_DISABLED:-1}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       APP_BASE_URL: ${APP_BASE_URL}

@@ -33,14 +33,26 @@ export function resetRateLimits() {
   buckets.clear();
 }
 
+// The address of the visitor. Behind a reverse proxy (Plesk/nginx, Caddy) the socket only shows the proxy, so every
+// visitor would share one bucket. TRUST_PROXY=<number of proxies in front of the app> reads the client address
+// from the end of X-Forwarded-For: the last entries were added by our own proxies, the one before them is the
+// client; anything a visitor puts in front of that is ignored. Unset/0: the socket address (direct access).
+export function clientIp(req) {
+  const socketIp = req.socket?.remoteAddress || 'unknown';
+  const hops = Number.parseInt(process.env.TRUST_PROXY ?? '0', 10);
+  if (!(hops > 0)) return socketIp;
+  const forwarded = String(req.headers?.['x-forwarded-for'] ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+  return forwarded.length >= hops ? forwarded[forwarded.length - hops] : socketIp;
+}
+
+// RATE_LIMIT_DISABLED=1 switches off the per-address limits of every route that uses this middleware. The
+// per-account lock of a login (5 wrong tries per e-mail) is a separate check and stays.
+const limitsDisabled = () => ['1', 'true', 'yes', 'on'].includes(String(process.env.RATE_LIMIT_DISABLED ?? '').toLowerCase());
+
 export function rateLimit({ keyPrefix, maxAttempts, windowMs }) {
   return (handler) => async (ctx) => {
-    // ponytail: assumes the app is reached directly (true today — see
-    // docker-compose.yml, no reverse proxy in front). Behind a proxy this
-    // collapses every client into the proxy's one IP. Upgrade path: a
-    // TRUST_PROXY-style env gate that trusts a configured number of
-    // X-Forwarded-For hops, not a naive "trust the header" read.
-    const ip = ctx.req.socket.remoteAddress || 'unknown';
+    if (limitsDisabled()) return handler(ctx);
+    const ip = clientIp(ctx.req);
     if (isRateLimited(`${keyPrefix}:${ip}`, maxAttempts, windowMs)) {
       return { status: 429, body: { error: 'Zu viele Anfragen. Bitte später erneut versuchen.' } };
     }
