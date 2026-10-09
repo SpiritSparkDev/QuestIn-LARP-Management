@@ -98,7 +98,7 @@ router.post('/members/import', requireAuth(requireAdminGroup(async ({ req, user 
   const [accountSchema, groupRows, userRows, invRows] = await Promise.all([
     getAccountFieldSchema(),
     query('SELECT id, key, name FROM groups'),
-    query('SELECT id, email FROM users'),
+    query('SELECT id, email FROM users WHERE email IS NOT NULL'),
     query('SELECT email FROM invitations WHERE redeemed_at IS NULL AND cancelled_at IS NULL'),
   ]);
   const result = analyzeImport(body.csv, {
