@@ -57,8 +57,8 @@ router.delete('/managed-persons/:id/events/:eventId/register', requireGroupManag
   const person = await getManagedPersonForRegistration(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
   try {
-    await unregisterFromEvent(person.id, params.eventId);
-    return { status: 200, body: { unregistered: true } };
+    const { manualReview } = await unregisterFromEvent(person.id, params.eventId);
+    return { status: 200, body: { unregistered: true, manualReview } };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
     if (err.code === 'CANNOT_UNREGISTER') return { status: 409, body: { error: err.message } };

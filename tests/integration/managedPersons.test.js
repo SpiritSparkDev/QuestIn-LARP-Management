@@ -289,6 +289,15 @@ test('POST/DELETE /managed-persons/:id/events/:eventId/register registers and un
     assert.equal(list.length, 1);
     assert.equal(list[0].eventId, eventId);
 
+    // The manager hands in the character later; strangers cannot.
+    const { rows: charRows } = await query("INSERT INTO characters (user_id, name) VALUES ($1, 'Nachgereicht') RETURNING id", [managedId]);
+    const putChar = (c) => fetch(`http://localhost:${port}/events/${eventId}/registrations/${managedId}/character`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: c }, body: JSON.stringify({ characterId: charRows[0].id }),
+    });
+    assert.equal((await putChar((await makeUserAndSession('mitglied')).cookie)).status, 403);
+    assert.equal((await putChar(cookie)).status, 200);
+    assert.equal((await query('SELECT character_id FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, managedId])).rows[0].character_id, charRows[0].id);
+
     const unregisterRes = await fetch(`http://localhost:${port}/managed-persons/${managedId}/events/${eventId}/register`, { method: 'DELETE', headers: { Cookie: cookie } });
     assert.equal(unregisterRes.status, 200);
   } finally {

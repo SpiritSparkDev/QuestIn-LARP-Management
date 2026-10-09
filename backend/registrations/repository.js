@@ -488,6 +488,51 @@ export async function updateRegistrationLodging(eventId, userId, lodgingId, { st
   });
 }
 
+// "Charakter nachreichen / austauschen": changes the character of an existing registration
+// without touching its role. SC: a registration may exist without a character (null = nachreichen)
+// and a character that is booked as SC for another event is not available; NSC: the character is
+// optional (null = Springer). The old character is free again as soon as it is replaced.
+// Participants (and their managers) may do this until check-in; staff any time before check-out.
+export async function setRegistrationCharacter(eventId, userId, characterId, requestingUser, { staff = false } = {}) {
+  const { rows: current } = await query(
+    'SELECT con_role, status, character_id FROM registrations WHERE event_id = $1 AND user_id = $2',
+    [eventId, userId]
+  );
+  if (current.length === 0) {
+    const err = new Error('registration not found');
+    err.code = 'REGISTRATION_NOT_FOUND';
+    throw err;
+  }
+  const { con_role: conRole, status, character_id: oldCharacterId } = current[0];
+  if (!['sc', 'nsc'].includes(conRole)) {
+    const err = new Error(`Für die Rolle "${conRole}" gibt es keinen Charakter.`);
+    err.code = 'CHARACTER_NOT_ALLOWED';
+    throw err;
+  }
+  const open = staff ? ['pending', 'waitlisted', 'confirmed', 'checked_in'] : ['pending', 'waitlisted', 'confirmed'];
+  if (!open.includes(status)) {
+    const err = new Error('Der Charakter lässt sich in diesem Status nicht mehr ändern. Bitte wende dich an die Orga.');
+    err.code = 'CHARACTER_LOCKED';
+    throw err;
+  }
+  const resolved = await resolveCharacterId(userId, conRole, characterId || null, eventId, { allowMissingSc: true });
+  if ((resolved ?? null) === (oldCharacterId ?? null)) return { eventId, userId, characterId: resolved ?? null, changed: false };
+  await query(
+    // The NSC answers of the registration only belong to the old character-less (Springer) state.
+    `UPDATE registrations SET character_id = $3,
+       nsc_data = CASE WHEN con_role = 'nsc' AND $3::uuid IS NOT NULL THEN '{}'::jsonb ELSE nsc_data END
+     WHERE event_id = $1 AND user_id = $2`,
+    [eventId, userId, resolved]
+  );
+  await logAudit({
+    actorId: requestingUser.id,
+    action: 'registration.character_changed',
+    subjectUserId: userId,
+    details: { eventId, from: oldCharacterId ?? null, to: resolved ?? null },
+  });
+  return { eventId, userId, characterId: resolved ?? null, changed: true };
+}
+
 export async function setConRole(eventId, userId, conRole, characterId, nscAvailable, nscCharacterId, flags, requestingUser, nscData) {
   if (!ALL_CON_ROLES.includes(conRole)) {
     const err = new Error(`conRole must be one of: ${ALL_CON_ROLES.join(', ')}`);

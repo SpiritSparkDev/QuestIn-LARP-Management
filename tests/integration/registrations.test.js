@@ -135,6 +135,45 @@ test('unregistering a confirmed registration cancels it and flags manual review'
   });
 });
 
+test('a character can be handed in later and swapped; the old one is free again, taken or foreign ones are refused', async () => {
+  await withTestServer(async (port) => {
+    const { userId, cookie } = await makeUserAndSession();
+    const stranger = await makeUserAndSession();
+    const eventId = await makeEvent();
+    const otherEventId = await makeEventNamed('Other Con', '2028-01-01');
+    const first = await makeCharacter(port, cookie, 'sc', 'Erster');
+    const second = await makeCharacter(port, cookie, 'sc', 'Zweiter');
+    const strangerChar = await makeCharacter(port, stranger.cookie, 'sc', 'Fremder');
+    const json = { 'Content-Type': 'application/json', Cookie: cookie };
+    const setChar = (characterId, c = cookie) => fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}/character`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: c }, body: JSON.stringify({ characterId }),
+    });
+    const charOf = async () => (await query('SELECT character_id FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].character_id;
+
+    // SC without a character is allowed now ("Charakter folgt")
+    const reg = await fetch(`http://localhost:${port}/events/${eventId}/register`, { method: 'POST', headers: json, body: JSON.stringify({ conRole: 'sc' }) });
+    assert.equal(reg.status, 201);
+    assert.equal(await charOf(), null);
+
+    assert.equal((await setChar(first)).status, 200); // handed in
+    assert.equal(await charOf(), first);
+    assert.equal((await setChar(second)).status, 200); // swapped
+    assert.equal(await charOf(), second);
+
+    // `first` is free again: another event may take it; then it is no longer available here
+    await query("INSERT INTO registrations (user_id, event_id, con_role, character_id, status) VALUES ($1, $2, 'sc', $3, 'pending')", [userId, otherEventId, first]);
+    assert.equal((await setChar(first)).status, 409);
+    assert.equal((await setChar(strangerChar)).status, 403);
+    assert.equal((await setChar(second, stranger.cookie)).status, 403);
+    assert.equal((await setChar(null)).status, 200); // back to "nachreichen"
+    assert.equal(await charOf(), null);
+
+    // locked once checked in (participants)
+    await query("UPDATE registrations SET status = 'checked_in' WHERE event_id = $1 AND user_id = $2", [eventId, userId]);
+    assert.equal((await setChar(second)).status, 409);
+  });
+});
+
 test('listed registrations include payment fields', async () => {
   await withTestServer(async (port) => {
     const { userId, cookie } = await makeUserAndSession();
@@ -561,7 +600,7 @@ test('approving a registration with con_role helfer succeeds without a character
   });
 });
 
-test('registering with con_role sc and no characterId is rejected', async () => {
+test('registering with con_role sc and no characterId is allowed: the character follows later', async () => {
   await withTestServer(async (port) => {
     const { cookie } = await makeUserAndSession();
     const eventId = await makeEvent();
@@ -569,7 +608,7 @@ test('registering with con_role sc and no characterId is rejected', async () => 
       method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({ conRole: 'sc' }),
     });
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 201);
   });
 });
 
@@ -1487,7 +1526,7 @@ test('an admin can register another member for an event (even with a waiver conf
     });
     try {
       assert.equal((await post(member.cookie, { conRole: 'sc', characterId })).status, 403);
-      assert.equal((await post(admin.cookie, { conRole: 'sc' })).status, 400);
+      assert.equal((await post(admin.cookie, { conRole: 'bogus' })).status, 400);
       assert.equal((await post(admin.cookie, { conRole: 'sc', characterId }, crypto.randomUUID())).status, 404);
       const res = await post(admin.cookie, { conRole: 'sc', characterId });
       assert.equal(res.status, 201);

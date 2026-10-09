@@ -96,6 +96,17 @@
 
         <div class="tab-panel" id="anmelden-tab" hidden>
           <h2>Anmeldungen</h2>
+          <dialog id="character-swap-dialog">
+            <h3 id="character-swap-title">Charakter</h3>
+            <p class="lede" id="character-swap-lede"></p>
+            <select id="character-swap-select"></select>
+            <label for="character-swap-select">Charakter</label>
+            <div class="dialog-actions">
+              <button type="button" id="character-swap-save">Speichern</button>
+              <button type="button" id="character-swap-cancel" class="btn-ghost">Abbrechen</button>
+            </div>
+          </dialog>
+
           <dialog id="edit-ot-dialog">
             <h3>Anmeldungsdaten bearbeiten</h3>
             <div id="edit-flags"></div>
@@ -656,11 +667,13 @@
       ${renderPriceTable(events.find((e) => e.id === r.eventId)?.pricing, r.priceGroup, { highlight: r.priceTier })}
       <div class="action-row">
         <button type="button" data-reg-edit="${r.eventId}" class="btn-ghost">Bearbeiten</button>
-        ${(r.status === "pending" || r.status === "waitlisted") ? `<button type="button" data-reg-unregister="${r.eventId}" class="btn-secondary">Abmelden</button>` : ""}
+        ${(["sc", "nsc"].includes(r.conRole) && ["pending", "waitlisted", "confirmed"].includes(r.status)) ? `<button type="button" data-reg-char="${r.eventId}" class="btn-secondary">${r.characterId ? "Charakter wechseln" : (r.conRole === "nsc" ? "Charakter hinterlegen" : "Charakter nachreichen")}</button>` : ""}
+        ${["pending", "waitlisted", "confirmed"].includes(r.status) ? `<button type="button" data-reg-unregister="${r.eventId}" class="btn-secondary">Abmelden</button>` : ""}
         ${(r.amountDueCents != null && !r.paidAt && !r.conPayer) ? `<button type="button" data-reg-pay="${r.eventId}">Jetzt zahlen (${(r.amountDueCents / 100).toFixed(2).replace(".", ",")} &euro;)</button>` : ""}
       </div>
     </div>`).join("");
       container.querySelectorAll("[data-reg-edit]").forEach((btn) => btn.addEventListener("click", () => openEditOtDialog(btn.dataset.regEdit)));
+      container.querySelectorAll("[data-reg-char]").forEach((btn) => btn.addEventListener("click", () => openCharacterSwapDialog(btn.dataset.regChar)));
       container.querySelectorAll("[data-reg-unregister]").forEach((btn) => btn.addEventListener("click", () => unregister(btn.dataset.regUnregister)));
       container.querySelectorAll("[data-reg-pay]").forEach((btn) => btn.addEventListener("click", () => payForRegistration(btn.dataset.regPay)));
     }
@@ -686,14 +699,50 @@
     }
 
     async function unregister(eventId) {
-      if (!confirm("Diese Person wirklich von diesem Event abmelden?")) return;
+      const confirmed = currentRegistrations.find((r) => r.eventId === eventId)?.status === "confirmed";
+      if (!confirm(confirmed
+        ? "Diese Person wirklich abmelden? Die Anmeldung ist bereits bestätigt. Die Orga prüft die Abmeldung manuell, auch eine mögliche Erstattung der Ticketgebühr."
+        : "Diese Person wirklich von diesem Event abmelden?")) return;
       try {
-        await api.delete(`/managed-persons/${managedPersonId}/events/${eventId}/register`);
+        const result = await api.delete(`/managed-persons/${managedPersonId}/events/${eventId}/register`);
+        if (result?.manualReview) notify("Die Person ist abgemeldet. Die Orga prüft das manuell und meldet sich wegen einer möglichen Erstattung.", "success");
         await loadRegistrations();
       } catch (err) {
         notify(err.message, "error");
       }
     }
+
+    // Charakter nachreichen / austauschen (the old one is free again as soon as another is saved).
+    const characterSwapDialog = document.getElementById("character-swap-dialog");
+    let swapping = null;
+    function openCharacterSwapDialog(eventId) {
+      const registration = currentRegistrations.find((r) => r.eventId === eventId);
+      if (!registration) return;
+      swapping = { eventId };
+      const isNsc = registration.conRole === "nsc";
+      document.getElementById("character-swap-title").textContent = registration.characterId ? "Charakter wechseln" : "Charakter nachreichen";
+      document.getElementById("character-swap-lede").textContent = isNsc
+        ? "Wähle den Charakter, den die Person als NSC spielt, oder lass sie als Springer ohne festen Charakter kommen."
+        : "Wähle den Charakter, mit dem die Person kommt. Der bisherige Charakter wird dadurch wieder frei. Du kannst auch ohne Charakter bleiben und ihn später nachreichen.";
+      const usable = characters.filter((c) => isNsc || !c.registeredFor || c.registeredFor.eventId === eventId);
+      document.getElementById("character-swap-select").innerHTML =
+        `<option value="">${isNsc ? "Kein Charakter – Springer" : "Ohne Charakter (später nachreichen)"}</option>`
+        + usable.map((c) => `<option value="${escapeHtml(c.id)}"${c.id === registration.characterId ? " selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
+      characterSwapDialog.showModal();
+    }
+    document.getElementById("character-swap-cancel").addEventListener("click", () => characterSwapDialog.close());
+    document.getElementById("character-swap-save").addEventListener("click", async () => {
+      try {
+        await api.put(`/events/${swapping.eventId}/registrations/${managedPersonId}/character`, {
+          characterId: document.getElementById("character-swap-select").value || null,
+        });
+        characterSwapDialog.close();
+        notify("Gespeichert.", "success");
+        await Promise.all([loadCharacters(), loadRegistrations()]);
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
 
     async function payForRegistration(eventId) {
       try {

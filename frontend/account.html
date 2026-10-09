@@ -349,6 +349,17 @@
                   </div>
                 </dialog>
 
+                <dialog id="character-swap-dialog">
+                  <h3 id="character-swap-title">Charakter</h3>
+                  <p class="lede" id="character-swap-lede"></p>
+                  <select id="character-swap-select"></select>
+                  <label for="character-swap-select">Charakter</label>
+                  <div class="dialog-actions">
+                    <button type="button" id="character-swap-save">Speichern</button>
+                    <button type="button" id="character-swap-cancel" class="btn-ghost">Abbrechen</button>
+                  </div>
+                </dialog>
+
                 <dialog id="edit-ot-dialog">
                   <h3>Anmeldungsdaten bearbeiten</h3>
                   <p class="lede">Diese Änderung benachrichtigt die Orga und Admin dieses Events per E-Mail.</p>
@@ -408,7 +419,7 @@
                         <select id="character-select" style="display:none;"></select>
                         <label for="character-select" id="character-select-label" style="display:none;">Als welcher Charakter kommst du?</label>
                         <div id="no-character-hint" style="display:none;">
-                          <p class="sub">Du hast noch keinen passenden Charakter.</p>
+                          <p class="sub">Du hast noch keinen passenden Charakter. Du kannst dich trotzdem anmelden und den Charakter später nachreichen.</p>
                           <button type="button" id="no-character-hint-btn" class="create-card">
                             <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
                             <span class="create-card-title">Charakter anlegen</span>
@@ -471,6 +482,7 @@
                 </p>
                 <div id="active-registration-price-table"></div>
                 <button type="button" id="active-registration-edit-btn">Bearbeiten</button>
+                <button type="button" id="active-registration-character-btn" class="btn-secondary" style="display:none;">Charakter wechseln</button>
                 <button type="button" id="active-registration-lodging-btn" class="btn-secondary" style="display:none;">Unterkunft wählen</button>
                 <button type="button" id="active-registration-unregister-btn" class="btn-secondary" style="display:none;">Abmelden</button>
               </div>
@@ -2165,7 +2177,7 @@
     }
 
     function populateRegistrationCharacterFields() {
-      characterSelect.innerHTML = ['<option value="">Bitte wählen</option>']
+      characterSelect.innerHTML = ['<option value="">Charakter später nachreichen</option>']
         .concat(characters.map(scCharacterOption))
         .join("");
       updateNoCharacterHintVisibility();
@@ -2454,6 +2466,12 @@
       document.getElementById("active-registration-price-table").innerHTML = renderPriceTable(activeEvent.pricing, registration.priceGroup, { highlight: registration.priceTier });
       document.getElementById("active-registration-edit-btn").onclick = () =>
         openEditOtDialog(activeEvent.id);
+      // Hand in or swap the character while the registration is not yet checked in.
+      const characterBtn = document.getElementById("active-registration-character-btn");
+      const swappable = ["sc", "nsc"].includes(registration.conRole) && ["pending", "waitlisted", "confirmed"].includes(registration.status);
+      characterBtn.style.display = swappable ? "" : "none";
+      characterBtn.textContent = registration.characterId ? "Charakter wechseln" : registration.conRole === "nsc" ? "Charakter hinterlegen" : "Charakter nachreichen";
+      characterBtn.onclick = () => openCharacterSwapDialog(activeEvent.id, registration);
       const unregisterBtn = document.getElementById("active-registration-unregister-btn");
       if (["pending", "waitlisted", "confirmed"].includes(registration.status)) {
         unregisterBtn.style.display = "";
@@ -2501,6 +2519,37 @@
       }
     });
 
+    // Charakter nachreichen / austauschen: the old one is free again as soon as another is saved.
+    const characterSwapDialog = document.getElementById("character-swap-dialog");
+    let swapping = null;
+    function openCharacterSwapDialog(eventId, registration) {
+      swapping = { eventId, registration };
+      const isNsc = registration.conRole === "nsc";
+      document.getElementById("character-swap-title").textContent = registration.characterId ? "Charakter wechseln" : "Charakter nachreichen";
+      document.getElementById("character-swap-lede").textContent = isNsc
+        ? "Wähle den Charakter, den du als NSC spielst, oder komm als Springer ohne festen Charakter."
+        : "Wähle den Charakter, mit dem du kommst. Der bisherige Charakter wird dadurch wieder frei. Du kannst auch ohne Charakter bleiben und ihn später nachreichen.";
+      // An SC character that is booked for another event is taken; the current one stays selectable.
+      const usable = characters.filter((c) => isNsc || !c.registeredFor || c.registeredFor.eventId === eventId);
+      document.getElementById("character-swap-select").innerHTML =
+        `<option value="">${isNsc ? "Kein Charakter – Springer" : "Ohne Charakter (später nachreichen)"}</option>`
+        + usable.map((c) => `<option value="${escapeHtml(c.id)}"${c.id === registration.characterId ? " selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
+      characterSwapDialog.showModal();
+    }
+    document.getElementById("character-swap-cancel").addEventListener("click", () => characterSwapDialog.close());
+    document.getElementById("character-swap-save").addEventListener("click", async () => {
+      try {
+        await api.put(`/events/${swapping.eventId}/registrations/${currentUserId}/character`, {
+          characterId: document.getElementById("character-swap-select").value || null,
+        });
+        characterSwapDialog.close();
+        notify("Gespeichert.", "success");
+        await Promise.all([loadCharacters(), loadRegistrations()]);
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
+
     async function unregister(eventId) {
       const confirmed = currentRegistrations.find((r) => r.eventId === eventId)?.status === "confirmed";
       const question = confirmed
@@ -2526,11 +2575,8 @@
         characterId = nscCharacterSelect.value || undefined;
         nscData = collectNscFields(document.getElementById("nsc-questionnaire"), nscSchema, canOverrideCheckin);
       } else {
+        // No character yet is fine: it can be handed in later from the registration card.
         characterId = characterSelect.value || undefined;
-        if (!characterId) {
-          notify("Wähle einen Charakter.", "error");
-          return;
-        }
         conRole = "sc";
       }
 
