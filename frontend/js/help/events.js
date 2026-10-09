@@ -105,6 +105,7 @@ export default {
       { label: 'Spalte Extras', text: 'Zugebuchte Extras der Anmeldung.' },
       { label: 'Spalte Betrag', text: 'Oben der Betrag in Euro, den die Person zahlen soll (leer = kein Betrag), darunter ein Feld für einen Rabatt in Euro. Darüber steht Teilnahmegruppe und Preisstufe. Änderungen werden beim Verlassen des Feldes gespeichert.' },
       { label: 'Spalte Zahlung', text: 'Zeigt „Offen“ bzw. bei Con-Zahlern „Zahlt vor Ort“, oder „Bezahlt“ mit Zahlungsart (Karte, PayPal, Überweisung). Ohne Betrag steht dort ein Strich.' },
+      { label: 'Kleine Symbol-Buttons in der Zeile', text: 'Damit jede Person eine schlanke Zeile bleibt, sind die Aktionen Symbole mit Tooltip: Haken = als bezahlt markieren, Pfeil zurück = Zahlung zurücksetzen, Münzen-Pfeile = erstatten, Person mit Zahnrad = Rolle ändern, durchgestrichene Glocke = Überweisungsmeldung zurücksetzen.' },
       { label: 'Als bezahlt markieren', text: 'Bucht die Zahlung manuell als erhalten, z. B. bei Barzahlung oder Überweisung.' },
       { label: 'Zurücksetzen (Zahlung)', text: 'Setzt eine bezahlte Anmeldung wieder auf unbezahlt.' },
       { label: 'Erstatten', text: 'Fragt nach dem Betrag (vorbelegt mit dem vollen Betrag) und bucht nach Bestätigung eine Erstattung. Danach steht „Vollständig erstattet“ oder „Teilerstattet“ mit Betrag.' },

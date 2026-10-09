@@ -5515,3 +5515,26 @@ select.status-select {
 #dashboard-tab .dashboard-split {
   margin-top: 32px;
 }
+
+/* Check-in rows: one line per person -- status and its small actions side by side, tighter padding */
+.grid-cell.cell-inline {
+  flex-wrap: wrap;
+  align-content: center;
+  gap: 6px;
+}
+
+.grid-row:not(.grid-header) .grid-cell {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Members list: paid */
+.paid-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #2e9e4f;
+  vertical-align: middle;
+}

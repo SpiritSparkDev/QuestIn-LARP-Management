@@ -733,6 +733,7 @@ test('PayPal buttons: order only when switched on and for the right person; capt
   const { setPaymentSettings } = await import('../../backend/paymentSettings/repository.js');
   await setPaymentSettings({ paypalClientId: 'cid-public', paypalSecret: 'secret', paypalEnabled: true, paypalButtonsEnabled: false });
   const eventId = await makeEvent();
+  await query("UPDATE events SET code = 'B17/2027' WHERE id = $1", [eventId]);
   const userId = await makeUser();
   const strangerId = await makeUser();
   await makeRegistration(eventId, userId);
@@ -769,6 +770,8 @@ test('PayPal buttons: order only when switched on and for the right person; capt
       assert.equal((await ok.json()).orderId, 'BTNORDER0001');
       assert.equal(created.payment_source, undefined); // no redirect for the buttons
       assert.equal(created.purchase_units[0].amount.value, '45.00');
+      // The provider-side description is the same text as the bank-transfer reference.
+      assert.equal(created.purchase_units[0].description, 'B17/2027 Pay-Repo Test');
 
       const capture = (orderId) => realFetch(`http://localhost:${port}/paypal/capture`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }) });
       const paid = async () => (await query('SELECT paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0].paid_at;

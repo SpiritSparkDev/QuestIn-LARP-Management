@@ -763,6 +763,11 @@
 
     // Same status override as in Check-In: one dropdown per registration of
     // the member (only the one for the chosen event, if the filter has one).
+    // Green dot: this person has paid (for the chosen event, or any of their registrations).
+    const paidDot = (m) => ((m.registrations ?? []).some((r) => (!prefs.event || r.eventId === prefs.event) && r.paidAt && r.status !== 'cancelled')
+      ? '<span class="paid-dot" role="img" aria-label="Bezahlt" title="Bezahlt"></span>'
+      : '');
+
     // Registrations shown in the list: only the chosen event's, if the filter has one.
     const shownRegs = (m) => (m.registrations ?? []).filter((r) => !prefs.event || r.eventId === prefs.event);
     const eventNameOf = (id) => allEvents.find((e) => e.id === id)?.name ?? '';
@@ -846,7 +851,7 @@
         const selectable = m.status !== 'invited' && m.id !== myUserId;
         return `<tr>
     <td>${selectable ? `<input type="checkbox" data-select="${m.id}" aria-label="Auswählen"${selected.has(m.id) ? ' checked' : ''}>` : ''}</td>
-    <td data-col="name">${escapeHtml(fullName(m))}${discordBadge}${m.email ? guestBadge : ''}</td>
+    <td data-col="name">${paidDot(m)}${escapeHtml(fullName(m))}${discordBadge}${m.email ? guestBadge : ''}</td>
     <td data-col="email">${m.email ? escapeHtml(m.email) : guestBadge}</td>
     <td data-col="role">${escapeHtml(m.group?.name ?? '–')}</td>
     <td data-col="participation">${escapeHtml(participationLabels(m).join(', ') || '–')}</td>

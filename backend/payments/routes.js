@@ -90,6 +90,7 @@ async function createCheckoutSession({
       quantity: 1,
     }],
     client_reference_id: clientReferenceId,
+    payment_intent_data: { description: await paymentDescription(eventId, userId, productLabel) },
     success_url: successUrl,
     cancel_url: cancelUrl,
   });
@@ -318,7 +319,7 @@ async function createPaypalSession({ eventId, userId, amountDueCents, successUrl
   const { orderId, approveUrl } = await createPaypalOrder(config, {
     reference: `${eventId}:${userId}`,
     amountCents: amountDueCents,
-    description: `${productLabel} – ${event?.name ?? 'Event'}`,
+    description: await paymentDescription(eventId, userId, productLabel),
     returnUrl: `${base}/paypal/return`,
     cancelUrl: `${base}/paypal/cancel`,
     requestId: crypto.randomUUID(),
@@ -390,7 +391,7 @@ async function createPaypalButtonsOrder(eventId, userId) {
   const { orderId } = await createPaypalOrder(config, {
     reference: `${eventId}:${userId}`,
     amountCents: rows[0].amount_due_cents,
-    description: `Teilnahmegebühr – ${event.name ?? 'Event'}`,
+    description: await paymentDescription(eventId, userId),
     requestId: crypto.randomUUID(),
     sdk: true,
   });
@@ -433,6 +434,15 @@ router.get('/payments/overdue-transfers', requireAuth(requireMenu('mitglieder')(
   return { status: 200, body: await listOverdueTransfers(3) };
 })));
 
+// What the payment is called at the provider: the same text as the bank-transfer reference
+// ("P17/2027 Anna-Muster"), so a payment can be matched to a person at a glance.
+async function paymentDescription(eventId, userId, productLabel = 'Teilnahmegebühr') {
+  const event = await getEvent(eventId);
+  if (productLabel !== 'Teilnahmegebühr') return `${productLabel} – ${event?.name ?? 'Event'}`;
+  const { rows } = await query('SELECT first_name, last_name FROM users WHERE id = $1', [userId]);
+  return buildPaymentReference(eventId, userId, { code: event?.code, firstName: rows[0]?.first_name, lastName: rows[0]?.last_name });
+}
+
 // SumUp hosted checkout. The returned object only needs `.url`, like a Stripe session.
 async function createSumupSession({ eventId, userId, amountDueCents, successUrl, productLabel }) {
   const config = await getSumupConfig();
@@ -443,7 +453,7 @@ async function createSumupSession({ eventId, userId, amountDueCents, successUrl,
   const checkout = await createSumupCheckout(config, {
     reference,
     amountCents: amountDueCents,
-    description: `${productLabel} – ${event?.name ?? 'Event'}`,
+    description: await paymentDescription(eventId, userId, productLabel),
     returnUrl: `${await baseUrl()}/webhooks/sumup/${config.webhookSecret}`,
     redirectUrl: successUrl,
   });

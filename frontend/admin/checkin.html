@@ -200,7 +200,7 @@ function allColumns() {
   const base = [
     { id: 'name', label: 'Name', locked: true, track: 'minmax(150px, 1.2fr)', render: (p) => escapeHtml(p.name) },
     { id: 'characters', label: 'Charaktere', track: 'minmax(130px, 1fr)', render: (p) => escapeHtml(p.characters.map((c) => c.name).join(', ')) },
-    { id: 'role', label: 'Rolle', track: 'minmax(140px, 0.9fr)', cls: 'cell-stack', render: renderConRoleCell },
+    { id: 'role', label: 'Rolle', track: 'minmax(140px, 0.9fr)', cls: 'cell-inline', render: renderConRoleCell },
   ];
   const it = selectedColumns.it.map((key) => {
     const field = currentSchema.find((f) => f.key === key) ?? { key };
@@ -226,7 +226,7 @@ function allColumns() {
     ...(lodgingEnabled ? [{ id: 'lodging', label: 'Unterkunft', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.lodgingName ?? '') }] : []),
     { id: 'extras', label: 'Extras', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.extrasText ?? '') },
     { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
-    { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-stack', render: renderPaymentStatusCell },
+    { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-inline', render: renderPaymentStatusCell },
     { id: 'status', label: 'Status', track: '130px', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(statusLabel(p.status, p.conPayer))}</span>` },
     { id: 'actions', label: 'Aktionen', locked: true, track: eventEnded() ? 'minmax(210px, 1.3fr)' : 'minmax(110px, 0.7fr)', cls: 'cell-actions', render: (p) => renderCheckinCell(p) + renderCheckoutCell(p) },
     ...(canOverride ? [{ id: 'override', label: 'Override', track: '150px', render: renderOverrideCell }] : []),
@@ -651,17 +651,20 @@ function renderOverrideCell(p) {
   return `<select data-override="${escapeHtml(p.userId)}" data-prev-status="${escapeHtml(p.status)}" aria-label="Status-Override">${options}</select>`;
 }
 
+// Small icon-only action next to a status: keeps a row on one line.
+const iconAction = (attrs, icon, title) => `<button type="button" class="btn-ghost btn-sm btn-icon" ${attrs} title="${title}" aria-label="${title}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span></button>`;
+
 function renderConRoleCell(p) {
   const label = CON_ROLE_LABELS[p.conRole] ?? p.conRole ?? '–';
   const flagBadges = (p.flags ?? []).map((f) => ` <span class="tag">${escapeHtml(f)}</span>`).join('');
   const badge = flagBadges + (p.nscAvailable ? ' <span class="tag">auch NSC-bereit</span>' : '');
   const changeButton = canOverride && p.userId
-    ? `<button type="button" class="btn-ghost btn-sm" data-change-role="${escapeHtml(p.userId)}">Rolle ändern</button>`
+    ? iconAction(`data-change-role="${escapeHtml(p.userId)}"`, 'manage_accounts', 'Rolle ändern')
     : '';
   const nscInfo = p.conRole === 'nsc'
-    ? `<div class="sub" style="white-space:normal;">${p.characters?.[0]?.name ? `Fester NSC: ${escapeHtml(p.characters[0].name)}` : 'Springer'}</div>`
+    ? `<span class="sub">${p.characters?.[0]?.name ? `Fester NSC: ${escapeHtml(p.characters[0].name)}` : 'Springer'}</span>`
     : '';
-  return `<div><strong>${escapeHtml(label)}</strong>${badge}</div>${nscInfo}${changeButton}`;
+  return `<strong>${escapeHtml(label)}</strong>${badge}${nscInfo}${changeButton}`;
 }
 
 const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', sumup: 'SumUp', paypal: 'PayPal', stripe_klarna: 'Klarna', stripe_sepa_debit: 'SEPA-Lastschrift', stripe_bank_transfer: 'Überweisung (Stripe)', bank_transfer: 'Überweisung' };
@@ -691,13 +694,13 @@ function renderPaymentStatusCell(p) {
     if (p.refundedAt) {
       const fullyRefunded = p.refundAmountCents >= p.amountDueCents;
       const refundNote = fullyRefunded ? 'Vollständig erstattet' : `Teilerstattet: ${(p.refundAmountCents / 100).toFixed(2)} €`;
-      return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <span class="sub">${refundNote}</span> <button type="button" class="btn-ghost btn-sm" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
+      return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <span class="sub">${refundNote}</span> ${iconAction(`data-mark-unpaid="${escapeHtml(p.userId)}"`, 'undo', 'Zahlung zurücksetzen')}`;
     }
-    return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> <button type="button" class="btn-ghost btn-sm" data-refund="${escapeHtml(p.userId)}">Erstatten</button> <button type="button" class="btn-ghost btn-sm" data-mark-unpaid="${escapeHtml(p.userId)}">Zurücksetzen</button>`;
+    return `<span class="status-pill status-confirmed">Bezahlt (${escapeHtml(label)})</span> ${iconAction(`data-refund="${escapeHtml(p.userId)}"`, 'currency_exchange', 'Erstatten')} ${iconAction(`data-mark-unpaid="${escapeHtml(p.userId)}"`, 'undo', 'Zahlung zurücksetzen')}`;
   }
   const openLabel = p.conPayer ? 'Zahlt vor Ort' : 'Offen';
-  const notified = p.transferNotifiedAt ? ` <span class="status-pill status-waitlisted" title="Gemeldet am ${escapeHtml(new Date(p.transferNotifiedAt).toLocaleString('de-DE'))}">Überweisung gemeldet</span> <button type="button" class="btn-ghost btn-sm" data-reset-transfer="${escapeHtml(p.userId)}" title="Meldung zurücksetzen (kein Zahlungseingang)">Zurücksetzen</button>` : '';
-  return `<span class="status-pill status-pending">${openLabel}</span>${notified} <button type="button" class="btn-ghost btn-sm" data-mark-paid="${escapeHtml(p.userId)}">Als bezahlt markieren</button>`;
+  const notified = p.transferNotifiedAt ? ` <span class="status-pill status-waitlisted" title="Gemeldet am ${escapeHtml(new Date(p.transferNotifiedAt).toLocaleString('de-DE'))}">Überweisung gemeldet</span> ${iconAction(`data-reset-transfer="${escapeHtml(p.userId)}"`, 'notifications_off', 'Meldung zurücksetzen (kein Zahlungseingang)')}` : '';
+  return `<span class="status-pill status-pending">${openLabel}</span>${notified} ${iconAction(`data-mark-paid="${escapeHtml(p.userId)}"`, 'check_circle', 'Als bezahlt markieren')}`;
 }
 
 searchInput.addEventListener('input', () => {

@@ -27,6 +27,7 @@ export default {
       { label: 'Anmeldestatus …', text: 'Bulk-Aktion für ein gewähltes Event: „Bestätigen“ (Zahlung eingegangen) oder „Absagen“ (inklusive Nachrücken von der Warteliste). Nur sichtbar mit dem Recht, Status frei zu setzen. Es ändern sich nur Anmeldungen, bei denen der Wechsel erlaubt ist.' },
       { label: 'Auswahl aufheben', text: 'Entfernt alle Haken. Die Auswahl gilt nur für sichtbare Zeilen: Wenn du Filter oder Suche änderst, fallen ausgeblendete Zeilen raus.' },
       { label: 'Alle auswählen (Kästchen in der Kopfzeile)', text: 'Wählt alle angezeigten Mitglieder aus. Eingeladene und dein eigenes Konto lassen sich nicht auswählen.' },
+      { label: 'Grüner Punkt vor dem Namen', text: 'Die Person hat bezahlt (für das gewählte Event, sonst für irgendeine ihrer Anmeldungen). Abgesagte Anmeldungen zählen nicht.' },
       { label: 'Spalte Name', text: 'Zeigt „Vorname Nachname / Rufname“. Ein Discord-Symbol zeigt, dass ein Discord-Konto verknüpft ist.' },
       { label: 'Spalte E-Mail', text: 'Die E-Mail-Adresse des Kontos. Bei verwalteten Personen oder Direktanmeldungen kann sie leer sein.' },
       { label: 'Spalte Rolle', text: 'Die Rolle des Mitglieds im Tool. Sie bestimmt, welche Menüs und Felder die Person sieht.' },
