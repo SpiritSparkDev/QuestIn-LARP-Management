@@ -72,13 +72,13 @@ const tx = (accountId, type, amount, extra = {}) => ({
 });
 const checkedIn = (s, userId) => ({ user_id: userId, event_id: s.eventId, status: 'checked_in', checked_in_at: NOW(), checked_out_at: null });
 
-function pkgOf(s, { generation = s.generation, takenAt = new Date(), snapshotId = s.snapshotId, registrations = [], accounts = [], txs = [], audit = [] } = {}) {
+function pkgOf(s, { generation = s.generation, takenAt = new Date(), snapshotId = s.snapshotId, registrations = [], accounts = [], txs = [], audit = [], mails } = {}) {
   return JSON.parse(JSON.stringify({
     manifest: {
       kind: 'return', snapshot_id: snapshotId, taken_at: takenAt, instance_id: crypto.randomUUID(), schema_version: SCHEMA,
       generation, return_token: container.returnToken(snapshotId), event_id: s.eventId,
     },
-    data: { registrations, tavern_accounts: accounts, tavern_transactions: txs, audit_log: audit },
+    data: { registrations, tavern_accounts: accounts, tavern_transactions: txs, audit_log: audit, ...(mails ? { mail_outbox: mails } : {}) },
   }));
 }
 
@@ -137,6 +137,22 @@ test('clean merge: check-ins, accounts, ledger, void marks, audit; online releas
   const again = await mergeReturnPackage(db, pkg, { userId: s.adminId });
   assert.equal(again.status, 'already_applied');
   assert.equal((await query('SELECT count(*)::int n FROM tavern_transactions WHERE account_id = $1', [n.id])).rows[0].n, 1);
+});
+
+test('offline mails are carried over into the online outbox once, even if the package is merged again', async () => {
+  const s = await scenario();
+  const player = await addReg(s);
+  const mail = { id: crypto.randomUUID(), created_at: NOW(), to_address: `offline-${player}@offline.invalid`, subject: 'Zahlung eingegangen', body: 'Danke', is_html: false, slot: 'payment_received', user_id: player };
+  const pkg = pkgOf(s, { mails: [mail] });
+  const res = await mergeReturnPackage(db, pkg, { userId: s.adminId, interim: true });
+  assert.equal(res.report.queuedMails, 1);
+  const again = pkgOf(s, { generation: s.generation + 1, mails: [mail] });
+  await mergeReturnPackage(db, again, { userId: s.adminId, interim: true });
+  const { rows } = await query('SELECT slot, user_id, sent_at FROM mail_outbox WHERE id = $1', [mail.id]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].slot, 'payment_received');
+  assert.equal(rows[0].sent_at, null, 'no SMTP in tests: stays queued');
+  await query('DELETE FROM mail_outbox WHERE id = $1', [mail.id]);
 });
 
 test('registration_changed_online + unknown_entity: held back, resolvable per option, last one releases online', async () => {

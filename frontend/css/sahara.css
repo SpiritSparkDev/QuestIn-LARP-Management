@@ -2242,6 +2242,12 @@ tbody tr:last-child td {
   color: var(--on-surface-variant);
 }
 
+/* Versandprotokoll: mail failed or was never sent */
+.badge-failed {
+  background: rgba(192, 57, 43, 0.12);
+  color: #c0392b;
+}
+
 /* ---------- Dashboard layout + event ticket panel ---------- */
 
 .dashboard-layout {

@@ -61,6 +61,23 @@ export default {
     ],
   },
 
+  '/admin/email-log.html': {
+    title: 'Versandprotokoll',
+    anchor: 'email-log',
+    intro: 'Hier siehst Du jede automatisch verschickte E-Mail mit Ergebnis – und ob der E-Mail-Versand überhaupt richtig eingerichtet ist.',
+    items: [
+      { label: 'Zustand des E-Mail-Versands', text: 'Prüft, was Mails still und leise verschwinden lässt: kein SMTP-Server, keine Absenderadresse, Absender passt nicht zum SMTP-Konto, Links zeigen auf „localhost“, kürzliche Fehlschläge und noch nicht versendete Mails aus der Offline-Version. Gibt es ein Problem, erscheint im Menü ein Punkt bei „Versandprotokoll“ und einmal pro Sitzung ein Hinweis.' },
+      { label: 'Status „Versendet“', text: 'Der Mailserver hat die Mail angenommen. Kommt sie trotzdem nicht an, liegt sie meist im Spam-Ordner des Empfängers oder wurde von dessen Anbieter aussortiert.' },
+      { label: 'Status „Fehlgeschlagen“', text: 'Der Mailserver hat die Mail abgelehnt oder war nicht erreichbar. Die Fehlermeldung steht darunter, z. B. falsches Passwort oder abgelehnter Absender.' },
+      { label: 'Status „Nicht versendet (kein SMTP)“', text: 'Es war kein SMTP-Server eingerichtet, die Mail ging nirgendwohin. Sie wird nicht nachträglich verschickt.' },
+      { label: 'Status „Offline gesammelt“', text: 'Auf der Offline-Version geschrieben. Nach der Rückgabe wird sie online automatisch verschickt (dann mit eigenem Eintrag).' },
+      { label: 'Status „Übersprungen“', text: 'Test-Person aus dem Test-Modus, an sie wird nie gesendet.' },
+      { label: 'Suche und Status', text: 'Filtert nach Empfängeradresse oder Betreff und nach Status. „Ältere laden“ holt die nächsten 100 Einträge.' },
+      { label: 'Aufbewahrung', text: 'Einträge werden nach 90 Tagen automatisch gelöscht.' },
+      { label: 'Beim Mitglied', text: 'Im Mitglieder-Detail zeigt der Reiter „E-Mails“ die letzten Mails an genau diese Person.' },
+    ],
+  },
+
   '/admin/sync.html': {
     title: 'Datenabgleich',
     anchor: 'sync',
@@ -94,7 +111,7 @@ export default {
 
       { label: 'Tab „Allgemein“', text: 'Basis-URL, Einladungen, Zahlungserinnerungen, Warteliste, Charakter-Suche sowie AGB und Rechtstexte.' },
       { label: 'Basis-URL', text: 'Grundlage für Links in E-Mails (Bestätigung, Passwort-Reset, Einladungen, Zahlung). Leer = Umgebungsvariable APP_BASE_URL des Servers. Darunter steht, welche URL aktuell aktiv ist. Eine falsche URL führt zu kaputten Links in Mails.' },
-      { label: 'Einladungen: Gültig für (Tage)', text: 'Wie lange ein Einladungslink gültig bleibt. Danach läuft er ab.' },
+      { label: 'Einladungen: Gültig für (Tage)', text: 'Wie lange ein Einladungslink gültig bleibt (Standard: 14 Tage). Danach läuft er ab. Nutzt die eingeladene Person später „Passwort vergessen“, bekommt sie automatisch eine erneuerte Einladung.' },
       { label: 'Zahlungserinnerungen an die Orga', text: 'Per PDF angemeldete Personen bleiben offen, bis sie zahlen. Nach 1, 2 und 3 eingetragenen Tagen (1 bis 365) bekommt die Orga je eine Mail mit der Liste der offenen Zahlungen. Leer = keine Erinnerung. Con-Zahler zählen nicht.' },
       { label: 'Teilnehmerlimit: welche Rollen zählen mit?', text: 'Nur angehakte Rollen zählen gegen die Teilnehmergrenzen eines Events (Gesamt, SC, NSC). Standard: SC, NSC und Direktanmeldungen zählen, Helfer, Hilfs-Orga und Orga nicht. Nicht zählende Rollen können sich immer anmelden und nehmen keinen Platz weg. Beim Speichern rücken Wartende nach, wo jetzt Platz ist.' },
       { label: 'Warteliste: Automatisch nachrücken lassen', text: 'An: Wird ein Platz frei, rückt die am längsten wartende Person automatisch nach. Aus: Staff muss im Check-In-Bereich manuell nachrücken lassen. Wirkt sofort.' },
@@ -104,7 +121,7 @@ export default {
 
       { label: 'Tab „Check-In“: Hotkeys', text: 'Klicke in ein Feld und drücke die gewünschte Taste für „Einchecken (im Pop-up)“, „Abbrechen (im Pop-up)“ und „Scan starten (Push-to-See)“. Die Taste wird sofort in Deinem Konto gespeichert. Vom Browser reservierte oder doppelt belegte Tasten werden abgelehnt.' },
 
-      { label: 'Tab „E-Mail“: SMTP-Zugang', text: 'Host, Port, Benutzername, Passwort und Absender-Adresse für den Versand von Registrierung, Passwort-Reset und Einladungen. Ein leeres Passwort-Feld behält das gespeicherte Passwort. Ohne gültigen Zugang kommen keine Mails an.' },
+      { label: 'Tab „E-Mail“: SMTP-Zugang', text: 'Host, Port, Benutzername, Passwort und Absender-Adresse für den Versand von Registrierung, Passwort-Reset und Einladungen. Ein leeres Passwort-Feld behält das gespeicherte Passwort. Ohne gültigen Zugang kommen keine Mails an. Die Absender-Adresse sollte zur Domain des SMTP-Kontos passen, sonst landen Mails oft im Spam. Ob der Versand funktioniert, zeigt Administration → Versandprotokoll.' },
       { label: 'Test-Mail senden', text: 'Schickt eine Testmail an die Ziel-E-Mail-Adresse mit den aktuell eingetragenen Feldern, ohne sie zu speichern. So prüfst Du Zugangsdaten vor dem Speichern.' },
 
       { label: 'Tab „Zahlungen“, Karte „Stripe“: Stripe Secret Key', text: 'Zugangsschlüssel für Stripe, das Kreditkarte, PayPal und automatisch bestätigte Banküberweisung verarbeitet. Leer lassen behält den gespeicherten Schlüssel.' },

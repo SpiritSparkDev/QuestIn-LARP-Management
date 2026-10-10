@@ -4,18 +4,52 @@ import { getAppSettings, DEFAULT_BASE_URL } from '../appSettings/repository.js';
 import { logger } from '../logger.js';
 import { renderSlotEmail } from '../emailTemplates/send.js';
 import { isOffline, outboxTransport } from '../appMode.js';
+import { recordEmail } from '../emailLog/repository.js';
+
+// Transporters handed out while no SMTP host is configured: nodemailer's
+// jsonTransport "sends" into the void, so these mails are logged as
+// not_configured instead of sent.
+const unconfiguredTransporters = new WeakSet();
+
+export function isUnconfiguredTransporter(transporter) {
+  return unconfiguredTransporters.has(transporter);
+}
 
 // Delivers whatever renderSlotEmail resolved to (an admin-assigned template
 // or the slot's hardcoded fallback text) -- isHtml picks sendMail's html vs
 // text option, same rule as the manual "send test" flow in
-// backend/emailTemplates/routes.js.
-function deliver(transporter, from, to, { subject, body, isHtml }) {
+// backend/emailTemplates/routes.js. Every attempt lands in the
+// Versandprotokoll (email_log); a failure is recorded and rethrown.
+export async function deliver(transporter, from, to, { subject, body, isHtml, slot = null, userId = null }) {
+  const entry = { slot, userId, to, subject };
   // Test-Modus people live on a reserved, undeliverable domain -- never try to mail them.
-  if (String(to).toLowerCase().endsWith('@test.invalid')) return Promise.resolve({ skipped: true });
-  return transporter.sendMail({ to, from, subject, ...(isHtml ? { html: body } : { text: body }) });
+  if (String(to).toLowerCase().endsWith('@test.invalid')) {
+    await recordEmail({ ...entry, status: 'skipped', error: 'Test-Person (Test-Modus), nicht versendet' });
+    return { skipped: true };
+  }
+  const mail = { to, from, subject, ...(isHtml ? { html: body } : { text: body }) };
+  if (transporter === outboxTransport) {
+    const info = await outboxTransport.sendMail(mail, { slot, userId });
+    await recordEmail({ ...entry, status: 'queued', error: 'Offline-Version: wird nach der Rückgabe versendet' });
+    return info;
+  }
+  let info;
+  try {
+    info = await transporter.sendMail(mail);
+  } catch (err) {
+    await recordEmail({ ...entry, status: 'failed', error: err.message });
+    throw err;
+  }
+  if (unconfiguredTransporters.has(transporter)) {
+    logger.warn('no SMTP host configured, mail was not sent', { slot, to });
+    await recordEmail({ ...entry, status: 'not_configured', error: 'Kein SMTP-Server eingerichtet' });
+  } else {
+    await recordEmail({ ...entry, status: 'sent' });
+  }
+  return info;
 }
 
-async function resolveSmtpConfig() {
+export async function resolveSmtpConfig() {
   let settings = null;
   if (process.env.DATABASE_URL) {
     try {
@@ -36,16 +70,19 @@ async function resolveSmtpConfig() {
 export async function getTransporterAndFrom() {
   const { host, port, username, password, from } = await resolveSmtpConfig();
   if (isOffline()) return { transporter: outboxTransport, from };
-  const transporter = host
-    ? nodemailer.createTransport({
-        host,
-        port,
-        auth: username ? { user: username, pass: password } : undefined,
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 20000,
-      })
-    : nodemailer.createTransport({ jsonTransport: true });
+  if (!host) {
+    const transporter = nodemailer.createTransport({ jsonTransport: true });
+    unconfiguredTransporters.add(transporter);
+    return { transporter, from };
+  }
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    auth: username ? { user: username, pass: password } : undefined,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
+  });
   return { transporter, from };
 }
 
@@ -88,6 +125,21 @@ export async function sendInvitationEmail(to, token, { account } = {}) {
     subject: 'Du wurdest zu Pakyrion eingeladen',
     body: `Du wurdest eingeladen. Setze dein Passwort, um loszulegen: ${url}`,
   }), { account, extra: { link: url } });
+  return deliver(transporter, from, to, rendered);
+}
+
+// "Passwort vergessen" from someone who only has a Direktanmeldung: there is
+// no password to reset, so they get their ticket links instead of silence.
+export async function sendGuestAccessEmail(to, { userId, tickets }) {
+  const { transporter, from } = await getTransporterAndFrom();
+  const base = await baseUrl();
+  const list = tickets.map((t) => `- ${t.eventName}: ${base}/guest-payment.html?token=${t.paymentToken}`).join('\n');
+  const rendered = await renderSlotEmail('guest_access', () => ({
+    subject: 'Deine Anmeldung – du hast kein Konto mit Passwort',
+    body: tickets.length > 0
+      ? `Du hast „Passwort vergessen“ angefragt. Zu dieser Adresse gibt es nur eine Direktanmeldung ohne Konto und daher auch kein Passwort. Deine Tickets findest du hier, ganz ohne Login:\n\n${list}\n\nWenn du ein eigenes Konto möchtest, wende dich an die Orga – sie kann deine Anmeldung in ein Konto umwandeln.`
+      : 'Du hast „Passwort vergessen“ angefragt. Zu dieser Adresse gibt es nur eine Direktanmeldung ohne Konto und daher auch kein Passwort. Wenn du ein eigenes Konto möchtest, wende dich an die Orga – sie kann deine Anmeldung in ein Konto umwandeln.',
+  }), { userId, extra: { tickets: list, hasTickets: tickets.length > 0 } });
   return deliver(transporter, from, to, rendered);
 }
 

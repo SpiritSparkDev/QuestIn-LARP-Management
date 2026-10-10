@@ -35,7 +35,7 @@ function decryptInvitation(row) {
   };
 }
 
-export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, eventId, ttlDays = 3, userId, ...otFields }) {
+export async function createInvitation({ email, firstName, lastName, nickname, groupId, invitedBy, eventId, ttlDays = 14, userId, ...otFields }) {
   const schema = await getAccountFieldSchema();
   const data = {};
   for (const field of schema) {
@@ -62,7 +62,7 @@ export async function getInvitationById(id) {
   return rows[0] ? decryptInvitation(rows[0]) : null;
 }
 
-export async function regenerateToken(id, ttlDays = 3) {
+export async function regenerateToken(id, ttlDays = 14) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
   const { rows } = await query(
@@ -83,6 +83,18 @@ export async function markRedeemed(id, client) {
     [id]
   );
   return rows.length > 0;
+}
+
+// Newest not-yet-redeemed, not-cancelled invitation for an address --
+// expired ones included, "Passwort vergessen" renews them.
+export async function findOpenInvitationByEmail(email) {
+  const { rows } = await query(
+    `SELECT ${SELECT_COLUMNS} FROM invitations
+     WHERE lower(email) = lower($1) AND redeemed_at IS NULL AND cancelled_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
+    [email]
+  );
+  return rows[0] ? decryptInvitation(rows[0]) : null;
 }
 
 export async function listOpenInvitations() {

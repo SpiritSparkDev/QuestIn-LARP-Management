@@ -912,7 +912,7 @@
       async function loadInvitationSettings() {
         const settings = await api.get("/app-settings");
         invitationForm.elements.invitationTtlDays.value =
-          settings.invitationTtlDays ?? 3;
+          settings.invitationTtlDays ?? 14;
       }
 
       invitationForm.addEventListener("submit", async (event) => {

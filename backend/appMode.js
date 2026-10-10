@@ -7,12 +7,13 @@ export function isOffline() {
   return process.env.APP_MODE === 'offline';
 }
 
-// Drop-in for a nodemailer transporter: stores the mail for sending after the handback.
+// Drop-in for a nodemailer transporter: stores the mail for sending after the
+// handback (the return package carries it, see backend/emailLog/outbox.js).
 export const outboxTransport = {
-  async sendMail({ to, from, subject, html, text }) {
+  async sendMail({ to, from, subject, html, text }, { slot = null, userId = null } = {}) {
     await query(
-      'INSERT INTO mail_outbox (to_address, from_address, subject, body, is_html) VALUES ($1, $2, $3, $4, $5)',
-      [to, from ?? null, subject, html ?? text ?? '', html !== undefined]
+      'INSERT INTO mail_outbox (to_address, from_address, subject, body, is_html, slot, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [to, from ?? null, subject, html ?? text ?? '', html !== undefined, slot, userId]
     );
     return { queued: true };
   },

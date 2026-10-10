@@ -113,7 +113,7 @@ document.getElementById('forgot-link').addEventListener('click', async (event) =
   }
   try {
     await api.post('/auth/password-reset/request', { email });
-    notify('Falls diese E-Mail registriert ist, wurde eine Mail mit einem Reset-Link verschickt.', 'success');
+    notify('Falls es zu dieser Adresse ein Konto, eine Einladung oder eine Anmeldung gibt, ist eine Mail unterwegs. Bitte auch im Spam-Ordner nachsehen.', 'success');
   } catch (err) {
     notify(err.message, 'error');
   }

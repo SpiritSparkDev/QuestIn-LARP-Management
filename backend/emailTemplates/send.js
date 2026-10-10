@@ -32,12 +32,12 @@ export async function renderSlotEmail(slot, fallback, { userId, characterId, acc
             : { account: account ?? {}, character: {} };
           const context = { ...base, ...extra };
           const rendered = renderEmailTemplate(template, context);
-          return { subject: rendered.subject, body: rendered.body, isHtml: template.isHtml };
+          return { subject: rendered.subject, body: rendered.body, isHtml: template.isHtml, slot, userId: userId ?? null };
         }
       }
     } catch (err) {
       logger.error('failed to render assigned email template, falling back to default text', { slot, error: err.message });
     }
   }
-  return { ...fallback(), isHtml: false };
+  return { ...fallback(), isHtml: false, slot, userId: userId ?? null };
 }

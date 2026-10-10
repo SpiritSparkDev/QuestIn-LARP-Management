@@ -156,7 +156,7 @@ test('exportReturnPackage: only the offline domain, signed with the same token',
   assert.equal(manifest.snapshot_id, ids.snapshot);
   assert.equal(manifest.generation, 1);
   assert.equal(manifest.return_token, container.returnToken(ids.snapshot));
-  assert.deepEqual(Object.keys(data).sort(), ['audit_log', 'registrations', 'tavern_accounts', 'tavern_transactions']);
+  assert.deepEqual(Object.keys(data).sort(), ['audit_log', 'mail_outbox', 'registrations', 'tavern_accounts', 'tavern_transactions']);
   assert.equal(data.registrations[0].status, 'checked_in');
   assert.equal(data.tavern_transactions.length, 3);
   await assert.rejects(pkg.readPackage(source, buf, 'rp', 'snapshot'), { code: 'WRONG_KIND' });

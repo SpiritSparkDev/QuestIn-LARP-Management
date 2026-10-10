@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Versandprotokoll – Pakyrion Admin</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
+    <h1>Versandprotokoll</h1>
+    <p class="sub">Jede automatisch verschickte E-Mail mit Ergebnis. So lässt sich unterscheiden, ob eine Mail nie rausging oder beim Empfänger hängen geblieben ist (dann meist im Spam-Ordner). Einträge werden nach <span id="retention-days">90</span> Tagen gelöscht. Neueste zuerst.</p>
+
+    <div class="card form-pad" id="health-card">
+      <h2>Zustand des E-Mail-Versands</h2>
+      <div id="health"><p class="sub">Wird geprüft …</p></div>
+    </div>
+
+    <div class="card form-pad">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:2;min-width:220px;">
+          <input id="log-search" type="search" placeholder=" ">
+          <label for="log-search">Empfänger oder Betreff</label>
+        </div>
+        <div style="flex:1;min-width:180px;">
+          <select id="log-status">
+            <option value="">Alle</option>
+            <option value="sent">Versendet</option>
+            <option value="failed">Fehlgeschlagen</option>
+            <option value="not_configured">Nicht versendet (kein SMTP)</option>
+            <option value="queued">Offline gesammelt</option>
+            <option value="skipped">Übersprungen (Test-Person)</option>
+          </select>
+          <label for="log-status">Status</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-scroll">
+        <table id="log-list">
+          <thead><tr><th>Zeitpunkt</th><th>Art der E-Mail</th><th>Empfänger</th><th>Betreff</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div style="padding:12px 16px;"><button type="button" class="btn-ghost" id="log-more" style="display:none;">Ältere laden</button></div>
+    </div>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
+applyBranding();
+import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { renderEmailLogRows } from '/js/emailLog.js';
+import { notify } from '/js/notifications.js';
+initSidebarToggle();
+
+const PAGE = 100;
+const listBody = document.querySelector('#log-list tbody');
+const searchInput = document.getElementById('log-search');
+const statusSelect = document.getElementById('log-status');
+const moreButton = document.getElementById('log-more');
+let slotLabels = {};
+let entries = [];
+
+async function loadHealth() {
+  const health = await api.get('/admin/email-log/health');
+  document.getElementById('retention-days').textContent = health.retentionDays;
+  const summary = `<p class="sub">Letzte ${health.recentDays} Tage: ${health.recent.sent} versendet, ${health.recent.failed} fehlgeschlagen, ${health.recent.notConfigured} ohne SMTP nicht versendet.${health.offline ? ' Dies ist die Offline-Version: Mails werden gesammelt und nach der Rückgabe online versendet.' : ''}</p>`;
+  const problems = health.problems.map((p) => (p.level === 'error'
+    ? `<div class="notice-warn"><strong>Problem:</strong> ${escapeHtml(p.text)}</div>`
+    : `<div class="notice-info"><span class="material-symbols-outlined" aria-hidden="true">warning</span><div>${escapeHtml(p.text)}</div></div>`)).join('');
+  document.getElementById('health').innerHTML = (problems || '<div class="notice-info"><span class="material-symbols-outlined" aria-hidden="true">check_circle</span><div>Keine Probleme gefunden. Kommt eine Mail trotzdem nicht an, steht sie unten als „Versendet“ – dann bitte beim Empfänger im Spam-Ordner nachsehen lassen.</div></div>') + summary;
+}
+
+async function loadPage({ append = false } = {}) {
+  const params = new URLSearchParams({ limit: String(PAGE) });
+  if (searchInput.value.trim()) params.set('search', searchInput.value.trim());
+  if (statusSelect.value) params.set('status', statusSelect.value);
+  if (append && entries.length) params.set('before', entries[entries.length - 1].createdAt);
+  const page = await api.get(`/admin/email-log?${params}`);
+  entries = append ? entries.concat(page) : page;
+  listBody.innerHTML = renderEmailLogRows(entries, slotLabels, { withRecipient: true })
+    || '<tr><td colspan="100%">Keine Einträge.</td></tr>';
+  moreButton.style.display = page.length === PAGE ? '' : 'none';
+}
+
+let searchTimer;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadPage().catch((err) => notify(err.message, 'error')), 300);
+});
+statusSelect.addEventListener('change', () => loadPage().catch((err) => notify(err.message, 'error')));
+moreButton.addEventListener('click', () => loadPage({ append: true }).catch((err) => notify(err.message, 'error')));
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  if (!confirm('Wirklich abmelden?')) return;
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  if (account.group.key !== 'admin') {
+    notify('Kein Zugriff – nur für Admin.', 'error');
+  } else {
+    const { slots } = await api.get('/admin/email-templates/slots');
+    slotLabels = Object.fromEntries(slots.map((s) => [s.key, s.label]));
+    await Promise.all([loadHealth(), loadPage()]);
+  }
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else notify(err.message, 'error');
+} finally {
+  hideLoading();
+}
+</script>
+</body>
+</html>

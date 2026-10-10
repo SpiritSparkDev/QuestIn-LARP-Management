@@ -19,6 +19,9 @@ import './events/routes.js';
 import './mailings/routes.js';
 import './privacy/routes.js';
 import { runDueAutoDeletions } from './privacy/repository.js';
+import './emailLog/routes.js';
+import { purgeOldEmailLog } from './emailLog/repository.js';
+import { flushMailOutbox } from './emailLog/outbox.js';
 import './characters/routes.js';
 import './characterReviews/routes.js';
 import './characterFiles/routes.js';
@@ -194,9 +197,13 @@ export function startBackgroundJobs() {
   if (isOffline()) return [];
   startBackupScheduler();
   const runCleanup = () => runDueAutoDeletions().catch((err) => logger.error('privacy cleanup failed', { error: err.message }));
+  const runMailHousekeeping = () => Promise.all([
+    purgeOldEmailLog().catch((err) => logger.error('email log purge failed', { error: err.message })),
+    flushMailOutbox().catch((err) => logger.error('mail outbox flush failed', { error: err.message })),
+  ]);
   const every = 6 * 60 * 60 * 1000;
   return [
-    [runCleanup, 60_000], [runUnpaidReminders, 120_000], [runConPayerAutomation, 180_000],
+    [runCleanup, 60_000], [runUnpaidReminders, 120_000], [runConPayerAutomation, 180_000], [runMailHousekeeping, 240_000],
   ].flatMap(([job, delay]) => [setTimeout(job, delay).unref(), setInterval(job, every).unref()]);
 }
 

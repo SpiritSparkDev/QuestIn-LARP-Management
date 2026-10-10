@@ -150,6 +150,7 @@
             <button type="button" class="tab-btn active" data-tab="detail-tab-konto">Konto</button>
             <button type="button" class="tab-btn" data-tab="detail-tab-chars" id="detail-chars-tab-btn">Charaktere</button>
             <button type="button" class="tab-btn" data-tab="detail-tab-regs" id="detail-regs-tab-btn" hidden>Anmeldungen</button>
+            <button type="button" class="tab-btn" data-tab="detail-tab-mails" id="detail-mails-tab-btn" hidden>E-Mails</button>
           </div>
           <div class="tab-panel" id="detail-tab-konto">
             <div id="detail-group-wrap" style="display:none;">
@@ -172,6 +173,15 @@
           </div>
           <div class="tab-panel" id="detail-tab-regs" hidden>
             <div id="detail-registrations"></div>
+          </div>
+          <div class="tab-panel" id="detail-tab-mails" hidden>
+            <p class="sub">Die letzten automatischen E-Mails an dieses Mitglied (auch an seine Adresse, bevor das Konto bestand). Steht eine Mail auf „Versendet“, kam sie beim Mailserver an – fehlt sie trotzdem, bitte im Spam-Ordner nachsehen lassen. <a href="/admin/email-log.html">Zum Versandprotokoll</a></p>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>Zeitpunkt</th><th>Art der E-Mail</th><th>Betreff</th><th>Status</th></tr></thead>
+                <tbody id="detail-mails"></tbody>
+              </table>
+            </div>
           </div>
           <div class="dialog-actions">
             <button type="button" id="detail-cancel" class="btn-ghost">Schließen</button>
@@ -246,6 +256,7 @@
     import { api } from '/js/api.js';
     import { applyBranding } from '/js/branding.js';
     import { hideLoading } from '/js/loading.js';
+    import { renderEmailLogRows } from '/js/emailLog.js';
     applyBranding();
     import { escapeHtml, attachLiveValidation, renderEventOptions, renderAccountFieldInput, collectAccountFieldValues, nullifyBlankNumberFields, otFieldValuesEqual, renderField, collectFieldValues, STATUS_LABELS } from '/js/formFields.js';
     import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
@@ -1375,6 +1386,22 @@
       }).join('')}</select></label>`;
     }
 
+    // Admin only (the Versandprotokoll is): answers "did they ever get the mail?".
+    let mailSlotLabels = null;
+    async function renderMailsTab(memberId) {
+      const tbody = document.getElementById('detail-mails');
+      tbody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
+      try {
+        mailSlotLabels ??= Object.fromEntries((await api.get('/admin/email-templates/slots')).slots.map((s) => [s.key, s.label]));
+        const entries = await api.get(`/admin/email-log/members/${memberId}`);
+        if (editingMemberId !== memberId) return;
+        tbody.innerHTML = renderEmailLogRows(entries, mailSlotLabels, { withRecipient: false })
+          || '<tr><td colspan="100%">Noch keine E-Mails protokolliert.</td></tr>';
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="100%">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
     async function openDetail(memberId) {
       const member = await api.get(`/members/${memberId}`);
       editingMemberId = memberId;
@@ -1386,6 +1413,8 @@
       renderCharactersTab(member);
       document.getElementById('detail-regs-tab-btn').hidden = !(canCreateForOthers || canOverrideCheckin);
       if (canCreateForOthers || canOverrideCheckin) renderRegistrationsTab(member);
+      document.getElementById('detail-mails-tab-btn').hidden = !isAdminViewer;
+      if (isAdminViewer) renderMailsTab(memberId);
 
       if (myAccountFields.includes('group')) {
         detailGroupWrap.style.display = '';

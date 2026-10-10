@@ -65,6 +65,18 @@ export const EMAIL_SLOTS = [
     ],
   },
   {
+    key: 'guest_access',
+    category: 'access',
+    label: 'Passwort vergessen bei Direktanmeldung (kein Konto)',
+    description: 'Wenn jemand „Passwort vergessen“ nutzt, der sich nur direkt angemeldet hat und deshalb kein Konto und kein Passwort hat.',
+    linkSummary: 'Ticketlinks: je Anmeldung die Ticketseite ohne Login (guest-payment.html)',
+    supportsAccount: true,
+    extraFields: [
+      { key: 'tickets', label: 'Liste der Anmeldungen mit Ticketlink', required: true, example: '- Beispiel-Con: https://…/guest-payment.html?token=BEISPIEL' },
+      { key: 'hasTickets', label: 'Wahr, wenn mindestens ein Ticketlink vorhanden ist (für {{#if hasTickets}})', example: 'true' },
+    ],
+  },
+  {
     key: 'waitlisted',
     category: 'registration',
     label: 'Auf die Warteliste gesetzt',

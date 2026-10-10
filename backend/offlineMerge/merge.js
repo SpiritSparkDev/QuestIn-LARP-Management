@@ -3,6 +3,8 @@ import * as authority from '../instanceAuthority/repository.js';
 import { fail } from '../offlinePackage/container.js';
 import { readPackage } from '../offlinePackage/snapshot.js';
 import { logAudit } from '../audit/repository.js';
+import { logger } from '../logger.js';
+import { flushMailOutbox } from '../emailLog/outbox.js';
 
 // Return merge (plan step 4). `db` is anything with query() and withTransaction(fn(client)).
 // Conflict-free parts are applied idempotently; everything else becomes a sync_conflicts row
@@ -196,6 +198,14 @@ export async function mergeReturnPackage(db, pkg, { userId = null, interim = fal
           [e.id, e.created_at, auditKnown.has(e.actor_id) ? e.actor_id : null, e.action, auditKnown.has(e.subject_user_id) ? e.subject_user_id : null, JSON.stringify(e.details ?? {})]);
         report.auditEntries += ins.rowCount;
       }
+
+      // Idempotent via the offline row id: every interim package carries all still-unsent mails.
+      for (const mail of data.mail_outbox ?? []) {
+        const ins = await client.query(
+          `INSERT INTO mail_outbox (id, created_at, to_address, subject, body, is_html, slot, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`,
+          [mail.id, mail.created_at, mail.to_address, mail.subject, mail.body, mail.is_html, mail.slot ?? null, mail.user_id ?? null]);
+        report.queuedMails = (report.queuedMails ?? 0) + ins.rowCount;
+      }
     }
 
     const conflicts = [];
@@ -226,6 +236,10 @@ export async function mergeReturnPackage(db, pkg, { userId = null, interim = fal
     // ponytail: separate transaction; if it fails the merge stays applied and an admin uses the release route.
     await authorityRepo.returnToPrimary(eventId, userId);
     result.status = 'released';
+  }
+  if (result.report?.queuedMails) {
+    // ponytail: global db like the role switch; a failure leaves the mails queued for the background job.
+    await flushMailOutbox().catch((err) => logger.error('mail outbox flush after merge failed', { error: err.message }));
   }
   if (!result.alreadyApplied && result.status !== 'clock_skew') {
     await logAudit({ actorId: userId, action: 'offline_return', details: { eventId, snapshotId: m.snapshot_id, generation: m.generation, via, status: result.status, report: result.report } });

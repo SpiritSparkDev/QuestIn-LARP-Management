@@ -145,6 +145,8 @@ export async function exportReturnPackage(db, passphrase) {
     tavern_transactions: await q(
       `SELECT ${TX_COLUMNS} FROM tavern_transactions WHERE account_id IN (SELECT id FROM tavern_accounts WHERE event_id = $1) ORDER BY created_at, id`, [state.event_id]),
     audit_log: await q('SELECT id, created_at, actor_id, action, subject_user_id, details FROM audit_log WHERE created_at >= $1 ORDER BY created_at', [state.snapshot_taken_at]),
+    // Mails written on site; the online side sends them (backend/emailLog/outbox.js).
+    mail_outbox: await q('SELECT id, created_at, to_address, subject, body, is_html, slot, user_id FROM mail_outbox WHERE sent_at IS NULL ORDER BY created_at'),
   };
   const manifest = {
     kind: 'return',

@@ -3,6 +3,7 @@ import { APP_VERSION } from './version.js';
 import { initResponsiveTables } from './responsiveTables.js';
 import { api } from './api.js';
 import { updateModeChip } from './offlineSwitch.js';
+import { notify } from './notifications.js';
 import './help.js';
 import './legalFooter.js';
 
@@ -36,6 +37,7 @@ const ADMIN_ONLY_LINKS = [
   { label: 'Rollen', href: '/admin/groups.html', icon: 'groups' },
   { label: 'Charakterschema', href: '/admin/character-schema.html', icon: 'badge' },
   { label: 'E-Mail-Vorlagen', href: '/admin/email-templates.html', icon: 'mail' },
+  { label: 'Versandprotokoll', href: '/admin/email-log.html', icon: 'outgoing_mail' },
   { label: 'Datenabgleich', href: '/admin/sync.html', icon: 'sync_alt' },
   { label: 'Einstellungen', href: '/admin/settings.html', icon: 'settings' },
   { label: 'Protokoll', href: '/admin/audit.html', icon: 'history' },
@@ -52,7 +54,8 @@ const ADDON_LINKS = [
 
 function renderNavItem({ href, label, icon, dot }, currentPath) {
   const current = href === currentPath ? 'sidebar-nav-item current' : 'sidebar-nav-item';
-  const dotHtml = dot ? '<span class="nav-dot" role="img" aria-label="Angaben unvollständig" title="Angaben unvollständig"></span>' : '';
+  const dotLabel = typeof dot === 'string' ? dot : 'Angaben unvollständig';
+  const dotHtml = dot ? `<span class="nav-dot" role="img" aria-label="${escapeHtml(dotLabel)}" title="${escapeHtml(dotLabel)}"></span>` : '';
   return `<a href="${href}" class="${current}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span>${dotHtml}</a>`;
 }
 
@@ -110,6 +113,51 @@ async function showOfflineBanner() {
   document.head.append(link);
 }
 showOfflineBanner();
+
+// Admins get a dot on "Versandprotokoll" and, once per browser session, a
+// toast while something keeps mails from arriving (no SMTP server, no From
+// address, links pointing at localhost, recent failures -- see
+// backend/emailLog/routes.js). Cached briefly so not every page asks again.
+const MAIL_HEALTH_HREF = '/admin/email-log.html';
+const MAIL_HEALTH_KEY = 'mailHealth';
+const MAIL_HEALTH_NOTIFIED_KEY = 'mailHealthNotified';
+const MAIL_HEALTH_TTL_MS = 5 * 60 * 1000;
+const MAIL_DOT_LABEL = 'Probleme beim E-Mail-Versand';
+
+function readCachedMailHealth() {
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(MAIL_HEALTH_KEY) ?? 'null');
+    return cached && Date.now() - cached.at < MAIL_HEALTH_TTL_MS ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
+async function checkMailHealth() {
+  let health = readCachedMailHealth();
+  if (!health) {
+    try {
+      const { problems } = await api.get('/admin/email-log/health');
+      health = { at: Date.now(), errors: problems.filter((p) => p.level === 'error').length, total: problems.length };
+      sessionStorage.setItem(MAIL_HEALTH_KEY, JSON.stringify(health));
+    } catch {
+      if (!health) return;
+    }
+  }
+  if (health.total === 0) return;
+  document.querySelectorAll(`a.sidebar-nav-item[href="${MAIL_HEALTH_HREF}"]`).forEach((link) => {
+    if (link.querySelector('.nav-dot')) return;
+    link.insertAdjacentHTML('beforeend', `<span class="nav-dot" role="img" aria-label="${MAIL_DOT_LABEL}" title="${MAIL_DOT_LABEL}"></span>`);
+  });
+  if (health.errors === 0 || window.location.pathname === MAIL_HEALTH_HREF) return;
+  try {
+    if (sessionStorage.getItem(MAIL_HEALTH_NOTIFIED_KEY)) return;
+    sessionStorage.setItem(MAIL_HEALTH_NOTIFIED_KEY, '1');
+  } catch {
+    // Storage unavailable -- show it anyway.
+  }
+  notify('Der E-Mail-Versand ist nicht vollständig eingerichtet – manche oder alle Mails kommen nicht an. Details unter Administration → Versandprotokoll.', 'error');
+}
 
 const ADMIN_OPEN_KEY = 'sidebarAdminOpen';
 const GROUP_MENU_KEY = 'groupMenuEnabled';
@@ -174,7 +222,11 @@ export function renderNavLinks(account, currentPath, { accountIncomplete = false
   // while one of its pages is current (so the highlighted entry is visible);
   // otherwise the person's last choice is remembered.
   if (account.group.key === 'admin') {
-    const adminItems = [...ADMIN_ONLY_LINKS, ...ADDON_LINKS.filter((item) => account[item.flag])];
+    const mailHealth = readCachedMailHealth();
+    const adminItems = [...ADMIN_ONLY_LINKS, ...ADDON_LINKS.filter((item) => account[item.flag])]
+      .map((item) => (item.href === MAIL_HEALTH_HREF && mailHealth?.total ? { ...item, dot: MAIL_DOT_LABEL } : item));
+    // Runs after the caller has inserted this HTML (the request is async).
+    checkMailHealth();
     const containsCurrent = adminItems.some((item) => item.href === currentPath);
     const open = containsCurrent || readAdminSectionOpen();
     html += `<details class="sidebar-admin"${open ? ' open' : ''}>
