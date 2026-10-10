@@ -39,11 +39,25 @@
     <div class="card">
       <div class="table-scroll">
       <table id="event-list">
-        <thead><tr><th>Name</th><th>Datum</th><th>Status</th><th></th><th></th><th></th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Datum</th><th>Status</th><th></th><th></th><th></th><th></th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       </div>
     </div>
+
+    <dialog id="lock-dialog">
+      <h2 id="lock-title">Anmeldesperre</h2>
+      <p class="sub">Gesperrte Personen können sich (und ihre Gruppenmitglieder) nicht mehr selbst zu diesem Event anmelden, auch nicht über das Direktanmeldungs-Widget. Bestehende Anmeldungen bleiben. Admins und Moderatoren können weiterhin jeden anmelden. Wirkt sofort beim Speichern.</p>
+      <h3>Nach Anmeldeart</h3>
+      <label><input type="checkbox" id="lock-all"> <strong>Alle</strong> (Anmeldung komplett sperren)</label>
+      <div id="lock-con-roles" style="display:flex;flex-wrap:wrap;gap:4px 16px;margin:6px 0 12px;"></div>
+      <h3>Nach Rolle des Kontos</h3>
+      <div id="lock-groups" style="display:flex;flex-wrap:wrap;gap:4px 16px;margin:6px 0 12px;"></div>
+      <div class="dialog-actions">
+        <button type="button" id="lock-save">Speichern</button>
+        <button type="button" id="lock-cancel" class="btn-ghost">Abbrechen</button>
+      </div>
+    </dialog>
 
     <dialog id="force-delete-dialog">
       <h2>Event erzwungen löschen</h2>
@@ -732,20 +746,73 @@ document.getElementById('new-event-btn').addEventListener('click', () => {
 
 document.getElementById('event-cancel-edit').addEventListener('click', () => { resetForm(); hideForm(); });
 
+// Manual registration lock (admin only), see backend/registrations/lock.js.
+const LOCK_CON_ROLES = [['sc', 'SC'], ['nsc', 'NSC'], ['ticket', 'Direktanmeldung'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga']];
+let isAdmin = false;
+let lockGroups = [];
+let lockEventId = null;
+const lockDialog = document.getElementById('lock-dialog');
+const lockAll = document.getElementById('lock-all');
+
+function lockBadge(e) {
+  const roles = e.registration_locked_con_roles ?? [];
+  const groups = e.registration_locked_groups ?? [];
+  if (!roles.length && !groups.length) return '';
+  const parts = roles.length === LOCK_CON_ROLES.length ? ['alle']
+    : [...LOCK_CON_ROLES.filter(([k]) => roles.includes(k)).map(([, l]) => l), ...groups.map((k) => lockGroups.find((g) => g.key === k)?.name ?? k)];
+  return ` <span class="badge badge-failed">Anmeldung gesperrt: ${escapeHtml(parts.join(', '))}</span>`;
+}
+
+function openLockDialog(event) {
+  lockEventId = event.id;
+  document.getElementById('lock-title').textContent = `Anmeldesperre: ${event.name}`;
+  const roles = event.registration_locked_con_roles ?? [];
+  const groups = event.registration_locked_groups ?? [];
+  document.getElementById('lock-con-roles').innerHTML = LOCK_CON_ROLES.map(([key, label]) => `<label><input type="checkbox" data-lock-role="${key}"${roles.includes(key) ? ' checked' : ''}> ${escapeHtml(label)}</label>`).join('');
+  document.getElementById('lock-groups').innerHTML = lockGroups.filter((g) => g.key !== 'admin').map((g) => `<label><input type="checkbox" data-lock-group="${escapeHtml(g.key)}"${groups.includes(g.key) ? ' checked' : ''}> ${escapeHtml(g.name)}</label>`).join('');
+  syncLockAll();
+  lockDialog.showModal();
+}
+
+function syncLockAll() {
+  const boxes = [...lockDialog.querySelectorAll('[data-lock-role]')];
+  lockAll.checked = boxes.every((b) => b.checked);
+}
+lockAll.addEventListener('change', () => lockDialog.querySelectorAll('[data-lock-role]').forEach((b) => { b.checked = lockAll.checked; }));
+lockDialog.addEventListener('change', (evt) => { if (evt.target.dataset.lockRole) syncLockAll(); });
+document.getElementById('lock-cancel').addEventListener('click', () => lockDialog.close());
+document.getElementById('lock-save').addEventListener('click', async () => {
+  const conRoles = [...lockDialog.querySelectorAll('[data-lock-role]:checked')].map((b) => b.dataset.lockRole);
+  const groups = [...lockDialog.querySelectorAll('[data-lock-group]:checked')].map((b) => b.dataset.lockGroup);
+  try {
+    await api.put(`/events/${lockEventId}/registration-lock`, { conRoles, groups });
+    notify(conRoles.length || groups.length ? 'Anmeldesperre gespeichert.' : 'Anmeldesperre aufgehoben.', 'success');
+    lockDialog.close();
+    await loadEvents();
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
 async function loadEvents() {
   listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
   const events = await api.get('/events');
   listBody.innerHTML = events.map((e) => `<tr>
     <td>${escapeHtml(e.name)}</td>
     <td>${escapeHtml(e.event_date)}${e.end_date ? ` – ${escapeHtml(e.end_date)}` : ""}</td>
-    <td>${e.is_active ? '<span class="badge badge-active">Aktiv – Anmeldung offen</span>' : '<span class="badge badge-inactive">Inaktiv</span>'}${e.ended_at ? ' <span class="badge badge-inactive">Beendet</span>' : ''}</td>
+    <td>${e.is_active ? '<span class="badge badge-active">Aktiv – Anmeldung offen</span>' : '<span class="badge badge-inactive">Inaktiv</span>'}${e.ended_at ? ' <span class="badge badge-inactive">Beendet</span>' : ''}${lockBadge(e)}</td>
     <td>${e.is_active ? '' : `<button type="button" class="btn-sm" data-activate="${e.id}">Aktivieren</button>`}</td>
     <td>${e.ended_at
       ? `<button type="button" class="btn-sm btn-ghost" data-reopen="${e.id}">Wieder öffnen</button>`
       : `<button type="button" class="btn-sm btn-ghost" data-end="${e.id}" title="Danach ist Check-Out möglich">Event beenden</button>`}</td>
     <td><button type="button" class="btn-sm btn-ghost" data-edit="${e.id}">Bearbeiten</button></td>
+    <td>${isAdmin ? `<button type="button" class="btn-sm btn-ghost" data-lock="${e.id}">Anmeldesperre</button>` : ''}</td>
     <td><button type="button" class="btn-sm btn-ghost" data-delete="${e.id}">Löschen</button></td>
   </tr>`).join('');
+
+  listBody.querySelectorAll('[data-lock]').forEach((button) => {
+    button.addEventListener('click', () => openLockDialog(events.find((e) => e.id === button.dataset.lock)));
+  });
 
   for (const e of events.filter((ev) => ev.ended_at)) {
     const due = (await api.get(`/events/${e.id}/privacy`).catch(() => [])).filter((r) => r.state === 'due' && r.mode === 'notify');
@@ -942,6 +1009,8 @@ try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+  isAdmin = account.group.key === 'admin';
+  if (isAdmin) lockGroups = await api.get('/groups').catch(() => []);
   await loadEvents();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

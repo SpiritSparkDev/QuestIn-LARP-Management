@@ -191,6 +191,9 @@ router.post('/public/events/:eventId/guest-registration', rateLimit(GUEST_REGIST
     if (err.code === 'EVENT_NOT_ACTIVE') {
       return { status: 409, body: { error: 'Für dieses Event ist aktuell keine Anmeldung möglich.' } };
     }
+    if (err.code === 'REGISTRATION_LOCKED') {
+      return { status: 409, body: { error: err.message } };
+    }
     if (err.code === 'INVALID_PRICE_GROUP') {
       return { status: 400, body: { error: err.message } };
     }

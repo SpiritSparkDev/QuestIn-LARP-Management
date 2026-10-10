@@ -2160,6 +2160,39 @@ tbody tr:last-child td {
   margin-bottom: 0;
 }
 
+/* Compact search field with an "X" to clear it (member list) */
+.search-box {
+  position: relative;
+  flex: 0 1 340px;
+  min-width: 0;
+}
+.search-box .search {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 34px;
+}
+.search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+}
+.search-clear[hidden] { display: none; }
+.search-clear:hover { background: var(--surface-container-high); }
+.search-clear .material-symbols-outlined { font-size: 18px; }
+
 /* ---------- Status badges/pills (registrations, participants, events, members) ---------- */
 
 .status-pill {

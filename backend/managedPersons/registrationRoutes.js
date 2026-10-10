@@ -37,7 +37,7 @@ router.post('/managed-persons/:id/events/:eventId/register', requireGroupManager
     if (err.code === 'ALREADY_REGISTERED') return { status: 409, body: { error: err.message } };
     if (err.code === 'INVALID_CON_ROLE') return { status: 400, body: { error: err.message } };
     if (err.code === 'FORBIDDEN_CON_ROLE') return { status: 403, body: { error: err.message } };
-    if (err.code === 'EVENT_NOT_ACTIVE') return { status: 403, body: { error: err.message } };
+    if (err.code === 'EVENT_NOT_ACTIVE' || err.code === 'REGISTRATION_LOCKED') return { status: 403, body: { error: err.message } };
     if (err.code === 'CHARACTER_REQUIRED' || err.code === 'CHARACTER_NOT_ALLOWED') {
       return { status: 400, body: { error: err.message } };
     }

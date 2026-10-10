@@ -101,7 +101,7 @@ router.post('/members/import', requireAuth(requireAdminGroup(async ({ req, user 
     getAccountFieldSchema(),
     query('SELECT id, key, name FROM groups'),
     query('SELECT id, email FROM users WHERE email IS NOT NULL'),
-    query('SELECT email FROM invitations WHERE redeemed_at IS NULL AND cancelled_at IS NULL'),
+    query('SELECT email FROM invitations WHERE redeemed_at IS NULL AND cancelled_at IS NULL AND email IS NOT NULL'),
   ]);
   const result = analyzeImport(body.csv, {
     accountSchema,
@@ -265,6 +265,7 @@ router.post('/members/:id/access-link/send', requireAuth(requireMenu('mitglieder
   const member = await getMember(params.id);
   if (!member) return { status: 404, body: { error: 'member not found' } };
   if (member.isGuest) return { status: 400, body: { error: 'guest accounts have no access link' } };
+  if (!member.email) return { status: 400, body: { error: 'Für dieses Mitglied ist keine E-Mail-Adresse hinterlegt.' } };
 
   const token = await ensureAccessToken(params.id);
   try {
@@ -288,10 +289,14 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { email, firstName, lastName, nickname, group, eventId, sendEmail, ...rest } = body;
   const shouldSendEmail = sendEmail !== false;
-  if (!email || !firstName || !lastName) {
+  // Admins may create someone without an e-mail address (no one to invite):
+  // the account is created active right away, without login until an
+  // address is added.
+  const withoutEmail = !email && user.group.key === 'admin';
+  if ((!email && !withoutEmail) || !firstName || !lastName) {
     return { status: 400, body: { error: 'email, firstName, and lastName are required' } };
   }
-  if (!isValidEmail(email)) {
+  if (!withoutEmail && !isValidEmail(email)) {
     return { status: 400, body: { error: 'invalid email format' } };
   }
 
@@ -308,9 +313,11 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     return { status: 400, body: { error: `not permitted to set: ${disallowed.join(', ')}` } };
   }
 
-  const { rows: existingUser } = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
-  if (existingUser.length > 0) {
-    return { status: 409, body: { error: 'a member with this email already exists' } };
+  if (!withoutEmail) {
+    const { rows: existingUser } = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+    if (existingUser.length > 0) {
+      return { status: 409, body: { error: 'a member with this email already exists' } };
+    }
   }
 
   const groupKey = group ?? DEFAULT_INVITE_GROUP_KEY;
@@ -331,7 +338,7 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
   // values that follow.
   const invitation = await createInvitation({
     ...rest,
-    email: email.toLowerCase(),
+    email: withoutEmail ? null : email.toLowerCase(),
     firstName,
     lastName,
     nickname,
@@ -340,6 +347,13 @@ router.post('/members/invite', requireAuth(requireMenu('mitglieder')(async ({ re
     eventId: eventId || undefined,
     ttlDays: invitationTtlDays,
   });
+
+  if (withoutEmail) {
+    // Same account creation as an invitee redeeming their link, minus the password.
+    const { userId } = await activateInvitation(invitation);
+    await logAudit({ actorId: user.id, action: 'user.created_without_email', subjectUserId: userId, details: {} });
+    return { status: 201, body: { id: userId, email: null, status: 'active', created: true } };
+  }
 
   let emailSent = null;
   if (shouldSendEmail) {

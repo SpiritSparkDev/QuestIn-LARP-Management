@@ -88,8 +88,34 @@ test('only admins may activate, and an address already in use is refused', async
   });
 });
 
+test('an admin creates a member without an e-mail address; others still need one', async () => {
+  await withTestServer(async (port) => {
+    const admin = await sessionFor('admin');
+    const moderator = await sessionFor('moderator');
+    const body = JSON.stringify({ firstName: 'Ohne', lastName: `Mail-${crypto.randomUUID()}` });
+
+    const byModerator = await fetch(`http://localhost:${port}/members/invite`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: moderator.cookie }, body });
+    assert.equal(byModerator.status, 400);
+
+    const res = await fetch(`http://localhost:${port}/members/invite`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie }, body });
+    assert.equal(res.status, 201);
+    const created = await res.json();
+    assert.equal(created.status, 'active');
+    const { rows: [user] } = await query('SELECT email, is_guest, password_hash FROM users WHERE id = $1', [created.id]);
+    assert.equal(user.email, null);
+    assert.equal(user.is_guest, false);
+    assert.equal(user.password_hash, null);
+
+    const members = await (await fetch(`http://localhost:${port}/members`, { headers: { Cookie: admin.cookie } })).json();
+    assert.equal(members.find((m) => m.id === created.id)?.status, 'active');
+    const send = await fetch(`http://localhost:${port}/members/${created.id}/access-link/send`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie }, body: '{}' });
+    assert.equal(send.status, 400);
+    await query('DELETE FROM users WHERE id = $1', [created.id]);
+  });
+});
+
 test.after(async () => {
-  await query('DELETE FROM invitations WHERE email LIKE $1', [`${PREFIX}%`]);
+  await query('DELETE FROM invitations WHERE email LIKE $1 OR invited_by IN (SELECT id FROM users WHERE email LIKE $1)', [`${PREFIX}%`]);
   await query('DELETE FROM audit_log WHERE subject_user_id IN (SELECT id FROM users WHERE email LIKE $1) OR actor_id IN (SELECT id FROM users WHERE email LIKE $1)', [`${PREFIX}%`]);
   await query('DELETE FROM users WHERE email LIKE $1', [`${PREFIX}%`]);
   await closePool();

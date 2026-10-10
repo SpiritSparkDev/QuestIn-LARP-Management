@@ -1,9 +1,11 @@
 import { ALL_RULE_OPS, isNumericOp, rulesOf, RULE_SOURCES, MAX_RULES_PER_GROUP } from '../../frontend/js/priceGroupRules.js';
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
-import { requireMenu } from '../middleware/authorize.js';
+import { requireMenu, requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEvent, setEventEnded } from './repository.js';
+import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEvent, setEventEnded, setRegistrationLock } from './repository.js';
+import { ALL_CON_ROLES } from '../registrations/capacity.js';
+import { logAudit } from '../audit/repository.js';
 import { query } from '../db.js';
 import { maybePromoteFromWaitlist } from '../registrations/repository.js';
 import { validatePrivacyDeletion } from '../privacy/repository.js';
@@ -309,4 +311,21 @@ router.delete('/events/:id', requireAuth(requireMenu('events')(async ({ req, par
     if (err.code === 'EVENT_HAS_REGISTRATIONS') return { status: 409, body: { error: err.message } };
     throw err;
   }
+})));
+
+// Manual registration lock (admin only, takes effect immediately): which con
+// roles and which account roles may no longer register themselves for this
+// event. Staff registering someone is not affected (backend/registrations/lock.js).
+router.put('/events/:id/registration-lock', requireAuth(requireAdminGroup(async ({ req, params, user }) => {
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const conRoles = [...new Set(body.conRoles ?? [])];
+  const groups = [...new Set(body.groups ?? [])];
+  if (!conRoles.every((r) => ALL_CON_ROLES.includes(r))) return { status: 400, body: { error: 'unknown con role' } };
+  const { rows: known } = await query('SELECT key FROM groups WHERE key = ANY($1)', [groups]);
+  if (known.length !== groups.length) return { status: 400, body: { error: 'unknown group' } };
+  const saved = await setRegistrationLock(params.id, { conRoles, groups });
+  if (!saved) return { status: 404, body: { error: 'event not found' } };
+  await logAudit({ actorId: user.id, action: 'registration.lock_changed', details: { eventId: params.id, ...saved } });
+  return { status: 200, body: saved };
 })));

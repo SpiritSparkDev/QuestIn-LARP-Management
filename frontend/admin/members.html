@@ -40,7 +40,7 @@
           <button type="button" class="toggle-btn" data-view="deactivated">Deaktivierte Mitglieder</button>
         </div>
         <div class="card" style="margin-top:16px;">
-          <div class="toolbar"><input class="search" id="member-search" placeholder="Suche nach Name, E-Mail oder Rolle …"></div>
+          <div class="toolbar"><div class="search-box"><input class="search" id="member-search" placeholder="Name, E-Mail oder Rolle …" aria-label="Mitglieder durchsuchen"><button type="button" class="search-clear" id="member-search-clear" aria-label="Suche leeren" title="Suche leeren" hidden><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div></div>
           <div class="member-filters">
             <div>
               <select id="member-filter-group"></select>
@@ -215,7 +215,7 @@
               </div>
               <div>
                 <input id="invite-email" name="email" type="email" required>
-                <label for="invite-email">E-Mail</label>
+                <label for="invite-email" id="invite-email-label">E-Mail</label>
               </div>
             </div>
             <div>
@@ -664,9 +664,20 @@
       } catch (err) { notify(err.message, 'error'); importApply.disabled = false; }
     });
 
-    searchInput.addEventListener('input', () => {
+    const searchClear = document.getElementById('member-search-clear');
+    function applySearch() {
       currentSearch = searchInput.value;
+      searchClear.hidden = !searchInput.value;
       renderMembers();
+    }
+    searchInput.addEventListener('input', applySearch);
+    searchInput.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Escape' && searchInput.value) { searchInput.value = ''; applySearch(); }
+    });
+    searchClear.addEventListener('click', () => {
+      searchInput.value = '';
+      applySearch();
+      searchInput.focus();
     });
     groupFilter.addEventListener('change', () => { prefs.group = groupFilter.value; savePrefs(); renderMembers(); });
     kindFilter.addEventListener('change', () => { prefs.kind = kindFilter.value; savePrefs(); renderMembers(); });
@@ -702,6 +713,7 @@
       groupBySelect.value = '';
       currentSearch = '';
       searchInput.value = '';
+      searchClear.hidden = true;
       groupFilter.value = '';
       kindFilter.value = '';
       refreshEventFilter();
@@ -1635,7 +1647,16 @@
       payload.sendEmail = formData.has('sendEmail');
       Object.assign(payload, nullifyBlankNumberFields(accountSchema, collectAccountFieldValues(inviteFields, accountSchema)));
       try {
+        if (!payload.email) delete payload.email;
         const result = await api.post('/members/invite', payload);
+        if (result.created) {
+          notify('Mitglied ohne E-Mail angelegt. Es kann sich erst anmelden, wenn eine E-Mail-Adresse hinterlegt ist.', 'success');
+          event.target.reset();
+          buildFieldInputs(inviteFields);
+          inviteDialog.close();
+          await loadMembers();
+          return;
+        }
         if (result.emailSent === false) {
           notify('Einladung erstellt, aber der E-Mail-Versand ist fehlgeschlagen. Bitte SMTP-Einstellungen prüfen oder über "Erneut senden" in der Mitgliederliste erneut versuchen.', 'error');
         } else if (result.emailSent === null) {
@@ -1670,6 +1691,11 @@
       canOverrideCheckin = account.canOverrideCheckinStatus === true;
       canCreateForOthers = ['admin', 'moderator'].includes(account.group.key);
       isAdminViewer = account.group.key === 'admin';
+      if (isAdminViewer) {
+        // Admins may create people who have no e-mail address at all.
+        document.getElementById('invite-email').required = false;
+        document.getElementById('invite-email-label').textContent = 'E-Mail (leer lassen, wenn die Person keine hat)';
+      }
       lodgingEnabled = account.lodgingEnabled === true && ['admin', 'moderator'].includes(account.group.key);
       document.getElementById('member-export').hidden = account.canExportMembers !== true;
       document.getElementById('member-import').hidden = account.group.key !== 'admin';

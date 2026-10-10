@@ -18,6 +18,7 @@ import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { updateCharacter } from '../characters/repository.js';
 import { logAudit } from '../audit/repository.js';
 import { COUNTED_STATUSES, loadCapacity, capacityBlock, withAdded, withRemoved, BLOCK_MESSAGES } from './capacity.js';
+import { assertNotRegistrationLocked } from './lock.js';
 
 // 'ticket' = a self-service guest ticket bought via the external ticket
 // widget (backend/guestRegistrations/routes.js) -- no character, distinct
@@ -333,6 +334,9 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
     throw err;
   }
 
+  // PDF imports are entered by staff from a paper form, so the manual lock doesn't apply.
+  if (!pdfImport) await assertNotRegistrationLocked(event, userId, conRole, requestingUser);
+
   // Generalizes the old sc-character-creation active-event gate to every
   // self-service con_role, now that character creation itself has no event
   // context at all to gate on.
@@ -589,6 +593,8 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
   // leaves its old one first), and the old role's place is free for the waitlist afterwards.
   const { rows: before } = await query('SELECT con_role, status FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
   const roleChanged = before.length > 0 && before[0].con_role !== conRole;
+  // Switching into a locked role is a new registration for that role in effect.
+  if (roleChanged && event) await assertNotRegistrationLocked(event, userId, conRole, requestingUser);
   if (roleChanged && COUNTED_STATUSES.includes(before[0].status)) {
     const state = await loadCapacity((sql, params) => query(sql, params), eventId);
     const block = capacityBlock(withRemoved(state, before[0].con_role), conRole);

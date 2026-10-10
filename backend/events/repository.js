@@ -4,7 +4,7 @@ import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
-const SELECT_COLUMNS = `id, name, event_date, end_date, code, capacity, hard_capacity, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity, low_seats_notice, low_seats_from, payments_open, color, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at,
+const SELECT_COLUMNS = `id, name, event_date, end_date, code, capacity, hard_capacity, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity, registration_locked_con_roles, registration_locked_groups, low_seats_notice, low_seats_from, payments_open, color, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at,
   (low_seats_notice AND (SELECT count(*) FROM registrations r WHERE r.event_id = events.id AND r.status IN ('pending', 'confirmed', 'checked_in', 'checked_out'))
     BETWEEN COALESCE(low_seats_from, capacity) AND COALESCE(hard_capacity, capacity) - 1) AS low_seats,
   -- "Nur noch wenige Plätze" per role: planned places used up, hard limit not reached yet
@@ -276,4 +276,14 @@ export async function deleteEvent(id, { force = false, notify = false } = {}) {
   }
 
   return true;
+}
+
+// Manual registration lock (see backend/registrations/lock.js).
+export async function setRegistrationLock(id, { conRoles, groups }) {
+  const { rows } = await query(
+    `UPDATE events SET registration_locked_con_roles = $2, registration_locked_groups = $3 WHERE id = $1
+     RETURNING registration_locked_con_roles, registration_locked_groups`,
+    [id, conRoles, groups]
+  );
+  return rows[0] ? { conRoles: rows[0].registration_locked_con_roles, groups: rows[0].registration_locked_groups } : null;
 }
