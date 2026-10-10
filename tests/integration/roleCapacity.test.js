@@ -117,6 +117,25 @@ test('an admin turning an SC into an NSC: the NSC limit is checked and the SC pl
   });
 });
 
+test('staff moving a waitlisted person onto a full limit is warned (409) and may force it', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent({ sc: 1 });
+    const admin = await makeUser('admin');
+    const [first, waiting] = await Promise.all([makeUser(), makeUser()]);
+    assert.equal(await register(port, eventId, first, 'sc'), 'pending');
+    assert.equal(await register(port, eventId, waiting, 'sc'), 'waitlisted');
+    const put = (body) => fetch(`http://localhost:${port}/events/${eventId}/checkin/${waiting.userId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie }, body: JSON.stringify({ status: 'pending', previousStatus: 'waitlisted', ...body }),
+    });
+    const warned = await put({});
+    assert.equal(warned.status, 409);
+    assert.equal((await warned.json()).code, 'CAPACITY_FULL');
+    assert.equal(await statusOf(eventId, waiting.userId), 'waitlisted');
+    assert.equal((await put({ force: true })).status, 200);
+    assert.equal(await statusOf(eventId, waiting.userId), 'pending');
+  });
+});
+
 test('events accept and validate the SC / NSC limits', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUser('admin');
