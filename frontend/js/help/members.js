@@ -46,6 +46,7 @@ export default {
       { label: 'Reaktivieren (Zeile)', text: 'Bei deaktivierten Mitgliedern: schaltet das Konto wieder frei.' },
       { label: 'Löschen', text: 'Bei deaktivierten Mitgliedern: löscht das Konto nach Rückfrage endgültig. Das lässt sich nicht rückgängig machen.' },
       { label: 'Erneut senden', text: 'Bei Eingeladenen: schickt die Einladung noch einmal und zeigt den Link unten an.' },
+      { label: 'Aktivieren', text: 'Nur für Admins, bei Eingeladenen: legt das Konto sofort als aktives Mitglied an, ohne dass die Person den Einladungslink einlöst – z. B. wenn die Mail nie ankam. Das Konto hat noch kein Passwort; danach wird der Zugriffslink angezeigt, den Du kopieren oder per Mail schicken kannst. Damit oder über „Passwort vergessen“ setzt die Person ihr Passwort. Der alte Einladungslink wird ungültig.' },
       { label: 'Absagen (Einladung)', text: 'Bei Eingeladenen: zieht die Einladung zurück.' },
       { label: 'Detail-Dialog: Tab Konto', text: 'Hier änderst du Vorname, Nachname, Rufname und die weiteren Kontofelder. Felder, die du nicht ändern darfst, siehst du nur als Text. Mit Schloss-Symbol gekennzeichnete Felder werden verschlüsselt gespeichert.' },
       { label: 'Rolle (im Detail-Dialog)', text: 'Dropdown zum Ändern der Rolle. Nur sichtbar, wenn du Rollen vergeben darfst.' },

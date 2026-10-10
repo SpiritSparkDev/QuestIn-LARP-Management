@@ -21,6 +21,7 @@ import { query } from '../db.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { isValidEmail } from '../validation.js';
 import { ensureAccessToken } from '../auth/accessTokens.js';
+import { activateInvitation } from '../invitations/activate.js';
 
 export async function filterToAllowedFields(body, allowedFields) {
   const schemaKeys = (await getAccountFieldSchema()).map((f) => f.key);
@@ -411,6 +412,31 @@ router.post('/members/invitations/:id/resend', requireAuth(requireMenu('mitglied
   await logAudit({ actorId: user.id, action: 'link.sent', details: { kind: 'invitation_resent', email: updated.email, emailed: emailSent === true } });
   const link = `${await baseUrl()}/set-password.html?token=${updated.token}`;
   return { status: 200, body: { id: updated.id, email: updated.email, status: 'invited', emailSent, link } };
+})));
+
+// Admin shortcut for invitees who never redeemed their link (mail lost,
+// link expired, ...): creates the account right away, without a password.
+// The response carries the member's access link (reset-password.html, since
+// the address counts as confirmed by the admin), so the admin can hand it
+// over or mail it; "Passwort vergessen" works from now on as well.
+router.post('/members/invitations/:id/activate', requireAuth(requireAdminGroup(async ({ params, user }) => {
+  const invitation = await getInvitationById(params.id);
+  if (!invitation) return { status: 404, body: { error: 'invitation not found' } };
+  if (invitation.redeemedAt || invitation.cancelledAt) return { status: 409, body: { error: 'Die Einladung wurde bereits eingelöst oder abgesagt.' } };
+  if (!isValidEmail(invitation.email ?? '')) return { status: 400, body: { error: 'Die Einladung hat keine gültige E-Mail-Adresse.' } };
+
+  let userId;
+  let accessToken;
+  try {
+    ({ userId, accessToken } = await activateInvitation(invitation));
+  } catch (err) {
+    if (err.code === 'ALREADY_REDEEMED') return { status: 409, body: { error: 'Die Einladung wurde bereits eingelöst oder abgesagt.' } };
+    if (err.code === '23505') return { status: 409, body: { error: 'Diese E-Mail-Adresse gehört bereits zu einem anderen Konto.' } };
+    throw err;
+  }
+  await logAudit({ actorId: user.id, action: 'invitation.activated', subjectUserId: userId, details: { email: invitation.email } });
+  const link = `${await baseUrl()}/reset-password.html?token=${accessToken}`;
+  return { status: 200, body: { id: userId, link } };
 })));
 
 router.post('/members/invitations/:id/cancel', requireAuth(requireMenu('mitglieder')(async ({ params }) => {

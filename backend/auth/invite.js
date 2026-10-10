@@ -1,12 +1,11 @@
 import { router } from '../routes.js';
-import { withTransaction } from '../db.js';
 import { hashPassword } from '../crypto/password.js';
 import { createSession } from './sessions.js';
 import { serializeSessionCookie } from './cookies.js';
 import { readJsonBody } from '../httpBody.js';
-import { getInvitationByToken, markRedeemed } from '../invitations/repository.js';
+import { getInvitationByToken } from '../invitations/repository.js';
+import { activateInvitation } from '../invitations/activate.js';
 import { isValidPassword, isValidEmail } from '../validation.js';
-import { generateAccessToken } from './accessTokens.js';
 
 // Lets the set-password page know whether the person still has to enter an e-mail address.
 router.get('/auth/invite/info', async ({ req }) => {
@@ -40,47 +39,10 @@ router.post('/auth/invite/redeem', async ({ req }) => {
   }
 
   const passwordHash = await hashPassword(password);
-  const accessToken = generateAccessToken();
 
   let userId;
   try {
-    userId = await withTransaction(async (client) => {
-      let redeemedUserId;
-      if (invitation.userId) {
-        // Guest-conversion mode: update the existing guest row in place
-        // instead of inserting a new one -- same record, now with login
-        // access. The WHERE guard is defense-in-depth alongside
-        // markRedeemed's own race guard: it also refuses to touch a row
-        // that was somehow already converted or is no longer a guest.
-        const { rowCount } = await client.query(
-          `UPDATE users SET password_hash = $2, is_guest = false, email_verified = true, access_token = $3, managed_by_user_id = NULL,
-             email = COALESCE(email, $4)
-           WHERE id = $1 AND is_guest = true AND password_hash IS NULL`,
-          [invitation.userId, passwordHash, accessToken, email]
-        );
-        if (rowCount === 0) {
-          const err = new Error('invitation already redeemed');
-          err.code = 'ALREADY_REDEEMED';
-          throw err;
-        }
-        redeemedUserId = invitation.userId;
-      } else {
-        const { rows } = await client.query(
-          `INSERT INTO users (email, password_hash, group_id, first_name, last_name, nickname, email_verified, account_data_enc, access_token)
-           VALUES ($1, $2, $3, $4, $5, $6, true, (SELECT account_data_enc FROM invitations WHERE id = $7), $8)
-           RETURNING id`,
-          [invitation.email, passwordHash, invitation.groupId, invitation.firstName, invitation.lastName, invitation.nickname ?? null, invitation.id, accessToken]
-        );
-        redeemedUserId = rows[0].id;
-      }
-      const redeemed = await markRedeemed(invitation.id, client);
-      if (!redeemed) {
-        const err = new Error('invitation already redeemed');
-        err.code = 'ALREADY_REDEEMED';
-        throw err;
-      }
-      return redeemedUserId;
-    });
+    ({ userId } = await activateInvitation(invitation, { passwordHash, email }));
   } catch (err) {
     if (err.code === 'ALREADY_REDEEMED') {
       return { status: 400, body: { error: 'Ungültiger oder abgelaufener Link.' } };

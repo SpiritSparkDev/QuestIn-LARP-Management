@@ -947,6 +947,7 @@
         } else {
           statusCell = m.expired ? '<span class="badge badge-inactive">Einladung abgelaufen</span>' : '';
           actionsCell = `<button type="button" class="btn-sm btn-ghost" data-resend="${m.id}">Erneut senden</button>
+         ${isAdminViewer ? `<button type="button" class="btn-sm btn-ghost" data-activate-invite="${m.id}" title="Konto sofort anlegen, ohne dass die Person den Einladungslink einlöst">Aktivieren</button>` : ''}
          <button type="button" class="btn-sm btn-ghost" data-cancel-invite="${m.id}">Absagen</button>`;
         }
         const discordBadge = m.discordUsername
@@ -1020,6 +1021,9 @@
       });
       listBody.querySelectorAll('[data-resend]').forEach((button) => {
         button.addEventListener('click', () => resendInvitation(button.dataset.resend));
+      });
+      listBody.querySelectorAll('[data-activate-invite]').forEach((button) => {
+        button.addEventListener('click', () => activateInvite(button.dataset.activateInvite));
       });
       listBody.querySelectorAll('[data-cancel-invite]').forEach((button) => {
         button.addEventListener('click', () => cancelInvite(button.dataset.cancelInvite));
@@ -1520,6 +1524,21 @@
         }
         showInviteLink(result.link);
         await loadMembers();
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+    }
+
+    // Admin only: turns the invitation into an active account without a
+    // password, then shows the new member's access link (with "per Mail senden").
+    async function activateInvite(invitationId) {
+      const invited = viewMembers.find((m) => m.id === invitationId);
+      if (!confirm(`${invited?.name ?? 'Diese Person'} jetzt als aktives Mitglied anlegen?\n\nDas Konto entsteht sofort, noch ohne Passwort. Danach wird der Zugriffslink angezeigt: Damit (oder über „Passwort vergessen“) setzt die Person ihr Passwort. Der alte Einladungslink wird ungültig.`)) return;
+      try {
+        const result = await api.post(`/members/invitations/${invitationId}/activate`, {});
+        notify('Mitglied aktiviert.', 'success');
+        await loadMembers();
+        showAccessLinkBox(result.link, result.id);
       } catch (err) {
         notify(err.message, 'error');
       }

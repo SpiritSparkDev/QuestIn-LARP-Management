@@ -84,6 +84,7 @@ const ACTION_LABELS = {
   'group_tree.join_code_redeemed': 'Gruppe per Code beigetreten',
   'group_tree.view_characters': 'Gruppenverwaltung sah Charaktere',
   'link.sent': 'Link versendet',
+  'invitation.activated': 'Einladung durch Admin aktiviert',
   'members.export': 'Export Mitgliederliste',
   'members.merged': 'Konten zusammengeführt',
   'members.bulk': 'Sammelaktion Mitglieder',
@@ -93,7 +94,7 @@ const ACTION_LABELS = {
   'privacy.deletion': 'Daten gelöscht (Datenschutz)',
 };
 const CATEGORIES = {
-  accounts: /^(user|role|members\.bulk)/,
+  accounts: /^(user|role|members\.bulk|invitation\.activated)/,
   characters: /^character\./,
   registrations: /^(registration|checkin)\./,
   payments: /^payment\./,
@@ -111,6 +112,7 @@ function describe(entry) {
   const who = entry.subjectName ? ` · ${entry.subjectName}` : '';
   switch (entry.action) {
     case 'user.registered': return entry.subjectName ?? '';
+    case 'invitation.activated': return `${d.email ?? ''}${who}`;
     case 'role.changed': return `${d.from} → ${d.to}${who}`;
     case 'character.created':
     case 'character.deleted': return `„${d.characterName}“${who}${d.forced ? ' · trotz Anmeldung gelöscht' : ''}`;
