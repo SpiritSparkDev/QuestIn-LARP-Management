@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Gleich wieder da</title>
+<!--
+  Served by the Plesk nginx (not by the app) while the container restarts
+  during a deploy -- see docs/deploy.md. Must stay fully self-contained:
+  no /css, /js or fonts from the app, it is down whenever this page shows.
+-->
+<style>
+  :root {
+    --surface: #faf5ee;
+    --card: #ffffff;
+    --on-surface: #3a302a;
+    --on-surface-variant: #605850;
+    --outline-variant: #d8d0c8;
+    --primary: #b25d27;
+    --on-primary: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #241c16;
+      --card: #291f18;
+      --on-surface: #f0e6da;
+      --on-surface-variant: #cdbfae;
+      --outline-variant: #4a3c30;
+      --primary: #e68a46;
+      --on-primary: #2a1505;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+    background: var(--surface);
+    color: var(--on-surface);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main {
+    width: 100%;
+    max-width: 480px;
+    padding: 36px 28px;
+    background: var(--card);
+    border: 1px solid var(--outline-variant);
+    border-radius: 16px;
+    text-align: center;
+  }
+  h1 {
+    margin: 18px 0 10px;
+    font: 600 1.9rem/1.2 "EB Garamond", Georgia, "Times New Roman", serif;
+  }
+  p { margin: 0 0 12px; color: var(--on-surface-variant); }
+  .spinner {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto;
+    border: 4px solid var(--outline-variant);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+  .status { margin-top: 20px; font-size: 0.85rem; }
+  button {
+    margin-top: 8px;
+    padding: 10px 24px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--primary);
+    color: var(--on-primary);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="spinner" aria-hidden="true"></div>
+  <h1>Gleich wieder da</h1>
+  <p>Gerade wird eine neue Version eingespielt. Das dauert meist nur ein bis zwei Minuten. Deine Daten sind sicher.</p>
+  <p>Hast du eben etwas abgeschickt? Dann prüfe danach bitte, ob es angekommen ist.</p>
+  <p class="status" id="status" role="status">Diese Seite lädt sich automatisch neu, sobald alles wieder läuft.</p>
+  <button type="button" id="reload">Jetzt neu laden</button>
+</main>
+<script>
+  // Poll the app's health check; as soon as it answers, reload the page the
+  // user actually wanted (this page is served under their original URL).
+  var started = Date.now();
+  var status = document.getElementById('status');
+  document.getElementById('reload').addEventListener('click', function () { location.reload(); });
+  function check() {
+    fetch('/health', { cache: 'no-store' })
+      .then(function (res) { if (res.ok) location.reload(); else retry(); })
+      .catch(retry);
+  }
+  function retry() {
+    if (Date.now() - started > 10 * 60 * 1000) {
+      status.textContent = 'Das dauert länger als gewohnt. Bitte versuche es später noch einmal.';
+      setTimeout(check, 30000);
+      return;
+    }
+    setTimeout(check, 5000);
+  }
+  setTimeout(check, 5000);
+</script>
+</body>
+</html>

@@ -21,7 +21,12 @@ async function request(path, options = {}) {
   }
 
   if (!res.ok) {
-    const error = new Error(body?.error || `request failed with status ${res.status}`);
+    // 502/503/504 without a JSON error: the proxy answered because the app is
+    // down, usually a deploy restarting it (see docs/deploy.md).
+    const restarting = !body?.error && [502, 503, 504].includes(res.status);
+    const error = new Error(body?.error || (restarting
+      ? 'Der Server wird gerade neu gestartet (Update). Bitte versuche es in ein bis zwei Minuten noch einmal.'
+      : `request failed with status ${res.status}`));
     error.status = res.status;
     error.body = body;
     throw error;
