@@ -105,6 +105,33 @@ test('GET /members includes each member\'s event registrations (event and status
   }
 });
 
+test('GET /members names each member\'s play group (managed persons count for their manager\'s group)', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const manager = await makeUserAndSession('mitglied');
+    await query("UPDATE users SET group_name = 'Rabenschar' WHERE id = $1", [manager.userId]);
+    const joined = await makeUserAndSession('mitglied');
+    await query('UPDATE users SET group_parent_id = $2 WHERE id = $1', [joined.userId, manager.userId]);
+    const { rows: managedRows } = await query(
+      "INSERT INTO users (email, first_name, last_name, group_id, is_guest, email_verified, managed_by_user_id) VALUES (NULL, 'Gruppen', 'Kind', (SELECT id FROM groups WHERE key = 'mitglied'), true, false, $1) RETURNING id",
+      [joined.userId]
+    );
+    const loner = await makeUserAndSession('mitglied');
+
+    const members = await (await fetch(`http://localhost:${port}/members`, { headers: { Cookie: cookie } })).json();
+    const playGroupOf = (id) => members.find((m) => m.id === id).playGroup;
+    const expected = { id: manager.userId, name: 'Rabenschar (Members Test)' };
+    assert.deepEqual(playGroupOf(manager.userId), expected);
+    assert.deepEqual(playGroupOf(joined.userId), expected);
+    assert.deepEqual(playGroupOf(managedRows[0].id), expected);
+    assert.equal(playGroupOf(loner.userId), null);
+  } finally {
+    server.close();
+  }
+});
+
 test('GET /members/:id returns every field regardless of the viewer\'s own permissions, plus the member\'s characters', async () => {
   const server = createServer().listen(0);
   try {

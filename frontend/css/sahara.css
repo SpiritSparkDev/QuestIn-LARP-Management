@@ -4422,6 +4422,30 @@ th.is-sortable[data-dir="desc"]::after {
   color: var(--primary-text, var(--primary));
 }
 
+/* Mitglieder: group header rows (Gruppieren nach) */
+.member-group-row td {
+  background: var(--surface-container);
+  padding: 0;
+}
+
+.member-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--on-surface, inherit);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.member-group-toggle .sub { display: inline; margin: 0; font-weight: 400; }
+
 .member-character-actions {
   display: flex;
   gap: 10px;

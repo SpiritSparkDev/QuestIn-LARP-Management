@@ -60,7 +60,26 @@ export async function listMembers(includeDeactivated = false) {
     if (!byUser.has(r.user_id)) byUser.set(r.user_id, []);
     byUser.get(r.user_id).push({ eventId: r.event_id, status: r.status, conPayer: r.con_payer, conRole: r.con_role, flags: r.flags, paidAt: r.paid_at, transferNotifiedAt: r.transfer_notified_at });
   }
-  return members.map((m) => ({ ...m, registrations: byUser.get(m.id) ?? [] }));
+
+  // The (play) group each member belongs to, so the list can be grouped by it.
+  // Groups are flat: a managed person counts for their manager's group; a
+  // full account is in the group they joined, or in their own if they run
+  // one (group name, managed persons or members -- see groupTree's joinBlocker).
+  const { rows: playGroupRows } = await query(
+    `SELECT u.id AS user_id, gm.id AS manager_id, gm.first_name, gm.last_name, gm.nickname, gm.group_name
+     FROM users u
+     JOIN users root ON root.id = COALESCE(u.managed_by_user_id, u.id)
+     JOIN users gm ON gm.id = COALESCE(root.group_parent_id, root.id)
+     WHERE u.id = ANY($1::uuid[])
+       AND (coalesce(gm.group_name, '') <> ''
+            OR EXISTS (SELECT 1 FROM users m WHERE m.managed_by_user_id = gm.id OR m.group_parent_id = gm.id))`,
+    [members.map((m) => m.id)]
+  );
+  const playGroupByUser = new Map(playGroupRows.map((r) => {
+    const managerName = displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname });
+    return [r.user_id, { id: r.manager_id, name: r.group_name ? `${r.group_name} (${managerName})` : managerName }];
+  }));
+  return members.map((m) => ({ ...m, registrations: byUser.get(m.id) ?? [], playGroup: playGroupByUser.get(m.id) ?? null }));
 }
 
 export async function getMember(id) {

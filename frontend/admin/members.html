@@ -83,6 +83,17 @@
               <select id="member-sort"></select>
               <label for="member-sort">Sortieren nach</label>
             </div>
+            <div>
+              <select id="member-group-by">
+                <option value="">Nicht gruppieren</option>
+                <option value="role">Rolle</option>
+                <option value="participation">SC / NSC / Sonderrollen</option>
+                <option value="event">Event</option>
+                <option value="status">Anmeldestatus</option>
+                <option value="playGroup">Spielgruppe</option>
+              </select>
+              <label for="member-group-by">Gruppieren nach</label>
+            </div>
             <div class="member-filter-summary">
               <span class="sub" id="member-count"></span>
               <button type="button" id="member-filter-reset" class="btn-ghost btn-sm">Zurücksetzen</button>
@@ -275,7 +286,7 @@
     const STATUS_RANK = { active: 0, invited: 1, deactivated: 2 };
     const PREFS_KEY = 'memberListPrefs';
     let viewMembers = [];
-    let prefs = { group: '', kind: '', event: '', registration: '', participation: '', sort: 'name', dir: 'asc' };
+    let prefs = { group: '', kind: '', event: '', registration: '', participation: '', sort: 'name', dir: 'asc', groupBy: '' };
     try {
       prefs = { ...prefs, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {}) };
     } catch {
@@ -325,6 +336,7 @@
       `<option value="${key}:asc">${label} (A–Z)</option>`,
       `<option value="${key}:desc">${label} (Z–A)</option>`,
     ]).join('');
+    const groupBySelect = document.getElementById('member-group-by');
     const groupFilter = document.getElementById('member-filter-group');
     const kindFilter = document.getElementById('member-filter-kind');
 
@@ -336,6 +348,7 @@
       refreshEventFilter();
       refreshParticipationFilter();
       sortSelect.value = `${prefs.sort}:${prefs.dir}`;
+      groupBySelect.value = prefs.groupBy;
     }
 
     const eventFilter = document.getElementById('member-filter-event');
@@ -412,7 +425,7 @@
         if (!memberMatchesRegistration(m)) return false;
         if (!memberMatchesParticipation(m)) return false;
         if (!term) return true;
-        return [m.name, m.nickname, m.email, m.group?.name, m.managedBy?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
+        return [m.name, m.nickname, m.email, m.group?.name, m.managedBy?.name, m.playGroup?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
       });
       const direction = prefs.dir === 'desc' ? -1 : 1;
       // Ties fall back to the name so the order is always stable and predictable.
@@ -432,13 +445,48 @@
       document.getElementById('member-count').textContent = filtersActive
         ? `${shown} von ${viewMembers.length} Mitgliedern`
         : `${viewMembers.length} Mitglieder`;
-      document.getElementById('member-filter-reset').hidden = !filtersActive && prefs.sort === 'name' && prefs.dir === 'asc';
+      document.getElementById('member-filter-reset').hidden = !filtersActive && prefs.sort === 'name' && prefs.dir === 'asc' && !prefs.groupBy;
       document.querySelectorAll('#member-list th[data-sort]').forEach((th) => {
         const active = th.dataset.sort === prefs.sort;
         th.classList.add('is-sortable');
         th.dataset.dir = active ? prefs.dir : '';
         th.setAttribute('aria-sort', active ? (prefs.dir === 'asc' ? 'ascending' : 'descending') : 'none');
       });
+    }
+
+    // ---- Grouping (Gruppieren nach) ----
+    // Groups follow the shown list (filters and the chosen event apply). A member
+    // with several values (registrations for two events, SC plus a special role)
+    // appears in each of their groups; one without any lands in the last group.
+    // Collapsed groups are only remembered until the grouping changes.
+    const GROUP_BY_EMPTY = { role: 'Ohne Rolle', participation: 'Ohne aktive Anmeldung', event: 'Ohne Anmeldung', status: 'Ohne Anmeldung', playGroup: 'Ohne Spielgruppe' };
+    const collapsedGroups = new Set();
+
+    // [{ key, label, rank }] of one member; groups are ordered by rank, then label.
+    function groupKeysOf(m) {
+      switch (prefs.groupBy) {
+        case 'role': return m.group?.name ? [{ key: m.group.name, label: m.group.name, rank: 0 }] : [];
+        case 'participation': return participationLabels(m).map((l) => ({ key: l, label: l, rank: 0 }));
+        case 'event': return [...new Set(shownRegs(m).map((r) => r.eventId))].map((id) => {
+          const index = allEvents.findIndex((e) => e.id === id);
+          return { key: id, label: eventNameOf(id) || 'Unbekanntes Event', rank: index < 0 ? allEvents.length : index };
+        });
+        case 'status': return [...new Set(shownRegs(m).map((r) => r.status))].map((st) => ({ key: st, label: STATUS_LABELS[st] ?? st, rank: STATUS_ORDER.indexOf(st) }));
+        case 'playGroup': return m.playGroup ? [{ key: m.playGroup.id, label: m.playGroup.name, rank: 0 }] : [];
+        default: return [];
+      }
+    }
+
+    function groupedMembers(list) {
+      const groups = new Map();
+      for (const m of list) {
+        const keys = groupKeysOf(m);
+        for (const g of keys.length ? keys : [{ key: '', label: GROUP_BY_EMPTY[prefs.groupBy], rank: Infinity }]) {
+          if (!groups.has(g.key)) groups.set(g.key, { ...g, members: [] });
+          groups.get(g.key).members.push(m);
+        }
+      }
+      return [...groups.values()].sort((a, b) => (a.rank === b.rank ? a.label.localeCompare(b.label, 'de') : a.rank - b.rank));
     }
 
     // ---- Bulk actions on the selected rows ----
@@ -623,6 +671,12 @@
       savePrefs();
       renderMembers();
     });
+    groupBySelect.addEventListener('change', () => {
+      prefs.groupBy = groupBySelect.value;
+      collapsedGroups.clear();
+      savePrefs();
+      renderMembers();
+    });
     document.querySelectorAll('#member-list th[data-sort]').forEach((th) => {
       th.addEventListener('click', () => {
         prefs.dir = prefs.sort === th.dataset.sort && prefs.dir === 'asc' ? 'desc' : 'asc';
@@ -633,7 +687,8 @@
       });
     });
     document.getElementById('member-filter-reset').addEventListener('click', () => {
-      prefs = { group: '', kind: '', event: '', registration: '', participation: '', sort: 'name', dir: 'asc' };
+      prefs = { group: '', kind: '', event: '', registration: '', participation: '', sort: 'name', dir: 'asc', groupBy: '' };
+      groupBySelect.value = '';
       currentSearch = '';
       searchInput.value = '';
       groupFilter.value = '';
@@ -855,7 +910,7 @@
 
     function renderMembers() {
       const visible = filteredAndSortedMembers();
-      listBody.innerHTML = visible.length ? visible.map((m) => {
+      const memberRow = (m) => {
         let statusCell;
         let actionsCell;
         const accessLinkBtn = m.status === 'active' && !m.isGuest
@@ -897,7 +952,14 @@
     <td data-col="status">${statusCell}</td>
     <td>${actionsCell}</td>
   </tr>`;
-      }).join('') : '<tr><td colspan="8" class="sub">Keine Mitglieder gefunden.</td></tr>';
+      };
+      const groupRows = (g) => {
+        const collapsed = collapsedGroups.has(g.key);
+        return `<tr class="member-group-row"><td colspan="8"><button type="button" class="member-group-toggle" data-group-toggle="${escapeHtml(g.key)}" aria-expanded="${collapsed ? 'false' : 'true'}"><span class="material-symbols-outlined" aria-hidden="true">${collapsed ? 'chevron_right' : 'expand_more'}</span>${escapeHtml(g.label)} <span class="sub">(${g.members.length})</span></button></td></tr>${collapsed ? '' : g.members.map(memberRow).join('')}`;
+      };
+      listBody.innerHTML = !visible.length
+        ? '<tr><td colspan="8" class="sub">Keine Mitglieder gefunden.</td></tr>'
+        : prefs.groupBy ? groupedMembers(visible).map(groupRows).join('') : visible.map(memberRow).join('');
 
       // Only what is still shown stays selected: changing filter or search clears the rest.
       const shownIds = new Set(visible.map((m) => m.id));
@@ -906,7 +968,16 @@
         box.checked = selected.has(box.dataset.select);
         box.addEventListener('change', () => {
           if (box.checked) selected.add(box.dataset.select); else selected.delete(box.dataset.select);
+          // Grouped lists can show a member in several groups: keep their boxes in step.
+          listBody.querySelectorAll(`[data-select="${box.dataset.select}"]`).forEach((other) => { other.checked = box.checked; });
           updateBulkBar();
+        });
+      });
+      listBody.querySelectorAll('[data-group-toggle]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const key = button.dataset.groupToggle;
+          if (collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
+          renderMembers();
         });
       });
       updateBulkBar();
