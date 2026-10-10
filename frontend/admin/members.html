@@ -497,7 +497,7 @@
           <select id="bulk-reg-action"><option value="approve">Bestätigen (Zahlung eingegangen)</option><option value="cancel">Absagen (Nachrücken von der Warteliste inklusive)</option></select><label for="bulk-reg-action">Aktion</label>`;
         sentence += ' werden im gewählten Event geändert (nur wo der Statuswechsel erlaubt ist)';
       } else {
-        sentence += bulkKind === 'deactivate' ? ' werden deaktiviert und sofort abgemeldet' : ' werden reaktiviert';
+        sentence += bulkKind === 'deactivate' ? ' werden deaktiviert, sofort abgemeldet und ihre offenen Anmeldungen für kommende Events storniert' : ' werden reaktiviert';
       }
       bulkBody.innerHTML = `${controls}<p>${escapeHtml(sentence)}. Fortfahren?</p>`;
       bulkRun.hidden = false;
@@ -1436,7 +1436,7 @@
     }
 
     async function deactivateMemberRow(id) {
-      if (!confirm('Mitglied wirklich deaktivieren? Der Login wird gesperrt und alle aktiven Sitzungen werden sofort beendet.')) return;
+      if (!confirm('Mitglied wirklich deaktivieren? Der Login wird gesperrt, alle aktiven Sitzungen werden sofort beendet und offene Anmeldungen für kommende Events werden storniert (beim Reaktivieren nicht wiederhergestellt).')) return;
       try {
         await api.post(`/members/${id}/deactivate`, {});
         notify('Mitglied deaktiviert.', 'success');

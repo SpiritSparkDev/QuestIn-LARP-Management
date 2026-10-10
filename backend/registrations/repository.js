@@ -1040,9 +1040,9 @@ export async function approveRegistration(eventId, userId) {
   return transitionStatus(eventId, userId, 'approve');
 }
 
-export async function cancelRegistration(eventId, userId) {
+export async function cancelRegistration(eventId, userId, { actorId = null, reason } = {}) {
   const result = await transitionStatus(eventId, userId, 'cancel');
-  await logAudit({ actorId: null, action: 'registration.cancelled', subjectUserId: userId, details: { eventId, self: false } });
+  await logAudit({ actorId, action: 'registration.cancelled', subjectUserId: userId, details: { eventId, self: false, ...(reason ? { reason } : {}) } });
   await maybePromoteFromWaitlist(eventId);
   return result;
 }

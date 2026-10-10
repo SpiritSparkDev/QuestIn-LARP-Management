@@ -610,6 +610,50 @@ test('POST /members/:id/deactivate blocks login, kills sessions, and hides the m
   }
 });
 
+test('POST /members/:id/deactivate cancels open registrations of upcoming events only', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { userId: adminId, cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId: targetId } = await makeUserAndSession('mitglied');
+    const event = async (date, ended = false) => (await query(
+      `INSERT INTO events (name, event_date, ended_at) VALUES ('Deactivate-Con', $1, ${ended ? 'now()' : 'NULL'}) RETURNING id`, [date]
+    )).rows[0].id;
+    const upcomingPending = await event('2099-01-01');
+    const upcomingWaitlisted = await event('2099-02-01');
+    const upcomingCheckedIn = await event('2099-03-01');
+    const past = await event('2000-01-01');
+    const ended = await event('2099-04-01', true);
+    const reg = (eventId, status) => query(
+      "INSERT INTO registrations (user_id, event_id, con_role, status) VALUES ($1, $2, 'helfer', $3)", [targetId, eventId, status]
+    );
+    await reg(upcomingPending, 'pending');
+    await reg(upcomingWaitlisted, 'waitlisted');
+    await reg(upcomingCheckedIn, 'checked_in');
+    await reg(past, 'confirmed');
+    await reg(ended, 'confirmed');
+
+    const res = await fetch(`http://localhost:${port}/members/${targetId}/deactivate`, { method: 'POST', headers: { Cookie: adminCookie } });
+    assert.equal(res.status, 200);
+
+    const { rows } = await query('SELECT event_id, status FROM registrations WHERE user_id = $1', [targetId]);
+    const statusOf = (eventId) => rows.find((r) => r.event_id === eventId).status;
+    assert.equal(statusOf(upcomingPending), 'cancelled');
+    assert.equal(statusOf(upcomingWaitlisted), 'cancelled');
+    assert.equal(statusOf(upcomingCheckedIn), 'checked_in');
+    assert.equal(statusOf(past), 'confirmed');
+    assert.equal(statusOf(ended), 'confirmed');
+
+    const { rows: audit } = await query(
+      "SELECT actor_id FROM audit_log WHERE action = 'registration.cancelled' AND subject_user_id = $1", [targetId]
+    );
+    assert.equal(audit.length, 2);
+    assert.ok(audit.every((a) => a.actor_id === adminId));
+  } finally {
+    server.close();
+  }
+});
+
 test('POST /members/:id/deactivate rejects deactivating your own account', async () => {
   const server = createServer().listen(0);
   try {
