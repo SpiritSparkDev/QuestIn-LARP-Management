@@ -18,7 +18,7 @@ import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { updateCharacter } from '../characters/repository.js';
 import { logAudit } from '../audit/repository.js';
 import { COUNTED_STATUSES, loadCapacity, capacityBlock, withAdded, withRemoved, BLOCK_MESSAGES } from './capacity.js';
-import { assertNotRegistrationLocked } from './lock.js';
+import { checkRegistrationLock, registrationLockReason } from './lock.js';
 
 // 'ticket' = a self-service guest ticket bought via the external ticket
 // widget (backend/guestRegistrations/routes.js) -- no character, distinct
@@ -335,7 +335,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   }
 
   // PDF imports are entered by staff from a paper form, so the manual lock doesn't apply.
-  if (!pdfImport) await assertNotRegistrationLocked(event, userId, conRole, requestingUser);
+  const lockedToWaitlist = !pdfImport && (await checkRegistrationLock(event, userId, conRole, requestingUser)) === 'waitlist';
 
   // Generalizes the old sc-character-creation active-event gate to every
   // self-service con_role, now that character creation itself has no event
@@ -364,15 +364,15 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
     const registration = await withTransaction(async (client) => {
       // Total limit and the SC / NSC limit; roles that do not count (crew) never wait.
       const capacityState = await loadCapacity((sql, params) => client.query(sql, params), eventId, { lockEvent: true });
-      const status = capacityBlock(capacityState, conRole) ? 'waitlisted' : 'pending';
+      const status = lockedToWaitlist || capacityBlock(capacityState, conRole) ? 'waitlisted' : 'pending';
       await assertExtrasCapacity(client, event, resolvedExtras);
       // Waitlisted people don't hold a bed (they would take one at promotion).
       const lodging = status === 'waitlisted' ? { lodging: null, lodgingCents: 0, details: null } : requestedLodging;
       await assertLodgingCapacity(client, lodging.lodging);
       const amountDueCents = amountDueFor(resolvedPrice.priceListCents, extrasCents + lodging.lodgingCents);
       const { rows } = await client.query(
-        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details, con_payer, pdf_import, deadline_mail_optin, optout_token, nsc_data)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb)
+        `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details, con_payer, pdf_import, deadline_mail_optin, optout_token, nsc_data, waitlisted_by_lock)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb, $26)
          RETURNING user_id, event_id, status, con_role, character_id, nsc_available, nsc_character_id, flags, checked_in_at, checked_out_at, waiver_version_accepted, waiver_accepted_at, extras, extras_cents`,
         [
           userId, eventId, conRole, resolvedCharacterId, resolvedNsc.nscAvailable, resolvedNsc.nscCharacterId, resolvedFlags,
@@ -384,6 +384,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
           conPayer === true || resolvedPrice.conPayer, pdfImport === true,
           deadlineMails === true, deadlineMails === true ? crypto.randomBytes(24).toString('hex') : null,
           JSON.stringify(resolvedCharacterId || !resolvedNscData ? {} : resolvedNscData),
+          lockedToWaitlist,
         ]
       );
       return rows[0];
@@ -400,7 +401,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
           const { rows: userRows } = await query('SELECT email FROM users WHERE id = $1', [userId]);
           if (userRows[0]) {
             const transport = await getTransporterAndFrom();
-            await sendWaitlistedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event', userId }, transport);
+            await sendWaitlistedEmail(userRows[0].email, { eventName: event?.name ?? 'Unbekanntes Event', userId, locked: lockedToWaitlist }, transport);
           }
         } catch (err) {
           logger.error('failed to send waitlisted notification', { error: err.message, userId, eventId });
@@ -594,7 +595,7 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
   const { rows: before } = await query('SELECT con_role, status FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
   const roleChanged = before.length > 0 && before[0].con_role !== conRole;
   // Switching into a locked role is a new registration for that role in effect.
-  if (roleChanged && event) await assertNotRegistrationLocked(event, userId, conRole, requestingUser);
+  if (roleChanged && event) await checkRegistrationLock(event, userId, conRole, requestingUser, { forceBlock: true });
   if (roleChanged && COUNTED_STATUSES.includes(before[0].status)) {
     const state = await loadCapacity((sql, params) => query(sql, params), eventId);
     const block = capacityBlock(withRemoved(state, before[0].con_role), conRole);
@@ -691,17 +692,23 @@ export async function maybePromoteFromWaitlist(eventId) {
     // Oldest first, but each person only moves up if THEIR limit has room: a waiting NSC must not
     // block an SC (or the other way round) when only one of the two limits is full.
     let state = await loadCapacity((sql, params) => client.query(sql, params), eventId, { lockEvent: true });
-    // No limit at all: nobody can be waiting because of one (a manual waitlist entry stays what it is).
-    if (state.limits.total === null && state.limits.sc === null && state.limits.nsc === null) return [];
+    // No limit at all: nobody can be waiting because of one (a manual waitlist entry stays what it is) --
+    // except people the registration lock put there, who move up once it no longer covers them.
+    const noLimits = state.limits.total === null && state.limits.sc === null && state.limits.nsc === null;
+    const { rows: [event] } = await client.query('SELECT name, registration_locked_con_roles, registration_locked_groups FROM events WHERE id = $1', [eventId]);
     const { rows: waiting } = await client.query(
-      "SELECT user_id, con_role FROM registrations WHERE event_id = $1 AND status = 'waitlisted' ORDER BY COALESCE(waitlisted_at, created_at) ASC",
+      `SELECT r.user_id, r.con_role, r.waitlisted_by_lock, g.key AS group_key, g.name AS group_name
+       FROM registrations r JOIN users u ON u.id = r.user_id JOIN groups g ON g.id = u.group_id
+       WHERE r.event_id = $1 AND r.status = 'waitlisted' ORDER BY COALESCE(r.waitlisted_at, r.created_at) ASC`,
       [eventId]
     );
     const promoted = [];
     for (const candidate of waiting) {
+      if (noLimits && !candidate.waitlisted_by_lock) continue;
+      if (candidate.waitlisted_by_lock && event && registrationLockReason(event, candidate.con_role, { key: candidate.group_key, name: candidate.group_name })) continue;
       if (capacityBlock(state, candidate.con_role)) continue;
       await client.query(
-        "UPDATE registrations SET status = 'pending' WHERE event_id = $1 AND user_id = $2 AND status = 'waitlisted'",
+        "UPDATE registrations SET status = 'pending', waitlisted_by_lock = false WHERE event_id = $1 AND user_id = $2 AND status = 'waitlisted'",
         [eventId, candidate.user_id]
       );
       state = withAdded(state, candidate.con_role);
@@ -1061,6 +1068,8 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
     `UPDATE registrations SET
        status = $4,
        waitlisted_at = CASE WHEN $5 THEN now() WHEN $4 = 'waitlisted' THEN waitlisted_at ELSE NULL END,
+       -- A hand-made status change ends a lock-waitlisting; manual waitlist entries stay manual.
+       waitlisted_by_lock = waitlisted_by_lock AND $4 = 'waitlisted' AND NOT $5,
        checked_in_at = CASE
          WHEN $4 IN ('pending', 'confirmed', 'cancelled', 'waitlisted') THEN NULL
          WHEN $4 = 'checked_in' AND checked_in_at IS NULL THEN now()

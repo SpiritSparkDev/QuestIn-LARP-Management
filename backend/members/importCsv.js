@@ -35,7 +35,7 @@ export function parseCsv(text) {
 const cellText = (v) => (/^'[=+\-@\t\r]/.test(v) ? v.slice(1) : v).trim();
 
 const BASE = { nachname: 'lastName', vorname: 'firstName', rufname: 'nickname', 'e-mail': 'email', email: 'email', rolle: 'group' };
-const READ_ONLY = new Set(['anzeigename', 'status', 'kontoart', 'verwaltet von', 'discord']);
+const READ_ONLY = new Set(['mitgliedsnummer', 'anzeigename', 'status', 'kontoart', 'verwaltet von', 'discord']);
 
 // Pure analysis: header mapping + per-row validation against the current DB state.
 // ctx: { accountSchema, groups: [{id,key,name}], existingByEmail: Map, openInvitationEmails: Set, mayImportSensitive }

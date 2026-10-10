@@ -321,11 +321,15 @@ router.put('/events/:id/registration-lock', requireAuth(requireAdminGroup(async 
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const conRoles = [...new Set(body.conRoles ?? [])];
   const groups = [...new Set(body.groups ?? [])];
+  const mode = body.mode ?? 'block';
+  if (!['block', 'waitlist'].includes(mode)) return { status: 400, body: { error: 'mode must be block or waitlist' } };
   if (!conRoles.every((r) => ALL_CON_ROLES.includes(r))) return { status: 400, body: { error: 'unknown con role' } };
   const { rows: known } = await query('SELECT key FROM groups WHERE key = ANY($1)', [groups]);
   if (known.length !== groups.length) return { status: 400, body: { error: 'unknown group' } };
-  const saved = await setRegistrationLock(params.id, { conRoles, groups });
+  const saved = await setRegistrationLock(params.id, { conRoles, groups, mode });
   if (!saved) return { status: 404, body: { error: 'event not found' } };
   await logAudit({ actorId: user.id, action: 'registration.lock_changed', details: { eventId: params.id, ...saved } });
+  // Lifting (part of) a lock lets people who were waitlisted because of it move up.
+  await maybePromoteFromWaitlist(params.id);
   return { status: 200, body: saved };
 })));

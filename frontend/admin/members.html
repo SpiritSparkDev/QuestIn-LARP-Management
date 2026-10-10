@@ -40,7 +40,7 @@
           <button type="button" class="toggle-btn" data-view="deactivated">Deaktivierte Mitglieder</button>
         </div>
         <div class="card" style="margin-top:16px;">
-          <div class="toolbar"><div class="search-box"><input class="search" id="member-search" placeholder="Name, E-Mail oder Rolle …" aria-label="Mitglieder durchsuchen"><button type="button" class="search-clear" id="member-search-clear" aria-label="Suche leeren" title="Suche leeren" hidden><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div></div>
+          <div class="toolbar"><div class="search-box"><input class="search" id="member-search" placeholder="Name, E-Mail, Rolle oder Nr. …" aria-label="Mitglieder durchsuchen"><button type="button" class="search-clear" id="member-search-clear" aria-label="Suche leeren" title="Suche leeren" hidden><span class="material-symbols-outlined" aria-hidden="true">close</span></button></div></div>
           <div class="member-filters">
             <div>
               <select id="member-filter-group"></select>
@@ -121,6 +121,7 @@
             <thead>
               <tr>
                 <th><input type="checkbox" id="member-select-all" aria-label="Alle angezeigten auswählen"></th>
+                <th data-sort="number" data-col="number" title="Mitgliedsnummer (fortlaufend nach Kontoanlage)">Nr.</th>
                 <th data-sort="name" data-col="name">Name</th>
                 <th data-sort="email" data-col="email">E-Mail</th>
                 <th data-sort="group" data-col="role">Rolle</th>
@@ -156,6 +157,13 @@
             <div id="detail-group-wrap" style="display:none;">
               <select id="detail-group" name="group"></select>
               <label for="detail-group">Rolle</label>
+            </div>
+            <div id="detail-email-wrap" hidden style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
+              <div style="flex:1;min-width:220px;">
+                <input id="detail-email" type="email" autocomplete="off">
+                <label for="detail-email">E-Mail-Adresse (Login)</label>
+              </div>
+              <button type="button" class="btn-secondary" id="detail-email-save">E-Mail ändern</button>
             </div>
             <div id="detail-fields"></div>
             <div class="save-bar"><button type="button" id="detail-save">Konto speichern</button> <button type="button" id="detail-abort" class="btn-ghost">Abbrechen</button></div>
@@ -293,7 +301,7 @@
     let currentSearch = '';
 
     // ---- Filter, search and sort (all client-side on the loaded list) ----
-    const SORT_LABELS = { name: 'Name', email: 'E-Mail', group: 'Rolle', participation: 'SC / NSC / Sonderrollen', event: 'Event', status: 'Anmeldestatus' };
+    const SORT_LABELS = { number: 'Mitgliedsnummer', name: 'Name', email: 'E-Mail', group: 'Rolle', participation: 'SC / NSC / Sonderrollen', event: 'Event', status: 'Anmeldestatus' };
     const STATUS_RANK = { active: 0, invited: 1, deactivated: 2 };
     const PREFS_KEY = 'memberListPrefs';
     let viewMembers = [];
@@ -307,7 +315,7 @@
     // Per-user column choice (key includes the account id, so another login in
     // the same browser keeps its own). Hidden columns are stored, so new
     // columns show up by default.
-    const MEMBER_COLUMNS = [['name', 'Name'], ['email', 'E-Mail'], ['role', 'Rolle'], ['participation', 'SC / NSC / Sonderrollen'], ['event', 'Event'], ['status', 'Status']];
+    const MEMBER_COLUMNS = [['number', 'Nr.'], ['name', 'Name'], ['email', 'E-Mail'], ['role', 'Rolle'], ['participation', 'SC / NSC / Sonderrollen'], ['event', 'Event'], ['status', 'Status']];
     function initColumnSettings(userId) {
       const key = `memberColumnsHidden:${userId}`;
       let hidden = [];
@@ -419,6 +427,8 @@
     function sortValue(m) {
       switch (prefs.sort) {
         case 'email': return m.email ?? '';
+        // Zero-padded so the plain string comparison below sorts numerically; invitations have none.
+        case 'number': return m.memberNumber ? String(m.memberNumber).padStart(9, '0') : '';
         case 'group': return m.group?.name ?? '';
         case 'participation': return participationLabels(m).join(', ');
         case 'event': return shownRegs(m).map((r) => allEvents.find((e) => e.id === r.eventId)?.code || eventNameOf(r.eventId)).join(', ');
@@ -436,6 +446,7 @@
         if (!memberMatchesRegistration(m)) return false;
         if (!memberMatchesParticipation(m)) return false;
         if (!term) return true;
+        if (/^#?\d+$/.test(term)) return String(m.memberNumber ?? '') === term.replace('#', '');
         return [m.name, m.nickname, m.email, m.group?.name, m.managedBy?.name, m.playGroup?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
       });
       const direction = prefs.dir === 'desc' ? -1 : 1;
@@ -968,6 +979,7 @@
         const selectable = m.status !== 'invited' && m.id !== myUserId;
         return `<tr>
     <td>${selectable ? `<input type="checkbox" data-select="${m.id}" aria-label="Auswählen"${selected.has(m.id) ? ' checked' : ''}>` : ''}</td>
+    <td data-col="number" class="sub">${m.memberNumber ?? '–'}</td>
     <td data-col="name">${paidDot(m)}${escapeHtml(fullName(m))}${discordBadge}${m.email ? guestBadge : ''}</td>
     <td data-col="email">${m.email ? escapeHtml(m.email) : guestBadge}</td>
     <td data-col="role">${escapeHtml(m.group?.name ?? '–')}</td>
@@ -979,10 +991,10 @@
       };
       const groupRows = (g) => {
         const collapsed = collapsedGroups.has(g.key);
-        return `<tr class="member-group-row"><td colspan="8"><button type="button" class="member-group-toggle" data-group-toggle="${escapeHtml(g.key)}" aria-expanded="${collapsed ? 'false' : 'true'}"><span class="material-symbols-outlined" aria-hidden="true">${collapsed ? 'chevron_right' : 'expand_more'}</span>${escapeHtml(g.label)} <span class="sub">(${g.members.length})</span></button></td></tr>${collapsed ? '' : g.members.map(memberRow).join('')}`;
+        return `<tr class="member-group-row"><td colspan="9"><button type="button" class="member-group-toggle" data-group-toggle="${escapeHtml(g.key)}" aria-expanded="${collapsed ? 'false' : 'true'}"><span class="material-symbols-outlined" aria-hidden="true">${collapsed ? 'chevron_right' : 'expand_more'}</span>${escapeHtml(g.label)} <span class="sub">(${g.members.length})</span></button></td></tr>${collapsed ? '' : g.members.map(memberRow).join('')}`;
       };
       listBody.innerHTML = !visible.length
-        ? '<tr><td colspan="8" class="sub">Keine Mitglieder gefunden.</td></tr>'
+        ? '<tr><td colspan="9" class="sub">Keine Mitglieder gefunden.</td></tr>'
         : prefs.groupBy ? groupedMembers(visible).map(groupRows).join('') : visible.map(memberRow).join('');
 
       // Only what is still shown stays selected: changing filter or search clears the rest.
@@ -1418,11 +1430,32 @@
       }
     }
 
+    // Admin only: set or change the member's address (login name), then offer
+    // to mail the access link to it -- the old links stop working.
+    let detailMemberIsGuest = false;
+    document.getElementById('detail-email-save').addEventListener('click', async () => {
+      const input = document.getElementById('detail-email');
+      const memberId = editingMemberId;
+      try {
+        const result = await api.put(`/members/${memberId}/email`, { email: input.value });
+        if (!result.changed) { notify('Die E-Mail-Adresse ist unverändert.', 'info'); return; }
+        input.value = result.email;
+        notify('E-Mail-Adresse geändert.', 'success');
+        await loadMembers();
+        if (!detailMemberIsGuest && confirm(`Zugangslink jetzt an ${result.email} schicken? Damit kann die Person (neu) ein Passwort setzen.`)) {
+          await api.post(`/members/${memberId}/access-link/send`, {});
+          notify('Zugangslink verschickt.', 'success');
+        }
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+    });
+
     async function openDetail(memberId) {
       const member = await api.get(`/members/${memberId}`);
       editingMemberId = memberId;
       await loadLodgingsFor(member);
-      detailTitle.textContent = `Mitglied bearbeiten: ${member.name}`;
+      detailTitle.textContent = `Mitglied bearbeiten: ${member.name} (Nr. ${member.memberNumber})`;
       buildDetailFieldInputs(detailFields, member);
 
       showDetailTab('detail-tab-konto');
@@ -1430,6 +1463,11 @@
       document.getElementById('detail-regs-tab-btn').hidden = !(canCreateForOthers || canOverrideCheckin);
       if (canCreateForOthers || canOverrideCheckin) renderRegistrationsTab(member);
       document.getElementById('detail-mails-tab-btn').hidden = !isAdminViewer;
+      const emailWrap = document.getElementById('detail-email-wrap');
+      emailWrap.hidden = !isAdminViewer;
+      emailWrap.style.display = isAdminViewer ? 'flex' : 'none';
+      document.getElementById('detail-email').value = member.email ?? '';
+      detailMemberIsGuest = member.isGuest === true;
       if (isAdminViewer) renderMailsTab(memberId);
 
       if (myAccountFields.includes('group')) {

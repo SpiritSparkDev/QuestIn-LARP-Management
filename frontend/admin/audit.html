@@ -86,6 +86,7 @@ const ACTION_LABELS = {
   'link.sent': 'Link versendet',
   'invitation.activated': 'Einladung durch Admin aktiviert',
   'user.created_without_email': 'Mitglied ohne E-Mail angelegt',
+  'user.email_changed': 'E-Mail-Adresse geändert',
   'members.export': 'Export Mitgliederliste',
   'members.merged': 'Konten zusammengeführt',
   'members.bulk': 'Sammelaktion Mitglieder',
@@ -114,6 +115,7 @@ function describe(entry) {
   switch (entry.action) {
     case 'user.registered': return entry.subjectName ?? '';
     case 'invitation.activated': return `${d.email ?? ''}${who}`;
+    case 'user.email_changed': return `${d.from ?? '(keine)'} → ${d.to}${who}`;
     case 'role.changed': return `${d.from} → ${d.to}${who}`;
     case 'character.created':
     case 'character.deleted': return `„${d.characterName}“${who}${d.forced ? ' · trotz Anmeldung gelöscht' : ''}`;

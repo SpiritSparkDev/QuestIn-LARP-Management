@@ -182,11 +182,13 @@ export async function sendRegistrationWithdrawnOrgaEmail(to, { userName, eventNa
   return deliver(transporter, from, to, rendered);
 }
 
-export async function sendWaitlistedEmail(to, { eventName, userId }, { transporter, from }) {
+export async function sendWaitlistedEmail(to, { eventName, userId, locked = false }, { transporter, from }) {
   const rendered = await renderSlotEmail('waitlisted', () => ({
     subject: `Warteliste: ${eventName}`,
-    body: `Deine Anmeldung für "${eventName}" ist eingegangen, das Event ist aber bereits ausgebucht. Du stehst auf der Warteliste und wirst benachrichtigt, sobald ein Platz frei wird.`,
-  }), { userId, extra: { eventName } });
+    body: locked
+      ? `Deine Anmeldung für "${eventName}" ist eingegangen. Die Anmeldung ist derzeit gesperrt, deshalb stehst du auf der Warteliste. Du wirst benachrichtigt, sobald du nachrückst.`
+      : `Deine Anmeldung für "${eventName}" ist eingegangen, das Event ist aber bereits ausgebucht. Du stehst auf der Warteliste und wirst benachrichtigt, sobald ein Platz frei wird.`,
+  }), { userId, extra: { eventName, locked } });
   return deliver(transporter, from, to, rendered);
 }
 

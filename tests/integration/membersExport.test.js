@@ -86,11 +86,11 @@ test('the export is a ;-separated UTF-8 CSV of the requested members in the requ
     const bytes = Buffer.from(await res.arrayBuffer());
     assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
     const text = bytes.toString('utf8').slice(1);
-    assert.ok(text.startsWith('Nachname;Vorname;Rufname;Anzeigename;E-Mail;Rolle;Status;Kontoart'));
+    assert.ok(text.startsWith('Mitgliedsnummer;Nachname;Vorname;Rufname;Anzeigename;E-Mail;Rolle;Status;Kontoart'));
     const lines = text.trim().split('\r\n');
     assert.equal(lines.length, 3);
-    assert.ok(lines[1].startsWith('Zimmer;Zoe;'));
-    assert.ok(lines[2].startsWith('Abel;Amy;'));
+    assert.match(lines[1], /^\d+;Zimmer;Zoe;/);
+    assert.match(lines[2], /^\d+;Abel;Amy;/);
 
     assert.equal((await exportCsv(port, admin.cookie, { ids: 'nope' })).status, 400);
     assert.equal((await exportCsv(port, admin.cookie, { eventId: '00000000-0000-4000-8000-000000000000' })).status, 404);

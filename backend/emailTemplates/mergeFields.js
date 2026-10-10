@@ -14,6 +14,7 @@ const BUILTIN_ACCOUNT_FIELDS = [
   { key: 'nickname', label: 'Rufname' },
   { key: 'name', label: 'Anzeigename' },
   { key: 'email', label: 'E-Mail' },
+  { key: 'memberNumber', label: 'Mitgliedsnummer' },
 ];
 
 const BUILTIN_CHARACTER_FIELDS = [

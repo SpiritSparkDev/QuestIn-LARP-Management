@@ -20,7 +20,7 @@ import { logger } from '../logger.js';
 import { query } from '../db.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { isValidEmail } from '../validation.js';
-import { ensureAccessToken } from '../auth/accessTokens.js';
+import { ensureAccessToken, rotateAccessToken } from '../auth/accessTokens.js';
 import { activateInvitation } from '../invitations/activate.js';
 
 export async function filterToAllowedFields(body, allowedFields) {
@@ -259,6 +259,30 @@ router.get('/members/:id/access-link', requireAuth(requireMenu('mitglieder')(asy
   const page = member.emailVerified ? 'reset-password' : 'verify';
   const link = `${await baseUrl()}/${page}.html?token=${token}`;
   return { status: 200, body: { link, emailVerified: member.emailVerified } };
+})));
+
+// Admin sets or changes a member's e-mail address (also the login name).
+// The address counts as confirmed by the admin; the access token is rotated
+// so links sent to the old address stop working.
+router.put('/members/:id/email', requireAuth(requireAdminGroup(async ({ req, params, user }) => {
+  const body = await readJsonBody(req);
+  if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const email = String(body.email ?? '').trim().toLowerCase();
+  if (!isValidEmail(email)) return { status: 400, body: { error: 'Bitte eine gültige E-Mail-Adresse angeben.' } };
+  const member = await getMember(params.id);
+  if (!member) return { status: 404, body: { error: 'member not found' } };
+  if ((member.email ?? '').toLowerCase() === email) return { status: 200, body: { email, changed: false } };
+  const { rows: taken } = await query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [email, params.id]);
+  if (taken.length > 0) return { status: 409, body: { error: 'Diese E-Mail-Adresse gehört bereits zu einem anderen Konto.' } };
+  try {
+    await query('UPDATE users SET email = $2, email_verified = true WHERE id = $1', [params.id, email]);
+  } catch (err) {
+    if (err.code === '23505') return { status: 409, body: { error: 'Diese E-Mail-Adresse gehört bereits zu einem anderen Konto.' } };
+    throw err;
+  }
+  await rotateAccessToken(params.id);
+  await logAudit({ actorId: user.id, action: 'user.email_changed', subjectUserId: params.id, details: { from: member.email, to: email } });
+  return { status: 200, body: { email, changed: true } };
 })));
 
 router.post('/members/:id/access-link/send', requireAuth(requireMenu('mitglieder')(async ({ params, requestId, user }) => {

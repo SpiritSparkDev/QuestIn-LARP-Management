@@ -7,7 +7,7 @@ import { decryptFieldBlob as decryptRegistrationBlob } from '../registrationFiel
 
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.deactivated_at,
-  users.is_guest, users.managed_by_user_id,
+  users.is_guest, users.managed_by_user_id, users.member_number, users.created_at,
   owners.first_name AS owner_first_name, owners.last_name AS owner_last_name, owners.nickname AS owner_nickname,
   users.account_data_enc,
   groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
@@ -23,6 +23,9 @@ const FROM_JOIN = `
 function decryptMember(row) {
   return {
     id: row.id,
+    // Permanent, unique number in order of account creation (migration 124).
+    memberNumber: row.member_number,
+    createdAt: row.created_at,
     email: row.email,
     firstName: row.first_name,
     lastName: row.last_name,

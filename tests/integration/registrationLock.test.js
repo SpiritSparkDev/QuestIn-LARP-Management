@@ -85,6 +85,27 @@ test('only admins set the lock, and only known roles are accepted', async () => 
   });
 });
 
+test('waitlist mode: a locked registration goes onto the waitlist and moves up once the lock is lifted', async () => {
+  await withTestServer(async (port) => {
+    await query('UPDATE app_settings SET waitlist_auto_promote = true');
+    const admin = await sessionFor('admin');
+    const member = await sessionFor('mitglied');
+    const waitingByHand = await sessionFor('mitglied');
+    const eventId = await makeEvent();
+    await query("INSERT INTO registrations (user_id, event_id, con_role, status) VALUES ($1, $2, 'sc', 'waitlisted')", [waitingByHand.id, eventId]);
+
+    assert.equal((await lock(port, admin, eventId, { conRoles: ['sc'], mode: 'waitlist' })).status, 200);
+    const res = await register(port, member, eventId);
+    assert.equal(res.status, 201);
+    const statusOf = async (userId) => (await query('SELECT status, waitlisted_by_lock FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId])).rows[0];
+    assert.deepEqual(await statusOf(member.id), { status: 'waitlisted', waitlisted_by_lock: true });
+
+    await lock(port, admin, eventId, { conRoles: [], mode: 'waitlist' });
+    assert.deepEqual(await statusOf(member.id), { status: 'pending', waitlisted_by_lock: false });
+    assert.equal((await statusOf(waitingByHand.id)).status, 'waitlisted', 'a manual waitlist entry is not promoted by lifting the lock');
+  });
+});
+
 test.after(async () => {
   await query('DELETE FROM registrations WHERE event_id = ANY($1)', [events]);
   await query('DELETE FROM events WHERE id = ANY($1)', [events]);

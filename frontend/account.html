@@ -2310,8 +2310,9 @@
     function registrationLockMessage(event) {
       if (!event || ["admin", "moderator"].includes(navAccount?.group?.key)) return "";
       const role = isNscRoleSelected() ? "nsc" : "sc";
-      if ((event.registration_locked_con_roles ?? []).includes(role)) return `Die Anmeldung als ${CON_ROLE_LABELS[role]} ist für dieses Event derzeit gesperrt.`;
-      if ((event.registration_locked_groups ?? []).includes(navAccount?.group?.key)) return `Für deine Rolle „${navAccount.group.name}“ ist die Anmeldung zu diesem Event derzeit gesperrt.`;
+      const waitlist = event.registration_lock_mode === "waitlist" ? " Du kannst dich trotzdem anmelden und kommst dann auf die Warteliste." : "";
+      if ((event.registration_locked_con_roles ?? []).includes(role)) return `Die Anmeldung als ${CON_ROLE_LABELS[role]} ist für dieses Event derzeit gesperrt.${waitlist}`;
+      if ((event.registration_locked_groups ?? []).includes(navAccount?.group?.key)) return `Für deine Rolle „${navAccount.group.name}“ ist die Anmeldung zu diesem Event derzeit gesperrt.${waitlist}`;
       return "";
     }
 
@@ -2321,7 +2322,7 @@
       const lockHint = document.getElementById("registration-lock-hint");
       lockHint.textContent = lockMessage;
       lockHint.hidden = !lockMessage;
-      registerButton.disabled = Boolean(lockMessage);
+      registerButton.disabled = Boolean(lockMessage) && event?.registration_lock_mode !== "waitlist";
       // Few places left overall, or in the limit of the chosen role (SC / NSC).
       const roleLow = isNscRoleSelected() ? event?.low_seats_nsc : event?.low_seats_sc;
       document.getElementById("event-low-seats-badge").hidden = !(event?.is_active && (event.low_seats || roleLow));

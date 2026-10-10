@@ -53,6 +53,9 @@
       <div id="lock-con-roles" style="display:flex;flex-wrap:wrap;gap:4px 16px;margin:6px 0 12px;"></div>
       <h3>Nach Rolle des Kontos</h3>
       <div id="lock-groups" style="display:flex;flex-wrap:wrap;gap:4px 16px;margin:6px 0 12px;"></div>
+      <h3>Was passiert bei einer gesperrten Anmeldung?</h3>
+      <label><input type="radio" name="lock-mode" value="block"> Ablehnen – die Anmeldung ist nicht möglich</label>
+      <label><input type="radio" name="lock-mode" value="waitlist"> Auf die Warteliste setzen – rückt automatisch nach, sobald die Sperre aufgehoben ist</label>
       <div class="dialog-actions">
         <button type="button" id="lock-save">Speichern</button>
         <button type="button" id="lock-cancel" class="btn-ghost">Abbrechen</button>
@@ -760,7 +763,8 @@ function lockBadge(e) {
   if (!roles.length && !groups.length) return '';
   const parts = roles.length === LOCK_CON_ROLES.length ? ['alle']
     : [...LOCK_CON_ROLES.filter(([k]) => roles.includes(k)).map(([, l]) => l), ...groups.map((k) => lockGroups.find((g) => g.key === k)?.name ?? k)];
-  return ` <span class="badge badge-failed">Anmeldung gesperrt: ${escapeHtml(parts.join(', '))}</span>`;
+  const how = e.registration_lock_mode === 'waitlist' ? ' → Warteliste' : '';
+  return ` <span class="badge badge-failed">Anmeldung gesperrt: ${escapeHtml(parts.join(', '))}${how}</span>`;
 }
 
 function openLockDialog(event) {
@@ -770,6 +774,8 @@ function openLockDialog(event) {
   const groups = event.registration_locked_groups ?? [];
   document.getElementById('lock-con-roles').innerHTML = LOCK_CON_ROLES.map(([key, label]) => `<label><input type="checkbox" data-lock-role="${key}"${roles.includes(key) ? ' checked' : ''}> ${escapeHtml(label)}</label>`).join('');
   document.getElementById('lock-groups').innerHTML = lockGroups.filter((g) => g.key !== 'admin').map((g) => `<label><input type="checkbox" data-lock-group="${escapeHtml(g.key)}"${groups.includes(g.key) ? ' checked' : ''}> ${escapeHtml(g.name)}</label>`).join('');
+  const mode = event.registration_lock_mode ?? 'block';
+  lockDialog.querySelectorAll('[name="lock-mode"]').forEach((r) => { r.checked = r.value === mode; });
   syncLockAll();
   lockDialog.showModal();
 }
@@ -785,7 +791,8 @@ document.getElementById('lock-save').addEventListener('click', async () => {
   const conRoles = [...lockDialog.querySelectorAll('[data-lock-role]:checked')].map((b) => b.dataset.lockRole);
   const groups = [...lockDialog.querySelectorAll('[data-lock-group]:checked')].map((b) => b.dataset.lockGroup);
   try {
-    await api.put(`/events/${lockEventId}/registration-lock`, { conRoles, groups });
+    const mode = lockDialog.querySelector('[name="lock-mode"]:checked')?.value ?? 'block';
+    await api.put(`/events/${lockEventId}/registration-lock`, { conRoles, groups, mode });
     notify(conRoles.length || groups.length ? 'Anmeldesperre gespeichert.' : 'Anmeldesperre aufgehoben.', 'success');
     lockDialog.close();
     await loadEvents();

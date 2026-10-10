@@ -26,6 +26,7 @@ function memberKind(m) {
 // Each cell holds the member's status for that event, or "Nicht angemeldet".
 export function buildMembersCsv(members, { accountSchema, viewer, event, events = [] }) {
   const columns = [
+    { label: 'Mitgliedsnummer', value: (m) => m.memberNumber },
     { label: 'Nachname', value: (m) => m.lastName },
     { label: 'Vorname', value: (m) => m.firstName },
     { label: 'Rufname', value: (m) => m.nickname },

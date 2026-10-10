@@ -80,8 +80,12 @@ export const EMAIL_SLOTS = [
     key: 'waitlisted',
     category: 'registration',
     label: 'Auf die Warteliste gesetzt',
+    description: 'Wenn das Event bzw. das SC-/NSC-Kontingent voll ist, oder wenn eine Anmeldesperre mit „Auf die Warteliste setzen“ greift.',
     supportsAccount: true,
-    extraFields: [{ key: 'eventName', label: 'Eventname', example: 'Beispiel-Con' }],
+    extraFields: [
+      { key: 'eventName', label: 'Eventname', example: 'Beispiel-Con' },
+      { key: 'locked', label: 'Wahr, wenn eine Anmeldesperre der Grund ist (für {{#if locked}})', example: '' },
+    ],
   },
   {
     key: 'waitlist_promoted',

@@ -38,7 +38,7 @@ export async function exportSnapshot(db, eventId, passphrase) {
   const { rows: groups } = await db.query(`SELECT ${GROUP_COLUMNS} FROM groups`);
   // Staff = may check in or use the tavern; only they get a real email and password hash.
   const { rows: userRows } = await db.query(
-    `SELECT u.id, u.email, u.password_hash, u.first_name, u.last_name, u.nickname, g.key AS group_key,
+    `SELECT u.id, u.member_number, u.email, u.password_hash, u.first_name, u.last_name, u.nickname, g.key AS group_key,
             (g.key = 'admin' OR g.visible_menus ?| ARRAY['checkin', 'taverne']) AS staff
      FROM users u JOIN groups g ON g.id = u.group_id
      WHERE u.deactivated_at IS NULL
@@ -117,6 +117,8 @@ export async function importSnapshot(db, buffer, passphrase, authorityRepo = aut
     }
     await insertRows(client, 'events', [data.event]);
     await insertRows(client, 'users', data.users.map(({ group_key, ...u }) => ({ ...u, group_id: groupIds[group_key], email_verified: true })));
+    // Same member numbers as online; anyone created on site continues after the highest.
+    await client.query("SELECT setval('users_member_number_seq', GREATEST(COALESCE((SELECT max(member_number) FROM users), 0), 1))");
     await insertRows(client, 'characters', data.characters);
     await insertRows(client, 'registrations', data.registrations);
     await insertRows(client, 'tavern_items', data.tavern_items);
