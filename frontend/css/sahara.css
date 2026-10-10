@@ -4635,6 +4635,19 @@ th.is-sortable[data-dir="desc"]::after {
   padding-bottom: 110px;
 }
 
+/* A secondary form next to the page's main one keeps its button in its own
+   card -- two fixed bars would sit on top of each other and hide the first. */
+.save-bar.save-bar-inline {
+  position: static;
+  justify-content: flex-start;
+  padding: 12px 0 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-top: 0;
+  box-shadow: none;
+}
+
 @media (max-width: 900px) {
   .save-bar {
     left: 0;
