@@ -8,9 +8,9 @@ import {
 } from './repository.js';
 import { listAvailableMergeFields, buildMergeContext } from './mergeFields.js';
 import { renderEmailTemplate } from './render.js';
-import { EMAIL_SLOTS, getEmailSlot } from './slots.js';
+import { EMAIL_SLOTS, EMAIL_SLOT_CATEGORIES, getEmailSlot, missingRequiredFields, exampleExtraFields } from './slots.js';
 import { listCharactersForUser } from '../characters/repository.js';
-import { getTransporterAndFrom } from '../auth/mailer.js';
+import { getTransporterAndFrom, baseUrl } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 
 const MAX_NAME_LENGTH = 200;
@@ -18,14 +18,20 @@ const MAX_SUBJECT_LENGTH = 500;
 const MAX_BODY_LENGTH = 50000;
 
 function validateTemplateInput(body) {
-  const { name, subject, body: content, isHtml } = body;
+  const { name, subject, body: content, isHtml, slot } = body;
   if (typeof name !== 'string' || name.trim().length === 0) return 'name ist erforderlich';
+  const slotDef = typeof slot === 'string' ? getEmailSlot(slot) : null;
+  if (!slotDef) return 'Bitte die Art der E-Mail wählen (slot)';
   if (name.length > MAX_NAME_LENGTH) return `name darf höchstens ${MAX_NAME_LENGTH} Zeichen lang sein`;
   if (subject !== undefined && typeof subject !== 'string') return 'subject muss Text sein';
   if ((subject ?? '').length > MAX_SUBJECT_LENGTH) return `subject darf höchstens ${MAX_SUBJECT_LENGTH} Zeichen lang sein`;
   if (content !== undefined && typeof content !== 'string') return 'body muss Text sein';
   if ((content ?? '').length > MAX_BODY_LENGTH) return `body darf höchstens ${MAX_BODY_LENGTH} Zeichen lang sein`;
   if (isHtml !== undefined && typeof isHtml !== 'boolean') return 'isHtml muss ein Wahrheitswert sein';
+  const missing = missingRequiredFields(slot, content);
+  if (missing.length > 0) {
+    return `Für „${slotDef.label}“ muss der Inhalt ${missing.map((f) => `{{${f.key}}} (${f.label})`).join(' und ')} enthalten`;
+  }
   return null;
 }
 
@@ -45,7 +51,7 @@ router.get('/admin/email-templates/fields', requireAuth(requireAdminGroup(async 
 router.get('/admin/email-templates/slots', requireAuth(requireAdminGroup(async () => {
   const assignments = await listSlotAssignments();
   const slots = EMAIL_SLOTS.map((slot) => ({ ...slot, templateId: assignments[slot.key] ?? null }));
-  return { status: 200, body: slots };
+  return { status: 200, body: { categories: EMAIL_SLOT_CATEGORIES, slots } };
 })));
 
 router.put('/admin/email-templates/slots/:slot', requireAuth(requireAdminGroup(async ({ req, params }) => {
@@ -57,6 +63,15 @@ router.put('/admin/email-templates/slots/:slot', requireAuth(requireAdminGroup(a
   if (templateId !== null && templateId !== undefined) {
     const template = await getEmailTemplate(templateId);
     if (!template) return { status: 400, body: { error: 'template not found' } };
+    if (template.slot !== params.slot) {
+      const own = getEmailSlot(template.slot);
+      return {
+        status: 400,
+        body: { error: own
+          ? `Die Vorlage „${template.name}“ ist für „${own.label}“ geschrieben, nicht für „${slotDef.label}“.`
+          : `Der Vorlage „${template.name}“ ist noch keine Art der E-Mail zugeordnet.` },
+      };
+    }
   }
   const saved = await setSlotAssignment(params.slot, templateId ?? null);
   return { status: 200, body: saved };
@@ -98,6 +113,14 @@ router.delete('/admin/email-templates/:id', requireAuth(requireAdminGroup(async 
   return { status: 200, body: { deleted: true } };
 })));
 
+// The member's real OT/IT fields plus example values for the template's
+// slot-specific placeholders, so {{link}} shows which kind of link (and
+// which page) the real mail will carry instead of rendering empty.
+async function previewContext(template, userId, characterId) {
+  const context = await buildMergeContext(userId, { characterId });
+  return { ...context, ...exampleExtraFields(template.slot, await baseUrl()) };
+}
+
 // Renders a template against a real member's (and optionally one of their
 // characters') data without sending anything -- lets an admin check the
 // merge before spending a real test send.
@@ -110,7 +133,7 @@ router.post('/admin/email-templates/:id/preview', requireAuth(requireAdminGroup(
   if (!userId) return { status: 400, body: { error: 'userId is required' } };
 
   try {
-    const context = await buildMergeContext(userId, { characterId });
+    const context = await previewContext(template, userId, characterId);
     const rendered = renderEmailTemplate(template, context);
     return { status: 200, body: { ...rendered, isHtml: template.isHtml } };
   } catch (err) {
@@ -131,7 +154,7 @@ router.post('/admin/email-templates/:id/send-test', requireAuth(requireAdminGrou
 
   let context;
   try {
-    context = await buildMergeContext(userId, { characterId });
+    context = await previewContext(template, userId, characterId);
   } catch (err) {
     if (err.code === 'MEMBER_NOT_FOUND') return { status: 404, body: { error: 'member not found' } };
     if (err.code === 'CHARACTER_NOT_FOUND') return { status: 400, body: { error: 'character does not belong to this member' } };

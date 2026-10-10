@@ -22,7 +22,11 @@ export async function renderSlotEmail(slot, fallback, { userId, characterId, acc
       const templateId = await getSlotAssignment(slot);
       if (templateId) {
         const template = await getEmailTemplate(templateId);
-        if (template) {
+        // A template written for another slot would carry that slot's
+        // wording around this slot's link -- send the default text instead.
+        if (template && template.slot !== slot) {
+          logger.warn('assigned email template belongs to another slot, using default text', { slot, templateId, templateSlot: template.slot });
+        } else if (template) {
           const base = userId
             ? await buildMergeContext(userId, { characterId })
             : { account: account ?? {}, character: {} };

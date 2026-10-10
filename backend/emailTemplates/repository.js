@@ -1,6 +1,6 @@
 import { query } from '../db.js';
 
-const SELECT_COLUMNS = 'id, name, subject, body, is_html, created_at, updated_at';
+const SELECT_COLUMNS = 'id, name, subject, body, is_html, slot, created_at, updated_at';
 
 function mapRow(row) {
   return {
@@ -9,6 +9,7 @@ function mapRow(row) {
     subject: row.subject,
     body: row.body,
     isHtml: row.is_html,
+    slot: row.slot,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -24,21 +25,29 @@ export async function getEmailTemplate(id) {
   return rows[0] ? mapRow(rows[0]) : null;
 }
 
-export async function createEmailTemplate({ name, subject, body, isHtml }) {
+export async function createEmailTemplate({ name, subject, body, isHtml, slot }) {
   const { rows } = await query(
-    `INSERT INTO email_templates (name, subject, body, is_html) VALUES ($1, $2, $3, $4) RETURNING ${SELECT_COLUMNS}`,
-    [name, subject ?? '', body ?? '', Boolean(isHtml)]
+    `INSERT INTO email_templates (name, subject, body, is_html, slot) VALUES ($1, $2, $3, $4, $5) RETURNING ${SELECT_COLUMNS}`,
+    [name, subject ?? '', body ?? '', Boolean(isHtml), slot]
   );
   return mapRow(rows[0]);
 }
 
-export async function updateEmailTemplate(id, { name, subject, body, isHtml }) {
+// Changing a template's slot drops its assignments to any other slot (that
+// slot falls back to its default text) -- returned as `unassignedSlots` so
+// the UI can say so.
+export async function updateEmailTemplate(id, { name, subject, body, isHtml, slot }) {
   const { rows } = await query(
-    `UPDATE email_templates SET name = $2, subject = $3, body = $4, is_html = $5, updated_at = now()
+    `UPDATE email_templates SET name = $2, subject = $3, body = $4, is_html = $5, slot = $6, updated_at = now()
      WHERE id = $1 RETURNING ${SELECT_COLUMNS}`,
-    [id, name, subject ?? '', body ?? '', Boolean(isHtml)]
+    [id, name, subject ?? '', body ?? '', Boolean(isHtml), slot]
   );
-  return rows[0] ? mapRow(rows[0]) : null;
+  if (!rows[0]) return null;
+  const { rows: dropped } = await query(
+    'DELETE FROM email_slot_assignments WHERE template_id = $1 AND slot <> $2 RETURNING slot',
+    [id, slot]
+  );
+  return { ...mapRow(rows[0]), unassignedSlots: dropped.map((r) => r.slot) };
 }
 
 export async function deleteEmailTemplate(id) {

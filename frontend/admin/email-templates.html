@@ -33,14 +33,14 @@
 
     <div class="card form-pad">
       <h2>System-E-Mails</h2>
-      <p class="sub">Legt fest, welche Vorlage für welche automatisch versendete E-Mail verwendet wird. Ohne Auswahl wird der eingebaute Standardtext verschickt.</p>
+      <p class="sub">Legt fest, welche Vorlage für welche automatisch versendete E-Mail verwendet wird. Ohne Auswahl wird der eingebaute Standardtext verschickt. Jede Vorlage ist für genau eine Art von E-Mail geschrieben und kann nur dort ausgewählt werden – so landet z. B. nie ein Passwort-Link in einer Einladungsmail.</p>
       <div id="slot-list"></div>
     </div>
 
     <div class="card">
       <div class="table-scroll">
       <table id="template-list">
-        <thead><tr><th>Name</th><th>Betreff</th><th>Format</th><th></th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Art der E-Mail</th><th>Betreff</th><th>Format</th><th>Verwendet</th><th></th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       </div>
@@ -49,6 +49,10 @@
     <div class="card form-pad">
       <h2 id="form-title">Neue Vorlage</h2>
       <form id="template-form">
+        <select id="template-slot" name="slot" required></select>
+        <label for="template-slot">Art der E-Mail <span style="opacity:0.6;font-size:12px;">legt fest, welcher Link mit {{link}} verschickt wird</span></label>
+        <div id="template-slot-info"></div>
+
         <input id="template-name" name="name" type="text" required>
         <label for="template-name">Name <span style="opacity:0.6;font-size:12px;">nur intern, erscheint nicht in der Mail</span></label>
 
@@ -63,6 +67,8 @@
         <div style="margin:16px 0;">
           <strong>Felder einfügen</strong>
           <p class="sub" style="margin:4px 0 8px;">Klicke auf ein Feld, um es an der Cursorposition in Betreff/Inhalt einzufügen (zuletzt angeklicktes Feld von beiden wird verwendet).</p>
+          <p class="sub" style="margin-bottom:4px;"><strong>Links &amp; Daten dieser E-Mail</strong></p>
+          <div id="slot-field-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
           <p class="sub" style="margin-bottom:4px;"><strong>OT-Felder (Konto)</strong></p>
           <div id="account-field-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
           <p class="sub" style="margin-bottom:4px;"><strong>IT-Felder (Charakter)</strong></p>
@@ -78,7 +84,7 @@
 
     <div class="card form-pad" id="test-section" style="display:none;">
       <h2>Vorschau &amp; Testmail</h2>
-      <p class="sub">Rendert die Vorlage mit den echten Daten eines gewählten Mitglieds (und optional eines seiner Charaktere).</p>
+      <p class="sub">Rendert die Vorlage mit den echten Daten eines gewählten Mitglieds (und optional eines seiner Charaktere). Links und E-Mail-spezifische Daten werden mit Beispielwerten gefüllt (Token „BEISPIEL“), damit Du siehst, auf welche Seite der Link führt.</p>
       <select id="test-member"></select>
       <label for="test-member">Mitglied</label>
       <select id="test-character"><option value="">Kein Charakter</option></select>
@@ -114,6 +120,9 @@ const nameInput = document.getElementById('template-name');
 const subjectInput = document.getElementById('template-subject');
 const bodyInput = document.getElementById('template-body');
 const isHtmlCheckbox = document.getElementById('template-is-html');
+const slotSelect = document.getElementById('template-slot');
+const slotInfoEl = document.getElementById('template-slot-info');
+const slotFieldTagsEl = document.getElementById('slot-field-tags');
 const testSection = document.getElementById('test-section');
 const testMemberSelect = document.getElementById('test-member');
 const testCharacterSelect = document.getElementById('test-character');
@@ -125,6 +134,11 @@ const previewBodyHtmlEl = document.getElementById('preview-body-html');
 let editingId = null;
 let templates = [];
 let members = [];
+let slots = [];
+let categories = [];
+
+const slotByKey = (key) => slots.find((s) => s.key === key) ?? null;
+const slotLabel = (key) => slotByKey(key)?.label ?? key;
 
 // Tracks whichever of subject/body was focused last, so a field-tag click
 // (which itself steals focus) still knows where to insert the placeholder.
@@ -155,10 +169,55 @@ async function loadFields() {
   renderFieldTags(document.getElementById('character-field-tags'), 'character', fields.character);
 }
 
-function resetForm() {
+function mentions(source, key) {
+  return new RegExp(`\\{\\{\\{?\\s*${key}\\s*\\}?\\}\\}`).test(source ?? '');
+}
+
+function slotOptionsHtml(selected) {
+  const groups = categories.map((c) => {
+    const options = slots.filter((s) => s.category === c.key)
+      .map((s) => `<option value="${s.key}"${s.key === selected ? ' selected' : ''}>${escapeHtml(s.label)}</option>`);
+    return `<optgroup label="${escapeHtml(c.label)}">${options.join('')}</optgroup>`;
+  });
+  return `<option value=""${selected ? '' : ' selected'} disabled>Bitte wählen …</option>${groups.join('')}`;
+}
+
+// Describes the chosen slot (when it is sent, which link it carries), offers
+// its own placeholders as insert buttons and flags required ones that the
+// body doesn't use yet -- the server refuses to save those, too.
+function renderSlotInfo() {
+  const slot = slotByKey(slotSelect.value);
+  if (!slot) {
+    slotInfoEl.innerHTML = '<p class="notice-warn">Wähle zuerst, für welche E-Mail diese Vorlage ist. Erst dann steht fest, welcher Link eingesetzt wird.</p>';
+    slotFieldTagsEl.innerHTML = '<p class="sub">Erst Art der E-Mail wählen.</p>';
+    return;
+  }
+  const missing = slot.extraFields.filter((f) => f.required && !mentions(bodyInput.value, f.key));
+  slotInfoEl.innerHTML = `
+    <div class="notice-info">
+      <span class="material-symbols-outlined" aria-hidden="true">${slot.linkSummary ? 'link' : 'mail'}</span>
+      <div>
+        ${slot.description ? `<div>${escapeHtml(slot.description)}</div>` : ''}
+        <div><strong>${slot.linkSummary ? escapeHtml(slot.linkSummary) : 'Diese E-Mail enthält keinen Link.'}</strong></div>
+      </div>
+    </div>
+    ${missing.length > 0 ? `<p class="notice-warn">Pflicht im Inhalt: ${missing.map((f) => `<code>{{${escapeHtml(f.key)}}}</code> (${escapeHtml(f.label)})`).join(', ')}. Bitte keine Links von Hand eintragen – nur der Platzhalter enthält den persönlichen Link des Empfängers.</p>` : ''}`;
+  slotFieldTagsEl.innerHTML = slot.extraFields.map((f) => `<button type="button" class="btn-sm btn-ghost" data-token="{{${escapeHtml(f.key)}}}">${escapeHtml(f.label)}${f.required ? ' · Pflicht' : ''}</button>`).join('')
+    || '<p class="sub">Keine zusätzlichen Felder.</p>';
+  slotFieldTagsEl.querySelectorAll('[data-token]').forEach((btn) => {
+    btn.addEventListener('click', () => { insertAtCursor(insertTarget, btn.dataset.token); renderSlotInfo(); });
+  });
+}
+
+slotSelect.addEventListener('change', renderSlotInfo);
+bodyInput.addEventListener('input', renderSlotInfo);
+
+function resetForm(slotKey = '') {
   editingId = null;
   formTitle.textContent = 'Neue Vorlage';
   form.reset();
+  slotSelect.innerHTML = slotOptionsHtml(slotKey);
+  renderSlotInfo();
   testSection.style.display = 'none';
   previewResult.style.display = 'none';
   form.querySelector('button[type="submit"]').textContent = 'Speichern';
@@ -171,6 +230,8 @@ function startEdit(template) {
   subjectInput.value = template.subject;
   bodyInput.value = template.body;
   isHtmlCheckbox.checked = template.isHtml;
+  slotSelect.innerHTML = slotOptionsHtml(template.slot);
+  renderSlotInfo();
   form.querySelector('button[type="submit"]').textContent = 'Änderungen speichern';
   testSection.style.display = '';
   previewResult.style.display = 'none';
@@ -181,8 +242,10 @@ async function loadTemplates() {
   templates = await api.get('/admin/email-templates');
   listBody.innerHTML = templates.map((t) => `<tr>
     <td>${escapeHtml(t.name)}</td>
+    <td>${t.slot ? escapeHtml(slotLabel(t.slot)) : '<span class="badge badge-inactive">Keine Art gewählt – bitte bearbeiten</span>'}</td>
     <td>${escapeHtml(t.subject)}</td>
     <td>${t.isHtml ? 'HTML' : 'Klartext'}</td>
+    <td>${slots.some((s) => s.templateId === t.id) ? '<span class="badge badge-active">Aktiv</span>' : '<span class="badge badge-inactive">Nicht zugeordnet</span>'}</td>
     <td><button type="button" class="btn-sm btn-ghost" data-edit="${t.id}">Bearbeiten</button></td>
     <td><button type="button" class="btn-sm btn-ghost" data-delete="${t.id}">Löschen</button></td>
   </tr>`).join('') || '<tr><td colspan="100%">Noch keine Vorlagen angelegt.</td></tr>';
@@ -210,26 +273,45 @@ async function loadTemplates() {
   renderSlots();
 }
 
-let slots = [];
+function renderSlotRow(slot) {
+  // Only templates written for this slot -- a template for another slot
+  // would carry the wrong link (the server rejects it as well).
+  const options = ['<option value="">Standardtext (System)</option>']
+    .concat(templates.filter((t) => t.slot === slot.key)
+      .map((t) => `<option value="${t.id}"${t.id === slot.templateId ? ' selected' : ''}>${escapeHtml(t.name)}</option>`));
+  const hintParts = [];
+  if (slot.supportsAccount) hintParts.push('OT-Felder (Konto)');
+  if (slot.extraFields.length > 0) hintParts.push(`Variablen: ${slot.extraFields.map((f) => `{{${f.key}}}`).join(', ')}`);
+  return `
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--outline-variant);">
+      <div style="min-width:260px;flex:1;">
+        <strong>${escapeHtml(slot.label)}</strong>
+        ${slot.description ? `<p class="sub" style="margin:2px 0 0;">${escapeHtml(slot.description)}</p>` : ''}
+        ${slot.linkSummary ? `<p style="margin:4px 0 0;font-size:14px;display:flex;gap:6px;align-items:flex-start;"><span class="material-symbols-outlined" aria-hidden="true" style="font-size:18px;">link</span><span>${escapeHtml(slot.linkSummary)}</span></p>` : ''}
+        <p class="sub" style="margin:2px 0 0;">${escapeHtml(hintParts.join(' · '))}</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select data-slot="${slot.key}" style="max-width:280px;">${options.join('')}</select>
+        <button type="button" class="btn-sm btn-ghost" data-new-for="${slot.key}">Neue Vorlage</button>
+      </div>
+    </div>
+  `;
+}
 
 function renderSlots() {
   const slotListEl = document.getElementById('slot-list');
-  slotListEl.innerHTML = slots.map((slot) => {
-    const options = ['<option value="">Standardtext (System)</option>']
-      .concat(templates.map((t) => `<option value="${t.id}"${t.id === slot.templateId ? ' selected' : ''}>${escapeHtml(t.name)}</option>`));
-    const hintParts = [];
-    if (slot.supportsAccount) hintParts.push('OT-Felder (Konto)');
-    if (slot.extraFields.length > 0) hintParts.push(`Variablen: ${slot.extraFields.map((f) => `{{${f.key}}}`).join(', ')}`);
-    return `
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--outline-variant);">
-        <div style="min-width:260px;flex:1;">
-          <strong>${escapeHtml(slot.label)}</strong>
-          <p class="sub" style="margin:2px 0 0;">${escapeHtml(hintParts.join(' · '))}</p>
-        </div>
-        <select data-slot="${slot.key}" style="max-width:280px;">${options.join('')}</select>
-      </div>
-    `;
+  slotListEl.innerHTML = categories.map((c) => {
+    const rows = slots.filter((s) => s.category === c.key).map(renderSlotRow).join('');
+    return rows ? `<h3 style="margin:20px 0 4px;">${escapeHtml(c.label)}</h3>${rows}` : '';
   }).join('');
+
+  slotListEl.querySelectorAll('[data-new-for]').forEach((button) => {
+    button.addEventListener('click', () => {
+      resetForm(button.dataset.newFor);
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      nameInput.focus();
+    });
+  });
 
   slotListEl.querySelectorAll('[data-slot]').forEach((select) => {
     select.addEventListener('change', async () => {
@@ -238,6 +320,7 @@ function renderSlots() {
         const saved = await api.put(`/admin/email-templates/slots/${select.dataset.slot}`, { templateId: select.value || null });
         if (slot) slot.templateId = saved.templateId;
         notify('Gespeichert.', 'success');
+        await loadTemplates();
       } catch (err) {
         notify(err.message, 'error');
       }
@@ -246,8 +329,7 @@ function renderSlots() {
 }
 
 async function loadSlots() {
-  slots = await api.get('/admin/email-templates/slots');
-  renderSlots();
+  ({ slots, categories } = await api.get('/admin/email-templates/slots'));
 }
 
 form.addEventListener('submit', async (event) => {
@@ -257,12 +339,17 @@ form.addEventListener('submit', async (event) => {
     subject: subjectInput.value,
     body: bodyInput.value,
     isHtml: isHtmlCheckbox.checked,
+    slot: slotSelect.value,
   };
   try {
     const saved = editingId
       ? await api.put(`/admin/email-templates/${editingId}`, payload)
       : await api.post('/admin/email-templates', payload);
     notify('Gespeichert.', 'success');
+    if (saved.unassignedSlots?.length > 0) {
+      notify(`Zuordnung aufgehoben für: ${saved.unassignedSlots.map(slotLabel).join(', ')} – dort wird jetzt der Standardtext verschickt.`, 'info');
+    }
+    await loadSlots();
     startEdit(saved);
     await loadTemplates();
   } catch (err) {
@@ -344,8 +431,9 @@ try {
   if (account.group.key !== 'admin') {
     notify('Kein Zugriff – nur für Admin.', 'error');
   } else {
-    await Promise.all([loadFields(), loadTemplates(), loadMembersIntoTestPicker()]);
-    await loadSlots();
+    await Promise.all([loadFields(), loadSlots(), loadMembersIntoTestPicker()]);
+    resetForm();
+    await loadTemplates();
   }
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

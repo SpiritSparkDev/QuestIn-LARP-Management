@@ -55,7 +55,7 @@ test('/admin/email-templates CRUD round-trip for an admin', async () => {
 
     const createRes = await fetch(`http://localhost:${port}/admin/email-templates`, {
       method: 'POST', headers,
-      body: JSON.stringify({ name: 'Willkommen', subject: 'Hallo {{account.firstName}}', body: 'Text', isHtml: false }),
+      body: JSON.stringify({ name: 'Willkommen', subject: 'Hallo {{account.firstName}}', body: 'Text', isHtml: false, slot: 'waitlisted' }),
     });
     assert.equal(createRes.status, 201);
     const created = await createRes.json();
@@ -68,7 +68,7 @@ test('/admin/email-templates CRUD round-trip for an admin', async () => {
 
     const putRes = await fetch(`http://localhost:${port}/admin/email-templates/${created.id}`, {
       method: 'PUT', headers,
-      body: JSON.stringify({ name: 'Willkommen v2', subject: created.subject, body: created.body, isHtml: true }),
+      body: JSON.stringify({ name: 'Willkommen v2', subject: created.subject, body: created.body, isHtml: true, slot: 'waitlisted' }),
     });
     assert.equal(putRes.status, 200);
     assert.equal((await putRes.json()).isHtml, true);
@@ -113,7 +113,7 @@ test('POST /admin/email-templates/:id/preview merges OT and IT fields and respec
 
     const plainTemplate = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
       method: 'POST', headers,
-      body: JSON.stringify({ name: 'Plain', subject: 'Hi {{account.firstName}}', body: 'Dein Charakter: {{character.name}}', isHtml: false }),
+      body: JSON.stringify({ name: 'Plain', subject: 'Hi {{account.firstName}}', body: 'Dein Charakter: {{character.name}}', isHtml: false, slot: 'waitlisted' }),
     })).json();
 
     const plainPreview = await (await fetch(`http://localhost:${port}/admin/email-templates/${plainTemplate.id}/preview`, {
@@ -124,7 +124,7 @@ test('POST /admin/email-templates/:id/preview merges OT and IT fields and respec
 
     const htmlTemplate = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
       method: 'POST', headers,
-      body: JSON.stringify({ name: 'HTML', subject: 'Hi', body: '<p>{{character.name}}</p>', isHtml: true }),
+      body: JSON.stringify({ name: 'HTML', subject: 'Hi', body: '<p>{{character.name}}</p>', isHtml: true, slot: 'waitlisted' }),
     })).json();
     const htmlPreview = await (await fetch(`http://localhost:${port}/admin/email-templates/${htmlTemplate.id}/preview`, {
       method: 'POST', headers, body: JSON.stringify({ userId: targetUserId, characterId }),
@@ -143,7 +143,7 @@ test('POST /admin/email-templates/:id/preview rejects a character that does not 
     const characterOfB = await createCharacterFor(userB, 'Fremder Charakter');
 
     const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
-      method: 'POST', headers, body: JSON.stringify({ name: 'X', subject: 'S', body: 'B', isHtml: false }),
+      method: 'POST', headers, body: JSON.stringify({ name: 'X', subject: 'S', body: 'B', isHtml: false, slot: 'waitlisted' }),
     })).json();
 
     const res = await fetch(`http://localhost:${port}/admin/email-templates/${template.id}/preview`, {
@@ -161,7 +161,7 @@ test('POST /admin/email-templates/:id/send-test sends via the (jsonTransport) fa
 
     const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
       method: 'POST', headers,
-      body: JSON.stringify({ name: 'Send', subject: 'Betreff {{account.firstName}}', body: 'Body', isHtml: false }),
+      body: JSON.stringify({ name: 'Send', subject: 'Betreff {{account.firstName}}', body: 'Body', isHtml: false, slot: 'waitlisted' }),
     })).json();
 
     const res = await fetch(`http://localhost:${port}/admin/email-templates/${template.id}/send-test`, {
@@ -179,7 +179,8 @@ test('GET /admin/email-templates/slots lists every system-email slot unassigned 
     const { cookie } = await makeUserAndSession('admin');
     const res = await fetch(`http://localhost:${port}/admin/email-templates/slots`, { headers: { Cookie: cookie } });
     assert.equal(res.status, 200);
-    const slots = await res.json();
+    const { slots, categories } = await res.json();
+    assert.ok(slots.every((s) => categories.some((c) => c.key === s.category)));
     const waitlisted = slots.find((s) => s.key === 'waitlisted');
     assert.ok(waitlisted);
     assert.equal(waitlisted.templateId, null);
@@ -192,7 +193,7 @@ test('PUT /admin/email-templates/slots/:slot assigns and clears a template, and 
     const { cookie } = await makeUserAndSession('admin');
     const headers = { 'Content-Type': 'application/json', Cookie: cookie };
     const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
-      method: 'POST', headers, body: JSON.stringify({ name: 'Slot test', subject: 'S', body: 'B', isHtml: false }),
+      method: 'POST', headers, body: JSON.stringify({ name: 'Slot test', subject: 'S', body: 'B', isHtml: false, slot: 'waitlisted' }),
     })).json();
 
     const unknownSlot = await fetch(`http://localhost:${port}/admin/email-templates/slots/not-a-real-slot`, {
@@ -209,14 +210,14 @@ test('PUT /admin/email-templates/slots/:slot assigns and clears a template, and 
       method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
     });
     assert.equal(assignRes.status, 200);
-    const afterAssign = await (await fetch(`http://localhost:${port}/admin/email-templates/slots`, { headers })).json();
+    const afterAssign = (await (await fetch(`http://localhost:${port}/admin/email-templates/slots`, { headers })).json()).slots;
     assert.equal(afterAssign.find((s) => s.key === 'waitlisted').templateId, template.id);
 
     const clearRes = await fetch(`http://localhost:${port}/admin/email-templates/slots/waitlisted`, {
       method: 'PUT', headers, body: JSON.stringify({ templateId: null }),
     });
     assert.equal(clearRes.status, 200);
-    const afterClear = await (await fetch(`http://localhost:${port}/admin/email-templates/slots`, { headers })).json();
+    const afterClear = (await (await fetch(`http://localhost:${port}/admin/email-templates/slots`, { headers })).json()).slots;
     assert.equal(afterClear.find((s) => s.key === 'waitlisted').templateId, null);
   });
 });
@@ -234,7 +235,7 @@ test('assigning a template to the "waitlisted" slot changes what sendWaitlistedE
 
     const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
       method: 'POST', headers,
-      body: JSON.stringify({ name: 'Waitlist custom', subject: 'Hallo {{account.firstName}} ({{eventName}})', body: 'Warteliste für {{eventName}}', isHtml: false }),
+      body: JSON.stringify({ name: 'Waitlist custom', subject: 'Hallo {{account.firstName}} ({{eventName}})', body: 'Warteliste für {{eventName}}', isHtml: false, slot: 'waitlisted' }),
     })).json();
     await fetch(`http://localhost:${port}/admin/email-templates/slots/waitlisted`, {
       method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
@@ -261,7 +262,7 @@ test('assigning a template to "verification" merges the recipient\'s own OT fiel
 
     const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
       method: 'POST', headers,
-      body: JSON.stringify({ name: 'Verify custom', subject: 'Willkommen {{account.firstName}}', body: 'Bestätige hier: {{link}}', isHtml: false }),
+      body: JSON.stringify({ name: 'Verify custom', subject: 'Willkommen {{account.firstName}}', body: 'Bestätige hier: {{link}}', isHtml: false, slot: 'verification' }),
     })).json();
     await fetch(`http://localhost:${port}/admin/email-templates/slots/verification`, {
       method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
@@ -285,7 +286,7 @@ test('assigning a template to "invitation" merges the not-yet-redeemed invitatio
 
     const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
       method: 'POST', headers,
-      body: JSON.stringify({ name: 'Invite custom', subject: 'Hallo {{account.firstName}} {{account.lastName}}', body: 'Link: {{link}}', isHtml: false }),
+      body: JSON.stringify({ name: 'Invite custom', subject: 'Hallo {{account.firstName}} {{account.lastName}}', body: 'Link: {{link}}', isHtml: false, slot: 'invitation' }),
     })).json();
     await fetch(`http://localhost:${port}/admin/email-templates/slots/invitation`, {
       method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
@@ -302,6 +303,98 @@ test('assigning a template to "invitation" merges the not-yet-redeemed invitatio
       method: 'PUT', headers, body: JSON.stringify({ templateId: null }),
     });
   });
+});
+
+test('POST /admin/email-templates requires a known slot and the slot\'s required link placeholder', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: cookie };
+    const post = (payload) => fetch(`http://localhost:${port}/admin/email-templates`, { method: 'POST', headers, body: JSON.stringify(payload) });
+
+    assert.equal((await post({ name: 'Ohne Art', subject: 'S', body: 'B' })).status, 400);
+    assert.equal((await post({ name: 'Falsche Art', subject: 'S', body: 'B', slot: 'not-a-slot' })).status, 400);
+
+    const missingLink = await post({ name: 'Reset ohne Link', subject: 'S', body: 'Hier: https://example.com/login', slot: 'password_reset' });
+    assert.equal(missingLink.status, 400);
+    assert.match((await missingLink.json()).error, /\{\{link\}\}/);
+
+    const ok = await post({ name: 'Reset', subject: 'S', body: 'Neues Passwort: {{{ link }}}', slot: 'password_reset' });
+    assert.equal(ok.status, 201);
+    assert.equal((await ok.json()).slot, 'password_reset');
+  });
+});
+
+test('a template can only be assigned to its own slot', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: cookie };
+    const invitation = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'Einladung', subject: 'Willkommen', body: 'Konto anlegen: {{link}}', slot: 'invitation' }),
+    })).json();
+
+    const wrong = await fetch(`http://localhost:${port}/admin/email-templates/slots/password_reset`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: invitation.id }),
+    });
+    assert.equal(wrong.status, 400);
+    assert.match((await wrong.json()).error, /Einladung/);
+  });
+});
+
+test('changing a template\'s slot drops its assignment to the old slot', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: cookie };
+    const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ name: 'Wandert', subject: 'S', body: '{{eventName}}', slot: 'event_deleted' }),
+    })).json();
+    await fetch(`http://localhost:${port}/admin/email-templates/slots/event_deleted`, {
+      method: 'PUT', headers, body: JSON.stringify({ templateId: template.id }),
+    });
+
+    const updated = await (await fetch(`http://localhost:${port}/admin/email-templates/${template.id}`, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ name: 'Wandert', subject: 'S', body: '{{eventName}}', slot: 'waitlist_promoted' }),
+    })).json();
+    assert.deepEqual(updated.unassignedSlots, ['event_deleted']);
+
+    const { slots } = await (await fetch(`http://localhost:${port}/admin/email-templates/slots`, { headers })).json();
+    assert.equal(slots.find((s) => s.key === 'event_deleted').templateId, null);
+  });
+});
+
+test('preview fills the slot\'s link with an example pointing at the right page', async () => {
+  await withTestServer(async (port) => {
+    const { cookie } = await makeUserAndSession('admin');
+    const headers = { 'Content-Type': 'application/json', Cookie: cookie };
+    const { userId: targetUserId } = await makeUserAndSession('mitglied');
+
+    for (const [slot, page] of [['invitation', '/set-password.html'], ['password_reset', '/reset-password.html'], ['verification', '/verify.html']]) {
+      const template = await (await fetch(`http://localhost:${port}/admin/email-templates`, {
+        method: 'POST', headers, body: JSON.stringify({ name: `Vorschau ${slot}`, subject: 'S', body: 'Link: {{link}}', slot }),
+      })).json();
+      const preview = await (await fetch(`http://localhost:${port}/admin/email-templates/${template.id}/preview`, {
+        method: 'POST', headers, body: JSON.stringify({ userId: targetUserId }),
+      })).json();
+      assert.ok(preview.body.includes(`${page}?token=BEISPIEL`), `${slot}: ${preview.body}`);
+    }
+  });
+});
+
+test('a template assigned to a slot it was not written for falls back to the default text', async () => {
+  const { transporter, from } = await getTransporterAndFrom();
+  const { rows } = await query(
+    "INSERT INTO email_templates (name, subject, body, slot) VALUES ('Fremd', 'Fremder Betreff', 'Fremd', 'event_deleted') RETURNING id"
+  );
+  await query(
+    `INSERT INTO email_slot_assignments (slot, template_id) VALUES ('waitlisted', $1)
+     ON CONFLICT (slot) DO UPDATE SET template_id = $1`,
+    [rows[0].id]
+  );
+  const info = await sendWaitlistedEmail('wl-target@example.com', { eventName: 'TestCon' }, { transporter, from });
+  assert.ok(JSON.parse(info.message).subject.includes('Warteliste: TestCon'));
+  await query("DELETE FROM email_slot_assignments WHERE slot = 'waitlisted'");
 });
 
 test.after(async () => {
