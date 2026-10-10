@@ -1047,7 +1047,20 @@ export async function cancelRegistration(eventId, userId) {
   return result;
 }
 
-export async function setStatus(eventId, userId, status, expectedStatus) {
+export async function setStatus(eventId, userId, status, expectedStatus, { force = false } = {}) {
+  // Taking someone onto a place (from the waitlist or from cancelled) is refused while their limit is full,
+  // unless staff confirmed the override (force).
+  if (!force && !COUNTED_STATUSES.includes(expectedStatus) && COUNTED_STATUSES.includes(status)) {
+    const { rows: current } = await query('SELECT con_role FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    if (current.length > 0) {
+      const block = capacityBlock(await loadCapacity((sql, params) => query(sql, params), eventId), current[0].con_role);
+      if (block) {
+        const err = new Error(`${BLOCK_MESSAGES[block]} Die Person würde über das Limit gehen.`);
+        err.code = 'CAPACITY_FULL';
+        throw err;
+      }
+    }
+  }
   // A manual override moving a counted registration back to 'waitlisted' means it rejoins the waitlist NOW:
   // waitlisted_at (not created_at, which stays the original registration time) decides the promotion order.
   const rejoinsWaitlist = status === 'waitlisted' && COUNTED_STATUSES.includes(expectedStatus);

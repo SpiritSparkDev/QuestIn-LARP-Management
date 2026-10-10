@@ -1181,7 +1181,16 @@
           return;
         }
         try {
-          await api.put(`/events/${select.dataset.regStatus}/checkin/${editingMemberId}`, { status, previousStatus });
+          const url = `/events/${select.dataset.regStatus}/checkin/${editingMemberId}`;
+          try {
+            await api.put(url, { status, previousStatus });
+          } catch (err) {
+            // Limit full: staff may still override after a warning.
+            if (err.body?.code !== 'CAPACITY_FULL' || !confirm(`${err.message}
+
+Trotzdem setzen?`)) throw err;
+            await api.put(url, { status, previousStatus, force: true });
+          }
           notify('Status geändert.', 'success');
         } catch (err) {
           notify(err.message, 'error');

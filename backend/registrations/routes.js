@@ -255,10 +255,11 @@ router.put('/events/:id/checkin/:userId', requireAuth(requireAnyMenu('checkin', 
     return { status: 400, body: { error: `status must be one of: ${VALID_STATUSES.join(', ')}` } };
   }
   try {
-    const registration = await setStatus(params.id, params.userId, body.status, body.previousStatus);
+    const registration = await setStatus(params.id, params.userId, body.status, body.previousStatus, { force: body.force === true });
     return { status: 200, body: registration };
   } catch (err) {
     if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
+    if (err.code === 'CAPACITY_FULL') return { status: 409, body: { error: err.message, code: 'CAPACITY_FULL' } };
     if (err.code === 'STATUS_CONFLICT') return { status: 409, body: { error: err.message } };
     throw err;
   }

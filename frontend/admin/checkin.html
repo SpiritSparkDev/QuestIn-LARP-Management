@@ -928,7 +928,15 @@ async function overrideStatus(eventId, userId, newStatus, previousStatus) {
     return;
   }
   try {
-    await api.put(`/events/${eventId}/checkin/${userId}`, { status: newStatus, previousStatus });
+    try {
+      await api.put(`/events/${eventId}/checkin/${userId}`, { status: newStatus, previousStatus });
+    } catch (err) {
+      // Limit full: staff may still override after a warning.
+      if (err.body?.code !== 'CAPACITY_FULL' || !confirm(`${err.message}
+
+Trotzdem setzen?`)) throw err;
+      await api.put(`/events/${eventId}/checkin/${userId}`, { status: newStatus, previousStatus, force: true });
+    }
     await loadParticipants(eventId);
   } catch (err) {
     notify(err.message, 'error');
