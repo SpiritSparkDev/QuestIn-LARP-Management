@@ -18,6 +18,7 @@ import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { updateCharacter } from '../characters/repository.js';
 import { logAudit } from '../audit/repository.js';
 import { COUNTED_STATUSES, loadCapacity, capacityBlock, withAdded, withRemoved, BLOCK_MESSAGES } from './capacity.js';
+import { assertGuardianRegistered, isChildUser } from './children.js';
 import { checkRegistrationLock, registrationLockReason } from './lock.js';
 
 // 'ticket' = a self-service guest ticket bought via the external ticket
@@ -334,6 +335,8 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
     throw err;
   }
 
+  await assertGuardianRegistered(eventId, userId, appSettings.childrenEnabled);
+
   // PDF imports are entered by staff from a paper form, so the manual lock doesn't apply.
   const lockedToWaitlist = !pdfImport && (await checkRegistrationLock(event, userId, conRole, requestingUser)) === 'waitlist';
 
@@ -364,7 +367,8 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
     const registration = await withTransaction(async (client) => {
       // Total limit and the SC / NSC limit; roles that do not count (crew) never wait.
       const capacityState = await loadCapacity((sql, params) => client.query(sql, params), eventId, { lockEvent: true });
-      const status = lockedToWaitlist || capacityBlock(capacityState, conRole) ? 'waitlisted' : 'pending';
+      const isChild = await isChildUser(userId, (sql, params) => client.query(sql, params));
+      const status = lockedToWaitlist || capacityBlock(capacityState, conRole, isChild) ? 'waitlisted' : 'pending';
       await assertExtrasCapacity(client, event, resolvedExtras);
       // Waitlisted people don't hold a bed (they would take one at promotion).
       const lodging = status === 'waitlisted' ? { lodging: null, lodgingCents: 0, details: null } : requestedLodging;
@@ -598,7 +602,8 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
   if (roleChanged && event) await checkRegistrationLock(event, userId, conRole, requestingUser, { forceBlock: true });
   if (roleChanged && COUNTED_STATUSES.includes(before[0].status)) {
     const state = await loadCapacity((sql, params) => query(sql, params), eventId);
-    const block = capacityBlock(withRemoved(state, before[0].con_role), conRole);
+    const isChild = await isChildUser(userId);
+    const block = capacityBlock(withRemoved(state, before[0].con_role, isChild), conRole, isChild);
     if (block) {
       const err = new Error(`${BLOCK_MESSAGES[block]} Der Wechsel zu „${conRole}“ ist erst möglich, wenn dort ein Platz frei wird.`);
       err.code = 'CAPACITY_FULL';
@@ -697,7 +702,7 @@ export async function maybePromoteFromWaitlist(eventId) {
     const noLimits = state.limits.total === null && state.limits.sc === null && state.limits.nsc === null;
     const { rows: [event] } = await client.query('SELECT name, registration_locked_con_roles, registration_locked_groups FROM events WHERE id = $1', [eventId]);
     const { rows: waiting } = await client.query(
-      `SELECT r.user_id, r.con_role, r.waitlisted_by_lock, g.key AS group_key, g.name AS group_name
+      `SELECT r.user_id, r.con_role, r.waitlisted_by_lock, u.is_child, g.key AS group_key, g.name AS group_name
        FROM registrations r JOIN users u ON u.id = r.user_id JOIN groups g ON g.id = u.group_id
        WHERE r.event_id = $1 AND r.status = 'waitlisted' ORDER BY COALESCE(r.waitlisted_at, r.created_at) ASC`,
       [eventId]
@@ -706,12 +711,12 @@ export async function maybePromoteFromWaitlist(eventId) {
     for (const candidate of waiting) {
       if (noLimits && !candidate.waitlisted_by_lock) continue;
       if (candidate.waitlisted_by_lock && event && registrationLockReason(event, candidate.con_role, { key: candidate.group_key, name: candidate.group_name })) continue;
-      if (capacityBlock(state, candidate.con_role)) continue;
+      if (capacityBlock(state, candidate.con_role, candidate.is_child)) continue;
       await client.query(
         "UPDATE registrations SET status = 'pending', waitlisted_by_lock = false WHERE event_id = $1 AND user_id = $2 AND status = 'waitlisted'",
         [eventId, candidate.user_id]
       );
-      state = withAdded(state, candidate.con_role);
+      state = withAdded(state, candidate.con_role, candidate.is_child);
       promoted.push(candidate.user_id);
     }
     return promoted;
@@ -760,9 +765,11 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
             r.amount_due_cents, r.paid_at, r.transfer_notified_at, r.con_payer, r.price_group, r.price_tier, r.discount_cents, r.extras, r.extras_cents, r.lodging_id, r.lodging_details, lodging.name AS lodging_name, latest_payment.method AS payment_method,
             latest_payment.refund_amount_cents, latest_payment.refunded_at,
             r.waiver_version_accepted, r.waiver_accepted_at,
-            u.account_data_enc, r.registration_data_enc
+            u.account_data_enc, r.registration_data_enc,
+            u.is_child, guardian.first_name AS guardian_first_name, guardian.last_name AS guardian_last_name, guardian.nickname AS guardian_nickname
      FROM registrations r
      JOIN users u ON u.id = r.user_id
+     LEFT JOIN users guardian ON guardian.id = u.managed_by_user_id
      LEFT JOIN characters rc ON rc.id = r.character_id
      LEFT JOIN event_lodgings lodging ON lodging.id = r.lodging_id
      LEFT JOIN LATERAL (
@@ -850,6 +857,9 @@ export async function listParticipantsForEvent(eventId, { schema = [], viewer } 
       refundedAt: r.refunded_at,
       waiverVersionAccepted: r.waiver_version_accepted,
       waiverAcceptedAt: r.waiver_accepted_at,
+      // Add-on "Kinder": a child and the parent/guardian who manages them.
+      isChild: r.is_child,
+      guardianName: r.is_child ? displayName({ firstName: r.guardian_first_name, lastName: r.guardian_last_name, nickname: r.guardian_nickname }) : null,
       characters: charactersByUser.get(r.user_id) ?? [],
       selectableCharacters: selectableByUser.get(r.user_id) ?? [],
       otFields,

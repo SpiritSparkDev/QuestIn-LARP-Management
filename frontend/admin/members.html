@@ -158,6 +158,7 @@
               <select id="detail-group" name="group"></select>
               <label for="detail-group">Rolle</label>
             </div>
+            <label class="checkbox-row" id="detail-child-wrap" hidden><input type="checkbox" id="detail-child"> Kind (die verwaltende Person ist Elternteil bzw. sorgeberechtigt)</label>
             <div id="detail-email-wrap" hidden style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
               <div style="flex:1;min-width:220px;">
                 <input id="detail-email" type="email" autocomplete="off">
@@ -305,6 +306,8 @@
     const STATUS_RANK = { active: 0, invited: 1, deactivated: 2 };
     const PREFS_KEY = 'memberListPrefs';
     let viewMembers = [];
+    // Add-on "Kinder" (backend/registrations/children.js): badge, filter, sort, grouping and counter.
+    let childrenEnabled = false;
     let prefs = { group: '', kind: '', event: '', registration: '', participation: '', sort: 'name', dir: 'asc', groupBy: '' };
     try {
       prefs = { ...prefs, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {}) };
@@ -420,6 +423,8 @@
         case 'invited': return m.status === 'invited';
         case 'discord': return Boolean(m.discordUsername);
         case 'no-discord': return m.status !== 'invited' && !m.discordUsername;
+        case 'children': return m.isChild === true;
+        case 'adults': return m.isChild !== true;
         default: return true;
       }
     };
@@ -430,6 +435,8 @@
         // Zero-padded so the plain string comparison below sorts numerically; invitations have none.
         case 'number': return m.memberNumber ? String(m.memberNumber).padStart(9, '0') : '';
         case 'group': return m.group?.name ?? '';
+        // Kinder zuerst (A–Z) or last (Z–A); everyone else keeps the name order.
+        case 'child': return m.isChild ? '0' : '1';
         case 'participation': return participationLabels(m).join(', ');
         case 'event': return shownRegs(m).map((r) => allEvents.find((e) => e.id === r.eventId)?.code || eventNameOf(r.eventId)).join(', ');
         // Registration status in its natural order (Warteliste ... Abgesagt); no registration sinks to the bottom.
@@ -462,11 +469,20 @@
       });
     }
 
-    function updateMemberSummary(shown) {
+    // "· 4 Kinder (2 anwesend)" over the shown list; anwesend = checked in (for the chosen event, if any).
+    function childrenSummary(shownMembers) {
+      if (!childrenEnabled) return '';
+      const children = shownMembers.filter((m) => m.isChild);
+      const present = children.filter((m) => shownRegs(m).some((r) => r.status === 'checked_in')).length;
+      return ` · ${children.length} ${children.length === 1 ? 'Kind' : 'Kinder'} (${present} anwesend)`;
+    }
+
+    function updateMemberSummary(shownMembers) {
+      const shown = shownMembers.length;
       const filtersActive = Boolean(prefs.group || prefs.kind || prefs.event || prefs.registration || prefs.participation || currentSearch.trim());
-      document.getElementById('member-count').textContent = filtersActive
+      document.getElementById('member-count').textContent = (filtersActive
         ? `${shown} von ${viewMembers.length} Mitgliedern`
-        : `${viewMembers.length} Mitglieder`;
+        : `${viewMembers.length} Mitglieder`) + childrenSummary(shownMembers);
       document.getElementById('member-filter-reset').hidden = !filtersActive && prefs.sort === 'name' && prefs.dir === 'asc' && !prefs.groupBy;
       document.querySelectorAll('#member-list th[data-sort]').forEach((th) => {
         const active = th.dataset.sort === prefs.sort;
@@ -495,6 +511,7 @@
         });
         case 'status': return [...new Set(shownRegs(m).map((r) => r.status))].map((st) => ({ key: st, label: STATUS_LABELS[st] ?? st, rank: STATUS_ORDER.indexOf(st) }));
         case 'playGroup': return m.playGroup ? [{ key: m.playGroup.id, label: m.playGroup.name, rank: 0 }] : [];
+        case 'child': return m.isChild ? [{ key: 'child', label: 'Kinder', rank: 0 }] : [{ key: 'adult', label: 'Erwachsene', rank: 1 }];
         default: return [];
       }
     }
@@ -950,6 +967,7 @@
         const accessLinkBtn = m.status === 'active' && !m.isGuest
           ? `<button type="button" class="btn-sm btn-ghost btn-icon" data-access-link="${m.id}" title="Zugriffslink anzeigen" aria-label="Zugriffslink anzeigen"><span class="material-symbols-outlined" aria-hidden="true">key</span></button>`
           : '';
+        const childBadge = childrenEnabled && m.isChild ? ' <span class="badge">Kind</span>' : '';
         const guestBadge = m.managedBy
           ? ` <span class="badge badge-inactive" title="Wird von ${escapeHtml(m.managedBy.name)} verwaltet">Verwaltet von ${escapeHtml(m.managedBy.name)}</span>`
           : (m.isGuest ? ` <span class="badge badge-inactive">Direktanmeldung</span>` : '');
@@ -980,7 +998,7 @@
         return `<tr>
     <td>${selectable ? `<input type="checkbox" data-select="${m.id}" aria-label="Auswählen"${selected.has(m.id) ? ' checked' : ''}>` : ''}</td>
     <td data-col="number" class="sub">${m.memberNumber ?? '–'}</td>
-    <td data-col="name">${paidDot(m)}${escapeHtml(fullName(m))}${discordBadge}${m.email ? guestBadge : ''}</td>
+    <td data-col="name">${paidDot(m)}${escapeHtml(fullName(m))}${childBadge}${discordBadge}${m.email ? guestBadge : ''}</td>
     <td data-col="email">${m.email ? escapeHtml(m.email) : guestBadge}</td>
     <td data-col="role">${escapeHtml(m.group?.name ?? '–')}</td>
     <td data-col="participation">${escapeHtml(participationLabels(m).join(', ') || '–')}</td>
@@ -1067,7 +1085,7 @@
       listBody.querySelectorAll('[data-generate-conversion-link]').forEach((button) => {
         button.addEventListener('click', () => generateConversionLink(button.dataset.generateConversionLink));
       });
-      updateMemberSummary(visible.length);
+      updateMemberSummary(visible);
     }
 
     // ---- Charaktere tab -------------------------------------------------
@@ -1484,6 +1502,11 @@
         detailGroupWrap.style.display = 'none';
       }
 
+      // Only a managed person has a guardian, so only they can be marked as a child.
+      const childWrap = document.getElementById('detail-child-wrap');
+      childWrap.hidden = !(childrenEnabled && member.managedBy);
+      document.getElementById('detail-child').checked = member.isChild === true;
+
       setupMergeBox(member);
       detailDialog.showModal();
     }
@@ -1552,6 +1575,7 @@
       if (myAccountFields.includes('group') && detailGroupSelect.value) {
         payload.group = detailGroupSelect.value;
       }
+      if (!document.getElementById('detail-child-wrap').hidden) payload.isChild = document.getElementById('detail-child').checked;
       try {
         await api.patch(`/members/${editingMemberId}`, payload);
         notify('Gespeichert.', 'success');
@@ -1735,6 +1759,17 @@
         document.getElementById('invite-email-label').textContent = 'E-Mail (leer lassen, wenn die Person keine hat)';
       }
       lodgingEnabled = account.lodgingEnabled === true && ['admin', 'moderator'].includes(account.group.key);
+      childrenEnabled = account.childrenEnabled === true;
+      if (childrenEnabled) {
+        kindFilter.insertAdjacentHTML('beforeend', '<option value="children">Kinder</option><option value="adults">Ohne Kinder</option>');
+        groupBySelect.insertAdjacentHTML('beforeend', '<option value="child">Kinder / Erwachsene</option>');
+        sortSelect.insertAdjacentHTML('beforeend', '<option value="child:asc">Kinder zuerst</option><option value="child:desc">Kinder zuletzt</option>');
+      } else {
+        // Remembered from while the add-on was on: drop what no longer has a control.
+        if (['children', 'adults'].includes(prefs.kind)) prefs.kind = '';
+        if (prefs.groupBy === 'child') prefs.groupBy = '';
+        if (prefs.sort === 'child') [prefs.sort, prefs.dir] = ['name', 'asc'];
+      }
       document.getElementById('member-export').hidden = account.canExportMembers !== true;
       document.getElementById('member-import').hidden = account.group.key !== 'admin';
       myUserId = account.id;

@@ -189,6 +189,7 @@ router.patch('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ req,
   if (disallowed.length > 0) {
     return { status: 400, body: { error: `not permitted to edit: ${disallowed.join(', ')}` } };
   }
+  if (body.isChild !== undefined && typeof body.isChild !== 'boolean') return { status: 400, body: { error: 'isChild must be a boolean' } };
 
   const fields = { ...body };
   if (fields.group !== undefined) {

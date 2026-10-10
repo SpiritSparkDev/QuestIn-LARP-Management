@@ -7,7 +7,7 @@ import { decryptFieldBlob as decryptRegistrationBlob } from '../registrationFiel
 
 const SELECT_COLUMNS = `
   users.id, users.email, users.first_name, users.last_name, users.nickname, users.email_verified, users.deactivated_at,
-  users.is_guest, users.managed_by_user_id, users.member_number, users.created_at,
+  users.is_guest, users.managed_by_user_id, users.is_child, users.member_number, users.created_at,
   owners.first_name AS owner_first_name, owners.last_name AS owner_last_name, owners.nickname AS owner_nickname,
   users.account_data_enc,
   groups.id AS group_id, groups.key AS group_key, groups.name AS group_name,
@@ -39,6 +39,8 @@ function decryptMember(row) {
     managedBy: row.managed_by_user_id
       ? { id: row.managed_by_user_id, name: displayName({ firstName: row.owner_first_name, lastName: row.owner_last_name, nickname: row.owner_nickname }) }
       : null,
+    // Add-on "Kinder" (backend/registrations/children.js); only managed persons are ever marked.
+    isChild: row.is_child,
     group: { id: row.group_id, key: row.group_key, name: row.group_name },
     discordUsername: row.discord_username,
     ...decryptFieldBlob(row.account_data_enc),
@@ -144,7 +146,8 @@ export async function updateMember(id, fields) {
        first_name = COALESCE($3, first_name),
        last_name = COALESCE($4, last_name),
        nickname = COALESCE($5, nickname),
-       account_data_enc = $6
+       account_data_enc = $6,
+       is_child = CASE WHEN $7::boolean IS NULL THEN is_child ELSE $7 AND managed_by_user_id IS NOT NULL END
      WHERE id = $1
      RETURNING id`,
     [
@@ -154,6 +157,7 @@ export async function updateMember(id, fields) {
       fields.lastName ?? null,
       fields.nickname ?? null,
       encryptFieldBlob(nextData),
+      typeof fields.isChild === 'boolean' ? fields.isChild : null,
     ]
   );
   if (rows.length === 0) return null;

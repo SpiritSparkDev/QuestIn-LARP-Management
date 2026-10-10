@@ -55,6 +55,7 @@ router.post('/events/:id/register', requireAuth(async ({ req, params, user }) =>
     if (err.code === 'INVALID_CON_ROLE') return { status: 400, body: { error: err.message } };
     if (err.code === 'FORBIDDEN_CON_ROLE') return { status: 403, body: { error: err.message } };
     if (err.code === 'EVENT_NOT_ACTIVE' || err.code === 'REGISTRATION_LOCKED') return { status: 403, body: { error: err.message } };
+    if (err.code === 'GUARDIAN_NOT_REGISTERED') return { status: 409, body: { error: err.message } };
     if (err.code === 'CHARACTER_REQUIRED' || err.code === 'CHARACTER_NOT_ALLOWED') {
       return { status: 400, body: { error: err.message } };
     }
@@ -85,7 +86,7 @@ router.post('/events/:id/registrations/:userId', requireAuth(async ({ req, param
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };
-    if (err.code === 'ALREADY_REGISTERED' || err.code === 'CHARACTER_ALREADY_REGISTERED' || err.code === 'EXTRA_SOLD_OUT' || err.code === 'LODGING_FULL') return { status: 409, body: { error: err.message } };
+    if (err.code === 'ALREADY_REGISTERED' || err.code === 'CHARACTER_ALREADY_REGISTERED' || err.code === 'EXTRA_SOLD_OUT' || err.code === 'LODGING_FULL' || err.code === 'GUARDIAN_NOT_REGISTERED') return { status: 409, body: { error: err.message } };
     if (['INVALID_CON_ROLE', 'CHARACTER_REQUIRED', 'CHARACTER_NOT_ALLOWED', 'INVALID_NSC_AVAILABILITY', 'INVALID_FLAG', 'INVALID_PRICE_GROUP', 'INVALID_EXTRAS', 'INVALID_LODGING', 'INVALID_LODGING_DETAILS', 'LODGING_DISABLED'].includes(err.code)) {
       return { status: 400, body: { error: err.message } };
     }

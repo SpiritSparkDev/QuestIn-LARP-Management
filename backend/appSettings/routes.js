@@ -60,7 +60,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const {
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
-    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity, unpaidReminderDays,
+    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, childrenEnabled, childrenCountCapacity, backgroundPreset, backgroundOpacity, unpaidReminderDays,
   } = body;
   if (waiverText !== undefined && typeof waiverText !== 'string') {
     return { status: 400, body: { error: 'waiverText must be a string' } };
@@ -104,6 +104,12 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   if (lodgingEnabled !== undefined && typeof lodgingEnabled !== 'boolean') {
     return { status: 400, body: { error: 'lodgingEnabled must be a boolean' } };
   }
+  if (childrenEnabled !== undefined && typeof childrenEnabled !== 'boolean') {
+    return { status: 400, body: { error: 'childrenEnabled must be a boolean' } };
+  }
+  if (childrenCountCapacity !== undefined && typeof childrenCountCapacity !== 'boolean') {
+    return { status: 400, body: { error: 'childrenCountCapacity must be a boolean' } };
+  }
   if (pdfImportEnabled !== undefined && typeof pdfImportEnabled !== 'boolean') {
     return { status: 400, body: { error: 'pdfImportEnabled must be a boolean' } };
   }
@@ -144,17 +150,25 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   // avoids an extra query on the common PUT /app-settings call, which never
   // touches comingSoonEnabled at all (branding/theme/etc. edits).
   const wasComingSoonEnabled = comingSoonEnabled === false ? (await getAppSettings()).comingSoonEnabled : false;
+  // Children that stop counting free places (see registrations/children.js).
+  const childrenSettingTouched = childrenEnabled !== undefined || childrenCountCapacity !== undefined;
 
   const saved = await setAppSettings({
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText,
     baseUrl: baseUrl === undefined ? undefined : baseUrl.replace(/\/+$/, ''),
-    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, backgroundPreset, backgroundOpacity, unpaidReminderDays,
+    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, childrenEnabled, childrenCountCapacity, backgroundPreset, backgroundOpacity, unpaidReminderDays,
   });
 
   // Fire-and-forget: sendComingSoonReminders never throws (own try/catch per
   // recipient), so this must not be awaited before responding to the admin.
   if (comingSoonEnabled === false && wasComingSoonEnabled) {
     sendComingSoonReminders(user.id);
+  }
+
+  // Children no longer counting can free places: let the waiting people move up everywhere.
+  if (childrenSettingTouched) {
+    const { rows } = await query("SELECT DISTINCT event_id FROM registrations WHERE status = 'waitlisted'");
+    for (const row of rows) await maybePromoteFromWaitlist(row.event_id);
   }
 
   return { status: 200, body: saved };

@@ -43,7 +43,7 @@ router.put('/account/password', requireAuth(async ({ req, user }) => {
 router.get('/account', requireAuth(async ({ user }) => {
   const account = await getAccount(user.id);
   // Drives the admin sidebar's "PDF-Import" link (opt-in add-on).
-  const { pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled } = await getAppSettings();
+  const { pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, childrenEnabled } = await getAppSettings();
   // While an admin views the tool as another group, the account shows that group's permissions.
   const viewAs = user.viewingAs ? {
     group: { key: user.group.key, name: user.group.name },
@@ -56,7 +56,7 @@ router.get('/account', requireAuth(async ({ user }) => {
     canUseOffline: user.group.canUseOffline,
     viewingAs: user.viewingAs,
   } : {};
-  return { status: 200, body: { ...account, ...viewAs, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, testMode: await isTestModeEnabled(), instance: await getSummary() } };
+  return { status: 200, body: { ...account, ...viewAs, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, childrenEnabled, testMode: await isTestModeEnabled(), instance: await getSummary() } };
 }));
 
 router.patch('/account', requireAuth(async ({ req, user }) => {

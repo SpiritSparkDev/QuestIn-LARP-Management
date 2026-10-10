@@ -83,6 +83,7 @@ export default {
       { label: 'Event-Auswahl', text: 'Wählt das Event, dessen Teilnehmerliste angezeigt wird. Es stehen nur aktive Events zur Auswahl.' },
       { label: 'Event beenden (Check-Out freigeben) / Event wieder öffnen', text: 'Nur mit dem Menü „Events“ sichtbar. Beenden gibt das Auschecken frei, Wieder öffnen nimmt das zurück.' },
       { label: 'Gesamt / Eingecheckt', text: 'Zähler: Anzahl aller Personen in der Liste und Anzahl der aktuell eingecheckten Personen.' },
+      { label: 'Kinder anwesend', text: 'Nur mit aktivem Add-on „Kinder“: eingecheckte Kinder von allen angemeldeten Kindern (ohne abgesagte). Kinder tragen in der Liste das Badge „Kind“, der Tooltip nennt das Elternteil.' },
       { label: 'QR-Scan: Aus / Push / An', text: 'Aus: Kamera bleibt aus. Push: die Kamera startet nur per Button „Scan starten (20s)“ und stoppt nach 20 Sekunden. An: die Kamera läuft dauerhaft. Die Wahl wird im Browser gespeichert. Die Kamera braucht eine gesicherte Verbindung (https) und deine Freigabe.' },
       { label: 'Scan starten (20s)', text: 'Nur im Modus Push sichtbar. Startet die Kamera für 20 Sekunden.' },
       { label: 'Licht / Scan beenden', text: 'Im Kamerabild: „Licht“ schaltet die Taschenlampe ein, wenn das Gerät sie unterstützt. „Scan beenden“ stoppt die Kamera. Wechselt die Seite in den Hintergrund, pausiert der Scan automatisch.' },

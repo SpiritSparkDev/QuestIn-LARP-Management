@@ -6,7 +6,7 @@ import { sanitizeFieldValue } from '../richText.js';
 import { isGroupAncestorOf } from '../groupTree/repository.js';
 
 const SELECT_COLUMNS = `
-  id, email, first_name, last_name, nickname, account_data_enc
+  id, email, first_name, last_name, nickname, is_child, account_data_enc
 `;
 
 function decryptManagedPerson(row) {
@@ -17,6 +17,8 @@ function decryptManagedPerson(row) {
     lastName: row.last_name,
     nickname: row.nickname,
     name: displayName({ firstName: row.first_name, lastName: row.last_name, nickname: row.nickname }),
+    // Add-on "Kinder": the manager is the parent/guardian (backend/registrations/children.js).
+    isChild: row.is_child,
     ...decryptFieldBlob(row.account_data_enc),
   };
 }
@@ -46,10 +48,10 @@ export async function canRegisterFor(targetUserId, actorId) {
 export async function getManagedPersonForRegistration(id, actorId) {
   const own = await getManagedPerson(id, actorId);
   if (own || !(await canRegisterFor(id, actorId))) return own;
-  const { rows } = await query('SELECT id, first_name, last_name, nickname FROM users WHERE id = $1', [id]);
+  const { rows } = await query('SELECT id, first_name, last_name, nickname, is_child FROM users WHERE id = $1', [id]);
   const r = rows[0];
   return { id: r.id, email: null, firstName: r.first_name, lastName: r.last_name, nickname: r.nickname,
-    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }), groupView: true };
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }), isChild: r.is_child, groupView: true };
 }
 
 export async function listManagedPersons(ownerId) {
@@ -68,7 +70,7 @@ export async function getManagedPerson(id, ownerId) {
   return rows[0] ? decryptManagedPerson(rows[0]) : null;
 }
 
-export async function createManagedPerson({ ownerId, groupId, email, firstName, lastName, nickname, ...otFields }) {
+export async function createManagedPerson({ ownerId, groupId, email, firstName, lastName, nickname, isChild = false, ...otFields }) {
   const schema = await getAccountFieldSchema();
   const data = {};
   for (const field of schema) {
@@ -76,10 +78,10 @@ export async function createManagedPerson({ ownerId, groupId, email, firstName, 
   }
   try {
     const { rows } = await query(
-      `INSERT INTO users (email, first_name, last_name, nickname, group_id, is_guest, email_verified, account_data_enc, managed_by_user_id)
-       VALUES ($1, $2, $3, $4, $5, true, false, $6, $7)
+      `INSERT INTO users (email, first_name, last_name, nickname, group_id, is_guest, email_verified, account_data_enc, managed_by_user_id, is_child)
+       VALUES ($1, $2, $3, $4, $5, true, false, $6, $7, $8)
        RETURNING id`,
-      [email || null, firstName, lastName, nickname || null, groupId, encryptFieldBlob(data), ownerId]
+      [email || null, firstName, lastName, nickname || null, groupId, encryptFieldBlob(data), ownerId, isChild === true]
     );
     return getManagedPerson(rows[0].id, ownerId);
   } catch (err) {
@@ -111,7 +113,8 @@ export async function updateManagedPerson(id, ownerId, fields) {
          last_name = COALESCE($4, last_name),
          nickname = COALESCE($5, nickname),
          email = COALESCE($6, email),
-         account_data_enc = $7
+         account_data_enc = $7,
+         is_child = COALESCE($8, is_child)
        WHERE id = $1 AND managed_by_user_id = $2
        RETURNING id`,
       [
@@ -121,6 +124,7 @@ export async function updateManagedPerson(id, ownerId, fields) {
         fields.nickname ?? null,
         fields.email || null,
         encryptFieldBlob(nextData),
+        typeof fields.isChild === 'boolean' ? fields.isChild : null,
       ]
     );
     if (rows.length === 0) return null;
@@ -174,9 +178,10 @@ export async function searchClaimablePersons(term, ownerId) {
 }
 
 // The inverse of claimPerson: the person stays in the system (with registrations and
-// characters), the manager just no longer manages them.
+// characters), the manager just no longer manages them. A child always has a
+// guardian, so without a manager the person is no longer marked as one.
 export async function releasePerson(id, ownerId) {
-  const { rowCount } = await query('UPDATE users SET managed_by_user_id = NULL WHERE id = $1 AND managed_by_user_id = $2', [id, ownerId]);
+  const { rowCount } = await query('UPDATE users SET managed_by_user_id = NULL, is_child = false WHERE id = $1 AND managed_by_user_id = $2', [id, ownerId]);
   return rowCount > 0;
 }
 

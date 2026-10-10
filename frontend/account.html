@@ -288,6 +288,7 @@
                       <p class="sub">Für Mitspielende, Kinder oder andere Personen ohne eigenen Account. Ein Name genügt, eine E-Mail-Adresse brauchst du nicht.</p>
                       <div><input id="create-person-name" name="name" type="text" required><label for="create-person-name">Name</label></div>
                       <div><input id="create-person-email" name="email" type="email"><label for="create-person-email">E-Mail (nur nötig, wenn die Person später selbst ein Konto bekommen soll)</label></div>
+                      <label class="checkbox-row" data-children-only hidden><input type="checkbox" name="isChild"> Kind (ich bin Elternteil bzw. sorgeberechtigt)</label>
                       <button type="submit">Person anlegen</button>
                     </form>
                     <form class="card form-pad" data-managed-create="character">
@@ -309,6 +310,7 @@
                       <div><input id="managed-person-nickname" name="nickname" type="text"><label for="managed-person-nickname">Rufname</label></div>
                       <div><input id="managed-person-email" name="email" type="email"><label for="managed-person-email">E-Mail (optional, für spätere Umwandlung in einen eigenen Account)</label></div>
                     </div>
+                    <label class="checkbox-row" data-children-only hidden><input type="checkbox" id="managed-person-isChild"> Kind (ich bin Elternteil bzw. sorgeberechtigt). Kinder können nur zu Events angemeldet werden, zu denen du selbst angemeldet bist.</label>
                     <div id="managed-person-ot-fields"></div>
                     <div class="dialog-actions">
                       <button type="submit">Speichern</button>
@@ -1376,6 +1378,8 @@
     });
 
     let managedPersons = [];
+    // Add-on "Kinder": managed persons can be marked as children (backend/registrations/children.js).
+    let childrenEnabled = false;
 
     function managedPersonStatusLabel(p) {
       if (!p.email) return "Ohne eigenes Konto (keine E-Mail nötig)";
@@ -1492,7 +1496,7 @@
       <div class="mp-head">
         <span class="mp-avatar" aria-hidden="true">${initial}</span>
         <div>
-          <h3>${escapeHtml(p.name)}</h3>
+          <h3>${escapeHtml(p.name)}${childrenEnabled && p.isChild ? ' <span class="badge">Kind</span>' : ""}</h3>
           <p class="sub">${escapeHtml(managedPersonStatusLabel(p))}</p>
         </div>
         <span class="mp-origin" title="Von dir angelegt, du verwaltest diese Person. Angelegt heißt noch nicht angemeldet: siehe Zeile Anmeldung."><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>Angelegt</span>
@@ -2015,6 +2019,7 @@
       managedPersonForm.elements.lastName.value = person?.lastName ?? "";
       managedPersonForm.elements.nickname.value = person?.nickname ?? "";
       managedPersonForm.elements.email.value = person?.email ?? "";
+      document.getElementById("managed-person-isChild").checked = person?.isChild === true;
       renderManagedPersonOtFields(person ?? {});
       managedPersonDialog.showModal();
     }
@@ -2028,6 +2033,7 @@
       const data = {
         ...Object.fromEntries(new FormData(managedPersonForm)),
         ...nullifyBlankNumberFields(managedPersonSchema, collectAccountFieldValues(managedPersonOtFieldsContainer, managedPersonSchema)),
+        ...(childrenEnabled ? { isChild: document.getElementById("managed-person-isChild").checked } : {}),
       };
       try {
         await api.patch(`/managed-persons/${editingManagedPersonId}`, data);
@@ -2043,9 +2049,10 @@
     document.querySelectorAll("[data-managed-create]").forEach((form) => {
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const { name, email } = Object.fromEntries(new FormData(form));
+        const { name, email, isChild } = Object.fromEntries(new FormData(form));
         const body = form.dataset.managedCreate === "character" ? { characterName: name.trim() } : { nickname: name.trim() };
         if (email.trim()) body.email = email.trim();
+        if (childrenEnabled && isChild) body.isChild = true;
         try {
           await api.post("/managed-persons", body);
           notify("Gespeichert.", "success");
@@ -2728,7 +2735,14 @@
       const question = confirmed
         ? "Wirklich abmelden? Deine Anmeldung ist bereits bestätigt. Die Orga prüft die Abmeldung manuell, auch eine mögliche Erstattung der Ticketgebühr."
         : "Wirklich von diesem Event abmelden?";
-      if (!confirm(question)) return;
+      // Children may only attend with their guardian: say so, but don't block.
+      const children = childrenEnabled
+        ? managedPersons.filter((p) => p.isChild && (managedPersonRegistrations[p.id] ?? []).some((r) => r.eventId === eventId && r.status !== "cancelled"))
+        : [];
+      const childrenNote = children.length
+        ? `\n\nAchtung: ${children.map((p) => p.name).join(", ")} ${children.length === 1 ? "ist als Kind" : "sind als Kinder"} zu diesem Event angemeldet und darf ohne dich nicht teilnehmen. Melde ${children.length === 1 ? "das Kind" : "die Kinder"} bitte ebenfalls ab oder sprich mit der Orga.`
+        : "";
+      if (!confirm(question + childrenNote)) return;
       try {
         const { manualReview } = await api.delete(`/events/${eventId}/register`);
         if (manualReview) notify("Du bist abgemeldet. Die Orga prüft das manuell und meldet sich wegen einer möglichen Erstattung.", "success");
@@ -3502,6 +3516,8 @@
 
       currentUserId = account.id;
       lodgingEnabled = account.lodgingEnabled === true;
+      childrenEnabled = account.childrenEnabled === true;
+      document.querySelectorAll("[data-children-only]").forEach((el) => { el.hidden = !childrenEnabled; });
       renderRegistrationLodging();
       canEditCharacters = account.canEditCharacters;
       canOverrideCheckin = account.canOverrideCheckinStatus === true;

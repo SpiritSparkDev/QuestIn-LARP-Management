@@ -38,6 +38,7 @@
     <div class="stat-row">
       <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Gesamt</div></div>
       <div class="stat"><div class="stat-num forest" id="stat-checked-in">0</div><div class="stat-label">Eingecheckt</div></div>
+      <div class="stat" id="stat-children-wrap" hidden title="Kinder, die gerade eingecheckt sind, von allen angemeldeten Kindern (ohne abgesagte)"><div class="stat-num" id="stat-children">0</div><div class="stat-label">Kinder anwesend</div></div>
       <div class="stat" title="Teilnehmende, die „Ich habe überwiesen“ geklickt haben und noch nicht als bezahlt markiert sind"><div class="stat-num" id="stat-transfer">0</div><div class="stat-label">Überweisung gemeldet</div></div>
       <div class="stat">
         <div class="stat-label" id="scan-mode-label">QR-Scan</div>
@@ -164,6 +165,8 @@ const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', orga: 'Orga', 
 const ASSIGNABLE_CON_ROLES = [['sc', 'Teilnehmer (SC)'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga']];
 let currentSearch = '';
 let canOverride = false;
+// Add-on "Kinder": badge in the name column and the "Kinder anwesend" counter.
+let childrenEnabled = false;
 let lodgingEnabled = false;
 let canMoveLodging = false;
 let eventLodgings = [];
@@ -200,7 +203,7 @@ function saveSelectedColumns() {
 // referenced once the page has fully loaded.
 function allColumns() {
   const base = [
-    { id: 'name', label: 'Name', locked: true, track: 'minmax(150px, 1.2fr)', render: (p) => escapeHtml(p.name) },
+    { id: 'name', label: 'Name', locked: true, track: 'minmax(150px, 1.2fr)', render: (p) => escapeHtml(p.name) + (childrenEnabled && p.isChild ? ` <span class="badge" title="Kind von ${escapeHtml(p.guardianName ?? '')}">Kind</span>` : '') },
     { id: 'characters', label: 'Charaktere', track: 'minmax(130px, 1fr)', render: (p) => escapeHtml(p.characters.map((c) => c.name).join(', ')) },
     { id: 'role', label: 'Rolle', track: 'minmax(140px, 0.9fr)', cls: 'cell-inline', render: renderConRoleCell },
   ];
@@ -786,6 +789,8 @@ function renderParticipants(participants, eventId) {
   statTotal.textContent = participants.length;
   statCheckedIn.textContent = participants.filter((p) => p.status === 'checked_in').length;
   statTransfer.textContent = participants.filter((p) => p.transferNotifiedAt && !p.paidAt).length;
+  const children = participants.filter((p) => p.isChild && p.status !== 'cancelled');
+  document.getElementById('stat-children').textContent = `${children.filter((p) => p.status === 'checked_in').length} / ${children.length}`;
 
   listBody.querySelectorAll('[data-checkin]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -1127,6 +1132,8 @@ try {
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
   canOverride = !!account.canOverrideCheckinStatus;
   lodgingEnabled = account.lodgingEnabled === true;
+  childrenEnabled = account.childrenEnabled === true;
+  document.getElementById('stat-children-wrap').hidden = !childrenEnabled;
   canMoveLodging = lodgingEnabled && ['admin', 'moderator'].includes(account.group?.key);
   document.getElementById('checkin-export').hidden = account.canExportMembers !== true;
   canManageMembers = (account.menus ?? []).includes('mitglieder');

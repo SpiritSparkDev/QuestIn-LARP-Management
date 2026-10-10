@@ -62,7 +62,8 @@ async function dropBlankForbidden(fields, allowed) {
 router.post('/managed-persons', requireGroupManager(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { email, firstName = '', lastName = '', nickname, characterName, ...rawOtFields } = body;
+  const { email, firstName = '', lastName = '', nickname, characterName, isChild, ...rawOtFields } = body;
+  if (isChild !== undefined && typeof isChild !== 'boolean') return { status: 400, body: { error: 'isChild must be a boolean' } };
   const allowed = await editableFieldsOf();
   const otFields = await dropBlankForbidden(rawOtFields, allowed);
   // A person needs just one handle: a nickname, a full name or a character name.
@@ -82,7 +83,7 @@ router.post('/managed-persons', requireGroupManager(async ({ req, user }) => {
   try {
     const person = await createManagedPerson({
       ownerId: user.id, groupId: user.group.id, email: email?.toLowerCase(), firstName, lastName,
-      nickname: nickname || (firstName && lastName ? undefined : charName), ...otFields,
+      nickname: nickname || (firstName && lastName ? undefined : charName), isChild, ...otFields,
     });
     if (charName) await createCharacter(person.id, { name: charName, stub: true });
     return { status: 201, body: person };
@@ -93,8 +94,10 @@ router.post('/managed-persons', requireGroupManager(async ({ req, user }) => {
 }));
 
 router.patch('/managed-persons/:id', requireGroupManager(async ({ req, params, user }) => {
-  const rawBody = await readJsonBody(req);
-  if (rawBody === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const parsed = await readJsonBody(req);
+  if (parsed === null) return { status: 400, body: { error: 'invalid JSON' } };
+  const { isChild, ...rawBody } = parsed;
+  if (isChild !== undefined && typeof isChild !== 'boolean') return { status: 400, body: { error: 'isChild must be a boolean' } };
   const allowed = await editableFieldsOf();
   const body = await dropBlankForbidden(rawBody, allowed);
   if (body.email && !isValidEmail(body.email)) {
@@ -108,7 +111,7 @@ router.patch('/managed-persons/:id', requireGroupManager(async ({ req, params, u
 
   try {
     const fields = body.email !== undefined ? { ...body, email: body.email?.toLowerCase() } : body;
-    const person = await updateManagedPerson(params.id, user.id, fields);
+    const person = await updateManagedPerson(params.id, user.id, { ...fields, isChild });
     if (!person) return { status: 404, body: { error: 'managed person not found' } };
     return { status: 200, body: person };
   } catch (err) {
