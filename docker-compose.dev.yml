@@ -42,7 +42,9 @@ services:
       - ./db:/app/db
       - ./frontend:/app/frontend
       - uploads-data:/app/uploads
-    command: sh -c "npm run migrate && npm run seed-groups && npm run seed-nsc-schema && npm run seed-admin && npm run migrate-account-data-blob && npm run migrate-registration-data-blob && npm run dev"
+    # package.json is baked into the image (not mounted), so the dev entry is called
+    # directly: it re-runs pending migrations on every automatic restart.
+    command: sh -c "npm run migrate && npm run seed-groups && npm run seed-nsc-schema && npm run seed-admin && npm run migrate-account-data-blob && npm run migrate-registration-data-blob && node --watch-path=backend --watch-path=db/migrations backend/devServer.js"
 
 volumes:
   db-data:

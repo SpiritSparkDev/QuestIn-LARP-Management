@@ -207,8 +207,8 @@ export function startBackgroundJobs() {
   ].flatMap(([job, delay]) => [setTimeout(job, delay).unref(), setInterval(job, every).unref()]);
 }
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
-if (isMain) {
+// HTTP server plus background jobs: `npm start`, and backend/devServer.js after migrating.
+export function startServer() {
   const port = process.env.PORT || 3000;
   createServer().listen(port, () => {
     logger.info('server started', { port });
@@ -216,3 +216,6 @@ if (isMain) {
   startBackgroundJobs();
   warnIfWrongDatabase();
 }
+
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain) startServer();
