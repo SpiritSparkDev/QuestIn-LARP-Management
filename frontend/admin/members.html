@@ -1545,15 +1545,27 @@
       const label = mergeSource.selectedOptions[0]?.textContent;
       if (!mergeSource.value || !confirm(`„${label}“ wirklich in dieses Konto zusammenführen und danach löschen? Das kann nicht rückgängig gemacht werden.`)) return;
       mergeRun.disabled = true;
+      let result;
       try {
-        await api.post('/members/merge', { keepId: editingMemberId, dropId: mergeSource.value });
-        notify('Konten zusammengeführt.', 'success');
+        result = await api.post('/members/merge', { keepId: editingMemberId, dropId: mergeSource.value });
+      } catch (err) {
+        // Shown inline as well: a toast alone is easy to miss inside the dialog.
+        mergePreview.textContent = `Nicht zusammengeführt: ${err.message}`;
+        notify(err.message, 'error');
+        mergeRun.disabled = false;
+        return;
+      }
+      const done = `✓ „${label}“ wurde in dieses Konto zusammengeführt und gelöscht (${result.registrations} Anmeldung(en) übernommen).`;
+      notify('Konten zusammengeführt.', 'success');
+      try {
         await loadMembers();
         await openDetail(editingMemberId);
       } catch (err) {
         notify(err.message, 'error');
-        mergeRun.disabled = false;
       }
+      // openDetail resets the box; show the outcome there so the dialog visibly changed.
+      mergeBox.open = true;
+      mergePreview.textContent = done;
     });
 
     for (const id of ['detail-cancel', 'detail-abort']) {

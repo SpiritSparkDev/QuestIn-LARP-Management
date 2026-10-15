@@ -69,10 +69,20 @@ export async function mergeAccounts(keepId, dropId) {
     const { rows: moved } = await client.query(
       `SELECT event_id FROM registrations WHERE user_id = $2 AND event_id NOT IN (SELECT event_id FROM registrations WHERE user_id = $1)`,
       [keepId, dropId]);
+    // The payment / opt-out tokens are unique: park them while both rows exist, then hand them to the copy.
+    const movedIds = moved.map((r) => r.event_id);
+    const { rows: tokens } = await client.query(
+      `UPDATE registrations o SET payment_token = NULL, optout_token = NULL
+        FROM (SELECT event_id, payment_token, optout_token FROM registrations WHERE user_id = $1 AND event_id = ANY($2::uuid[])) t
+       WHERE o.user_id = $1 AND o.event_id = t.event_id
+       RETURNING t.event_id, t.payment_token, t.optout_token`, [dropId, movedIds]);
     await client.query(
       `INSERT INTO registrations (user_id, ${colList})
        SELECT $1, ${colList} FROM registrations WHERE user_id = $2 AND event_id = ANY($3::uuid[])`,
-      [keepId, dropId, moved.map((r) => r.event_id)]);
+      [keepId, dropId, movedIds]);
+    for (const t of tokens) {
+      await client.query('UPDATE registrations SET payment_token = $3, optout_token = $4 WHERE user_id = $1 AND event_id = $2', [keepId, t.event_id, t.payment_token, t.optout_token]);
+    }
     for (const table of ['payments', 'paypal_orders', 'nsc_dialog_messages']) {
       await client.query(`UPDATE ${table} SET user_id = $1 WHERE user_id = $2 AND event_id = ANY($3::uuid[])`, [keepId, dropId, moved.map((r) => r.event_id)]);
     }

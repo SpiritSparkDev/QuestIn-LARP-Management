@@ -8,7 +8,7 @@ Stand: 2026-10-08 (Plan P3).
 Lokal (`docker-compose.dev.yml`) startet der Server über `backend/devServer.js` im Watch-Modus auf `backend/` und `db/migrations/`: Eine neue Migrationsdatei wird beim automatischen Neustart sofort eingespielt, ohne den Container neu zu starten. Schlägt sie fehl, steht `migration failed` im Log und der Server wartet, bis die Datei korrigiert ist.
 
 ## Befund (geprüft am 2026-10-08)
-- Doppelte Präfixe aus der Frühzeit: `026` (3 Dateien), `033`, `034`, `085`, `086`, `090`, `091`, `092` (je 2). Letzte Migration: `096_nsc_als_rolle.sql`.
+- Doppelte Präfixe aus der Frühzeit: `026` (3 Dateien), `033`, `034`, `085`, `086`, `090`, `091`, `092` (je 2). Letzte Migration damals: `096_nsc_als_rolle.sql`; aktuell (2026-10-15): `125_children_addon.sql`, ohne neue Doppelpräfixe.
 - Alle betroffenen Dateien betreffen verschiedene Tabellen/Spalten und hängen nicht voneinander ab.
 - Beleg: Alle 105 Migrationen einmal in Namensreihenfolge und einmal mit **umgekehrter Reihenfolge innerhalb jeder Doppelgruppe** auf je eine frische Datenbank angewendet. Die normalisierten Schemata (485 Zeilen aus Spalten, Constraints, Indizes) sind **identisch**. Die Ausführungsreihenfolge innerhalb dieser Gruppen ist also egal.
 - Neue Doppelpräfixe verhindert `tests/unit/migrationFiles.test.js` (Allowlist der acht alten Präfixe, Lückenprüfung, Namensformat).

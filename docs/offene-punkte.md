@@ -1,4 +1,4 @@
-# Offene Punkte (Stand 2026-10-04)
+# Offene Punkte (Stand 2026-10-15)
 
 Entscheidungen zur Fragenliste: Wo nichts anderes gesagt wurde, gilt die jeweilige Empfehlung.
 
@@ -11,5 +11,15 @@ Entscheidungen zur Fragenliste: Wo nichts anderes gesagt wurde, gilt die jeweili
 - **CSV-Export:** Jeder Export wird protokolliert; sensible Felder (z. B. Gesundheitshinweise) nur mit eigenem Recht. Eine CSV der Check-In-Liste kommt dazu.
 
 ## Ideen ohne Entscheidung
-- Event-Anmeldung als Mitglieder-Filter ist da; Massenaktionen (Mail/Einladung an die gefilterte Liste) nicht.
+- Massenaktionen in der Mitgliederverwaltung (Rolle, Deaktivieren/Reaktivieren, Anmeldestatus, Auswahl-Export) sind da; Mail/Einladung an die gefilterte Liste nicht.
 - Seitenleiste: Hotkeys-Tab und Admin-Gruppe sind erledigt.
+
+## Seit 2026-10-04 umgesetzt
+- **Teilnehmerlimits:** Gesamtlimit plus getrennte Limits für SC und NSC je Event; welche Con-Rollen zählen, ist eine Admin-Einstellung (Standard SC, NSC, Ticket; Crew-Rollen zählen nicht). Warteliste je Limit/Rolle, Rückstufung durch Orga behält die Anmeldezeit (`waitlisted_at`). Admin kann SC auf NSC umstellen (mit Limitprüfung).
+- **Anmeldesperre pro Event** (je Con-Rolle und Account-Rolle); wer dadurch warten muss, kommt auf die Warteliste und rückt bei Aufhebung nach.
+- **Backup:** Zeitplan-Backup in der App (Admin → Backup → „Automatische Sicherung", siehe `docs/betrieb-backup.md`).
+- **Mitglieder:** Konten zusammenführen (Mitglieder-Detail), Mitgliedsnummer, E-Mail änderbar, Mitglieder ohne E-Mail, eingeladene Mitglieder direkt aktivieren, Tabelle sortier- und gruppierbar, Passwort in der App ändern, Add-on „Kinder" für verwaltete Personen.
+- **Check-In:** Spalte „Angemeldet am" (auch Mitglieder-Detail und CSV); Admin/Moderator verschieben Unterbringungen (auch im Mitglieder-Detail).
+- **Mail:** E-Mail-Vorlagen sind fest einer Mail-Art zugeordnet; Versandprotokoll für Systemmails (90 Tage).
+- **Betrieb:** Wartungsseite statt „502 Bad Gateway" während eines Deploys.
+- **Zahlungen:** Zahlungsarten einzeln schaltbar, PayPal-Buttons und PayPal.Me, Überweisung melden.

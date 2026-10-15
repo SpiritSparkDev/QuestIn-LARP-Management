@@ -1,6 +1,6 @@
 # Betrieb: Backup, Restore und Monitoring
 
-Stand: 2026-10-08. Umsetzung von Plan P5 (`docs/superpowers/plans/2026-10-07-p5-backup-restore-monitoring.md`).
+Stand: 2026-10-15. Umsetzung von Plan P5 (`docs/superpowers/plans/2026-10-07-p5-backup-restore-monitoring.md`).
 
 ## Was gesichert wird
 | Was | Wo | Wie |
@@ -37,6 +37,14 @@ RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID=…
 RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY=…
 ```
 oder SFTP (`TYPE=sftp`, `HOST`, `PORT`, `USER`, `PASS` als `rclone obscure`-Wert). Der Zugang sollte nur Schreibrechte haben; Aufbewahrung/Versionierung am Ziel einstellen (Lifecycle-Regel), das Skript löscht dort nichts.
+
+## Zeitplan-Backup in der App (zusätzlich)
+Unabhängig vom Docker-Dienst `backup` kann die App selbst sichern: **Admin → Backup → Karte „Automatische Sicherung"** (`backend/backup/schedule.js`). Das ist ein `.qbak` mit Umfang `participants`, `events` oder `all` (siehe `docs/log-ereignisse.md`), **kein** `pg_dump`, und ersetzt die nächtliche Datenbank-Sicherung oben nicht.
+- Zeitpunkt: täglich oder wöchentlich (Wochentag wählbar), Uhrzeit in **Berliner Zeit**. Der Server prüft jede Minute; je Kalendertag läuft höchstens ein Backup. Ein komplett verpasster Tag (Server aus) wird nicht nachgeholt.
+- Ziele: `local` (Ordner `BACKUP_LOCAL_DIR`), `s3`, `sftp`, einrichtbar unter „Ziele einrichten". Ein fehlschlagendes Ziel stoppt die anderen; der Status des letzten Laufs (`ok`/`partial`/`error`) steht auf der Karte.
+- Aufbewahrung (Anzahl, Standard 14, 1–365): nur im Serverordner (`local`); S3/SFTP behalten alles, dort eine Lifecycle-Regel setzen.
+- Passwort: Das Backup-Passwort liegt verschlüsselt in `backup_settings` (nötig, damit der Lauf ohne Eingabe klappt); ein leeres Feld beim Speichern behält das alte. Ohne Passwort, Ziel oder Haken läuft nichts. Verschlüsselt wird mit dem `ENCRYPTION_KEY`, der also auch hierfür separat zu sichern ist.
+- Protokoll: `backup.created` mit `details.scheduled: true`.
 
 ## Monitoring
 - **Backup-Heartbeat:** `BACKUP_PING_URL` auf eine Dead-man's-switch-URL setzen (z. B. Healthchecks.io, Erwartung alle 24 h, Karenz 2 h; bei stündlichem Betrieb entsprechend). Erfolg ruft die URL auf, Fehler ruft `<URL>/fail` auf. Bleibt der Ping aus, kommt die Warnung.

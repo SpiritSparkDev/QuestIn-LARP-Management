@@ -1,6 +1,6 @@
 # Protokoll (Audit-Log) und Backup
 
-Stand: 2026-10-08. Das Protokoll liegt in der Tabelle `audit_log` und ist im Admin-Menü unter **Protokoll** einsehbar (nach Kategorien filterbar). Geschrieben wird über `logAudit()` aus `backend/audit/repository.js`; ein Fehler dort bricht die eigentliche Aktion nie ab.
+Stand: 2026-10-15. Das Protokoll liegt in der Tabelle `audit_log` und ist im Admin-Menü unter **Protokoll** einsehbar (nach Kategorien filterbar). Geschrieben wird über `logAudit()` aus `backend/audit/repository.js`; ein Fehler dort bricht die eigentliche Aktion nie ab.
 
 ## Grundsatz: nur Wichtiges
 Protokolliert werden Ereignisse, die jemand später nachvollziehen will (Anlegen, Löschen, Geld, Rechte, Versand, Export). **Nicht** protokolliert werden Profil- und Feldänderungen, Textbearbeitungen, Dateiuploads, Logins. Im Protokoll stehen keine Feldinhalte, nur Namen/Beträge/Art des Ereignisses.
@@ -10,10 +10,18 @@ Protokolliert werden Ereignisse, die jemand später nachvollziehen will (Anlegen
 |---|---|
 | `user.registered` | Neues Konto registriert |
 | `role.changed` | Rolle eines Kontos geändert (Mitglieder-Verwaltung) |
+| `auth.password_changed` | Passwort in der App geändert (Konto-Seite) |
+| `user.email_changed` | E-Mail-Adresse eines Mitglieds durch Orga geändert (alt → neu) |
+| `user.created_without_email` | Mitglied ohne E-Mail angelegt |
+| `invitation.activated` | Eingeladenes Mitglied direkt durch Orga aktiviert |
+| `members.merged` | Konten zusammengeführt (behaltenes Konto, E-Mail/Name des entfernten, Zahl der Anmeldungen) |
 | `character.created` / `character.deleted` | Charakter angelegt / gelöscht (Name, ggf. „trotz Anmeldung") |
 | `character.staff_field_changed` | Staff-Feld eines Charakters geändert |
 | `registration.created` | Anmeldung zu einem Event (auch Warteliste, auch durch Orga/Verwalter) |
 | `registration.cancelled` | Abmeldung durch die Person selbst oder Storno durch Orga |
+| `registration.admin_create` | Anmeldung durch Orga für ein Mitglied angelegt |
+| `registration.character_changed` | Charakter einer Anmeldung getauscht/nachgereicht |
+| `registration.lock_changed` | Anmeldesperre eines Events geändert |
 | `checkin.confirm` | Angaben beim Check-in bestätigt/korrigiert |
 | `payment.received` | Zahlung eingegangen (Stripe, manuell als bezahlt markiert, Tavernen-Online-Aufladung) |
 | `payment.refunded` | Zahlung erstattet |
@@ -22,8 +30,13 @@ Protokolliert werden Ereignisse, die jemand später nachvollziehen will (Anlegen
 | `group_tree.join_code_redeemed` | Gruppe per Code beigetreten |
 | `link.sent` | Zugangs-/Einladungslink versendet oder erzeugt (Bestätigung, Passwort, Einladung, erneut, Gast-Umwandlung) |
 | `members.export`, `checkin.export`, `tavern.export` | CSV-Exporte |
-| `backup.created` | Backup heruntergeladen |
-| weitere | `offline_*`, `sync_conflict_resolved`, `privacy.deletion`, `managed_person.*`, `event.mailing` |
+| `members.import` | CSV-Import von Mitgliedern angewendet |
+| `members.bulk` | Bulk-Aktion in der Mitgliederverwaltung (Art, Anzahl, ok/fehlgeschlagen, IDs) |
+| `payment.transfer_notified` / `payment.transfer_reset` | Überweisung gemeldet / Meldung zurückgesetzt |
+| `backup.created` | Backup erstellt (manuell, auch Download; `details.scheduled: true` = Zeitplan-Backup, ohne Akteur) |
+| `backup.settings_changed` | Backup-Ziele/Zeitplan gespeichert (ohne Werte) |
+| `backup.restored` | Backup eingespielt |
+| weitere | `offline_*`, `sync_conflict_resolved`, `privacy.deletion`, `managed_person.*`, `event.mailing`, `character.group_field_changed`, `character.deleted_with_registrations`, `group_tree.account_fields_changed`, `group_tree.view_characters` |
 
 ## Vorschläge für weitere Ereignisse (noch nicht eingebaut)
 - Event angelegt / beendet / wieder geöffnet

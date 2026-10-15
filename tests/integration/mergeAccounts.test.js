@@ -40,7 +40,7 @@ test('merge moves registrations, payments, characters and fills empty fields; th
     const keep = await makeUser('mitglied', { phone: '123' });
     const dup = await makeUser('mitglied', { phone: '999', address: 'Hauptstr. 1' });
     const eventId = await makeEvent('Merge Con');
-    await query("INSERT INTO registrations (user_id, event_id, status, con_role) VALUES ($1, $2, 'confirmed', 'sc')", [dup.userId, eventId]);
+    await query("INSERT INTO registrations (user_id, event_id, status, con_role, payment_token, optout_token) VALUES ($1, $2, 'confirmed', 'sc', 'pt-merge-test', 'ot-merge-test')", [dup.userId, eventId]);
     await query("INSERT INTO payments (user_id, event_id, method, amount_cents) VALUES ($1, $2, 'bank_transfer', 5000)", [dup.userId, eventId]);
     await query("INSERT INTO characters (user_id, name) VALUES ($1, 'Doppelgänger')", [dup.userId]).catch(async () => {
       await query("INSERT INTO characters (user_id, event_id, name) VALUES ($1, $2, 'Doppelgänger')", [dup.userId, eventId]);
@@ -59,6 +59,7 @@ test('merge moves registrations, payments, characters and fills empty fields; th
 
     assert.equal((await query('SELECT 1 FROM users WHERE id = $1', [dup.userId])).rowCount, 0);
     assert.equal((await query('SELECT 1 FROM registrations WHERE user_id = $1 AND event_id = $2', [keep.userId, eventId])).rowCount, 1);
+    assert.deepEqual((await query('SELECT payment_token, optout_token FROM registrations WHERE user_id = $1 AND event_id = $2', [keep.userId, eventId])).rows[0], { payment_token: 'pt-merge-test', optout_token: 'ot-merge-test' });
     assert.equal((await query('SELECT amount_cents FROM payments WHERE user_id = $1 AND event_id = $2', [keep.userId, eventId])).rows[0].amount_cents, 5000);
     assert.equal((await query('SELECT count(*)::int AS n FROM characters WHERE user_id = $1', [keep.userId])).rows[0].n, 1);
     const data = decryptFieldBlob((await query('SELECT account_data_enc FROM users WHERE id = $1', [keep.userId])).rows[0].account_data_enc);
