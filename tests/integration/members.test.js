@@ -954,14 +954,42 @@ test('GET /members/:id/access-link rejects a guest account', async () => {
   }
 });
 
-async function makeGuest() {
-  const email = `members-guest-${crypto.randomUUID()}@example.com`;
+async function makeGuest({ withEmail = true } = {}) {
+  const email = withEmail ? `members-guest-${crypto.randomUUID()}@example.com` : null;
   const { rows } = await query(
     "INSERT INTO users (email, first_name, last_name, group_id, is_guest, email_verified) VALUES ($1, 'Guest', 'Person', (SELECT id FROM groups WHERE key = 'mitglied'), true, false) RETURNING id",
     [email]
   );
   return { id: rows[0].id, email };
 }
+
+test('POST /members/:id/generate-conversion-link works for a managed person without e-mail; e-mail and password are set on redeeming', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const managed = await makeGuest({ withEmail: false });
+    const res = await fetch(`http://localhost:${port}/members/${managed.id}/generate-conversion-link`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(res.status, 201);
+    const token = new URL((await res.json()).link).searchParams.get('token');
+
+    const email = `members-converted-${crypto.randomUUID()}@example.com`;
+    const redeemRes = await fetch(`http://localhost:${port}/auth/invite/redeem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password: 'correct horse battery staple', email }),
+    });
+    assert.equal(redeemRes.status, 200);
+    const { rows } = await query('SELECT is_guest, email FROM users WHERE id = $1', [managed.id]);
+    assert.equal(rows[0].is_guest, false);
+    assert.equal(rows[0].email, email);
+  } finally {
+    server.close();
+  }
+});
 
 test('POST /members/:id/generate-conversion-link rejects a non-guest member', async () => {
   const server = createServer().listen(0);
