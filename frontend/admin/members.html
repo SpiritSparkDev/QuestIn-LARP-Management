@@ -971,8 +971,8 @@
         const guestBadge = m.managedBy
           ? ` <span class="badge badge-inactive" title="Wird von ${escapeHtml(m.managedBy.name)} verwaltet">Verwaltet von ${escapeHtml(m.managedBy.name)}</span>`
           : (m.isGuest ? ` <span class="badge badge-inactive">Direktanmeldung</span>` : '');
-        // A managed person without an e-mail can't be sent a link; their manager converts them.
-        const conversionLinkBtn = m.isGuest && m.email
+        // Also for managed persons without an e-mail: the person enters it when redeeming the link.
+        const conversionLinkBtn = m.isGuest
           ? `<button type="button" class="btn-sm btn-ghost btn-icon" data-generate-conversion-link="${m.id}" title="Konvertierungslink erzeugen" aria-label="Konvertierungslink erzeugen"><span class="material-symbols-outlined" aria-hidden="true">sync_alt</span></button>`
           : '';
         if (m.status === 'active') {
