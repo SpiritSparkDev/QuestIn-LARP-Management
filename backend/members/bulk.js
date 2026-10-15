@@ -8,6 +8,7 @@ import { getEvent } from '../events/repository.js';
 import { reactivateMember } from './repository.js';
 import { updateMemberAudited, deactivateChecked } from './actions.js';
 import { filterToAllowedFields } from './routes.js';
+import { setPlayGroup } from './playGroup.js';
 import { approveRegistration, cancelRegistration } from '../registrations/repository.js';
 
 const MAX_BULK_IDS = 500;
@@ -62,6 +63,16 @@ bulkRoute('/members-bulk/group', async ({ body, user }) => {
       if (id.toLowerCase() === user.id.toLowerCase()) return 'Die eigene Rolle kann nicht per Sammelaktion geändert werden.';
       return (await updateMemberAudited(user.id, id, { group: rows[0].id })) ? null : 'member not found';
     },
+  };
+});
+
+bulkRoute('/members-bulk/play-group', async ({ body, user }) => {
+  if (user.group.key !== 'admin') return { status: 403, error: 'Kein Zugriff.' };
+  if (body.managerId !== null && typeof body.managerId !== 'string') return { status: 400, error: 'managerId (string or null) is required' };
+  return {
+    action: 'play-group',
+    details: { managerId: body.managerId },
+    perId: async (id) => setPlayGroup(id, body.managerId),
   };
 });
 

@@ -13,6 +13,7 @@ import { readJsonBody } from '../httpBody.js';
 import { listMembers, getMember, reactivateMember, deleteMember } from './repository.js';
 import { updateMemberAudited, deactivateChecked } from './actions.js';
 import { previewMerge, mergeAccounts } from './merge.js';
+import { setPlayGroup } from './playGroup.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
 import { sendInvitationEmail, sendVerificationEmail, sendPasswordResetEmail, baseUrl } from '../auth/mailer.js';
 import { getAppSettings } from '../appSettings/repository.js';
@@ -217,6 +218,24 @@ router.post('/members/:id/reactivate', requireAuth(requireMenu('mitglieder')(asy
 
 // Merge a duplicate account into another one (admin only): the second account's registrations, characters, files and
 // payments move to the first, then it is deleted. The preview lists what would move and what blocks the merge.
+// Put a member into a play group (the group of a group manager) or out of it: managerId null (admin only).
+router.put('/members/:id/play-group', requireAuth(requireAdminGroup(async ({ req, params, user }) => {
+  const body = await readJsonBody(req);
+  if (body === null || !('managerId' in body) || (body.managerId !== null && typeof body.managerId !== 'string')) {
+    return { status: 400, body: { error: 'managerId (string or null) is required' } };
+  }
+  let error;
+  try {
+    error = await setPlayGroup(params.id, body.managerId);
+  } catch (err) {
+    if (err.code === '22P02') return { status: 400, body: { error: 'invalid id' } };
+    throw err;
+  }
+  if (error) return { status: error === 'member not found' ? 404 : 409, body: { error } };
+  await logAudit({ actorId: user.id, action: 'members.play_group', subjectUserId: params.id, details: { managerId: body.managerId } });
+  return { status: 200, body: { managerId: body.managerId } };
+})));
+
 router.post('/members/merge', requireAuth(requireAdminGroup(async ({ req, user }) => {
   const body = await readJsonBody(req);
   if (!body || typeof body.keepId !== 'string' || typeof body.dropId !== 'string') return { status: 400, body: { error: 'keepId und dropId sind erforderlich.' } };

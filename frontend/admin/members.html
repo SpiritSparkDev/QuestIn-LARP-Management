@@ -106,6 +106,7 @@
           <div id="bulk-bar" class="member-filter-summary" hidden>
             <strong id="bulk-count"></strong>
             <button type="button" class="btn-secondary btn-sm" data-bulk="group" hidden>Rolle ändern …</button>
+            <button type="button" class="btn-secondary btn-sm" data-bulk="play-group" hidden>Spielgruppe …</button>
             <button type="button" class="btn-secondary btn-sm" data-bulk="deactivate" hidden>Deaktivieren</button>
             <button type="button" class="btn-secondary btn-sm" data-bulk="reactivate" hidden>Reaktivieren</button>
             <button type="button" class="btn-secondary btn-sm" data-bulk="registration" hidden>Anmeldestatus …</button>
@@ -168,6 +169,13 @@
             </div>
             <div id="detail-fields"></div>
             <div class="save-bar"><button type="button" id="detail-save">Konto speichern</button> <button type="button" id="detail-abort" class="btn-ghost">Abbrechen</button></div>
+            <div id="playgroup-box" hidden>
+              <h3>Spielgruppe</h3>
+              <p class="sub" id="playgroup-hint"></p>
+              <select id="playgroup-select"></select>
+              <label for="playgroup-select">Spielgruppe</label>
+              <button type="button" id="playgroup-save" class="btn-secondary">Spielgruppe übernehmen</button>
+            </div>
             <details id="merge-box" hidden>
               <summary>Doppeltes Konto zusammenführen</summary>
               <p class="sub">Wähle das Konto, das <strong>in dieses hier</strong> aufgehen soll. Seine Anmeldungen, Charaktere, Dateien und Zahlungen wandern hierher, leere Kontofelder werden aufgefüllt, danach wird es gelöscht. Das kann nicht rückgängig gemacht werden.</p>
@@ -546,6 +554,7 @@
       document.getElementById('bulk-count').textContent = `${selected.size} ausgewählt`;
       bulkBar.querySelector('[data-bulk="group"]').hidden = !myAccountFields.includes('group');
       bulkBar.querySelector('[data-bulk="registration"]').hidden = !canOverrideCheckin;
+      bulkBar.querySelector('[data-bulk="play-group"]').hidden = !isAdminViewer;
       bulkBar.querySelector('[data-bulk="deactivate"]').hidden = currentView !== 'active';
       bulkBar.querySelector('[data-bulk="reactivate"]').hidden = currentView !== 'deactivated';
       selectAll.checked = selectable.length > 0 && selected.size === selectable.length;
@@ -563,7 +572,7 @@
       updateBulkBar();
     });
 
-    const BULK_TITLES = { group: 'Rolle ändern', deactivate: 'Deaktivieren', reactivate: 'Reaktivieren', registration: 'Anmeldestatus setzen' };
+    const BULK_TITLES = { 'play-group': 'Spielgruppe setzen', group: 'Rolle ändern', deactivate: 'Deaktivieren', reactivate: 'Reaktivieren', registration: 'Anmeldestatus setzen' };
     let bulkKind = null;
     bulkBar.querySelectorAll('[data-bulk]').forEach((btn) => btn.addEventListener('click', async () => {
       bulkKind = btn.dataset.bulk;
@@ -579,6 +588,9 @@
         }
         controls = `<select id="bulk-group">${groupOptions.map((g) => `<option value="${escapeHtml(g.key)}">${escapeHtml(g.name)}</option>`).join('')}</select><label for="bulk-group">Neue Rolle</label>`;
         sentence += ' erhalten die gewählte Rolle';
+      } else if (bulkKind === 'play-group') {
+        controls = `<select id="bulk-play-group">${playGroupOptionsHtml(null, selected)}</select><label for="bulk-play-group">Spielgruppe</label>`;
+        sentence += ' werden der gewählten Spielgruppe zugeordnet (Gruppenleitungen und verwaltete Personen bleiben unverändert und werden als Fehler gemeldet)';
       } else if (bulkKind === 'registration') {
         controls = `<select id="bulk-event">${allEvents.map((e) => `<option value="${escapeHtml(e.id)}"${e.id === prefs.event ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select><label for="bulk-event">Event</label>
           <select id="bulk-reg-action"><option value="approve">Bestätigen (Zahlung eingegangen)</option><option value="cancel">Absagen (Nachrücken von der Warteliste inklusive)</option></select><label for="bulk-reg-action">Aktion</label>`;
@@ -597,6 +609,7 @@
       const ids = [...selected];
       const payload = { ids };
       if (bulkKind === 'group') payload.group = document.getElementById('bulk-group').value;
+      if (bulkKind === 'play-group') payload.managerId = document.getElementById('bulk-play-group').value || null;
       if (bulkKind === 'registration') {
         payload.eventId = document.getElementById('bulk-event').value;
         payload.action = document.getElementById('bulk-reg-action').value;
@@ -1508,6 +1521,7 @@
       document.getElementById('detail-child').checked = member.isChild === true;
 
       setupMergeBox(member);
+      setupPlayGroupBox(member);
       detailDialog.showModal();
     }
 
@@ -1516,6 +1530,43 @@
     const mergeSource = document.getElementById('merge-source');
     const mergePreview = document.getElementById('merge-preview');
     const mergeRun = document.getElementById('merge-run');
+
+    // Options for choosing a play group: the existing groups, then every free account that could lead a new one.
+    // `exclude`: ids that cannot be the target (the member itself / the whole selection).
+    function playGroupOptionsHtml(currentId, exclude = new Set()) {
+      const groups = new Map();
+      for (const m of viewMembers) if (m.playGroup) groups.set(m.playGroup.id, m.playGroup.name);
+      const leaders = viewMembers.filter((m) => m.status === 'active' && !m.managedBy && !m.playGroup && !groups.has(m.id) && !exclude.has(m.id));
+      const opt = (id, label) => `<option value="${escapeHtml(id)}" ${id === currentId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+      return `<option value="">– keine Spielgruppe –</option>`
+        + `<optgroup label="Bestehende Gruppen">${[...groups].filter(([id]) => !exclude.has(id)).sort((a, b) => a[1].localeCompare(b[1], 'de')).map(([id, name]) => opt(id, name)).join('')}</optgroup>`
+        + `<optgroup label="Neue Gruppe mit … als Leitung">${leaders.sort((a, b) => fullName(a).localeCompare(fullName(b), 'de')).map((m) => opt(m.id, fullName(m) || m.email)).join('')}</optgroup>`;
+    }
+
+    const playGroupBox = document.getElementById('playgroup-box');
+    const playGroupSelect = document.getElementById('playgroup-select');
+    function setupPlayGroupBox(member) {
+      playGroupBox.hidden = !isAdminViewer;
+      if (!isAdminViewer) return;
+      const listed = viewMembers.find((m) => m.id === member.id);
+      const managed = Boolean(listed?.managedBy ?? member.managedBy);
+      playGroupSelect.disabled = managed;
+      document.getElementById('playgroup-save').disabled = managed;
+      document.getElementById('playgroup-hint').textContent = managed
+        ? 'Verwaltete Personen gehören zur Gruppe ihres Verwalters – verschiebe den Verwalter.'
+        : (listed?.playGroup && listed.playGroup.id === member.id ? 'Dieses Konto leitet die Gruppe selbst. Zum Wechseln muss die Leitung zuerst aufgegeben werden.' : '');
+      playGroupSelect.innerHTML = playGroupOptionsHtml(listed?.playGroup && listed.playGroup.id !== member.id ? listed.playGroup.id : null, new Set([member.id]));
+    }
+    document.getElementById('playgroup-save').addEventListener('click', async () => {
+      try {
+        await api.put(`/members/${editingMemberId}/play-group`, { managerId: playGroupSelect.value || null });
+        notify('Spielgruppe gespeichert.', 'success');
+        await loadMembers();
+        setupPlayGroupBox({ id: editingMemberId, managedBy: viewMembers.find((m) => m.id === editingMemberId)?.managedBy });
+      } catch (err) {
+        notify(err.message, 'error');
+      }
+    });
 
     function setupMergeBox(member) {
       mergeBox.hidden = !isAdminViewer;
