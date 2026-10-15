@@ -101,6 +101,16 @@
                 <p class="sub" id="dashboard-group-summary-text"></p>
                 <button type="button" id="dashboard-group-link" class="btn-ghost">Zur Gruppenverwaltung</button>
               </div>
+
+              <div class="card form-pad" id="dashboard-join-card" hidden>
+                <h2>Hast du einen Gruppencode?</h2>
+                <p class="sub">Hat dir eine Gruppenleitung einen Beitrittscode gegeben, trage ihn hier ein. Du kommst direkt in ihre Gruppe und wirst gemeinsam mit ihr angemeldet.</p>
+                <form id="dashboard-join-form" class="group-tree-form">
+                  <input id="dashboard-join-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off">
+                  <label for="dashboard-join-code">Code der Gruppenleitung</label>
+                  <button type="submit" class="btn-ghost">Code einlösen</button>
+                </form>
+              </div>
               </div>
               </div>
 
@@ -1425,6 +1435,8 @@
       if (groupTree?.node.children.length) parts.push(`${groupTree.node.children.length} Mitglied${groupTree.node.children.length === 1 ? "" : "er"}`);
       if (groupTree?.outgoing.length) parts.push(`${groupTree.outgoing.length} offene Einladung${groupTree.outgoing.length === 1 ? "" : "en"}`);
       document.getElementById("dashboard-group-summary-text").textContent = parts.join(" · ");
+      // Only people who are in no group and manage none can still join one with a code.
+      document.getElementById("dashboard-join-card").hidden = !(groupTree?.canJoinGroup && !navAccount?.groupMemberOnly);
     }
 
     document.getElementById("dashboard-managed-persons-checkbox").addEventListener("change", (event) => {
@@ -1441,6 +1453,22 @@
       updateManagedPersonsDashboardVisibility();
     });
     document.getElementById("dashboard-group-link").addEventListener("click", () => goToTab("gruppe"));
+
+    document.getElementById("dashboard-join-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await api.post("/group-tree/join-code/redeem", { code: document.getElementById("dashboard-join-code").value });
+        document.getElementById("dashboard-join-code").value = "";
+        notify("Du bist der Gruppe beigetreten.", "success");
+        setGroupMenuEnabled(true);
+        await loadGroupTree();
+        renderNav();
+        updateManagedPersonsDashboardVisibility();
+        goToTab("gruppe");
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    });
 
     document.getElementById("password-form").addEventListener("submit", async (event) => {
       event.preventDefault();
