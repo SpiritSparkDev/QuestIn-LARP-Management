@@ -71,6 +71,17 @@
           </div>
         </div>
 
+        <dialog id="character-assign-dialog">
+          <h3 id="character-assign-title">Event zuordnen</h3>
+          <p class="lede" id="character-assign-lede"></p>
+          <div id="character-assign-body"></div>
+          <div class="dialog-actions">
+            <button type="button" id="character-assign-save">Zuordnen</button>
+            <button type="button" id="character-assign-goto" class="btn-secondary" hidden>Zur Anmeldung</button>
+            <button type="button" id="character-assign-cancel" class="btn-ghost">Abbrechen</button>
+          </div>
+        </dialog>
+
         <dialog id="delete-character-dialog">
           <h3>Charakter löschen</h3>
           <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden. Gib zur Bestätigung den Namen "<strong id="delete-character-name"></strong>" ein.</p>
@@ -358,8 +369,17 @@
         <button type="button" class="char-photo-upload" aria-label="Foto hochladen"><span class="material-symbols-outlined" aria-hidden="true">photo_camera</span></button>
       </div>
       <h3>${escapeHtml(c.name)}</h3>
+      <p class="sub char-card-event${c.registeredFor ? " is-assigned" : ""}">${c.registeredFor ? `Für ${escapeHtml(c.registeredFor.eventName)} als ${escapeHtml(CON_ROLE_LABELS[c.registeredFor.conRole] ?? c.registeredFor.conRole)} angemeldet.` : "Noch keinem Event zugeordnet."}</p>
+      <button type="button" class="btn-sm btn-secondary char-card-assign" data-assign="${c.id}">${c.registeredFor ? "Zuordnung ändern" : "Event zuordnen"}</button>
     </div>`)
         .join("");
+
+      characterListBody.querySelectorAll("[data-assign]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openCharacterAssignDialog(button.dataset.assign);
+        });
+      });
 
       characterListBody.querySelectorAll("[data-card-for]").forEach((card) => {
         card.addEventListener("click", () => startEdit(card.dataset.cardFor));
@@ -707,6 +727,60 @@
         const result = await api.delete(`/managed-persons/${managedPersonId}/events/${eventId}/register`);
         if (result?.manualReview) notify("Die Person ist abgemeldet. Die Orga prüft das manuell und meldet sich wegen einer möglichen Erstattung.", "success");
         await loadRegistrations();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    }
+
+    // Event zuordnen, seen from the character: picks one of the person's registrations and
+    // hands the character in there (same endpoint as "Charakter wechseln").
+    const characterAssignDialog = document.getElementById("character-assign-dialog");
+    const characterAssignBody = document.getElementById("character-assign-body");
+    const characterAssignSave = document.getElementById("character-assign-save");
+    const characterAssignGoto = document.getElementById("character-assign-goto");
+    function openCharacterAssignDialog(characterId) {
+      const character = characters.find((c) => c.id === characterId);
+      if (!character) return;
+      document.getElementById("character-assign-title").textContent = `${character.name}: Event zuordnen`;
+      characterAssignSave.hidden = false;
+      characterAssignGoto.hidden = true;
+      characterAssignGoto.textContent = "Zur Anmeldung";
+      characterAssignGoto.onclick = () => {
+        characterAssignDialog.close();
+        document.querySelector('.tab-btn[data-tab="anmelden-tab"]').click();
+      };
+      const current = character.registeredFor;
+      // Only SC registrations that are not checked in can take a character.
+      const candidates = currentRegistrations.filter((r) => r.conRole === "sc" && ["pending", "waitlisted", "confirmed"].includes(r.status));
+      if (current) {
+        document.getElementById("character-assign-lede").textContent = `Dieser Charakter ist für ${current.eventName} angemeldet.`;
+        characterAssignBody.innerHTML = '<p class="sub">Zum Wechseln des Charakters oder Bearbeiten der Anmeldung gehst du zur Anmeldung.</p>';
+        characterAssignSave.textContent = "Zuordnung lösen";
+        characterAssignGoto.hidden = false;
+        characterAssignSave.onclick = () => saveCharacterAssignment(current.eventId, null);
+      } else if (candidates.length === 0) {
+        document.getElementById("character-assign-lede").textContent = "Ein Charakter wird einem Event zugeordnet, indem die Person für das Event angemeldet wird und dort den Charakter bekommt.";
+        characterAssignBody.innerHTML = '<p class="sub">Die Person hat aktuell keine Anmeldung als Spielercharakter.</p>';
+        characterAssignSave.hidden = true;
+        characterAssignGoto.hidden = false;
+      } else {
+        document.getElementById("character-assign-lede").textContent = "Wähle die Anmeldung, mit der die Person diesen Charakter zum Event mitbringt.";
+        characterAssignBody.innerHTML = `<select id="character-assign-select">${candidates.map((r) => {
+          const replaces = r.characterId && r.characterId !== character.id;
+          return `<option value="${escapeHtml(r.eventId)}">${escapeHtml(r.eventName)}${replaces ? " (ersetzt den bisherigen Charakter)" : ""}</option>`;
+        }).join("")}</select><label for="character-assign-select">Event</label>`;
+        characterAssignSave.textContent = "Zuordnen";
+        characterAssignSave.onclick = () => saveCharacterAssignment(document.getElementById("character-assign-select").value, character.id);
+      }
+      characterAssignDialog.showModal();
+    }
+    document.getElementById("character-assign-cancel").addEventListener("click", () => characterAssignDialog.close());
+    async function saveCharacterAssignment(eventId, characterId) {
+      try {
+        await api.put(`/events/${eventId}/registrations/${managedPersonId}/character`, { characterId });
+        characterAssignDialog.close();
+        notify("Gespeichert.", "success");
+        await Promise.all([loadCharacters(), loadRegistrations()]);
       } catch (err) {
         notify(err.message, "error");
       }
