@@ -136,6 +136,27 @@ test('staff moving a waitlisted person onto a full limit is warned (409) and may
   });
 });
 
+test('children exempt from the limits are not warned when staff moves them onto the places', async () => {
+  await withTestServer(async (port) => {
+    await query('UPDATE app_settings SET children_enabled = true, children_count_capacity = false');
+    try {
+      const eventId = await makeEvent({ sc: 1 });
+      const admin = await makeUser('admin');
+      const [first, parent] = await Promise.all([makeUser(), makeUser()]);
+      assert.equal(await register(port, eventId, first, 'sc'), 'pending');
+      const child = await makeUser();
+      await query('UPDATE users SET is_child = true, managed_by_user_id = $2 WHERE id = $1', [child.userId, parent.userId]);
+      await query("INSERT INTO registrations (user_id, event_id, status, con_role) VALUES ($1, $2, 'waitlisted', 'sc')", [child.userId, eventId]);
+      const res = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${child.userId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin.cookie }, body: JSON.stringify({ status: 'pending', previousStatus: 'waitlisted' }),
+      });
+      assert.equal(res.status, 200); // the SC limit is full, but the child takes no place
+    } finally {
+      await query('UPDATE app_settings SET children_enabled = false, children_count_capacity = false');
+    }
+  });
+});
+
 test('events accept and validate the SC / NSC limits', async () => {
   await withTestServer(async (port) => {
     const admin = await makeUser('admin');
