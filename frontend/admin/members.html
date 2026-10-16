@@ -1267,6 +1267,16 @@
             <div id="reg-nsc-fields"></div>
             <div id="reg-price-wrap"></div>
             <div id="reg-extras-wrap"></div>
+            <select id="reg-comp">
+              <option value="">Normaler Preis</option>
+              <option value="free">Kostenlos (Orga / VIP)</option>
+              <option value="discount">Rabatt in €</option>
+            </select>
+            <label for="reg-comp">Preis</label>
+            <div id="reg-comp-discount-wrap" hidden>
+              <input id="reg-comp-discount" type="number" min="0" step="0.01" inputmode="decimal">
+              <label for="reg-comp-discount">Rabatt (€)</label>
+            </div>
             <div class="settings-actions"><button type="submit">Anmelden</button></div>
           </form>`));
       const reloadMember = async () => {
@@ -1400,6 +1410,9 @@
           : null;
         if (suggested) document.getElementById('reg-price').value = suggested;
       };
+      form.elements['reg-comp'].addEventListener('change', () => {
+        document.getElementById('reg-comp-discount-wrap').hidden = form.elements['reg-comp'].value !== 'discount';
+      });
       form.elements['reg-event'].addEventListener('change', refreshOptions);
       form.elements['reg-role'].addEventListener('change', refreshOptions);
       refreshOptions();
@@ -1414,6 +1427,12 @@
           extras: collectExtras(document.getElementById('reg-extras-wrap')),
         };
         if (payload.conRole === 'nsc') payload.nscData = collectNscFields(document.getElementById('reg-nsc-fields'), nscSchema, canOverrideCheckin);
+        const comp = form.elements['reg-comp'].value;
+        if (comp === 'free') payload.free = true;
+        if (comp === 'discount') {
+          payload.discountCents = Math.round(Number(form.elements['reg-comp-discount'].value) * 100);
+          if (!(payload.discountCents > 0)) { notify('Bitte einen Rabatt in € angeben.', 'error'); return; }
+        }
         try {
           await api.post(`/events/${eventId}/registrations/${editingMemberId}`, payload);
           notify('Mitglied angemeldet.', 'success');

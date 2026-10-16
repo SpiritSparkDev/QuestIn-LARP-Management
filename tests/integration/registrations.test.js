@@ -1696,3 +1696,22 @@ test('hard capacity: no waitlist between planned and hard capacity; waitlisted f
     assert.equal(await status(), 'pending');
   });
 });
+
+test('POST /events/:id/registrations/:userId with free=true registers an Orga/VIP at 0 EUR, booked as paid', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId } = await makeUserAndSession('mitglied');
+    const res = await fetch(`http://localhost:${port}/events/${eventId}/registrations/${userId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminCookie },
+      body: JSON.stringify({ conRole: 'helfer', free: true }),
+    });
+    assert.equal(res.status, 201);
+    const { rows } = await query('SELECT amount_due_cents, paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.equal(rows[0].amount_due_cents, 0);
+    assert.ok(rows[0].paid_at);
+    const { rows: payments } = await query('SELECT 1 FROM payments WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.equal(payments.length, 0);
+  });
+});
