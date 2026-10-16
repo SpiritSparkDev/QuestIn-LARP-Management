@@ -9,6 +9,7 @@ import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { buildParticipantsCsv } from './exportCsv.js';
 import { logAudit } from '../audit/repository.js';
 import { query } from '../db.js';
+import { grantComp } from '../payments/repository.js';
 import { canRegisterFor } from '../managedPersons/repository.js';
 import {
   registerForEvent,
@@ -80,9 +81,14 @@ router.post('/events/:id/registrations/:userId', requireAuth(async ({ req, param
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const { rows: userRows } = await query('SELECT 1 FROM users WHERE id = $1', [params.userId]).catch(() => ({ rows: [] }));
   if (userRows.length === 0) return { status: 404, body: { error: 'member not found' } };
+  // Orga / VIP: free of charge or a fixed discount, set right when registering.
+  const free = body.free === true;
+  const discountCents = body.discountCents ?? 0;
+  if (!Number.isInteger(discountCents) || discountCents < 0) return { status: 400, body: { error: 'discountCents must be a non-negative integer' } };
   try {
     const registration = await registerForEvent(params.userId, params.id, body.conRole, body.characterId, body.nscAvailable, body.nscCharacterId, body.flags, body.priceGroup, body.otFields, user, false, { bypassWaiver: true, allowMissingCharacter: true, nscData: body.nscData, extras: body.extras, lodgingId: body.lodgingId, lodgingDetails: body.lodgingDetails });
-    await logAudit({ actorId: user.id, action: 'registration.admin_create', details: { eventId: params.id, userId: params.userId, conRole: body.conRole } });
+    if (free || discountCents > 0) await grantComp(params.id, params.userId, { free, discountCents });
+    await logAudit({ actorId: user.id, action: 'registration.admin_create', details: { eventId: params.id, userId: params.userId, conRole: body.conRole, ...(free ? { free: true } : discountCents > 0 ? { discountCents } : {}) } });
     return { status: 201, body: registration };
   } catch (err) {
     if (err.code === 'EVENT_NOT_FOUND') return { status: 404, body: { error: 'event not found' } };

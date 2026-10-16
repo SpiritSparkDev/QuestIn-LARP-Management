@@ -63,6 +63,27 @@ export async function setDiscount(eventId, userId, discountCents) {
   return { ...mapRegistrationRow(rows[0]), discountCents: rows[0].discount_cents };
 }
 
+// Orga / VIP registrations: everything free (amount 0, booked as paid without a payment
+// row or mail -- no money moved), or a fixed discount in cents on the computed price.
+export async function grantComp(eventId, userId, { free = false, discountCents = 0 } = {}) {
+  if (!free) return discountCents > 0 ? setDiscount(eventId, userId, discountCents) : null;
+  const { rows } = await query(
+    `UPDATE registrations SET
+       discount_cents = COALESCE(price_list_cents, 0) + extras_cents + lodging_cents,
+       amount_due_cents = 0,
+       paid_at = COALESCE(paid_at, now())
+     WHERE event_id = $1 AND user_id = $2
+     RETURNING user_id, event_id, amount_due_cents, paid_at, discount_cents`,
+    [eventId, userId]
+  );
+  if (rows.length === 0) {
+    const err = new Error('registration not found');
+    err.code = 'REGISTRATION_NOT_FOUND';
+    throw err;
+  }
+  return { ...mapRegistrationRow(rows[0]), discountCents: rows[0].discount_cents };
+}
+
 export async function markPaidManually(eventId, userId, confirmedByUserId) {
   let booked = null;
   const result = await withTransaction(async (client) => {
