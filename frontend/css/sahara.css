@@ -2734,6 +2734,21 @@ tbody tr:last-child td {
   border-color: var(--primary);
 }
 
+.char-card-event {
+  margin: 8px 0;
+  text-align: center;
+  font-size: 13px;
+}
+
+.char-card-event.is-assigned {
+  color: var(--primary);
+}
+
+.char-card-assign {
+  display: block;
+  margin: 0 auto;
+}
+
 .char-card h3 {
   margin: 0;
   font-size: 18px;
