@@ -1245,6 +1245,7 @@
             <div class="action-row">
               ${lodgingSelectHtml(r)}${canOverrideCheckin ? `<label class="sub">Rolle <select data-reg-role="${escapeHtml(r.eventId)}" data-prev-role="${escapeHtml(r.conRole)}" data-character="${escapeHtml(r.characterId ?? '')}" aria-label="Rolle ändern">${[['sc', 'SC'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga'], ['ticket', 'Direktanmeldung']].map(([key, label]) => `<option value="${key}" ${key === r.conRole ? 'selected' : ''}>${label}</option>`).join('')}</select></label>` : ''}
               ${canOverrideCheckin ? `<label class="sub">Status <select data-reg-status="${escapeHtml(r.eventId)}" data-prev-status="${escapeHtml(r.status)}" aria-label="Status ändern">${STATUS_ORDER.map((st) => `<option value="${st}" ${st === r.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[st])}</option>`).join('')}</select></label>` : ''}
+              ${canCreateForOthers && r.status !== 'cancelled' ? `<span class="sub">${r.amountDueCents === 0 ? 'Kostenlos' : r.amountDueCents != null ? `Betrag: ${(r.amountDueCents / 100).toFixed(2).replace('.', ',')} €${r.paidAt ? ' (bezahlt)' : ''}` : 'Kein Betrag'}</span>${r.amountDueCents === 0 ? '' : `<button type="button" class="btn-ghost btn-sm" data-reg-free="${escapeHtml(r.eventId)}">Kostenlos stellen</button>`}` : ''}
               ${editableFields.length || eventFlagsOf(r.eventId).length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
             </div>
             <div class="member-registration-edit" data-reg-edit-panel="${escapeHtml(r.eventId)}" hidden>
@@ -1301,6 +1302,16 @@
           notify(err.message, 'error');
         }
         await reloadMember();
+      }));
+      detailRegistrations.querySelectorAll('[data-reg-free]').forEach((button) => button.addEventListener('click', async () => {
+        if (!confirm('Anmeldung kostenlos stellen? Der Betrag wird auf 0 € gesetzt und die Anmeldung gilt als bezahlt.')) return;
+        try {
+          await api.post(`/events/${button.dataset.regFree}/registrations/${editingMemberId}/free`, {});
+          notify('Anmeldung ist jetzt kostenlos.', 'success');
+          await reloadMember();
+        } catch (err) {
+          notify(err.message, 'error');
+        }
       }));
       detailRegistrations.querySelectorAll('[data-reg-lodging]').forEach((select) => select.addEventListener('change', async () => {
         const put = (lodgingDetails) => api.put(`/events/${select.dataset.regLodging}/registrations/${editingMemberId}/lodging`, { lodgingId: select.value || null, ...(lodgingDetails ? { lodgingDetails } : {}) });

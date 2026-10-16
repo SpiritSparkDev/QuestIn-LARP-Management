@@ -103,6 +103,19 @@ router.post('/events/:id/registrations/:userId', requireAuth(async ({ req, param
   }
 }));
 
+// Orga / VIP on an existing registration: free of charge (see grantComp).
+router.post('/events/:id/registrations/:userId/free', requireAuth(async ({ params, user }) => {
+  if (!['admin', 'moderator'].includes(user.group.key)) return { status: 403, body: { error: 'forbidden' } };
+  try {
+    const registration = await grantComp(params.id, params.userId, { free: true });
+    await logAudit({ actorId: user.id, action: 'registration.set_free', subjectUserId: params.userId, details: { eventId: params.id } });
+    return { status: 200, body: registration };
+  } catch (err) {
+    if (err.code === 'REGISTRATION_NOT_FOUND') return { status: 404, body: { error: 'registration not found' } };
+    throw err;
+  }
+}));
+
 router.delete('/events/:id/register', requireAuth(async ({ params, user }) => {
   try {
     const { manualReview } = await unregisterFromEvent(user.id, params.id);

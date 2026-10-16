@@ -1715,3 +1715,18 @@ test('POST /events/:id/registrations/:userId with free=true registers an Orga/VI
     assert.equal(payments.length, 0);
   });
 });
+
+test('POST /events/:id/registrations/:userId/free sets an existing registration to 0 EUR; members may not', async () => {
+  await withTestServer(async (port) => {
+    const eventId = await makeEvent();
+    const { cookie: adminCookie } = await makeUserAndSession('admin');
+    const { userId, cookie } = await makeUserAndSession('mitglied');
+    await query("INSERT INTO registrations (user_id, event_id, con_role, status, amount_due_cents) VALUES ($1, $2, 'helfer', 'confirmed', 5000)", [userId, eventId]);
+    const url = `http://localhost:${port}/events/${eventId}/registrations/${userId}/free`;
+    assert.equal((await fetch(url, { method: 'POST', headers: { Cookie: cookie } })).status, 403);
+    assert.equal((await fetch(url, { method: 'POST', headers: { Cookie: adminCookie } })).status, 200);
+    const { rows } = await query('SELECT amount_due_cents, paid_at FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
+    assert.equal(rows[0].amount_due_cents, 0);
+    assert.ok(rows[0].paid_at);
+  });
+});
