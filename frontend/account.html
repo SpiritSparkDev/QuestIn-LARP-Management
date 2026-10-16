@@ -197,7 +197,7 @@
                         <li>Hinterlege den Charakter der Person, oder reiche ihn später nach.</li>
                         <li>Melde die Personen an: einzeln über ihre Karte oder alle auf einmal mit „Ganze Gruppe anmelden“.</li>
                       </ol>
-                      <p class="sub">Eine angelegte Person gehört schon zu deiner Gruppe, ist aber <strong>noch nicht für ein Event angemeldet</strong>. Das steht in der Zeile „Anmeldung“ auf ihrer Karte.</p>
+                      <p class="sub">Ob eine Person schon für ein Event angemeldet ist, steht in der Zeile „Anmeldung“ auf ihrer Karte.</p>
                     </div>
                   </div>
                   <p class="sub" id="group-members-tab-intro">Alle in deiner Gruppe: von dir angelegte Personen und eingeladene Verwalter mit ihren Personen. Melde sie über ihre Karte an – oder alle auf einmal.</p>
@@ -1506,23 +1506,29 @@
       }).join("");
     }
 
+    // The characters of a person on a group card, each linking to the person's page.
+    function characterLines(personId) {
+      const chars = managedPersonCharacters[personId] ?? [];
+      const manageHref = `/managed-person.html?id=${encodeURIComponent(personId)}`;
+      return chars.length
+        ? chars
+            .map(
+              (c) => `<a class="mp-char" href="${manageHref}">
+            <span class="mp-char-name">${escapeHtml(c.name)}</span>
+            <span class="mp-char-status">${statusLineForCharacter(c)}</span>
+          </a>`,
+            )
+            .join("")
+        : '<p class="sub mp-empty">Noch kein Charakter angelegt.</p>';
+    }
+
     function renderManagedPersonsList() {
       updateManagedPersonsDashboardVisibility();
       ownCardsHtml = managedPersons
         .map((p) => {
-          const chars = managedPersonCharacters[p.id] ?? [];
           const manageHref = `/managed-person.html?id=${encodeURIComponent(p.id)}`;
           const initial = escapeHtml((p.name || "?").trim().charAt(0).toUpperCase());
-          const charList = chars.length
-            ? chars
-                .map(
-                  (c) => `<a class="mp-char" href="${manageHref}">
-            <span class="mp-char-name">${escapeHtml(c.name)}</span>
-            <span class="mp-char-status">${statusLineForCharacter(c)}</span>
-          </a>`,
-                )
-                .join("")
-            : '<p class="sub mp-empty">Noch kein Charakter angelegt.</p>';
+          const charList = characterLines(p.id);
           return `<div class="mp-card" data-managed-person-card="${p.id}">
       <div class="mp-head">
         <span class="mp-avatar" aria-hidden="true">${initial}</span>
@@ -1530,7 +1536,7 @@
           <h3>${escapeHtml(p.name)}${childrenEnabled && p.isChild ? ' <span class="badge">Kind</span>' : ""}</h3>
           <p class="sub">${escapeHtml(managedPersonStatusLabel(p))}</p>
         </div>
-        <span class="mp-origin" title="Von dir angelegt, du verwaltest diese Person. Angelegt heißt noch nicht angemeldet: siehe Zeile Anmeldung."><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>Angelegt</span>
+        <span class="mp-origin" title="Von dir angelegt, du verwaltest diese Person. Ob sie angemeldet ist, steht in der Zeile Anmeldung."><span class="material-symbols-outlined" aria-hidden="true">edit_note</span>Angelegt</span>
       </div>
       <div class="mp-chars">
         <span class="mp-chars-label">Anmeldung</span>
@@ -1641,6 +1647,14 @@
           ${renderGroupValues(child.groupData)}
         </div>
         <span class="mp-origin mp-origin--invited" title="Eingeladen – hat einen eigenen Account und ist deiner Gruppe beigetreten"><span class="material-symbols-outlined" aria-hidden="true">mail</span>Eingeladen</span>
+      </div>
+      <div class="mp-chars">
+        <span class="mp-chars-label">Anmeldung</span>
+        ${registrationLines(child.id)}
+      </div>
+      <div class="mp-chars">
+        <span class="mp-chars-label">Charaktere</span>
+        ${characterLines(child.id)}
       </div>
       <div class="mp-chars">
         <span class="mp-chars-label">Personen</span>
@@ -1796,6 +1810,26 @@
       }
       renderGroupTree();
       updateManagedPersonsDashboardVisibility();
+      loadGroupMemberDetails();
+    }
+
+    // Registration and characters of the members with their own account, so their cards say where they are
+    // registered (same endpoints as for the persons created by the manager).
+    async function loadGroupMemberDetails() {
+      if (!groupTree) return;
+      const ids = [];
+      const walk = (node) => node.children.forEach((c) => { ids.push(c.id); walk(c); });
+      walk(groupTree.node);
+      if (ids.length === 0) return;
+      const [lists, registrationLists] = await Promise.all([
+        Promise.all(ids.map((id) => api.get(`/managed-persons/${id}/characters`).catch(() => []))),
+        Promise.all(ids.map((id) => api.get(`/managed-persons/${id}/registrations`).catch(() => []))),
+      ]);
+      ids.forEach((id, i) => {
+        managedPersonCharacters[id] = lists[i];
+        managedPersonRegistrations[id] = registrationLists[i];
+      });
+      renderGroupMembers();
     }
 
     async function openGroupFieldsDialog(personId, personName) {
@@ -2014,6 +2048,7 @@
         managedPersonRegistrations[p.id] = registrationLists[i];
       });
       renderManagedPersonsList();
+      loadGroupMemberDetails();
     }
 
     const managedPersonDialog = document.getElementById("managed-person-dialog");
