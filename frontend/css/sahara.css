@@ -5680,3 +5680,47 @@ select.status-select {
 .error-actions a {
   text-decoration: none;
 }
+
+/* Member list on phones: one compact card per member instead of a label/value
+   row per column -- name and number on top, details flowing below, actions in one row. */
+@media (max-width: 700px) {
+  #member-list tr:not(.member-group-row) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+
+  #member-list tr:not(.member-group-row) td {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  #member-list tr:not(.member-group-row) td::before { display: none; }
+  #member-list tr:not(.member-group-row) td:empty { display: none; }
+
+  #member-list td[data-col="number"] { font-size: 13px; }
+  #member-list td[data-col="name"] { flex: 1 1 0; font-weight: 600; overflow-wrap: anywhere; }
+  #member-list td[data-col="email"] { flex: 1 0 100%; font-size: 13px; color: var(--on-surface-variant); overflow-wrap: anywhere; }
+  #member-list td[data-col="role"],
+  #member-list td[data-col="participation"] { font-size: 13px; }
+  #member-list td[data-col="status"] { flex: 1 0 100%; }
+  #member-list td[data-col="status"] select { width: 100%; }
+
+  /* Action icons side by side, separated from the details */
+  #member-list tr:not(.member-group-row) td:last-child {
+    flex: 1 0 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    width: auto;
+    padding-top: 6px;
+    border-top: 1px solid var(--outline-variant);
+  }
+}
