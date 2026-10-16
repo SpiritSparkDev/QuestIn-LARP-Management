@@ -4431,6 +4431,42 @@ dialog.member-dialog {
   cursor: pointer;
 }
 
+/* Accordion cue: chevron plus an "aufklappen / zuklappen" label on the right. */
+.member-character > summary::after {
+  content: "";
+  order: 3;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-right: 2px solid var(--on-surface-variant, currentColor);
+  border-bottom: 2px solid var(--on-surface-variant, currentColor);
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.15s;
+}
+
+.member-character[open] > summary::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+
+.member-character-toggle {
+  order: 2;
+  margin-left: auto;
+}
+
+.member-character-assign {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 14px 0;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.member-character-assign p {
+  margin: 0;
+  flex-basis: 100%;
+}
+
 .member-character-form {
   padding: 4px 14px 14px;
   border-top: 1px solid var(--outline-variant);
@@ -4720,6 +4756,11 @@ th.is-sortable[data-dir="desc"]::after {
   grid-template-columns: minmax(0, 1fr) minmax(250px, 310px);
   gap: 32px;
   align-items: start;
+}
+
+/* Same editor layout without the files column (managed persons keep their photo on the card). */
+.char-layout-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .char-col-main .action-row {
@@ -5727,4 +5768,37 @@ select.status-select {
     padding-top: 6px;
     border-top: 1px solid var(--outline-variant);
   }
+}
+
+/* Charakter wechseln: event on the left, character dropdown on the right */
+#character-swap-dialog {
+  width: min(560px, calc(100vw - 24px));
+}
+
+.swap-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 16px;
+}
+
+.swap-table td {
+  padding: 8px 0;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.swap-table .swap-event {
+  width: 42%;
+  padding-right: 14px;
+  font-weight: 600;
+}
+
+.swap-table .swap-event .sub {
+  display: block;
+  font-weight: 400;
+}
+
+.swap-table select {
+  width: 100%;
+  margin: 0;
 }

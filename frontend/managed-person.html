@@ -39,8 +39,9 @@
         </div>
 
         <div class="tab-panel" id="sc-tab" hidden>
-          <div class="dashboard-layout">
-            <div class="dashboard-main">
+          <h2>Charaktere</h2>
+          <div class="char-layout char-layout-single">
+            <div class="char-col-main">
               <div class="action-row">
                 <button type="button" id="new-character-btn" class="create-card">
                   <span class="create-card-icon"><span class="material-symbols-outlined" aria-hidden="true">add</span></span>
@@ -49,15 +50,26 @@
                 </button>
               </div>
 
+              <div id="character-list" class="char-grid"></div>
+
               <div id="sc-form-section" class="card" style="display:none;">
+                <p class="eyebrow">Chronik-Register</p>
                 <h3 id="form-title">Neuen Charakter anlegen</h3>
+                <p class="sub">Trage die Grunddaten des Helden ein &ndash; weitere Details lassen sich jederzeit hier nachtragen.</p>
                 <hr class="rule">
                 <form id="character-form">
                   <h3>1. Charaktername</h3>
                   <input id="character-name" name="name" type="text" required>
                   <label for="character-name">Charaktername</label>
+
                   <h3>2. Charakterdaten</h3>
                   <div id="character-dynamic-fields"></div>
+
+                  <div class="note-box">
+                    <span class="material-symbols-outlined" aria-hidden="true">info</span>
+                    <p>Diese Angaben bilden die Grundlage für den Charakterbogen und lassen sich jederzeit hier bearbeiten.</p>
+                  </div>
+
                   <div class="dialog-actions save-bar">
                     <button type="button" id="character-cancel-edit" class="btn-ghost">Abbrechen</button>
                     <button type="submit">Speichern</button>
@@ -65,12 +77,20 @@
                 </form>
               </div>
             </div>
-            <div>
-              <div id="character-list" class="char-grid"></div>
-            </div>
           </div>
         </div>
 
+
+        <!-- Opened from several tabs (Dashboard, Charaktere, Anmelden): must not sit inside a tab panel. -->
+        <dialog id="character-swap-dialog">
+          <h3 id="character-swap-title">Charakter</h3>
+          <p class="lede" id="character-swap-lede"></p>
+          <table class="swap-table"><tbody id="character-swap-rows"></tbody></table>
+          <div class="dialog-actions">
+            <button type="button" id="character-swap-save">Speichern</button>
+            <button type="button" id="character-swap-cancel" class="btn-ghost">Abbrechen</button>
+          </div>
+        </dialog>
 
         <dialog id="delete-character-dialog">
           <h3>Charakter löschen</h3>
@@ -97,16 +117,6 @@
 
         <div class="tab-panel" id="anmelden-tab" hidden>
           <h2>Anmeldungen</h2>
-          <dialog id="character-swap-dialog">
-            <h3 id="character-swap-title">Charakter</h3>
-            <p class="lede" id="character-swap-lede"></p>
-            <select id="character-swap-select"></select>
-            <label for="character-swap-select">Charakter</label>
-            <div class="dialog-actions">
-              <button type="button" id="character-swap-save">Speichern</button>
-              <button type="button" id="character-swap-cancel" class="btn-ghost">Abbrechen</button>
-            </div>
-          </dialog>
 
           <dialog id="edit-ot-dialog">
             <h3>Anmeldungsdaten bearbeiten</h3>
@@ -756,36 +766,75 @@
       }
     }
 
-    // Charakter nachreichen / austauschen (the old one is free again as soon as another is saved).
+    // Charakter nachreichen / austauschen: one row per open SC/NSC registration (event left, character dropdown
+    // right). The old character is free again as soon as another is saved.
     const characterSwapDialog = document.getElementById("character-swap-dialog");
-    let swapping = null;
-    function openCharacterSwapDialog(eventId) {
-      const registration = currentRegistrations.find((r) => r.eventId === eventId);
-      if (!registration) return;
-      swapping = { eventId };
-      const isNsc = registration.conRole === "nsc";
-      document.getElementById("character-swap-title").textContent = registration.characterId ? "Charakter wechseln" : "Charakter nachreichen";
-      document.getElementById("character-swap-lede").textContent = isNsc
-        ? "Wähle den Charakter, den die Person als NSC spielt, oder lass sie als Springer ohne festen Charakter kommen."
-        : "Wähle den Charakter, mit dem die Person kommt. Der bisherige Charakter wird dadurch wieder frei. Du kannst auch ohne Charakter bleiben und ihn später nachreichen.";
-      const usable = characters.filter((c) => isNsc || !c.registeredFor || c.registeredFor.eventId === eventId);
-      document.getElementById("character-swap-select").innerHTML =
-        `<option value="">${isNsc ? "Kein Charakter – Springer" : "Ohne Charakter (später nachreichen)"}</option>`
-        + usable.map((c) => `<option value="${escapeHtml(c.id)}"${c.id === registration.characterId ? " selected" : ""}>${escapeHtml(c.name)}</option>`).join("");
+    const swapRowsBody = document.getElementById("character-swap-rows");
+    let swapRegistrations = [];
+    const swapEventName = (r) => r.eventName;
+
+    // The dropdowns depend on each other: an SC character can sit in one event only, so what another row has
+    // chosen is disabled here. A character booked for an event outside this dialog (e.g. checked in) is not offered.
+    function fillSwapOptions() {
+      const selects = [...swapRowsBody.querySelectorAll("select")];
+      const chosenSc = new Map();
+      selects.forEach((s) => {
+        const reg = swapRegistrations.find((r) => r.eventId === s.dataset.swapEvent);
+        if (reg.conRole === "sc" && s.dataset.value) chosenSc.set(s.dataset.value, reg.eventId);
+      });
+      selects.forEach((s) => {
+        const reg = swapRegistrations.find((r) => r.eventId === s.dataset.swapEvent);
+        const isNsc = reg.conRole === "nsc";
+        const usable = characters.filter((c) => isNsc || !c.registeredFor || swapRegistrations.some((x) => x.eventId === c.registeredFor.eventId));
+        s.innerHTML = `<option value="">${isNsc ? "Kein Charakter – Springer" : "Ohne Charakter (später nachreichen)"}</option>`
+          + usable.map((c) => {
+            const taken = !isNsc && chosenSc.has(c.id) && chosenSc.get(c.id) !== reg.eventId;
+            return `<option value="${escapeHtml(c.id)}"${c.id === s.dataset.value ? " selected" : ""}${taken ? " disabled" : ""}>${escapeHtml(c.name)}${taken ? ` (gewählt für ${escapeHtml(swapEventName(swapRegistrations.find((x) => x.eventId === chosenSc.get(c.id))))})` : ""}</option>`;
+          }).join("");
+      });
+    }
+
+    function openCharacterSwapDialog() {
+      swapRegistrations = currentRegistrations.filter((r) => ["sc", "nsc"].includes(r.conRole) && ["pending", "waitlisted", "confirmed"].includes(r.status));
+      if (swapRegistrations.length === 0) return;
+      document.getElementById("character-swap-title").textContent = swapRegistrations.some((r) => r.characterId) ? "Charakter wechseln" : "Charakter nachreichen";
+      document.getElementById("character-swap-lede").textContent = "Wähle pro Event den Charakter, mit dem die Person kommt. Der bisherige Charakter wird dadurch wieder frei. Sie kann auch ohne Charakter bleiben und ihn später nachreichen (NSC: als Springer ohne festen Charakter).";
+      swapRowsBody.innerHTML = swapRegistrations.map((r) => `<tr>
+        <td class="swap-event">${escapeHtml(swapEventName(r))}<span class="sub">${escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole)}</span></td>
+        <td><select data-swap-event="${escapeHtml(r.eventId)}" data-orig="${escapeHtml(r.characterId ?? "")}" data-value="${escapeHtml(r.characterId ?? "")}" aria-label="Charakter für ${escapeHtml(swapEventName(r))}"></select></td>
+      </tr>`).join("");
+      swapRowsBody.querySelectorAll("select").forEach((s) => s.addEventListener("change", () => { s.dataset.value = s.value; fillSwapOptions(); }));
+      fillSwapOptions();
       characterSwapDialog.showModal();
     }
     document.getElementById("character-swap-cancel").addEventListener("click", () => characterSwapDialog.close());
     document.getElementById("character-swap-save").addEventListener("click", async () => {
+      let pending = [...swapRowsBody.querySelectorAll("select")]
+        .map((s) => ({ eventId: s.dataset.swapEvent, characterId: s.value || null, orig: s.dataset.orig || null }))
+        .filter((c) => c.characterId !== c.orig);
       try {
-        await api.put(`/events/${swapping.eventId}/registrations/${managedPersonId}/character`, {
-          characterId: document.getElementById("character-swap-select").value || null,
-        });
-        characterSwapDialog.close();
+        // A character that moves between two events is free only after the first change: retry what was refused.
+        for (let pass = 0; pass < 3 && pending.length; pass += 1) {
+          const failed = [];
+          let lastError;
+          for (const c of pending) {
+            try {
+              await api.put(`/events/${c.eventId}/registrations/${managedPersonId}/character`, { characterId: c.characterId });
+            } catch (err) {
+              if (err.status !== 409) throw err;
+              failed.push(c);
+              lastError = err;
+            }
+          }
+          if (failed.length === pending.length) throw lastError;
+          pending = failed;
+        }
         notify("Gespeichert.", "success");
-        await Promise.all([loadCharacters(), loadRegistrations()]);
       } catch (err) {
         notify(err.message, "error");
       }
+      characterSwapDialog.close();
+      await Promise.all([loadCharacters(), loadRegistrations()]);
     });
 
     async function payForRegistration(eventId) {

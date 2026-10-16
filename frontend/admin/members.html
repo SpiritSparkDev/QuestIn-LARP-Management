@@ -1131,6 +1131,23 @@
       document.getElementById('detail-chars-tab-btn').textContent = `Charaktere (${list.length})`;
 
       const eventsLine = (c) => (c.events.length ? escapeHtml(c.events.join(', ')) : 'noch keinem Event zugeordnet');
+
+      // What staff can do with a character: it belongs to an event through the member's registration (SC or NSC,
+      // not yet checked out). Not registered: one button per registration. Registered: change it in the registration.
+      const regEventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Event';
+      const openRegs = (member.registrations ?? []).filter((r) => ['sc', 'nsc'].includes(r.conRole) && ['pending', 'waitlisted', 'confirmed', 'checked_in'].includes(r.status));
+      const characterActions = (c) => {
+        const mine = (member.registrations ?? []).find((r) => r.characterId === c.id);
+        const btn = (attrs, label) => `<button type="button" class="btn-sm btn-secondary" ${attrs}>${escapeHtml(label)}</button>`;
+        if (mine) {
+          const blocked = openRegs.filter((r) => r.conRole === 'sc' && r.characterId !== c.id)
+            .map((r) => `<span class="sub">Für ${escapeHtml(regEventName(r.eventId))} nicht wählbar: bereits für ${escapeHtml(regEventName(mine.eventId))} angemeldet.</span>`).join('');
+          return `<p class="sub">Angemeldet für <strong>${escapeHtml(regEventName(mine.eventId))}</strong> als ${escapeHtml(roleLabelOf(mine.conRole))}.</p>${btn('data-char-open-regs', 'In der Anmeldung austauschen')}${blocked}`;
+        }
+        const targets = openRegs.filter((r) => r.characterId !== c.id);
+        if (targets.length === 0) return '<p class="sub">Zum Eintragen braucht das Mitglied zuerst eine Anmeldung (SC oder NSC) zu einem Event.</p>';
+        return `<p class="sub">Noch keinem Event zugeordnet. Eintragen in:</p>${targets.map((r) => btn(`data-char-enter="${escapeHtml(r.eventId)}" data-char="${escapeHtml(c.id)}"`, `Für ${regEventName(r.eventId)} eintragen${r.characterId ? ' (ersetzt den bisherigen)' : ''}`)).join('')}`;
+      };
       if (!canOverrideCheckin) {
         detailCharacters.innerHTML = list.length
           ? `<ul>${list.map((c) => `<li>${escapeHtml(c.name)} <span class="sub">${eventsLine(c)}</span></li>`).join('')}</ul>`
@@ -1173,7 +1190,8 @@
         if (ofClass.length === 0) return '';
         return `<h3>${title}</h3>${ofClass.map((c) => `
           <details class="member-character">
-            <summary><strong>${escapeHtml(c.name)}</strong> <span class="sub">${eventsLine(c)}</span></summary>
+            <summary><strong>${escapeHtml(c.name)}</strong> <span class="sub">${eventsLine(c)}</span><span class="member-character-toggle sub">aufklappen</span></summary>
+            <div class="member-character-assign">${characterActions(c)}</div>
             ${characterForm(characterClass, c)}
           </details>`).join('')}`;
       }).join('');
@@ -1201,6 +1219,22 @@
         });
       };
       detailCharacters.querySelectorAll('.member-character-form').forEach(wireSave);
+      detailCharacters.querySelectorAll('[data-char-open-regs]').forEach((b) => b.addEventListener('click', () => showDetailTab('detail-tab-regs')));
+      detailCharacters.querySelectorAll('[data-char-enter]').forEach((b) => b.addEventListener('click', async () => {
+        if (openRegs.find((r) => r.eventId === b.dataset.charEnter)?.characterId && !confirm('Der bisherige Charakter dieser Anmeldung wird dadurch wieder frei. Fortfahren?')) return;
+        try {
+          await api.put(`/events/${b.dataset.charEnter}/registrations/${editingMemberId}/character`, { characterId: b.dataset.char });
+          notify('Charakter eingetragen.', 'success');
+          const refreshed = await api.get(`/members/${editingMemberId}`);
+          renderRegistrationsTab(refreshed);
+          await renderCharactersTab(refreshed);
+          await loadMembers();
+        } catch (err) { notify(err.message, 'error'); }
+      }));
+      // The accordion label follows the state.
+      detailCharacters.querySelectorAll('details.member-character').forEach((d) => d.addEventListener('toggle', () => {
+        d.querySelector('.member-character-toggle').textContent = d.open ? 'zuklappen' : 'aufklappen';
+      }));
 
       detailCharacters.querySelectorAll('[data-new-character]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -1232,6 +1266,22 @@
       return rows.length ? `<ul class="sub nsc-summary">${rows.join('')}</ul>` : '';
     }
 
+    const roleLabelOf = (key) => REGISTER_ROLES.find(([k]) => k === key)?.[1] ?? key;
+
+    // Character of an SC/NSC registration: choose among the member's characters. An SC character that is
+    // registered as SC for another event is taken (named, not selectable); NSC characters stay reusable.
+    function characterSelectHtml(r, registrations, member) {
+      if (!['sc', 'nsc'].includes(r.conRole) || !['pending', 'waitlisted', 'confirmed', 'checked_in'].includes(r.status)) return '';
+      const chars = new Map((member.characters ?? []).map((c) => [c.id, c.name]));
+      const takenFor = (id) => registrations.find((o) => o.eventId !== r.eventId && o.characterId === id && o.conRole === 'sc');
+      const nameOf = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Event';
+      const options = [...chars].map(([id, name]) => {
+        const taken = r.conRole === 'sc' ? takenFor(id) : null;
+        return `<option value="${escapeHtml(id)}" ${id === r.characterId ? 'selected' : ''} ${taken ? 'disabled' : ''}>${escapeHtml(name)}${taken ? ` (bereits für ${escapeHtml(nameOf(taken.eventId))})` : ''}</option>`;
+      }).join('');
+      return `<label class="sub">Charakter <select data-reg-char="${escapeHtml(r.eventId)}" data-prev="${escapeHtml(r.characterId ?? '')}" aria-label="Charakter wählen"><option value="">${r.conRole === 'nsc' ? '– Springer –' : '– folgt später –'}</option>${options}</select></label>`;
+    }
+
     function renderRegistrationsTab(member) {
       const registered = member.registrations ?? [];
       const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Unbekanntes Event';
@@ -1240,11 +1290,12 @@
       const eventFlagsOf = (id) => allEvents.find((e) => e.id === id)?.flags ?? [];
       const registeredHtml = registered.length
         ? registered.map((r) => `<div class="member-registration" data-reg-event="${escapeHtml(r.eventId)}">
-            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${(r.flags ?? []).length ? ` <span class="sub">Sonderrollen: ${escapeHtml(r.flags.join(', '))}</span>` : ''}${r.conRole === 'nsc' ? ` <span class="sub">${r.characterName ? `Charakter: ${escapeHtml(r.characterName)}` : 'Springer'}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span>${r.registeredAt ? ` <span class="sub">angemeldet am ${escapeHtml(new Date(r.registeredAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</span>` : ''}</p>
+            <p><strong>${escapeHtml(eventName(r.eventId))}</strong> <span class="sub">${escapeHtml(roleLabel(r.conRole))}</span>${(r.flags ?? []).length ? ` <span class="sub">Sonderrollen: ${escapeHtml(r.flags.join(', '))}</span>` : ''}${['sc', 'nsc'].includes(r.conRole) ? ` <span class="sub">${r.characterName ? `Charakter: ${escapeHtml(r.characterName)}` : (r.conRole === 'nsc' ? 'Springer' : 'Charakter folgt')}</span>` : ''}${r.extras && Object.keys(r.extras).length ? ` <span class="sub">${escapeHtml(extrasSummary(allEvents.find((e) => e.id === r.eventId)?.extras ?? [], r.extras))}</span>` : ''} <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(STATUS_LABELS[r.status] ?? r.status)}</span>${r.registeredAt ? ` <span class="sub">angemeldet am ${escapeHtml(new Date(r.registeredAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))}</span>` : ''}</p>
             ${r.conRole === 'nsc' ? renderNscSummary(r.nscData) : ''}
             <div class="action-row">
               ${lodgingSelectHtml(r)}${canOverrideCheckin ? `<label class="sub">Rolle <select data-reg-role="${escapeHtml(r.eventId)}" data-prev-role="${escapeHtml(r.conRole)}" data-character="${escapeHtml(r.characterId ?? '')}" aria-label="Rolle ändern">${[['sc', 'SC'], ['nsc', 'NSC'], ['helfer', 'Helfer'], ['hilfs_orga', 'Hilfs-Orga'], ['orga', 'Orga'], ['ticket', 'Direktanmeldung']].map(([key, label]) => `<option value="${key}" ${key === r.conRole ? 'selected' : ''}>${label}</option>`).join('')}</select></label>` : ''}
               ${canOverrideCheckin ? `<label class="sub">Status <select data-reg-status="${escapeHtml(r.eventId)}" data-prev-status="${escapeHtml(r.status)}" aria-label="Status ändern">${STATUS_ORDER.map((st) => `<option value="${st}" ${st === r.status ? 'selected' : ''}>${escapeHtml(STATUS_LABELS[st])}</option>`).join('')}</select></label>` : ''}
+              ${canOverrideCheckin ? characterSelectHtml(r, registered, member) : ''}
               ${editableFields.length || eventFlagsOf(r.eventId).length ? `<button type="button" class="btn-ghost btn-sm" data-reg-edit="${escapeHtml(r.eventId)}">Bearbeiten</button>` : ''}
             </div>
             <div class="member-registration-edit" data-reg-edit-panel="${escapeHtml(r.eventId)}" hidden>
@@ -1322,6 +1373,20 @@
           return;
         }
         await reloadMember();
+      }));
+      detailRegistrations.querySelectorAll('[data-reg-char]').forEach((select) => select.addEventListener('change', async () => {
+        try {
+          await api.put(`/events/${select.dataset.regChar}/registrations/${editingMemberId}/character`, { characterId: select.value || null });
+          notify('Charakter gespeichert.', 'success');
+        } catch (err) {
+          notify(err.message, 'error');
+          select.value = select.dataset.prev;
+          return;
+        }
+        const refreshed = await api.get(`/members/${editingMemberId}`);
+        renderRegistrationsTab(refreshed);
+        await renderCharactersTab(refreshed);
+        await loadMembers();
       }));
       detailRegistrations.querySelectorAll('[data-reg-status]').forEach((select) => select.addEventListener('change', async () => {
         const previousStatus = select.dataset.prevStatus;
