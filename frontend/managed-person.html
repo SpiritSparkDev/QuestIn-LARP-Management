@@ -71,16 +71,6 @@
           </div>
         </div>
 
-        <dialog id="character-assign-dialog">
-          <h3 id="character-assign-title">Event zuordnen</h3>
-          <p class="lede" id="character-assign-lede"></p>
-          <div id="character-assign-body"></div>
-          <div class="dialog-actions">
-            <button type="button" id="character-assign-save">Zuordnen</button>
-            <button type="button" id="character-assign-goto" class="btn-secondary" hidden>Zur Anmeldung</button>
-            <button type="button" id="character-assign-cancel" class="btn-ghost">Abbrechen</button>
-          </div>
-        </dialog>
 
         <dialog id="delete-character-dialog">
           <h3>Charakter löschen</h3>
@@ -360,6 +350,25 @@
       }
     });
 
+    // What can be done with a character right now: it belongs to an event through the person's registration
+    // (SC or NSC, not yet checked in). Not registered: one button per registration to enter it into. Registered:
+    // swap it, plus why it cannot be entered into the other events (an SC character fits one event only).
+    function characterActionsHtml(c) {
+      const open = currentRegistrations.filter((r) => ["sc", "nsc"].includes(r.conRole) && ["pending", "waitlisted", "confirmed"].includes(r.status));
+      const btn = (attrs, label) => `<button type="button" class="btn-sm btn-secondary" ${attrs}>${escapeHtml(label)}</button>`;
+      if (c.registeredFor) {
+        const mine = open.find((r) => r.eventId === c.registeredFor.eventId && r.characterId === c.id);
+        const blocked = open.filter((r) => r.conRole === "sc" && r.characterId !== c.id)
+          .map((r) => `<span class="sub">Für ${escapeHtml(r.eventName)} nicht wählbar: bereits für ${escapeHtml(c.registeredFor.eventName)} angemeldet.</span>`).join("");
+        return (mine ? btn(`data-char-swap="${escapeHtml(mine.eventId)}"`, "Charakter austauschen") : '<span class="sub">Die Anmeldung lässt sich nicht mehr ändern – wende dich an die Orga.</span>') + blocked;
+      }
+      const targets = open.filter((r) => r.characterId !== c.id);
+      if (targets.length === 0) {
+        return `<span class="sub">Zum Eintragen braucht die Person zuerst eine Anmeldung zu einem Event.</span>${btn("data-char-goto", "Zur Anmeldung")}`;
+      }
+      return targets.map((r) => btn(`data-char-enter="${escapeHtml(r.eventId)}"`, `Für ${r.eventName} eintragen${r.characterId ? " (ersetzt den bisherigen)" : ""}`)).join("");
+    }
+
     function renderCharacterList() {
       characterListBody.innerHTML = characters
         .map((c) => `<div class="char-card" data-card-for="${c.id}">
@@ -370,14 +379,18 @@
       </div>
       <h3>${escapeHtml(c.name)}</h3>
       <p class="sub char-card-event${c.registeredFor ? " is-assigned" : ""}">${c.registeredFor ? `Für ${escapeHtml(c.registeredFor.eventName)} als ${escapeHtml(CON_ROLE_LABELS[c.registeredFor.conRole] ?? c.registeredFor.conRole)} angemeldet.` : "Noch keinem Event zugeordnet."}</p>
-      <button type="button" class="btn-sm btn-secondary char-card-assign" data-assign="${c.id}">${c.registeredFor ? "Zuordnung ändern" : "Event zuordnen"}</button>
+      <div class="char-card-actions">${characterActionsHtml(c)}</div>
     </div>`)
         .join("");
 
-      characterListBody.querySelectorAll("[data-assign]").forEach((button) => {
-        button.addEventListener("click", (event) => {
+      characterListBody.querySelectorAll("[data-char-swap], [data-char-enter], [data-char-goto]").forEach((button) => {
+        button.addEventListener("click", async (event) => {
           event.stopPropagation();
-          openCharacterAssignDialog(button.dataset.assign);
+          if (button.hasAttribute("data-char-goto")) return document.querySelector('.tab-btn[data-tab="anmelden-tab"]').click();
+          if (button.dataset.charSwap) return openCharacterSwapDialog(button.dataset.charSwap);
+          const replaces = currentRegistrations.find((r) => r.eventId === button.dataset.charEnter)?.characterId;
+          if (replaces && !confirm("Der bisherige Charakter dieser Anmeldung wird dadurch wieder frei. Fortfahren?")) return;
+          await saveCharacterAssignment(button.dataset.charEnter, button.closest("[data-card-for]").dataset.cardFor);
         });
       });
 
@@ -715,6 +728,7 @@
       currentRegistrations = await api.get(`/managed-persons/${managedPersonId}/registrations`);
       renderRegistrationsList();
       renderRegistrableEvents();
+      renderCharacterList();
       nscRoleTabButton.style.display = nscSchemaAvailable ? "" : "none";
     }
 
@@ -732,53 +746,9 @@
       }
     }
 
-    // Event zuordnen, seen from the character: picks one of the person's registrations and
-    // hands the character in there (same endpoint as "Charakter wechseln").
-    const characterAssignDialog = document.getElementById("character-assign-dialog");
-    const characterAssignBody = document.getElementById("character-assign-body");
-    const characterAssignSave = document.getElementById("character-assign-save");
-    const characterAssignGoto = document.getElementById("character-assign-goto");
-    function openCharacterAssignDialog(characterId) {
-      const character = characters.find((c) => c.id === characterId);
-      if (!character) return;
-      document.getElementById("character-assign-title").textContent = `${character.name}: Event zuordnen`;
-      characterAssignSave.hidden = false;
-      characterAssignGoto.hidden = true;
-      characterAssignGoto.textContent = "Zur Anmeldung";
-      characterAssignGoto.onclick = () => {
-        characterAssignDialog.close();
-        document.querySelector('.tab-btn[data-tab="anmelden-tab"]').click();
-      };
-      const current = character.registeredFor;
-      // Only SC registrations that are not checked in can take a character.
-      const candidates = currentRegistrations.filter((r) => r.conRole === "sc" && ["pending", "waitlisted", "confirmed"].includes(r.status));
-      if (current) {
-        document.getElementById("character-assign-lede").textContent = `Dieser Charakter ist für ${current.eventName} angemeldet.`;
-        characterAssignBody.innerHTML = '<p class="sub">Zum Wechseln des Charakters oder Bearbeiten der Anmeldung gehst du zur Anmeldung.</p>';
-        characterAssignSave.textContent = "Zuordnung lösen";
-        characterAssignGoto.hidden = false;
-        characterAssignSave.onclick = () => saveCharacterAssignment(current.eventId, null);
-      } else if (candidates.length === 0) {
-        document.getElementById("character-assign-lede").textContent = "Ein Charakter wird einem Event zugeordnet, indem die Person für das Event angemeldet wird und dort den Charakter bekommt.";
-        characterAssignBody.innerHTML = '<p class="sub">Die Person hat aktuell keine Anmeldung als Spielercharakter.</p>';
-        characterAssignSave.hidden = true;
-        characterAssignGoto.hidden = false;
-      } else {
-        document.getElementById("character-assign-lede").textContent = "Wähle die Anmeldung, mit der die Person diesen Charakter zum Event mitbringt.";
-        characterAssignBody.innerHTML = `<select id="character-assign-select">${candidates.map((r) => {
-          const replaces = r.characterId && r.characterId !== character.id;
-          return `<option value="${escapeHtml(r.eventId)}">${escapeHtml(r.eventName)}${replaces ? " (ersetzt den bisherigen Charakter)" : ""}</option>`;
-        }).join("")}</select><label for="character-assign-select">Event</label>`;
-        characterAssignSave.textContent = "Zuordnen";
-        characterAssignSave.onclick = () => saveCharacterAssignment(document.getElementById("character-assign-select").value, character.id);
-      }
-      characterAssignDialog.showModal();
-    }
-    document.getElementById("character-assign-cancel").addEventListener("click", () => characterAssignDialog.close());
     async function saveCharacterAssignment(eventId, characterId) {
       try {
         await api.put(`/events/${eventId}/registrations/${managedPersonId}/character`, { characterId });
-        characterAssignDialog.close();
         notify("Gespeichert.", "success");
         await Promise.all([loadCharacters(), loadRegistrations()]);
       } catch (err) {

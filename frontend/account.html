@@ -622,17 +622,6 @@
               </div>
             </div>
 
-            <dialog id="character-assign-dialog">
-              <h3 id="character-assign-title">Event zuordnen</h3>
-              <p class="lede" id="character-assign-lede"></p>
-              <div id="character-assign-body"></div>
-              <div class="dialog-actions">
-                <button type="button" id="character-assign-save">Zuordnen</button>
-                <button type="button" id="character-assign-goto" class="btn-secondary" hidden>Zur Anmeldung</button>
-                <button type="button" id="character-assign-cancel" class="btn-ghost">Abbrechen</button>
-              </div>
-            </dialog>
-
             <dialog id="delete-character-dialog">
               <h3>Charakter löschen</h3>
               <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden. Gib zur Bestätigung den Namen "<strong id="delete-character-name"></strong>" ein.</p>
@@ -987,16 +976,18 @@
       <div class="dash-char-body">
         <h3>${escapeHtml(c.name)}</h3>
         <p class="sub">${statusLine}</p>
+        <div class="dash-char-actions">${characterActionsHtml(c)}</div>
       </div>
       <span class="tag dash-char-tag ${registered ? "is-registered" : ""}">${registered ? "Angemeldet" : "Charakter"}</span>
     </div>`;
         })
         .join("");
       characters.forEach((c) => loadDashboardAvatar(c.id));
+      bindCharacterActions(container, (button) => characters[[...container.querySelectorAll("[data-dash-char]")].indexOf(button.closest("[data-dash-char]"))].id);
       container.querySelectorAll("[data-dash-char]").forEach((card) => {
         card.addEventListener("click", () => goToTab("charaktere"));
         card.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") goToTab("charaktere");
+          if (e.key === "Enter" && e.target === card) goToTab("charaktere");
         });
       });
     }
@@ -2593,6 +2584,9 @@
       renderDashboardEventCard();
       renderActiveRegistrationPanel();
       updateRegistrationCardVisibility();
+      // The character cards show what can be done with each character, which depends on the registrations.
+      renderCharacterList();
+      renderDashboardCharacters();
     }
 
     function labelForRegisteredAs(r) {
@@ -2769,55 +2763,9 @@
       }
     });
 
-    // Event zuordnen, seen from the character: a character belongs to an event through the
-    // person's registration, so this picks one of the person's own registrations and hands
-    // the character in there (same endpoint as "Charakter wechseln" on the Anmelden tab).
-    const characterAssignDialog = document.getElementById("character-assign-dialog");
-    const characterAssignBody = document.getElementById("character-assign-body");
-    const characterAssignSave = document.getElementById("character-assign-save");
-    const characterAssignGoto = document.getElementById("character-assign-goto");
-    let assigningCharacter = null;
-    function openCharacterAssignDialog(characterId) {
-      const character = characters.find((c) => c.id === characterId);
-      if (!character) return;
-      assigningCharacter = character;
-      const eventName = (id) => events.find((e) => e.id === id)?.name ?? "Event";
-      document.getElementById("character-assign-title").textContent = `${character.name}: Event zuordnen`;
-      characterAssignGoto.hidden = true;
-      characterAssignSave.hidden = false;
-      characterAssignGoto.onclick = () => { characterAssignDialog.close(); goToTab("anmelden"); };
-
-      const current = character.registeredFor;
-      // Only own SC registrations that are not checked in can take a character.
-      const candidates = currentRegistrations.filter((r) => r.conRole === "sc" && ["pending", "waitlisted", "confirmed"].includes(r.status));
-      if (current) {
-        document.getElementById("character-assign-lede").textContent = `Dieser Charakter ist für ${current.eventName} angemeldet. Willst du ihn von dort lösen, oder mit einem anderen Charakter tauschen?`;
-        characterAssignBody.innerHTML = `<p class="sub">Zum Wechseln des Charakters oder Bearbeiten der Anmeldung gehst du zur Anmeldung.</p>`;
-        characterAssignSave.textContent = "Zuordnung lösen";
-        characterAssignGoto.hidden = false;
-        characterAssignSave.onclick = () => saveCharacterAssignment(current.eventId, null);
-      } else if (candidates.length === 0) {
-        document.getElementById("character-assign-lede").textContent = "Ein Charakter wird einem Event zugeordnet, indem du dich für das Event anmeldest und dort den Charakter wählst.";
-        characterAssignBody.innerHTML = `<p class="sub">Du hast aktuell keine Anmeldung als Spielercharakter, der du den Charakter zuordnen könntest.</p>`;
-        characterAssignSave.hidden = true;
-        characterAssignGoto.hidden = false;
-        characterAssignGoto.textContent = "Zur Anmeldung";
-      } else {
-        document.getElementById("character-assign-lede").textContent = "Wähle die Anmeldung, mit der du diesen Charakter zum Event mitbringst.";
-        characterAssignBody.innerHTML = `<select id="character-assign-select">${candidates.map((r) => {
-          const taken = r.characterId && r.characterId !== character.id;
-          return `<option value="${escapeHtml(r.eventId)}">${escapeHtml(eventName(r.eventId))}${taken ? " (ersetzt den bisherigen Charakter)" : ""}</option>`;
-        }).join("")}</select><label for="character-assign-select">Event</label>`;
-        characterAssignSave.textContent = "Zuordnen";
-        characterAssignSave.onclick = () => saveCharacterAssignment(document.getElementById("character-assign-select").value, character.id);
-      }
-      characterAssignDialog.showModal();
-    }
-    document.getElementById("character-assign-cancel").addEventListener("click", () => characterAssignDialog.close());
     async function saveCharacterAssignment(eventId, characterId) {
       try {
         await api.put(`/events/${eventId}/registrations/${currentUserId}/character`, { characterId });
-        characterAssignDialog.close();
         notify("Gespeichert.", "success");
         await Promise.all([loadCharacters(), loadRegistrations()]);
       } catch (err) {
@@ -3361,6 +3309,42 @@
       return `Für ${escapeHtml(c.registeredFor.eventName)} als ${escapeHtml(roleLabel)} angemeldet.`;
     }
 
+    // What can be done with a character right now, spelled out: it belongs to an event through the person's own
+    // registration (SC or NSC, not yet checked in). Not registered: one button per registration to enter it into.
+    // Registered: swap it, plus why it cannot be entered into the other events (an SC character fits one event only).
+    function characterActionsHtml(c) {
+      const eventName = (id) => events.find((e) => e.id === id)?.name ?? "Event";
+      const open = currentRegistrations.filter((r) => ["sc", "nsc"].includes(r.conRole) && ["pending", "waitlisted", "confirmed"].includes(r.status));
+      const btn = (attrs, label) => `<button type="button" class="btn-sm btn-secondary" ${attrs}>${escapeHtml(label)}</button>`;
+      if (c.registeredFor) {
+        const mine = open.find((r) => r.eventId === c.registeredFor.eventId && r.characterId === c.id);
+        const blocked = open.filter((r) => r.conRole === "sc" && r.characterId !== c.id)
+          .map((r) => `<span class="sub">Für ${escapeHtml(eventName(r.eventId))} nicht wählbar: bereits für ${escapeHtml(c.registeredFor.eventName)} angemeldet.</span>`).join("");
+        return (mine ? btn(`data-char-swap="${escapeHtml(mine.eventId)}"`, "Charakter austauschen") : '<span class="sub">Die Anmeldung lässt sich nicht mehr ändern – wende dich an die Orga.</span>') + blocked;
+      }
+      const targets = open.filter((r) => r.characterId !== c.id);
+      if (targets.length === 0) {
+        return `<span class="sub">Zum Eintragen brauchst du zuerst eine Anmeldung zu einem Event.</span>${btn("data-char-goto", "Zur Anmeldung")}`;
+      }
+      return targets.map((r) => btn(`data-char-enter="${escapeHtml(r.eventId)}"`, `Für ${eventName(r.eventId)} eintragen${r.characterId ? " (ersetzt den bisherigen)" : ""}`)).join("");
+    }
+
+    function bindCharacterActions(container, characterIdOf) {
+      container.querySelectorAll("[data-char-swap], [data-char-enter], [data-char-goto]").forEach((button) => {
+        button.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          if (button.hasAttribute("data-char-goto")) return goToTab("anmelden");
+          const characterId = characterIdOf(button);
+          if (button.dataset.charSwap) {
+            return openCharacterSwapDialog(button.dataset.charSwap, currentRegistrations.find((r) => r.eventId === button.dataset.charSwap));
+          }
+          const replaces = currentRegistrations.find((r) => r.eventId === button.dataset.charEnter)?.characterId;
+          if (replaces && !confirm("Der bisherige Charakter dieser Anmeldung wird dadurch wieder frei. Fortfahren?")) return;
+          await saveCharacterAssignment(button.dataset.charEnter, characterId);
+        });
+      });
+    }
+
     function renderCharacterList() {
       document.getElementById("copy-character-btn").style.display = characters.length === 0 ? "none" : "";
       characterListBody.innerHTML = characters
@@ -3372,16 +3356,11 @@
       </div>
       <h3>${escapeHtml(c.name)}</h3>
       <p class="sub char-card-event${c.registeredFor ? " is-assigned" : ""}">${statusLineForCharacter(c)}</p>
-      <button type="button" class="btn-sm btn-secondary char-card-assign" data-assign="${c.id}">${c.registeredFor ? "Zuordnung ändern" : "Event zuordnen"}</button>
+      <div class="char-card-actions">${characterActionsHtml(c)}</div>
     </div>`)
         .join("");
 
-      characterListBody.querySelectorAll("[data-assign]").forEach((button) => {
-        button.addEventListener("click", (event) => {
-          event.stopPropagation();
-          openCharacterAssignDialog(button.dataset.assign);
-        });
-      });
+      bindCharacterActions(characterListBody, (button) => button.closest("[data-card-for]").dataset.cardFor);
       characterListBody.querySelectorAll("[data-card-for]").forEach((card) => {
         card.addEventListener("click", () => startEdit(card.dataset.cardFor));
       });

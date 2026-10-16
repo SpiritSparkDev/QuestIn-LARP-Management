@@ -2744,9 +2744,13 @@ tbody tr:last-child td {
   color: var(--primary);
 }
 
-.char-card-assign {
-  display: block;
-  margin: 0 auto;
+.dash-char-actions,
+.char-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 8px;
 }
 
 .char-card h3 {
