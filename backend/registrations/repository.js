@@ -1076,7 +1076,8 @@ export async function setStatus(eventId, userId, status, expectedStatus, { force
   if (!force && !COUNTED_STATUSES.includes(expectedStatus) && COUNTED_STATUSES.includes(status)) {
     const { rows: current } = await query('SELECT con_role FROM registrations WHERE event_id = $1 AND user_id = $2', [eventId, userId]);
     if (current.length > 0) {
-      const block = capacityBlock(await loadCapacity((sql, params) => query(sql, params), eventId), current[0].con_role);
+      // Children take no place while the Kinder add-on exempts them, so they are never warned.
+      const block = capacityBlock(await loadCapacity((sql, params) => query(sql, params), eventId), current[0].con_role, await isChildUser(userId));
       if (block) {
         const err = new Error(`${BLOCK_MESSAGES[block]} Die Person würde über das Limit gehen.`);
         err.code = 'CAPACITY_FULL';
