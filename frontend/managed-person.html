@@ -71,6 +71,17 @@
           </div>
         </div>
 
+        <dialog id="character-assign-dialog">
+          <h3 id="character-assign-title">Event zuordnen</h3>
+          <p class="lede" id="character-assign-lede"></p>
+          <div id="character-assign-body"></div>
+          <div class="dialog-actions">
+            <button type="button" id="character-assign-save">Zuordnen</button>
+            <button type="button" id="character-assign-goto" class="btn-secondary" hidden>Zur Anmeldung</button>
+            <button type="button" id="character-assign-cancel" class="btn-ghost">Abbrechen</button>
+          </div>
+        </dialog>
+
         <dialog id="delete-character-dialog">
           <h3>Charakter löschen</h3>
           <p class="lede">Diese Aktion kann nicht rückgängig gemacht werden. Gib zur Bestätigung den Namen "<strong id="delete-character-name"></strong>" ein.</p>
@@ -96,17 +107,6 @@
 
         <div class="tab-panel" id="anmelden-tab" hidden>
           <h2>Anmeldungen</h2>
-          <dialog id="character-assign-dialog">
-            <h3 id="character-assign-title">Event zuordnen</h3>
-            <p class="lede" id="character-assign-lede"></p>
-            <div id="character-assign-body"></div>
-            <div class="dialog-actions">
-              <button type="button" id="character-assign-save">Zuordnen</button>
-              <button type="button" id="character-assign-goto" class="btn-secondary" hidden>Zur Anmeldung</button>
-              <button type="button" id="character-assign-cancel" class="btn-ghost">Abbrechen</button>
-            </div>
-          </dialog>
-
           <dialog id="character-swap-dialog">
             <h3 id="character-swap-title">Charakter</h3>
             <p class="lede" id="character-swap-lede"></p>
