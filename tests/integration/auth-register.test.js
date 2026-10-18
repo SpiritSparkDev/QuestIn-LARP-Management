@@ -103,6 +103,31 @@ test('registering the same email twice is rejected with 409', async () => {
   });
 });
 
+test('registering with the email of a Direktanmeldung (guest) names the real problem; a full account keeps the old message', async () => {
+  await withTestServer(async (port) => {
+    const guestEmail = `guest-${crypto.randomUUID()}@example.com`;
+    const fullEmail = `full-${crypto.randomUUID()}@example.com`;
+    const { query } = await import('../../backend/db.js');
+    const gid = "(SELECT id FROM groups WHERE key = 'mitglied')";
+    await query(`INSERT INTO users (email, first_name, last_name, group_id, is_guest, email_verified) VALUES ($1, 'Gast', 'Test', ${gid}, true, true), ($2, 'Voll', 'Test', ${gid}, false, true)`, [guestEmail, fullEmail]);
+    const register = (email) => fetch(`http://localhost:${port}/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'correct horse battery staple', firstName: 'Neu', lastName: 'Konto' }),
+    });
+    const guest = await register(guestEmail);
+    assert.equal(guest.status, 409);
+    const guestBody = await guest.json();
+    assert.equal(guestBody.code, 'GUEST_REGISTRATION_EXISTS');
+    assert.match(guestBody.error, /Anmeldung über diese E-Mail-Adresse liegt bereits vor/);
+    assert.match(guestBody.error, /Admin oder die Orga/);
+
+    const full = await register(fullEmail);
+    assert.equal(full.status, 409);
+    assert.equal((await full.json()).error, 'Diese E-Mail-Adresse ist bereits registriert.');
+    await query('DELETE FROM users WHERE email = ANY($1)', [[guestEmail, fullEmail]]);
+  });
+});
+
 test('concurrent registrations for the same email: one 201, one 409, no 500', async () => {
   await withTestServer(async (port) => {
     const email = `race-${crypto.randomUUID()}@example.com`;

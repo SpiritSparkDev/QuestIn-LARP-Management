@@ -28,8 +28,12 @@ router.post('/auth/register', rateLimit(REGISTER_RATE_LIMIT)(async ({ req, reque
     return { status: 400, body: { error: 'Ungültiges E-Mail-Format.' } };
   }
 
-  const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+  const existing = await query('SELECT id, is_guest FROM users WHERE email = $1', [email]);
   if (existing.rows.length > 0) {
+    // A Direktanmeldung (guest account) is not a login yet: the person cannot register again, staff converts it.
+    if (existing.rows[0].is_guest) {
+      return { status: 409, body: { code: 'GUEST_REGISTRATION_EXISTS', error: 'Eine Anmeldung über diese E-Mail-Adresse liegt bereits vor. Bitte wende dich an einen Admin oder die Orga, um diese Anmeldung in ein Benutzerkonto umzuwandeln.' } };
+    }
     return { status: 409, body: { error: 'Diese E-Mail-Adresse ist bereits registriert.' } };
   }
 
