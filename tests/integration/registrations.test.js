@@ -1398,10 +1398,13 @@ test('manual promote via the existing status-override endpoint', async () => {
       body: JSON.stringify({ conRole: 'sc', characterId: waitlistedCharacterId }),
     });
 
-    const promoteRes = await fetch(`http://localhost:${port}/events/${eventId}/checkin/${waitlisted.userId}`, {
+    const promote = (extra) => fetch(`http://localhost:${port}/events/${eventId}/checkin/${waitlisted.userId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: staff.cookie },
-      body: JSON.stringify({ status: 'pending', previousStatus: 'waitlisted' }),
+      body: JSON.stringify({ status: 'pending', previousStatus: 'waitlisted', ...extra }),
     });
+    // The event is full: staff is warned first and has to confirm ("Trotzdem setzen").
+    assert.equal((await promote({})).status, 409);
+    const promoteRes = await promote({ force: true });
     assert.equal(promoteRes.status, 200);
     assert.equal((await promoteRes.json()).status, 'pending');
   });
