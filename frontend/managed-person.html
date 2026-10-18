@@ -531,12 +531,14 @@
     const registrationWaiverSection = document.getElementById("registration-waiver");
     const registrationWaiverCheckbox = document.getElementById("registration-waiver-checkbox");
 
+    // A child (marked) gets no Sonderrollen.
+    let personMarkedChild = false;
     function flagsFieldFor(event) {
-      return { key: "flags", label: "Sonderrollen", type: "multiselect", options: event?.flags ?? [] };
+      return { key: "flags", label: "Sonderrollen", type: "multiselect", options: personMarkedChild ? [] : event?.flags ?? [] };
     }
     function renderRegistrationFlags() {
       const event = events.find((e) => e.id === eventSelect.value);
-      registrationFlagsContainer.innerHTML = event?.flags?.length > 0
+      registrationFlagsContainer.innerHTML = !personMarkedChild && event?.flags?.length > 0
         ? `<h3>Sonderrollen</h3><p class="sub">Optional – wähle, was auf die Person zutrifft.</p>${renderFlagCards(event, [])}`
         : "";
       bindFlagCards(registrationFlagsContainer);
@@ -955,6 +957,7 @@
       dataForm.elements.email.value = person.email ?? "";
       // A person marked as a child keeps only the names and the child fields: no account, character or common registration fields.
       const markedChild = person.markedChild === true;
+      personMarkedChild = markedChild;
       accountSchema = markedChild ? [] : await api.get("/account-schema");
       dataOtFieldsContainer.innerHTML = accountSchema
         .map((field) => renderAccountFieldInput(field, person[field.key], {

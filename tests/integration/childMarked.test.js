@@ -59,6 +59,11 @@ test('a person marked as a child keeps only names and child fields; the rest is 
     assert.equal(stored.childVideo, true);
     assert.ok(!stored.photoOptOut);
 
+    // no Sonderrollen for a child: not at registration, not later
+    await query("UPDATE events SET flags = ARRAY['Heiler'] WHERE id = $1", [event.id]);
+    await fetch(`${base}/events/${event.id}/registrations/${created.id}/ot-fields`, json(cookie, 'PUT', { flags: ['Heiler'] }));
+    assert.deepEqual((await query('SELECT flags FROM registrations WHERE event_id = $1 AND user_id = $2', [event.id, created.id])).rows[0].flags, []);
+
     // unmarking brings the normal fields back
     await fetch(`${base}/managed-persons/${created.id}`, json(cookie, 'PATCH', { isChild: false, birthdate: '2019-05-05' }));
     const adult = await read();

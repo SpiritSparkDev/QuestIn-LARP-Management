@@ -1305,7 +1305,7 @@
             </div>
             <div class="member-registration-edit" data-reg-edit-panel="${escapeHtml(r.eventId)}" hidden>
               <p class="sub">${r.waiverAcceptedAt ? `Einverständnis erteilt am ${escapeHtml(new Date(r.waiverAcceptedAt).toLocaleString('de-DE'))} (Version ${escapeHtml(r.waiverVersionAccepted)})` : 'Kein Einverständnis hinterlegt.'}</p>
-              ${renderFlagCards(allEvents.find((e) => e.id === r.eventId), r.flags ?? [])}
+              ${member.markedChild ? '' : renderFlagCards(allEvents.find((e) => e.id === r.eventId), r.flags ?? [])}
               ${editableFields.map((field) => renderAccountFieldInput(field, r.fields?.[field.key], { idPrefix: `reg-${r.eventId}-` })).join('')}
               <div class="settings-actions"><button type="button" data-reg-save="${escapeHtml(r.eventId)}">Anmeldedaten speichern</button></div>
             </div>

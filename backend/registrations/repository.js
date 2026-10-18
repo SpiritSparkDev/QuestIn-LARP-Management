@@ -6,7 +6,7 @@ import { displayName } from '../displayName.js';
 import { decryptFieldBlob as decryptAccountFieldBlob } from '../accountFields.js';
 import { filterCharacterFields } from '../characters/visibility.js';
 import { listOpenInvitationsForEvent } from '../invitations/repository.js';
-import { registrationSchemaFor } from '../childFieldSchema/repository.js';
+import { registrationSchemaFor, isMarkedChild } from '../childFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../registrationFields.js';
 import { sendRegistrationOtFieldsChangedEmail, sendRegistrationWithdrawnOrgaEmail, sendWaitlistedEmail, sendWaitlistPromotedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
@@ -352,7 +352,8 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   const resolvedCharacterId = await resolveCharacterId(userId, conRole, characterId, eventId, { allowMissingSc: allowMissingCharacter });
   const resolvedNsc = await resolveNscAvailability(userId, conRole, nscAvailable, nscCharacterId, resolvedCharacterId);
   const resolvedNscData = await resolveNscData(conRole, nscData);
-  const resolvedFlags = resolveFlags(event.flags, flags);
+  // A child (marked) gets no Sonderrollen.
+  const resolvedFlags = await isMarkedChild(userId, appSettings) ? [] : resolveFlags(event.flags, flags);
   const resolvedPrice = resolvePriceGroup(event, priceGroup);
   const { extras: resolvedExtras, extrasCents } = resolveExtras(event, requestedExtras);
   const requestedLodging = await resolveLodging(eventId, appSettings.lodgingEnabled, requestedLodgingId, requestedLodgingDetails);
@@ -585,7 +586,7 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
   // (admin/checkin.html's con-role promotion dropdown) never sends flags at
   // all, so without this guard every promotion silently cleared them.
   let resolvedFlags;
-  if (flags !== undefined) {
+  if (flags !== undefined && !(await isMarkedChild(userId))) {
     resolvedFlags = resolveFlags(event?.flags ?? [], flags);
   } else {
     const { rows: currentFlagsRows } = await query(
@@ -1173,7 +1174,7 @@ export async function updateRegistrationOtFields(eventId, userId, otFields, flag
   // not a global schema field) -- only touched when the caller explicitly
   // sent them, same "only what's sent" contract as the schema fields loop.
   let nextFlags = currentRows[0].flags;
-  if (flags !== undefined) {
+  if (flags !== undefined && !(await isMarkedChild(userId))) {
     const event = await getEvent(eventId);
     nextFlags = resolveFlags(event?.flags ?? [], flags);
   }
