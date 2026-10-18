@@ -1,6 +1,7 @@
 import { query } from '../db.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { decryptFieldBlob } from '../accountFields.js';
+import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
 
 export async function getChildFieldSchema() {
   const { rows } = await query('SELECT schema FROM child_field_schema LIMIT 1');
@@ -41,4 +42,19 @@ export async function isChildForFields(userId, settings) {
 // The registration fields of this person's registration beyond the common schema: the child fields for a child.
 export async function childFieldsFor(userId, settings) {
   return (await isChildForFields(userId, settings)) ? getChildFieldSchema() : [];
+}
+
+// Marked as a child (add-on on): such a person has no account, character or common registration fields, only the
+// names and the child fields. Stored values stay untouched, so removing the mark brings them back.
+export async function isMarkedChild(userId, settings) {
+  const { childrenEnabled } = settings ?? await getAppSettings();
+  if (!childrenEnabled) return false;
+  const { rows } = await query('SELECT is_child FROM users WHERE id = $1', [userId]);
+  return rows[0]?.is_child === true;
+}
+
+// The registration fields that apply to this person's registration.
+export async function registrationSchemaFor(userId, settings) {
+  if (await isMarkedChild(userId, settings)) return getChildFieldSchema();
+  return [...await getRegistrationFieldSchema(), ...await childFieldsFor(userId, settings)];
 }

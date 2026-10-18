@@ -14,7 +14,7 @@ import { listMembers, getMember, reactivateMember, deleteMember } from './reposi
 import { updateMemberAudited, deactivateChecked } from './actions.js';
 import { previewMerge, mergeAccounts } from './merge.js';
 import { setPlayGroup } from './playGroup.js';
-import { isChildForFields } from '../childFieldSchema/repository.js';
+import { isChildForFields, isMarkedChild } from '../childFieldSchema/repository.js';
 import { createInvitation, regenerateToken, getInvitationById, listOpenInvitations, cancelInvitation } from '../invitations/repository.js';
 import { sendInvitationEmail, sendVerificationEmail, sendPasswordResetEmail, baseUrl } from '../auth/mailer.js';
 import { getAppSettings } from '../appSettings/repository.js';
@@ -182,6 +182,7 @@ router.get('/members/:id', requireAuth(requireMenu('mitglieder')(async ({ params
   }));
   // Children (Kinder add-on) have extra registration fields: the page shows and edits them with the others.
   member.childFields = await isChildForFields(member.id);
+  member.markedChild = await isMarkedChild(member.id);
   return { status: 200, body: member };
 })));
 

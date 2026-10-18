@@ -953,7 +953,9 @@
       dataForm.elements.lastName.value = person.lastName ?? "";
       dataForm.elements.nickname.value = person.nickname ?? "";
       dataForm.elements.email.value = person.email ?? "";
-      accountSchema = await api.get("/account-schema");
+      // A person marked as a child keeps only the names and the child fields: no account, character or common registration fields.
+      const markedChild = person.markedChild === true;
+      accountSchema = markedChild ? [] : await api.get("/account-schema");
       dataOtFieldsContainer.innerHTML = accountSchema
         .map((field) => renderAccountFieldInput(field, person[field.key], {
           sealedBadge: ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>',
@@ -961,17 +963,17 @@
         .join("");
       attachLiveValidation(dataOtFieldsContainer);
 
-      scSchema = await api.get("/sc-schema");
+      scSchema = markedChild ? [] : await api.get("/sc-schema");
       renderScSchemaFields();
 
       try {
-        nscSchema = await api.get("/nsc-schema");
+        nscSchema = markedChild ? [] : await api.get("/nsc-schema");
         nscSchemaAvailable = true;
         renderNscQuestionnaire();
       } catch {
         // NSC schema is optional-ish, same as account.html's own bootstrap.
       }
-      commonRegistrationSchema = await api.get("/registration-schema");
+      commonRegistrationSchema = markedChild ? [] : await api.get("/registration-schema");
       personName = person.name;
       childRegistrationSchema = person.childFields ? await api.get("/child-schema") : [];
       registrationSchema = [...commonRegistrationSchema, ...childRegistrationSchema];

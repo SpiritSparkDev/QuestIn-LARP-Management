@@ -132,9 +132,11 @@ export async function getMember(id) {
 }
 
 export async function updateMember(id, fields) {
-  const schema = await getAccountFieldSchema();
-  const { rows: currentRows } = await query('SELECT account_data_enc FROM users WHERE id = $1', [id]);
+  const { rows: currentRows } = await query('SELECT account_data_enc, is_child, managed_by_user_id FROM users WHERE id = $1', [id]);
   if (currentRows.length === 0) return null;
+  // A child keeps no account fields; what is stored stays untouched.
+  const isChild = typeof fields.isChild === 'boolean' ? fields.isChild && currentRows[0].managed_by_user_id !== null : currentRows[0].is_child;
+  const schema = isChild ? [] : await getAccountFieldSchema();
   const nextData = decryptFieldBlob(currentRows[0].account_data_enc);
   for (const field of schema) {
     if (fields[field.key] !== undefined) nextData[field.key] = sanitizeFieldValue(field, fields[field.key]);

@@ -71,7 +71,7 @@ export async function getManagedPerson(id, ownerId) {
 }
 
 export async function createManagedPerson({ ownerId, groupId, email, firstName, lastName, nickname, isChild = false, ...otFields }) {
-  const schema = await getAccountFieldSchema();
+  const schema = isChild === true ? [] : await getAccountFieldSchema();
   const data = {};
   for (const field of schema) {
     if (otFields[field.key] !== undefined) data[field.key] = sanitizeFieldValue(field, otFields[field.key]);
@@ -95,12 +95,13 @@ export async function createManagedPerson({ ownerId, groupId, email, firstName, 
 }
 
 export async function updateManagedPerson(id, ownerId, fields) {
-  const schema = await getAccountFieldSchema();
   const { rows: currentRows } = await query(
-    'SELECT account_data_enc FROM users WHERE id = $1 AND managed_by_user_id = $2',
+    'SELECT account_data_enc, is_child FROM users WHERE id = $1 AND managed_by_user_id = $2',
     [id, ownerId]
   );
   if (currentRows.length === 0) return null;
+  // A child keeps no account fields; what is stored stays untouched.
+  const schema = (fields.isChild ?? currentRows[0].is_child) ? [] : await getAccountFieldSchema();
   const nextData = decryptFieldBlob(currentRows[0].account_data_enc);
   for (const field of schema) {
     if (fields[field.key] !== undefined) nextData[field.key] = sanitizeFieldValue(field, fields[field.key]);

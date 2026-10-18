@@ -8,6 +8,7 @@ import { validateCharacterData } from '../events/schemaValidation.js';
 import { sanitizeDocumentFields } from '../richText.js';
 import { getNscProfileSchema } from '../nscSchema/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
+import { isMarkedChild } from '../childFieldSchema/repository.js';
 import { isManagedBy } from '../managedPersons/repository.js';
 import { diffForReview, recordReview } from '../characterReviews/repository.js';
 
@@ -15,7 +16,7 @@ const SELECT_COLUMNS = 'id, user_id, name, data, nsc_data, created_at';
 
 // `stub`: a placeholder character (name only) that is filled in later, so required fields aren't enforced yet.
 export async function createCharacter(userId, { name, data, stub = false }) {
-  const schema = await getScCharacterSchema();
+  const schema = await isMarkedChild(userId) ? [] : await getScCharacterSchema();
   data = sanitizeDocumentFields(schema, data ?? {});
   const errors = stub ? [] : validateCharacterData(schema, data);
   if (errors.length > 0) {
@@ -108,7 +109,7 @@ export async function updateCharacter(id, userId, { name, data }, { isElevated =
   let groupFieldChanges = [];
   let reviewChanges = [];
   if (data !== undefined) {
-    const schema = nsc ? await getNscProfileSchema() : await getScCharacterSchema();
+    const schema = await isMarkedChild(userId) ? [] : nsc ? await getNscProfileSchema() : await getScCharacterSchema();
     const stored = character[column] ?? {};
     // A staffOnly field's value can never be changed by the owner
     // themselves -- their own edit form doesn't even render an input for

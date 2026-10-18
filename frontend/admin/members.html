@@ -829,7 +829,11 @@
     // regardless of the viewer's own permissions (only PATCH enforces the
     // allowlist), so show every known field — editable when the caller may
     // change it, read-only text otherwise — instead of silently omitting it.
+    // A person marked as a child keeps only the names here (the child fields live with the registration).
+    let detailAccountSchema = [];
+
     function buildDetailFieldInputs(container, values = {}) {
+      detailAccountSchema = values.markedChild ? [] : accountSchema;
       const nameFieldsHtml = `
     <div class="firstName-container">
       <input id="field-firstName" data-field="firstName" type="text" value="${escapeHtml(values.firstName ?? '')}">
@@ -844,7 +848,7 @@
       <label for="field-nickname">Rufname</label>
     </div>
   `;
-      container.innerHTML = nameFieldsHtml + accountSchema.map((field) => {
+      container.innerHTML = nameFieldsHtml + detailAccountSchema.map((field) => {
         const label = field.label ?? field.key;
         if (myAccountFields.includes(field.key)) {
           const sealedBadge = ' <span class="sealed" title="Dieses Feld ist verschlüsselt gespeichert"><span class="material-symbols-outlined" aria-hidden="true">lock</span></span>';
@@ -1161,7 +1165,7 @@
       let details;
       try {
         [schemas, details] = await Promise.all([
-          Promise.all(CHARACTER_SECTIONS.map(async ({ characterClass }) => [characterClass, await api.get(`/${characterClass}-schema`).catch(() => [])])).then(Object.fromEntries),
+          Promise.all(CHARACTER_SECTIONS.map(async ({ characterClass }) => [characterClass, member.markedChild ? [] : await api.get(`/${characterClass}-schema`).catch(() => [])])).then(Object.fromEntries),
           Promise.all(list.map((c) => api.get(`/characters/${c.id}`))),
         ]);
       } catch (err) {
@@ -1287,7 +1291,7 @@
       const registered = member.registrations ?? [];
       const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Unbekanntes Event';
       const roleLabel = (key) => REGISTER_ROLES.find(([k]) => k === key)?.[1] ?? key;
-      const editableFields = [...registrationSchema, ...(member.childFields ? childSchema : [])].filter((f) => myAccountFields.includes(f.key));
+      const editableFields = [...(member.markedChild ? [] : registrationSchema), ...(member.childFields ? childSchema : [])].filter((f) => myAccountFields.includes(f.key));
       const eventFlagsOf = (id) => allEvents.find((e) => e.id === id)?.flags ?? [];
       const registeredHtml = registered.length
         ? registered.map((r) => `<div class="member-registration" data-reg-event="${escapeHtml(r.eventId)}">
@@ -1726,7 +1730,7 @@ Trotzdem setzen?`)) throw err;
       const payload = {};
       const detailSchema = [
         { key: 'firstName', type: 'text' }, { key: 'lastName', type: 'text' }, { key: 'nickname', type: 'text' },
-        ...accountSchema,
+        ...detailAccountSchema,
       ];
       Object.assign(payload, nullifyBlankNumberFields(detailSchema, collectAccountFieldValues(detailFields, detailSchema)));
       if (myAccountFields.includes('group') && detailGroupSelect.value) {
