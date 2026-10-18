@@ -21,7 +21,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",
     "archiver": "^8.0.0",
-    "basic-ftp": "^6.2.1",
+    "basic-ftp": "^6.2.2",
     "handlebars": "^4.7.9",
     "nodemailer": "^6.9.0",
     "pdf-lib": "^1.17.1",
