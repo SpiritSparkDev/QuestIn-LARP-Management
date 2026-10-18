@@ -47,6 +47,7 @@ import { runUnpaidReminders } from './registrations/unpaidReminders.js';
 import { runConPayerAutomation } from './registrations/conPayerAutomation.js';
 import './accountFieldSchema/routes.js';
 import './registrationFieldSchema/routes.js';
+import './childFieldSchema/routes.js';
 import './smtpSettings/routes.js';
 import './appSettings/routes.js';
 import './legalDocuments/routes.js';

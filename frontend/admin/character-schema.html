@@ -37,6 +37,7 @@
       <button type="button" class="tab-btn" data-tab="account-schema-tab">Konto</button>
       <button type="button" class="tab-btn" data-tab="registration-schema-tab">Anmeldung</button>
       <button type="button" class="tab-btn" data-tab="group-schema-tab">Gruppe</button>
+      <button type="button" class="tab-btn" data-tab="child-schema-tab" id="child-schema-tab-btn" hidden>Kinder</button>
     </div>
 
     <div class="tab-panel card form-pad" id="sc-schema-tab">
@@ -62,6 +63,13 @@
       <div id="registration-schema-rows"></div>
       <button type="button" id="registration-add-field">Feld hinzufügen</button>
       <div class="save-bar"><button type="button" id="registration-schema-save">Speichern</button></div>
+    </div>
+
+    <div class="tab-panel card form-pad" id="child-schema-tab" hidden>
+      <p class="sub">Zusätzliche Angaben pro Kind bei der Anmeldung, die die sorgeberechtigte Person ausfüllt (z. B. Einwilligungen zu Foto- und Videoaufnahmen). Als Kind gilt, wer als Kind markiert ist oder jünger als die Altersgrenze unter Einstellungen ist. Der Reiter ist nur sichtbar, solange das Add-on „Kinder“ aktiv ist.</p>
+      <div id="child-schema-rows"></div>
+      <button type="button" id="child-add-field">Feld hinzufügen</button>
+      <div class="save-bar"><button type="button" id="child-schema-save">Speichern</button></div>
     </div>
 
     <div class="tab-panel card form-pad" id="group-schema-tab" hidden>
@@ -231,6 +239,7 @@ const scRows = setupSchemaEditor({ rowsId: 'sc-schema-rows', addFieldId: 'sc-add
 const nscRows = setupSchemaEditor({ rowsId: 'nsc-schema-rows', addFieldId: 'nsc-add-field', saveId: 'nsc-schema-save', endpoint: '/nsc-schema', allowGroup: true });
 const accountRows = setupSchemaEditor({ rowsId: 'account-schema-rows', addFieldId: 'account-add-field', saveId: 'account-schema-save', endpoint: '/account-schema', allowPublic: false, allowSensitive: true, allowGroupManaged: true });
 const registrationRows = setupSchemaEditor({ rowsId: 'registration-schema-rows', addFieldId: 'registration-add-field', saveId: 'registration-schema-save', endpoint: '/registration-schema', allowPublic: false, allowSensitive: true, allowGroupManaged: true });
+const childRows = setupSchemaEditor({ rowsId: 'child-schema-rows', addFieldId: 'child-add-field', saveId: 'child-schema-save', endpoint: '/child-schema', allowPublic: false, allowSensitive: true });
 const groupRows = setupSchemaEditor({ rowsId: 'group-schema-rows', addFieldId: 'group-add-field', saveId: 'group-schema-save', endpoint: '/group-schema', allowPublic: false });
 
 document.getElementById('logout-link').addEventListener('click', async (evt) => {
@@ -247,9 +256,11 @@ try {
   if (account.group.key !== 'admin') {
     notify('Kein Zugriff – nur für Admin.', 'error');
   } else {
-    const [scSchema, nscSchema, accountSchema, registrationSchema, groupSchema] = await Promise.all([
-      api.get('/sc-schema'), api.get('/nsc-schema'), api.get('/account-schema'), api.get('/registration-schema'), api.get('/group-schema'),
+    const [scSchema, nscSchema, accountSchema, registrationSchema, groupSchema, childSchema] = await Promise.all([
+      api.get('/sc-schema'), api.get('/nsc-schema'), api.get('/account-schema'), api.get('/registration-schema'), api.get('/group-schema'), api.get('/child-schema'),
     ]);
+    document.getElementById('child-schema-tab-btn').hidden = account.childrenEnabled !== true;
+    childSchema.forEach((field) => addSchemaRow(childRows, field, { allowPublic: false, allowSensitive: true }));
     groupSchema.forEach((field) => addSchemaRow(groupRows, field, { allowPublic: false }));
     scSchema.forEach((field) => addSchemaRow(scRows, field, { allowGroup: true }));
     nscSchema.forEach((field) => addSchemaRow(nscRows, field, { allowGroup: true }));

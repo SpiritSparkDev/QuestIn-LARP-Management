@@ -515,6 +515,10 @@
     let events = [];
     let currentRegistrations = [];
     let registrationSchema = [];
+    // Registration fields = the common ones plus, for a child (Kinder add-on), the child fields the admin defined.
+    let commonRegistrationSchema = [];
+    let childRegistrationSchema = [];
+    let personName = "";
     let selectedRegistrationRole = "sc";
     const eventSelect = document.getElementById("event-select");
     const characterSelect = document.getElementById("character-select");
@@ -629,8 +633,15 @@
       });
     });
 
+    function otFieldsHtml(values, idPrefix) {
+      const input = (field) => renderAccountFieldInput(field, values[field.key], { idPrefix });
+      const childPart = childRegistrationSchema.length
+        ? `<h3 class="child-fields-title">Angaben für ${escapeHtml(personName)} (Kind)</h3><p class="sub">Als sorgeberechtigte Person gibst du diese Angaben für das Kind an.</p>${childRegistrationSchema.map(input).join("")}`
+        : "";
+      return commonRegistrationSchema.map(input).join("") + childPart;
+    }
     function renderOtFields(values = {}) {
-      otFieldsContainer.innerHTML = registrationSchema.map((field) => renderAccountFieldInput(field, values[field.key], { idPrefix: "register-" })).join("");
+      otFieldsContainer.innerHTML = otFieldsHtml(values, "register-");
       attachLiveValidation(otFieldsContainer);
     }
     function collectOtFields() {
@@ -856,7 +867,7 @@
       const flagsField = flagsFieldFor(event);
       document.getElementById("edit-flags").innerHTML = flagsField.options.length > 0 ? `<h4>Sonderrollen</h4>${renderFlagCards(event, registration.flags ?? [])}` : "";
       bindFlagCards(document.getElementById("edit-flags"));
-      document.getElementById("edit-ot-fields").innerHTML = registrationSchema.map((field) => renderAccountFieldInput(field, registration[field.key], { idPrefix: "edit-" })).join("");
+      document.getElementById("edit-ot-fields").innerHTML = otFieldsHtml(registration, "edit-");
       attachLiveValidation(document.getElementById("edit-ot-fields"));
       editOtDialog.showModal();
     }
@@ -960,7 +971,10 @@
       } catch {
         // NSC schema is optional-ish, same as account.html's own bootstrap.
       }
-      registrationSchema = await api.get("/registration-schema");
+      commonRegistrationSchema = await api.get("/registration-schema");
+      personName = person.name;
+      childRegistrationSchema = person.childFields ? await api.get("/child-schema") : [];
+      registrationSchema = [...commonRegistrationSchema, ...childRegistrationSchema];
       renderOtFields();
       await loadEvents();
       await loadRegistrationWaiver();

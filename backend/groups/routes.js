@@ -5,6 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { listGroups, getGroup, createGroup, updateGroup, deleteGroup } from './repository.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
+import { getChildFieldSchema } from '../childFieldSchema/repository.js';
 import { logAudit } from '../audit/repository.js';
 
 const MENU_KEYS = ['konto', 'mitglieder', 'events', 'checkin', 'taverne'];
@@ -16,8 +17,8 @@ function isValidMenuList(value) {
 
 // 'group' is a hardcoded permission key, never part of either schema.
 async function allowedFieldKeys() {
-  const [accountSchema, registrationSchema] = await Promise.all([getAccountFieldSchema(), getRegistrationFieldSchema()]);
-  return ['group', ...accountSchema.map((f) => f.key), ...registrationSchema.map((f) => f.key)];
+  const [accountSchema, registrationSchema, childSchema] = await Promise.all([getAccountFieldSchema(), getRegistrationFieldSchema(), getChildFieldSchema()]);
+  return ['group', ...accountSchema.map((f) => f.key), ...registrationSchema.map((f) => f.key), ...childSchema.map((f) => f.key)];
 }
 
 async function isValidFieldList(value) {

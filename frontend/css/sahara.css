@@ -5802,3 +5802,9 @@ select.status-select {
   width: 100%;
   margin: 0;
 }
+
+/* Child fields (Kinder add-on) inside the registration field grid: heading and hint span the full row. */
+.child-fields-title,
+.child-fields-title + .sub {
+  grid-column: 1 / -1;
+}

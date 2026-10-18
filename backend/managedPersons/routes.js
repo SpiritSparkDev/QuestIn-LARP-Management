@@ -11,6 +11,7 @@ import {
 } from './repository.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { logAudit } from '../audit/repository.js';
+import { isChildForFields } from '../childFieldSchema/repository.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -44,7 +45,8 @@ router.post('/managed-persons/:id/release', requireGroupManager(async ({ params,
 router.get('/managed-persons/:id', requireAuth(async ({ params, user }) => {
   const person = await getManagedPersonForRegistration(params.id, user.id);
   if (!person) return { status: 404, body: { error: 'managed person not found' } };
-  return { status: 200, body: person };
+  // Does the person get the extra child fields (Kinder add-on: marked as a child or under the age limit)?
+  return { status: 200, body: { ...person, childFields: await isChildForFields(person.id) } };
 }));
 
 // A manager acts for the people they manage, like the person would in their own account: every account field

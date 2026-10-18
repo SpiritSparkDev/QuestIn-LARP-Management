@@ -5,6 +5,7 @@ import { readJsonBody } from '../httpBody.js';
 import { getEvent } from '../events/repository.js';
 import { getScCharacterSchema } from '../scSchema/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
+import { getChildFieldSchema } from '../childFieldSchema/repository.js';
 import { getAccountFieldSchema } from '../accountFieldSchema/repository.js';
 import { buildParticipantsCsv } from './exportCsv.js';
 import { logAudit } from '../audit/repository.js';
@@ -363,7 +364,7 @@ router.put('/events/:id/registrations/:userId/ot-fields', requireAuth(async ({ r
   // exists to restrict what staff may do to OTHERS, not self-service), same
   // as PATCH /account has no such restriction.
   if (!isOwner) {
-    const registrationFieldKeys = (await getRegistrationFieldSchema()).map((f) => f.key);
+    const registrationFieldKeys = [...await getRegistrationFieldSchema(), ...await getChildFieldSchema()].map((f) => f.key);
     const disallowed = Object.keys(body).filter((key) => registrationFieldKeys.includes(key) && !user.group.accountFields.includes(key));
     if (disallowed.length > 0) {
       return { status: 400, body: { error: `not permitted to edit: ${disallowed.join(', ')}` } };

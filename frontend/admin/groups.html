@@ -251,9 +251,10 @@ try {
   const account = await api.get('/account');
   document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
   document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
-  const [accountSchema, registrationSchema] = await Promise.all([api.get('/account-schema'), api.get('/registration-schema')]);
+  const [accountSchema, registrationSchema, childSchema] = await Promise.all([api.get('/account-schema'), api.get('/registration-schema'), api.get('/child-schema')]);
   appendFieldCheckboxes(accountSchema);
   appendFieldCheckboxes(registrationSchema);
+  appendFieldCheckboxes(childSchema);
   await loadGroups();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';

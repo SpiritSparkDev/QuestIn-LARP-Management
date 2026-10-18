@@ -7,6 +7,7 @@ import { decryptFieldBlob as decryptAccountFieldBlob } from '../accountFields.js
 import { filterCharacterFields } from '../characters/visibility.js';
 import { listOpenInvitationsForEvent } from '../invitations/repository.js';
 import { getRegistrationFieldSchema } from '../registrationFieldSchema/repository.js';
+import { childFieldsFor } from '../childFieldSchema/repository.js';
 import { encryptFieldBlob, decryptFieldBlob } from '../registrationFields.js';
 import { sendRegistrationOtFieldsChangedEmail, sendRegistrationWithdrawnOrgaEmail, sendWaitlistedEmail, sendWaitlistPromotedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
@@ -357,7 +358,8 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
   const { extras: resolvedExtras, extrasCents } = resolveExtras(event, requestedExtras);
   const requestedLodging = await resolveLodging(eventId, appSettings.lodgingEnabled, requestedLodgingId, requestedLodgingDetails);
 
-  const schema = await getRegistrationFieldSchema();
+  // A child (Kinder add-on) has the child fields on top: the guardian fills them in while registering.
+  const schema = [...await getRegistrationFieldSchema(), ...await childFieldsFor(userId, appSettings)];
   const data = {};
   for (const field of schema) {
     if (otFields?.[field.key] !== undefined) data[field.key] = sanitizeFieldValue(field, otFields[field.key]);
@@ -1139,7 +1141,7 @@ export async function setStatus(eventId, userId, status, expectedStatus) {
 }
 
 export async function updateRegistrationOtFields(eventId, userId, otFields, flags) {
-  const schema = await getRegistrationFieldSchema();
+  const schema = [...await getRegistrationFieldSchema(), ...await childFieldsFor(userId)];
   const { rows: currentRows } = await query(
     'SELECT registration_data_enc, flags FROM registrations WHERE event_id = $1 AND user_id = $2',
     [eventId, userId]

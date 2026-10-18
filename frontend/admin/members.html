@@ -287,6 +287,7 @@
 
     let accountSchema = [];
     let registrationSchema = [];
+    let childSchema = [];
     let nscSchema = [];
 
     const listBody = document.querySelector('#member-list tbody');
@@ -1286,7 +1287,7 @@
       const registered = member.registrations ?? [];
       const eventName = (id) => allEvents.find((e) => e.id === id)?.name ?? 'Unbekanntes Event';
       const roleLabel = (key) => REGISTER_ROLES.find(([k]) => k === key)?.[1] ?? key;
-      const editableFields = registrationSchema.filter((f) => myAccountFields.includes(f.key));
+      const editableFields = [...registrationSchema, ...(member.childFields ? childSchema : [])].filter((f) => myAccountFields.includes(f.key));
       const eventFlagsOf = (id) => allEvents.find((e) => e.id === id)?.flags ?? [];
       const registeredHtml = registered.length
         ? registered.map((r) => `<div class="member-registration" data-reg-event="${escapeHtml(r.eventId)}">
@@ -1923,6 +1924,7 @@
       initColumnSettings(account.id);
       accountSchema = await api.get('/account-schema');
       registrationSchema = await api.get('/registration-schema');
+      if (childrenEnabled) childSchema = await api.get('/child-schema');
       nscSchema = await api.get('/nsc-schema').catch(() => []);
       buildFieldInputs(inviteFields);
       await loadEventOptions(inviteEventSelect);
