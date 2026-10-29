@@ -452,6 +452,22 @@
                 ><input type="checkbox" id="bank-qr-enabled" name="bankQrEnabled" />
                 QR-Code (Girocode) zum Bezahlen anzeigen</label
               >
+              <input
+                id="bank-reference-template"
+                name="bankReferenceTemplate"
+                type="text"
+                maxlength="200"
+                placeholder="{code} {name}"
+              />
+              <label for="bank-reference-template"
+                >Verwendungszweck
+                <span style="opacity: 0.6; font-size: 12px"
+                  >leer = Kennung + Vorname-Nachname. Platzhalter:
+                  {code} Event-Kennung, {event} Eventname, {vorname},
+                  {nachname}, {name} (Vorname-Nachname), {rolle}, {id}
+                  (Kurz-ID). Gilt für Anzeige und QR-Code.</span
+                ></label
+              >
               <div class="settings-actions">
                 <button type="submit">Speichern</button>
                 <span class="settings-state" aria-live="polite"></span>
@@ -1095,6 +1111,7 @@
         bankForm.elements.bankAccountHolder.value =
           settings.bankAccountHolder ?? "";
         bankForm.elements.bankQrEnabled.checked = settings.bankQrEnabled !== false;
+        bankForm.elements.bankReferenceTemplate.value = settings.bankReferenceTemplate ?? "";
         sumupForm.elements.sumupMerchantCode.value = settings.sumupMerchantCode ?? "";
         paypalForm.elements.paypalClientId.value = settings.paypalClientId ?? "";
         contactForm.elements.contactEmail.value = settings.contactEmail ?? "";

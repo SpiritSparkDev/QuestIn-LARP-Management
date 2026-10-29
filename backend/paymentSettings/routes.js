@@ -16,7 +16,10 @@ router.get('/admin/settings/payments', requireAuth(requireAdminGroup(async () =>
 router.put('/admin/settings/payments', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled } = body;
+  const { stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled, bankReferenceTemplate } = body;
+  if (bankReferenceTemplate !== undefined && (typeof bankReferenceTemplate !== 'string' || bankReferenceTemplate.length > 200)) {
+    return { status: 400, body: { error: 'bankReferenceTemplate must be text of at most 200 characters' } };
+  }
   if (SWITCHES.some((key) => body[key] !== undefined && typeof body[key] !== 'boolean')) {
     return { status: 400, body: { error: `${SWITCHES.join(', ')} must be booleans` } };
   }
@@ -34,7 +37,7 @@ router.put('/admin/settings/payments', requireAuth(requireAdminGroup(async ({ re
     || (paypalSandbox !== undefined && typeof paypalSandbox !== 'boolean')) {
     return { status: 400, body: { error: 'invalid PayPal settings' } };
   }
-  const saved = await setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled });
+  const saved = await setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled, bankReferenceTemplate });
   return { status: 200, body: saved };
 })));
 

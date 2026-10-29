@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { getStripeClient } from './stripeClient.js';
 import { getSumupConfig, createSumupCheckout, getSumupCheckout } from './sumupClient.js';
 import { getPaypalConfig, createPaypalOrder, capturePaypalOrder, completedCapture, isPaypalOrderId } from './paypalClient.js';
-import { getPaymentSettingsForUse, getPaymentSettings, getBankInfo } from '../paymentSettings/repository.js';
+import { getPaymentSettingsForUse, getPaymentSettings, getBankInfo, getBankReferenceTemplate } from '../paymentSettings/repository.js';
 import { buildPaymentReference } from './reference.js';
 import { canRegisterFor } from '../managedPersons/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
@@ -177,7 +177,7 @@ router.get('/public/registrations/:token', async ({ params }) => {
       paypalMeUrl: bank.paypalMeUrl,
       bank: bank.bankIban ? {
         iban: bank.bankIban, bic: bank.bankBic, accountHolder: bank.bankAccountHolder, qrEnabled: bank.bankQrEnabled,
-        reference: buildPaymentReference(registration.eventId, registration.userId, { code: event.code, firstName: rows[0]?.first_name, lastName: rows[0]?.last_name }),
+        reference: buildPaymentReference(registration.eventId, registration.userId, { code: event.code, eventName: event.name, role: registration.conRole, firstName: rows[0]?.first_name, lastName: rows[0]?.last_name, template: await getBankReferenceTemplate() }),
       } : null,
     };
   }

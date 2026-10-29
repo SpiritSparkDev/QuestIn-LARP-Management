@@ -11,6 +11,7 @@ import { encryptFieldBlob, decryptFieldBlob } from '../registrationFields.js';
 import { sendRegistrationOtFieldsChangedEmail, sendRegistrationWithdrawnOrgaEmail, sendWaitlistedEmail, sendWaitlistPromotedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
 import { getAppSettings } from '../appSettings/repository.js';
+import { getBankReferenceTemplate } from '../paymentSettings/repository.js';
 import { buildPaymentReference } from '../payments/reference.js';
 import { sanitizeFieldValue, sanitizeDocumentFields } from '../richText.js';
 import { validateCharacterData } from '../events/schemaValidation.js';
@@ -945,6 +946,7 @@ export async function listRegistrationsForUser(userId) {
      ORDER BY e.event_date`,
     [userId]
   );
+  const referenceTemplate = await getBankReferenceTemplate();
   return rows.map((r) => ({
     eventId: r.event_id,
     eventName: r.event_name,
@@ -974,7 +976,7 @@ export async function listRegistrationsForUser(userId) {
     lodgingDetails: r.lodging_details,
     waiverVersionAccepted: r.waiver_version_accepted,
     waiverAcceptedAt: r.waiver_accepted_at,
-    paymentReference: buildPaymentReference(r.event_id, userId, { code: r.event_code, firstName: r.user_first_name, lastName: r.user_last_name }),
+    paymentReference: buildPaymentReference(r.event_id, userId, { code: r.event_code, eventName: r.event_name, role: r.con_role, firstName: r.user_first_name, lastName: r.user_last_name, template: referenceTemplate }),
     ...decryptFieldBlob(r.registration_data_enc),
   }));
 }
