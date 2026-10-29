@@ -468,6 +468,12 @@
                   (Kurz-ID). Gilt für Anzeige und QR-Code.</span
                 ></label
               >
+              <p class="sub">
+                Beispiel: <code>{code} {rolle}: {name}</code> wird zu
+                „P17/2027 SC: Anna-Muster“.<br />
+                Vorschau (Beispieldaten):
+                <strong id="bank-reference-preview"></strong>
+              </p>
               <div class="settings-actions">
                 <button type="submit">Speichern</button>
                 <span class="settings-state" aria-live="polite"></span>
@@ -1104,6 +1110,23 @@
       const contactForm = document.getElementById("contact-settings-form");
       const paypalMeForm = document.getElementById("paypalme-settings-form");
 
+      let referencePreviewTimer;
+      function updateReferencePreview() {
+        clearTimeout(referencePreviewTimer);
+        referencePreviewTimer = setTimeout(async () => {
+          const template = bankForm.elements.bankReferenceTemplate.value;
+          try {
+            const { reference } = await api.get(
+              `/admin/settings/payments/reference-preview?template=${encodeURIComponent(template)}`,
+            );
+            document.getElementById("bank-reference-preview").textContent = reference;
+          } catch {
+            document.getElementById("bank-reference-preview").textContent = "–";
+          }
+        }, 250);
+      }
+      bankForm.elements.bankReferenceTemplate.addEventListener("input", updateReferencePreview);
+
       async function loadPaymentSettings() {
         const settings = await api.get("/admin/settings/payments");
         bankForm.elements.bankIban.value = settings.bankIban ?? "";
@@ -1112,6 +1135,7 @@
           settings.bankAccountHolder ?? "";
         bankForm.elements.bankQrEnabled.checked = settings.bankQrEnabled !== false;
         bankForm.elements.bankReferenceTemplate.value = settings.bankReferenceTemplate ?? "";
+        updateReferencePreview();
         sumupForm.elements.sumupMerchantCode.value = settings.sumupMerchantCode ?? "";
         paypalForm.elements.paypalClientId.value = settings.paypalClientId ?? "";
         contactForm.elements.contactEmail.value = settings.contactEmail ?? "";

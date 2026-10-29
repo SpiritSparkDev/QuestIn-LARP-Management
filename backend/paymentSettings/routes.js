@@ -2,6 +2,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
+import { buildPaymentReference } from '../payments/reference.js';
 import { getPaymentSettings, setPaymentSettings, getBankInfo, STRIPE_METHODS } from './repository.js';
 
 // A plain PayPal.Me link: every participant's browser opens it.
@@ -11,6 +12,15 @@ const SWITCHES = ['stripeEnabled', 'paypalEnabled', 'sumupEnabled', 'bankEnabled
 router.get('/admin/settings/payments', requireAuth(requireAdminGroup(async () => {
   const settings = await getPaymentSettings();
   return { status: 200, body: settings };
+})));
+
+// Live preview for the template field: the real builder with made-up sample data.
+router.get('/admin/settings/payments/reference-preview', requireAuth(requireAdminGroup(async ({ req }) => {
+  const template = new URL(req.url, 'http://localhost').searchParams.get('template') ?? '';
+  const reference = buildPaymentReference('1a2b3c4d-0000-0000-0000-000000000000', '5e6f7a8b-0000-0000-0000-000000000000', {
+    code: 'P17/2027', eventName: 'Sommercon 2027', role: 'sc', firstName: 'Anna', lastName: 'Muster', template: template.slice(0, 200),
+  });
+  return { status: 200, body: { reference } };
 })));
 
 router.put('/admin/settings/payments', requireAuth(requireAdminGroup(async ({ req }) => {

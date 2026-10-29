@@ -24,6 +24,22 @@ async function makeUserAndSession(groupKey = 'mitglied') {
   return { userId: rows[0].id, cookie: `session=${session.token}` };
 }
 
+test('GET /admin/settings/payments/reference-preview renders a template with sample data', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const url = `http://localhost:${port}/admin/settings/payments/reference-preview?template=${encodeURIComponent('{code} {rolle}: {name}')}`;
+    const res = await fetch(url, { headers: { Cookie: cookie } });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { reference: 'P17/2027 SC: Anna-Muster' });
+    const { cookie: memberCookie } = await makeUserAndSession('mitglied');
+    assert.equal((await fetch(url, { headers: { Cookie: memberCookie } })).status, 403);
+  } finally {
+    server.close();
+  }
+});
+
 test('PUT then GET /admin/settings/payments never returns plaintext secrets, only has-flags', async () => {
   const server = createServer().listen(0);
   try {
