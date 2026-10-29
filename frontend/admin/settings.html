@@ -743,6 +743,28 @@
             </p>
           </div>
           <div class="card form-pad">
+            <h2>Add-on: Funke</h2>
+            <p class="sub">
+              Verbindet QuestIn mit Funke, dem Matrix-basierten Org-Chat:
+              Teilnehmer melden sich in Funke mit ihrer Matrix-ID an, ihr
+              Anmeldestatus und ihr Charakter erscheinen dort. Ist das Add-on
+              aus, nimmt QuestIn keine Anmeldungen von Funke an.
+              <span id="funke-links"></span>
+            </p>
+            <label class="switch-row"
+              ><input type="checkbox" class="switch" id="funke-toggle" />
+              Funke aktiviert</label
+            >
+            <input id="funke-homeservers" type="text" placeholder="matrix.example.org, matrix.example.net" />
+            <label for="funke-homeservers">Freigegebene Matrix-Server (kommagetrennt)</label>
+            <input id="funke-origin" type="text" placeholder="https://funke.example.org" />
+            <label for="funke-origin">Adresse der Funke-App (Origin)</label>
+            <p class="settings-hint">
+              Nur Matrix-Server aus dieser Liste dürfen Teilnehmer anmelden.
+              Änderungen werden sofort gespeichert.
+            </p>
+          </div>
+          <div class="card form-pad">
             <h2>Add-on: PDF-Import</h2>
             <p class="sub">
               Liest ausgefüllte PDF-Anmeldeformulare ein und speichert sie.
@@ -1028,6 +1050,10 @@
           !settings.childrenEnabled;
         document.getElementById("character-browsing-toggle").checked =
           settings.characterBrowsingEnabled;
+        document.getElementById("funke-toggle").checked = settings.funkeEnabled;
+        document.getElementById("funke-homeservers").value =
+          (settings.funkeHomeservers ?? []).join(", ");
+        document.getElementById("funke-origin").value = settings.funkeOrigin ?? "";
       }
 
       async function loadWaitlistSetting() {
@@ -1322,6 +1348,39 @@
             notify(err.message, "error");
           }
         });
+
+      // Links zu Funke; die Website-URL eintragen, sobald es sie gibt.
+      const FUNKE_REPO_URL = "";
+      const FUNKE_WEBSITE_URL = "";
+      document.getElementById("funke-links").innerHTML = [
+        [FUNKE_REPO_URL, "Funke im Git-Repository"],
+        [FUNKE_WEBSITE_URL, "Funke-Website"],
+      ]
+        .filter(([url]) => url)
+        .map(([url, label]) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>`)
+        .join(" · ");
+
+      const saveFunke = (body, okText) => async (event) => {
+        try {
+          await api.put("/app-settings", body(event.target));
+          notify(okText(event.target), "success");
+        } catch (err) {
+          if (event.target.type === "checkbox") event.target.checked = !event.target.checked;
+          notify(err.message, "error");
+        }
+      };
+      document.getElementById("funke-toggle").addEventListener("change", saveFunke(
+        (el) => ({ funkeEnabled: el.checked }),
+        (el) => (el.checked ? "Funke aktiviert." : "Funke deaktiviert."),
+      ));
+      document.getElementById("funke-homeservers").addEventListener("change", saveFunke(
+        (el) => ({ funkeHomeservers: el.value.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean) }),
+        () => "Matrix-Server gespeichert.",
+      ));
+      document.getElementById("funke-origin").addEventListener("change", saveFunke(
+        (el) => ({ funkeOrigin: el.value.trim().replace(/\/+$/, "") }),
+        () => "Adresse gespeichert.",
+      ));
 
       document
         .getElementById("children-toggle")

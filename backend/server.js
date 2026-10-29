@@ -11,6 +11,8 @@ import './auth/register.js';
 import './auth/login.js';
 import './auth/passwordReset.js';
 import './auth/oauth.js';
+import './funke/routes.js';
+import { applyFunkeCors } from './funke/cors.js';
 import './auth/invite.js';
 import './auth/groupInvite.js';
 import './accounts/routes.js';
@@ -135,6 +137,8 @@ async function handleRequest(req, res) {
       return;
     }
   }
+
+  if (await applyFunkeCors(req, res)) return;
 
   const match = router.match(req.method, pathname);
   if (!match) {

@@ -60,7 +60,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   const {
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote,
-    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, childrenEnabled, childrenCountCapacity, childrenAgeLimit, backgroundPreset, backgroundOpacity, unpaidReminderDays,
+    waiverText, baseUrl, comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, childrenEnabled, childrenCountCapacity, childrenAgeLimit, funkeEnabled, funkeHomeservers, funkeOrigin, backgroundPreset, backgroundOpacity, unpaidReminderDays,
   } = body;
   if (waiverText !== undefined && typeof waiverText !== 'string') {
     return { status: 400, body: { error: 'waiverText must be a string' } };
@@ -106,6 +106,15 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   }
   if (childrenEnabled !== undefined && typeof childrenEnabled !== 'boolean') {
     return { status: 400, body: { error: 'childrenEnabled must be a boolean' } };
+  }
+  if (funkeEnabled !== undefined && typeof funkeEnabled !== 'boolean') {
+    return { status: 400, body: { error: 'funkeEnabled must be a boolean' } };
+  }
+  if (funkeHomeservers !== undefined && !(Array.isArray(funkeHomeservers) && funkeHomeservers.every((h) => typeof h === 'string' && /^[a-z0-9.-]+(:\d{1,5})?$/.test(h)))) {
+    return { status: 400, body: { error: 'funkeHomeservers must be a list of server names (e.g. matrix.example.org)' } };
+  }
+  if (funkeOrigin !== undefined && !(typeof funkeOrigin === 'string' && (funkeOrigin === '' || /^https?:\/\/[^/?#\s]+$/.test(funkeOrigin)))) {
+    return { status: 400, body: { error: 'funkeOrigin must be an origin like https://funke.example.org' } };
   }
   if (childrenCountCapacity !== undefined && typeof childrenCountCapacity !== 'boolean') {
     return { status: 400, body: { error: 'childrenCountCapacity must be a boolean' } };
@@ -159,7 +168,7 @@ router.put('/app-settings', requireAuth(requireAdminGroup(async ({ req, user }) 
   const saved = await setAppSettings({
     logoUrl, appTitle, eventName, quotaMbPerCharacter, invitationTtlDays, characterBrowsingEnabled, waitlistAutoPromote, waiverText,
     baseUrl: baseUrl === undefined ? undefined : baseUrl.replace(/\/+$/, ''),
-    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, childrenEnabled, childrenCountCapacity, childrenAgeLimit, backgroundPreset, backgroundOpacity, unpaidReminderDays,
+    comingSoonEnabled, comingSoonMessage, comingSoonUntil, themeMode, colorScheme, customColors, pdfImportEnabled, pdfExportEnabled, tavernEnabled, lodgingEnabled, childrenEnabled, childrenCountCapacity, childrenAgeLimit, funkeEnabled, funkeHomeservers, funkeOrigin, backgroundPreset, backgroundOpacity, unpaidReminderDays,
   });
 
   // Fire-and-forget: sendComingSoonReminders never throws (own try/catch per

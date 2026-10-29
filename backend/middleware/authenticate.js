@@ -2,6 +2,13 @@ import { parseCookies, SESSION_COOKIE_NAME } from '../auth/cookies.js';
 import { getSession } from '../auth/sessions.js';
 import { query } from '../db.js';
 import { effectiveAccountFields } from '../groups/repository.js';
+import { getAppSettings } from '../appSettings/repository.js';
+
+// Add-on "Funke": the Matrix client sends its session as a Bearer token.
+async function funkeBearerToken(req) {
+  const match = /^Bearer (\S+)$/.exec(req.headers.authorization ?? '');
+  return match && (await getAppSettings()).funkeEnabled ? match[1] : null;
+}
 
 // Group management (inviting, naming, registering people ...) is for the group
 // manager only; plain members of a group get a 403.
@@ -16,7 +23,7 @@ export function requireGroupManager(handler) {
 export function requireAuth(handler) {
   return async (ctx) => {
     const cookies = parseCookies(ctx.req.headers.cookie);
-    const token = cookies[SESSION_COOKIE_NAME];
+    const token = cookies[SESSION_COOKIE_NAME] ?? await funkeBearerToken(ctx.req);
     if (!token) return { status: 401, body: { error: 'Nicht angemeldet.' } };
 
     const session = await getSession(token);
