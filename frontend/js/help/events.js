@@ -5,7 +5,7 @@ export default {
     anchor: 'events',
     intro: 'Hier legst du Events an, bearbeitest sie, aktivierst sie für die Anmeldung und beendest sie.',
     items: [
-      { label: 'Neues Event', text: 'Öffnet das leere Event-Formular. Erst nach dem Speichern kannst du im Tab „Rundmail“ Mails senden.' },
+      { label: 'Neues Event', text: 'Öffnet das leere Event-Formular. Rundmails an die Angemeldeten verschickst du unter „Rundmail“ im Hauptmenü.' },
       { label: 'Event-Liste: Name, Datum, Status', text: 'Zeigt alle Events mit Datum (bei mehrtägigen von – bis). „Aktiv – Anmeldung offen“ heißt: Teilnehmende melden sich für dieses Event an. „Beendet“ erscheint, wenn das Event beendet wurde.' },
       { label: 'Aktivieren', text: 'Macht dieses Event zum aktuellen Event, für das die Anmeldung läuft. Nur bei inaktiven Events sichtbar.' },
       { label: 'Event beenden', text: 'Markiert das Event als beendet. Erst danach ist im Check-In das Auschecken möglich. Außerdem startet ab jetzt die Frist für die Datenlöschung (Tab „Datenschutz“).' },

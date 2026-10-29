@@ -1,4 +1,4 @@
-// "Rundmail" tab of the event form: WYSIWYG/HTML editor, recipient selection
+// "Rundmail" page (admin/mailing.html): WYSIWYG/HTML editor, recipient selection
 // (registered people with filters + manually typed addresses), test mail,
 // send with progress, history.
 import { api } from './api.js';
