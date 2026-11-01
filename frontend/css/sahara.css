@@ -3315,6 +3315,14 @@ input[type="checkbox"].group-feature-switch:checked {
   opacity: 0.75;
 }
 
+.mp-pay {
+  font-weight: 600;
+}
+
+.mp-pay--paid {
+  color: var(--success, inherit);
+}
+
 .mp-empty {
   margin: 0;
 }

@@ -18,6 +18,7 @@ import { getAppSettings } from '../appSettings/repository.js';
 import { topUpFromStripe, findActiveAccountForUser } from '../tavern/repository.js';
 import {
   setAmountDue, setDiscount, markPaidManually, markTransferNotified, clearTransferNotified, listOverdueTransfers, markUnpaid, recordSuccessfulStripePayment,
+  createGroupPayment, recordGroupPayment,
   getRegistrationByPaymentToken, refundPayment, listUnpaidRegistrationsForEvent, setGuestPaymentToken,
 } from './repository.js';
 
@@ -25,6 +26,8 @@ const CHECKOUT_METHODS = ['card', 'paypal', 'bank_transfer', 'klarna', 'sepa_deb
 const CHECKOUT_METHOD_ERROR = `method must be one of: ${CHECKOUT_METHODS.join(', ')}`;
 // The only methods whose ledger entry the tavern top-up knows (see TAVERN_LEDGER_METHODS).
 const TAVERN_STRIPE_METHODS = ['card', 'paypal', 'bank_transfer'];
+// Provider reference of one payment for several people: "G:<group_payments.id>".
+const GROUP_REFERENCE_PREFIX = 'G:';
 
 // Stripe bank transfer (customer_balance) is a delayed-notification method
 // that requires an existing Customer on the Checkout Session; a fresh
@@ -65,10 +68,10 @@ function stripeMethodForSession(session) {
 // and where Stripe redirects afterward is identical.
 async function createCheckoutSession({
   eventId, userId, method, amountDueCents, successUrl, cancelUrl,
-  clientReferenceId = `${eventId}:${userId}`, productLabel = 'Teilnahmegebühr',
+  clientReferenceId = `${eventId}:${userId}`, productLabel = 'Teilnahmegebühr', description,
 }) {
-  if (method === 'sumup') return createSumupSession({ eventId, userId, amountDueCents, successUrl, productLabel });
-  if (method === 'paypal_direct') return createPaypalSession({ eventId, userId, amountDueCents, successUrl, cancelUrl, productLabel });
+  if (method === 'sumup') return createSumupSession({ eventId, userId, amountDueCents, successUrl, productLabel, description, clientReferenceId });
+  if (method === 'paypal_direct') return createPaypalSession({ eventId, userId, amountDueCents, successUrl, cancelUrl, productLabel, description, clientReferenceId });
   // Only the Stripe methods the admin switched on can be started.
   const stripeSettings = await getPaymentSettingsForUse();
   if (!stripeSettings.stripeEnabled || !stripeSettings.stripeMethods.includes(method)) return null;
@@ -90,7 +93,7 @@ async function createCheckoutSession({
       quantity: 1,
     }],
     client_reference_id: clientReferenceId,
-    payment_intent_data: { description: await paymentDescription(eventId, userId, productLabel) },
+    payment_intent_data: { description: description ?? await paymentDescription(eventId, userId, productLabel) },
     success_url: successUrl,
     cancel_url: cancelUrl,
   });
@@ -345,8 +348,21 @@ async function resolveGroupSelection(req, eventId, user) {
   const payable = new Map((await listPayablePersons(eventId, user.id)).map((p) => [p.userId, p]));
   const persons = unique.map((id) => payable.get(id));
   if (persons.some((p) => !p)) return { error: { status: 409, body: { error: 'Für mindestens eine Person ist keine offene Zahlung möglich.' } } };
-  return { persons };
+  return { persons, body };
 }
+
+// The group-transfer text; also the description of an online group payment at the provider.
+async function groupReference(eventId, payerId, persons) {
+  const event = await getEvent(eventId);
+  const { rows } = await query('SELECT first_name, last_name, group_name FROM users WHERE id = $1', [payerId]);
+  return buildGroupPaymentReference(eventId, payerId, {
+    code: event.code, eventName: event.name,
+    payerFirstName: rows[0]?.first_name, payerLastName: rows[0]?.last_name, groupName: rows[0]?.group_name,
+    personNames: persons.map((p) => p.firstName), template: await getBankGroupReferenceTemplate(),
+  });
+}
+
+const sumCents = (persons) => persons.reduce((sum, p) => sum + p.amountDueCents, 0);
 
 router.get('/events/:eventId/group-payment', requireAuth(async ({ params, user }) => {
   const payable = (await listPayablePersons(params.eventId, user.id)).map(({ firstName, ...p }) => p);
@@ -358,21 +374,67 @@ router.post('/events/:eventId/group-payment/bank', requireAuth(async ({ req, par
   if (error) return error;
   const bank = await getBankInfo();
   if (!bank.bankIban) return { status: 409, body: { error: 'Es ist keine Banküberweisung eingerichtet. Bitte melde dich bei der Orga.' } };
-  const event = await getEvent(params.eventId);
-  const { rows } = await query('SELECT first_name, last_name, group_name FROM users WHERE id = $1', [user.id]);
-  const reference = buildGroupPaymentReference(params.eventId, user.id, {
-    code: event.code, eventName: event.name,
-    payerFirstName: rows[0]?.first_name, payerLastName: rows[0]?.last_name, groupName: rows[0]?.group_name,
-    personNames: persons.map((p) => p.firstName), template: await getBankGroupReferenceTemplate(),
-  });
+  const reference = await groupReference(params.eventId, user.id, persons);
   return {
     status: 200,
     body: {
-      totalCents: persons.reduce((sum, p) => sum + p.amountDueCents, 0),
+      totalCents: sumCents(persons),
       persons: persons.map(({ userId, name, amountDueCents }) => ({ userId, name, amountDueCents })),
       bank: { iban: bank.bankIban, bic: bank.bankBic, accountHolder: bank.bankAccountHolder, qrEnabled: bank.bankQrEnabled, reference },
     },
   };
+}));
+
+router.post('/events/:eventId/group-payment/summary', requireAuth(async ({ req, params, user }) => {
+  const { error, persons } = await resolveGroupSelection(req, params.eventId, user);
+  if (error) return error;
+  return { status: 200, body: { totalCents: sumCents(persons), persons: persons.map(({ userId, name, amountDueCents }) => ({ userId, name, amountDueCents })) } };
+}));
+
+// One online payment for several people. The provider only sees "G:<id>"; the webhook books each person.
+router.post('/events/:eventId/group-payment/checkout-session', requireAuth(async ({ req, params, user }) => {
+  const { error, persons, body } = await resolveGroupSelection(req, params.eventId, user);
+  if (error) return error;
+  if (body.method !== 'auto' && !CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
+  const method = body.method === 'auto' ? await firstOnlineMethod() : body.method;
+  if (!method) return { status: 409, body: { error: await noOnlinePaymentMessage() } };
+  const groupPaymentId = await createGroupPayment(params.eventId, user.id, persons.map((p) => p.userId));
+  const resolvedBaseUrl = await baseUrl();
+  const session = await createCheckoutSession({
+    eventId: params.eventId,
+    userId: user.id,
+    method,
+    amountDueCents: sumCents(persons),
+    clientReferenceId: `${GROUP_REFERENCE_PREFIX}${groupPaymentId}`,
+    productLabel: `Teilnahmegebühren (${persons.length} Personen)`,
+    description: await groupReference(params.eventId, user.id, persons),
+    successUrl: `${resolvedBaseUrl}/account.html?payment=success#gruppe`,
+    cancelUrl: `${resolvedBaseUrl}/account.html?payment=cancelled#gruppe`,
+  });
+  if (!session) return { status: 502, body: { error: 'Zahlungen sind aktuell nicht konfiguriert.' } };
+  return { status: 200, body: { url: session.url } };
+}));
+
+// PayPal's own buttons for a group payment; capture/booking goes through /paypal/capture like a single order.
+router.post('/events/:eventId/group-payment/paypal-order', requireAuth(async ({ req, params, user }) => {
+  const { error, persons } = await resolveGroupSelection(req, params.eventId, user);
+  if (error) return error;
+  const config = await getPaypalConfig();
+  const { paypalButtonsEnabled } = await getPaymentSettings();
+  if (!config?.enabled || !paypalButtonsEnabled) return { status: 409, body: { error: 'PayPal-Buttons sind nicht eingeschaltet.' } };
+  const groupPaymentId = await createGroupPayment(params.eventId, user.id, persons.map((p) => p.userId));
+  const totalCents = sumCents(persons);
+  const { orderId } = await createPaypalOrder(config, {
+    reference: `${GROUP_REFERENCE_PREFIX}${groupPaymentId}`, amountCents: totalCents,
+    description: await groupReference(params.eventId, user.id, persons),
+    requestId: crypto.randomUUID(), sdk: true,
+  });
+  const base = await baseUrl();
+  await query(
+    'INSERT INTO paypal_orders (order_id, event_id, user_id, group_payment_id, amount_cents, success_url, cancel_url) VALUES ($1, $2, NULL, $3, $4, $5, $6)',
+    [orderId, params.eventId, groupPaymentId, totalCents, `${base}/account.html?payment=success#gruppe`, `${base}/account.html?payment=cancelled#gruppe`]
+  );
+  return { status: 200, body: { orderId } };
 }));
 
 router.post('/events/:eventId/group-payment/transfer-notice', requireAuth(async ({ req, params, user }) => {
@@ -389,22 +451,23 @@ router.post('/events/:eventId/group-payment/transfer-notice', requireAuth(async 
 // /paypal/return, where the order is captured and booked. Everything that matters
 // (amount, who, which event) comes from our own paypal_orders row and PayPal's answer,
 // never from the browser: the only input is the order id, which PayPal made up.
-async function createPaypalSession({ eventId, userId, amountDueCents, successUrl, cancelUrl, productLabel }) {
+async function createPaypalSession({ eventId, userId, amountDueCents, successUrl, cancelUrl, productLabel, description, clientReferenceId }) {
   const config = await getPaypalConfig();
   if (!config?.enabled) return null;
   const event = await getEvent(eventId);
   const base = await baseUrl();
   const { orderId, approveUrl } = await createPaypalOrder(config, {
-    reference: `${eventId}:${userId}`,
+    reference: clientReferenceId,
     amountCents: amountDueCents,
-    description: await paymentDescription(eventId, userId, productLabel),
+    description: description ?? await paymentDescription(eventId, userId, productLabel),
     returnUrl: `${base}/paypal/return`,
     cancelUrl: `${base}/paypal/cancel`,
     requestId: crypto.randomUUID(),
   });
+  const groupPaymentId = clientReferenceId.startsWith(GROUP_REFERENCE_PREFIX) ? clientReferenceId.slice(GROUP_REFERENCE_PREFIX.length) : null;
   await query(
-    'INSERT INTO paypal_orders (order_id, event_id, user_id, amount_cents, success_url, cancel_url) VALUES ($1, $2, $3, $4, $5, $6)',
-    [orderId, eventId, userId, amountDueCents, successUrl, cancelUrl]
+    'INSERT INTO paypal_orders (order_id, event_id, user_id, group_payment_id, amount_cents, success_url, cancel_url) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+    [orderId, eventId, groupPaymentId ? null : userId, groupPaymentId, amountDueCents, successUrl, cancelUrl]
   );
   return { url: approveUrl };
 }
@@ -415,7 +478,7 @@ async function findPaypalOrder(req) {
   const orderId = new URL(req.url, 'http://localhost').searchParams.get('token');
   if (!isPaypalOrderId(orderId)) return null;
   const { rows } = await query(
-    'SELECT order_id, event_id, user_id, success_url, cancel_url, captured_at FROM paypal_orders WHERE order_id = $1',
+    'SELECT order_id, event_id, user_id, group_payment_id, success_url, cancel_url, captured_at FROM paypal_orders WHERE order_id = $1',
     [orderId]
   );
   return rows[0] ?? null;
@@ -437,6 +500,18 @@ async function bookPaypalOrder(order) {
     const config = await getPaypalConfig();
     if (!config) return { booked: false };
     const capture = completedCapture(await capturePaypalOrder(config, order.order_id));
+    if (order.group_payment_id) {
+      const ok = capture && capture.customId === `${GROUP_REFERENCE_PREFIX}${order.group_payment_id}` && await recordGroupPayment({
+        groupPaymentId: order.group_payment_id, method: 'paypal', provider: 'paypal',
+        paidCents: capture.amountCents, providerReference: `paypal:${capture.id}`,
+      });
+      if (!ok) {
+        logger.error('paypal group payment not booked (not completed, wrong reference or amount below due)', { orderId: order.order_id, captured: capture?.amountCents });
+        return { booked: false };
+      }
+      await query('UPDATE paypal_orders SET captured_at = now() WHERE order_id = $1', [order.order_id]);
+      return { booked: true };
+    }
     const { rows } = await query('SELECT amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = $2', [order.event_id, order.user_id]);
     const due = rows[0]?.amount_due_cents;
     // Only a completed capture for this very registration that covers the open amount counts.
@@ -499,7 +574,7 @@ router.post('/events/:eventId/registrations/:userId/paypal-order', requireAuth(a
 router.post('/paypal/capture', async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null || !isPaypalOrderId(body.orderId)) return { status: 400, body: { error: 'invalid order' } };
-  const { rows } = await query('SELECT order_id, event_id, user_id, success_url, cancel_url, captured_at FROM paypal_orders WHERE order_id = $1', [body.orderId]);
+  const { rows } = await query('SELECT order_id, event_id, user_id, group_payment_id, success_url, cancel_url, captured_at FROM paypal_orders WHERE order_id = $1', [body.orderId]);
   if (rows.length === 0) return { status: 404, body: { error: 'order not found' } };
   const { booked, issues = [] } = await bookPaypalOrder(rows[0]);
   if (booked) return { status: 200, body: { booked: true } };
@@ -533,16 +608,16 @@ async function paymentDescription(eventId, userId, productLabel = 'Teilnahmegeb�
 }
 
 // SumUp hosted checkout. The returned object only needs `.url`, like a Stripe session.
-async function createSumupSession({ eventId, userId, amountDueCents, successUrl, productLabel }) {
+async function createSumupSession({ eventId, userId, amountDueCents, successUrl, productLabel, description, clientReferenceId }) {
   const config = await getSumupConfig();
   if (!config?.enabled) return null;
   const event = await getEvent(eventId);
-  // Unique per attempt; the webhook reads eventId/userId back from it.
-  const reference = `${eventId}:${userId}:${crypto.randomBytes(4).toString('hex')}`;
+  // Unique per attempt; the webhook reads eventId/userId (or the group payment) back from it.
+  const reference = `${clientReferenceId}:${crypto.randomBytes(4).toString('hex')}`;
   const checkout = await createSumupCheckout(config, {
     reference,
     amountCents: amountDueCents,
-    description: await paymentDescription(eventId, userId, productLabel),
+    description: description ?? await paymentDescription(eventId, userId, productLabel),
     returnUrl: `${await baseUrl()}/webhooks/sumup/${config.webhookSecret}`,
     redirectUrl: successUrl,
   });
@@ -577,7 +652,18 @@ router.post('/webhooks/sumup/:secret', async ({ req, params }) => {
   if (checkout.status !== 'PAID' || checkout.merchant_code !== config.merchantCode || checkout.currency !== 'EUR') {
     return { status: 200, body: { received: true } };
   }
-  const [eventId, userId] = String(checkout.checkout_reference ?? '').split(':');
+  const sumupReference = String(checkout.checkout_reference ?? '');
+  if (sumupReference.startsWith(GROUP_REFERENCE_PREFIX)) {
+    const groupPaymentId = sumupReference.split(':')[1];
+    if (!UUID.test(groupPaymentId ?? '')) return { status: 200, body: { received: true } };
+    try {
+      await recordGroupPayment({ groupPaymentId, method: 'sumup', provider: 'sumup', paidCents: Math.round(Number(checkout.amount) * 100), providerReference: `sumup:${checkout.id}` });
+    } catch (err) {
+      logger.error('failed to record sumup group payment', { error: err.message, groupPaymentId, checkoutId });
+    }
+    return { status: 200, body: { received: true } };
+  }
+  const [eventId, userId] = sumupReference.split(':');
   if (!UUID.test(eventId ?? '') || !UUID.test(userId ?? '')) return { status: 200, body: { received: true } };
   const paidCents = Math.round(Number(checkout.amount) * 100);
   try {
@@ -627,6 +713,20 @@ router.post('/webhooks/stripe', async ({ req }) => {
         });
       } catch (err) {
         logger.error('failed to book tavern top-up', { error: err.message, reference, sessionId: session.id });
+      }
+    } else if (reference.startsWith(GROUP_REFERENCE_PREFIX)) {
+      const groupPaymentId = reference.slice(GROUP_REFERENCE_PREFIX.length);
+      try {
+        if (!UUID.test(groupPaymentId) || session.currency !== 'eur') {
+          logger.error('stripe group payment not booked (bad reference or currency)', { reference, sessionId: session.id });
+        } else {
+          await recordGroupPayment({
+            groupPaymentId, method: stripeMethodForSession(session), provider: 'stripe',
+            paidCents: session.amount_total, providerReference: session.id, stripePaymentIntentId: session.payment_intent,
+          });
+        }
+      } catch (err) {
+        logger.error('failed to record stripe group payment', { error: err.message, groupPaymentId, sessionId: session.id });
       }
     } else if (eventId && userId) {
       try {

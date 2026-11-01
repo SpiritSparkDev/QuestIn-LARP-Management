@@ -1094,7 +1094,6 @@
     }
 
     const paymentDialog = document.getElementById("payment-dialog");
-    let payingEventId = null;
 
     // PayPal's own buttons (their script). The browser only asks us for "an order for this registration" and
     // reports "approved"; amount, owner and booking stay on our server.
@@ -1120,13 +1119,18 @@
         const paypal = await loadPaypalSdk(clientId);
         await paypal.Buttons({
           style: { layout: "vertical", shape: "rect", label: "pay" },
-          createOrder: async () => (await api.post(`/events/${payingEventId}/registrations/${currentUserId}/paypal-order`, {})).orderId,
+          createOrder: async () => (await api.post(
+            payCtx.mode === "group"
+              ? `/events/${payCtx.eventId}/group-payment/paypal-order`
+              : `/events/${payCtx.eventId}/registrations/${currentUserId}/paypal-order`,
+            payCtx.mode === "group" ? { userIds: payCtx.userIds } : {},
+          )).orderId,
           onApprove: async (data) => {
             try {
               await api.post("/paypal/capture", { orderId: data.orderID });
               paymentDialog.close();
               notify("Danke! Deine Zahlung ist eingegangen.", "success");
-              await loadRegistrations();
+              await refreshAfterPayment();
             } catch (err) {
               notify(err.message, "error");
             }
@@ -1135,7 +1139,7 @@
             console.error("PayPal:", err);
             notify("Bei PayPal ist etwas schiefgegangen. Bitte versuche es erneut oder nimm einen anderen Weg.", "error");
           },
-          onCancel: () => notify("Die Zahlung wurde abgebrochen.", "error"),
+          onCancel: () => { notify("Die Zahlung wurde abgebrochen.", "error"); refreshGroupCards(); },
         }).render(container);
       } catch (err) {
         wrap.hidden = true;
@@ -1145,7 +1149,7 @@
     }
 
     // Payment wizard. One context object (payCtx) drives both modes: "single" (own registration, all
-    // methods) and "group" (group manager pays for several persons, bank transfer only).
+    // methods) and "group" (group manager pays for several persons; same methods, amount and target follow the picked persons).
     // Steps: persons (group only) -> method -> bank -> confirm; only the steps that apply are in payCtx.steps.
     let payCtx = null;
     let payHistory = [];
@@ -1208,10 +1212,45 @@
       if (reported) note.textContent = `Überweisung gemeldet am ${new Date(reported).toLocaleDateString("de-DE")}. Die Orga prüft den Zahlungseingang.`;
     }
 
+    // Shared by single and group mode: shows only the methods the admin has set up and returns the wizard
+    // steps that apply (without "persons"). Sets payCtx.paidVia to "bank" if a bank account exists.
+    let lastPaymentSettings = {};
+    function applyPaymentMethods(paymentSettings) {
+      lastPaymentSettings = paymentSettings;
+      const show = (id, on) => { document.getElementById(id).hidden = !on; };
+      ["payment-paypaldirect-btn", "payment-paypal-btn", "payment-card-btn", "payment-klarna-btn", "payment-sepa-btn", "payment-stripe-bank-btn", "payment-to-bank-btn", "payment-sumup-btn", "payment-paypalme-btn"].forEach((id) => show(id, false));
+      document.getElementById("paypal-buttons-wrap").hidden = true;
+      const stripeMethods = paymentSettings.stripeMethods ?? [];
+      const stripeOn = stripeMethods.length > 0;
+      const paypalOn = paymentSettings.paypalEnabled === true;
+      const bankOn = Boolean(paymentSettings.bankIban);
+      show("payment-paypal-btn", stripeMethods.includes("paypal"));
+      show("payment-card-btn", stripeMethods.includes("card"));
+      show("payment-stripe-bank-btn", stripeMethods.includes("bank_transfer"));
+      show("payment-klarna-btn", stripeMethods.includes("klarna"));
+      show("payment-sepa-btn", stripeMethods.includes("sepa_debit"));
+      // The buttons replace the redirect button; if their script cannot load, the redirect comes back.
+      show("payment-paypaldirect-btn", paypalOn && !paymentSettings.paypalButtonsClientId);
+      if (paymentSettings.paypalButtonsClientId) renderPaypalButtons(paymentSettings.paypalButtonsClientId);
+      // Two PayPal rows need telling apart; a single one is just "Per PayPal zahlen".
+      document.querySelector("#payment-paypal-btn span:last-child").textContent = paypalOn ? "Per PayPal (über Stripe)" : "Per PayPal zahlen";
+      show("payment-to-bank-btn", bankOn);
+      paypalMeUrl = typeof paymentSettings.paypalMeUrl === "string" && paymentSettings.paypalMeUrl.startsWith("https://") ? paymentSettings.paypalMeUrl : "";
+      show("payment-paypalme-btn", Boolean(paypalMeUrl));
+      show("payment-sumup-btn", paymentSettings.sumupEnabled === true);
+      document.getElementById("payment-contact").textContent = paymentSettings.contactEmail ? ` (${paymentSettings.contactEmail})` : "";
+      const online = stripeOn || paypalOn || Boolean(paymentSettings.paypalButtonsClientId) || paymentSettings.sumupEnabled === true;
+      document.getElementById("payment-none-hint").hidden = online || bankOn || Boolean(paypalMeUrl);
+      payCtx.paidVia = bankOn ? "bank" : "paypalme";
+      // Bank transfer as the only way: skip the method step.
+      const skipMethod = bankOn && !online && !paypalMeUrl;
+      return [...(skipMethod ? [] : ["method"]), ...(bankOn ? ["bank"] : []), ...(bankOn || paypalMeUrl ? ["confirm"] : [])];
+    }
+
     async function openPaymentDialog(eventId, registration) {
-      payingEventId = eventId;
       payCtx = {
         mode: "single",
+        eventId,
         title: "Zahlung",
         amountCents: registration.amountDueCents,
         reportedAt: registration.transferNotifiedAt,
@@ -1221,48 +1260,19 @@
         notifyTransfer: () => api.post(`/events/${eventId}/registrations/${currentUserId}/transfer-notice`, {}),
       };
       payHistory = [];
-      // Only methods the admin has set up are offered.
-      const show = (id, on) => { document.getElementById(id).hidden = !on; };
-      ["payment-paypaldirect-btn", "payment-paypal-btn", "payment-card-btn", "payment-klarna-btn", "payment-sepa-btn", "payment-stripe-bank-btn", "payment-to-bank-btn", "payment-sumup-btn", "payment-paypalme-btn"].forEach((id) => show(id, false));
       document.getElementById("payment-none-hint").hidden = true;
-      document.getElementById("paypal-buttons-wrap").hidden = true;
       try {
-        const paymentSettings = await api.get("/payment-settings");
-        const stripeMethods = paymentSettings.stripeMethods ?? [];
-        const stripeOn = stripeMethods.length > 0;
-        const paypalOn = paymentSettings.paypalEnabled === true;
-        const bankOn = Boolean(paymentSettings.bankIban);
-        show("payment-paypal-btn", stripeMethods.includes("paypal"));
-        show("payment-card-btn", stripeMethods.includes("card"));
-        show("payment-stripe-bank-btn", stripeMethods.includes("bank_transfer"));
-        show("payment-klarna-btn", stripeMethods.includes("klarna"));
-        show("payment-sepa-btn", stripeMethods.includes("sepa_debit"));
-        // The buttons replace the redirect button; if their script cannot load, the redirect comes back.
-        show("payment-paypaldirect-btn", paypalOn && !paymentSettings.paypalButtonsClientId);
-        if (paymentSettings.paypalButtonsClientId) renderPaypalButtons(paymentSettings.paypalButtonsClientId);
-        // Two PayPal rows need telling apart; a single one is just "Per PayPal zahlen".
-        document.querySelector("#payment-paypal-btn span:last-child").textContent = paypalOn ? "Per PayPal (über Stripe)" : "Per PayPal zahlen";
-        show("payment-to-bank-btn", bankOn);
-        paypalMeUrl = typeof paymentSettings.paypalMeUrl === "string" && paymentSettings.paypalMeUrl.startsWith("https://") ? paymentSettings.paypalMeUrl : "";
-        show("payment-paypalme-btn", Boolean(paypalMeUrl));
-        show("payment-sumup-btn", paymentSettings.sumupEnabled === true);
-        const contact = document.getElementById("payment-contact");
-        contact.textContent = paymentSettings.contactEmail ? ` (${paymentSettings.contactEmail})` : "";
-        const online = stripeOn || paypalOn || Boolean(paymentSettings.paypalButtonsClientId) || paymentSettings.sumupEnabled === true;
-        document.getElementById("payment-none-hint").hidden = online || bankOn || Boolean(paypalMeUrl);
-        payCtx.paidVia = bankOn ? "bank" : "paypalme";
-        if (bankOn) {
+        const steps = applyPaymentMethods(await api.get("/payment-settings"));
+        if (payCtx.paidVia === "bank") {
+          const cfg = lastPaymentSettings;
           payCtx.bank = {
-            iban: paymentSettings.bankIban,
-            bic: paymentSettings.bankBic,
-            accountHolder: paymentSettings.bankAccountHolder,
-            qrEnabled: paymentSettings.bankQrEnabled !== false,
+            iban: cfg.bankIban,
+            bic: cfg.bankBic,
+            accountHolder: cfg.bankAccountHolder,
+            qrEnabled: cfg.bankQrEnabled !== false,
             reference: registration.paymentReference,
           };
         }
-        // Bank transfer as the only way: skip the method step.
-        const skipMethod = bankOn && !online && !paypalMeUrl;
-        const steps = [...(skipMethod ? [] : ["method"]), ...(bankOn ? ["bank"] : []), ...(bankOn || paypalMeUrl ? ["confirm"] : [])];
         if (steps.length > 0) payCtx.steps = steps;
       } catch {
         // Settings unavailable: better to say so than to offer methods that may not work.
@@ -1274,10 +1284,9 @@
 
     async function startCheckout(method) {
       try {
-        const { url } = await api.post(
-          `/events/${payingEventId}/registrations/${currentUserId}/checkout-session`,
-          { method },
-        );
+        const { url } = payCtx.mode === "group"
+          ? await api.post(`/events/${payCtx.eventId}/group-payment/checkout-session`, { userIds: payCtx.userIds, method })
+          : await api.post(`/events/${payCtx.eventId}/registrations/${currentUserId}/checkout-session`, { method });
         window.location.href = url;
       } catch (err) {
         notify(err.message, "error");
@@ -1298,7 +1307,8 @@
       payCtx.paidVia = "paypalme";
       gotoPayStep("confirm");
     });
-    document.getElementById("payment-to-bank-btn").addEventListener("click", () => {
+    document.getElementById("payment-to-bank-btn").addEventListener("click", async () => {
+      if (payCtx.mode === "group" && !(await loadGroupBank())) return;
       payCtx.paidVia = "bank";
       gotoPayStep("bank");
     });
@@ -1307,7 +1317,7 @@
         await payCtx.notifyTransfer();
         paymentDialog.close();
         notify("Danke! Die Orga wurde informiert und prüft den Zahlungseingang.", "success");
-        await loadRegistrations();
+        await refreshAfterPayment();
       } catch (err) {
         notify(err.message, "error");
       }
@@ -1315,6 +1325,7 @@
     document.getElementById("payment-back-btn").addEventListener("click", () => showPayStep(payHistory.pop()));
     document.getElementById("payment-next-btn").addEventListener("click", async () => {
       if (payCtx.steps[payStepIdx] === "persons" && !(await prepareGroupPayment())) return;
+      if (payCtx.mode === "group" && payCtx.steps[payStepIdx + 1] === "bank" && !(await loadGroupBank())) return;
       showPayStep(payStepIdx + 1, { push: true });
     });
     document.getElementById("payment-dialog-close").addEventListener("click", () => paymentDialog.close());
@@ -1364,17 +1375,44 @@
       loadGroupPayable();
     });
 
+    // Total and persons for the picked people, then the method step with the same settings as in single mode.
     async function prepareGroupPayment() {
       const userIds = pickedGroupPayIds();
       if (userIds.length === 0) { notify("Wähle mindestens eine Person.", "error"); return false; }
       try {
-        const result = await api.post(`/events/${payCtx.eventId}/group-payment/bank`, { userIds });
-        Object.assign(payCtx, { userIds, amountCents: result.totalCents, bank: result.bank });
+        const result = await api.post(`/events/${payCtx.eventId}/group-payment/summary`, { userIds });
+        Object.assign(payCtx, { userIds, amountCents: result.totalCents, bank: null, reportedAt: null });
+      } catch (err) {
+        notify(err.message, "error");
+        return false;
+      }
+      let rest = ["method"];
+      try {
+        rest = applyPaymentMethods(await api.get("/payment-settings"));
+      } catch {
+        // Settings unavailable: better to say so than to offer methods that may not work.
+        applyPaymentMethods({});
+        document.getElementById("payment-none-hint").hidden = false;
+      }
+      payCtx.steps = ["persons", ...(rest.length ? rest : ["method"])];
+      return true;
+    }
+
+    // Bank data and reference come from the server for exactly the picked persons.
+    async function loadGroupBank() {
+      try {
+        const result = await api.post(`/events/${payCtx.eventId}/group-payment/bank`, { userIds: payCtx.userIds });
+        Object.assign(payCtx, { amountCents: result.totalCents, bank: result.bank });
         return true;
       } catch (err) {
         notify(err.message, "error");
         return false;
       }
+    }
+
+    // After any payment action: refresh the own registrations and the person cards of the group tab.
+    async function refreshAfterPayment() {
+      await Promise.all([loadRegistrations(), refreshGroupCards()]);
     }
 
     async function openGroupPaymentDialog() {
@@ -1392,10 +1430,11 @@
           reportedAt: null,
           paidVia: "bank",
           bank: null,
-          steps: ["persons", "bank", "confirm"],
+          steps: ["persons", "method"],
           notifyTransfer: () => api.post(`/events/${payCtx.eventId}/group-payment/transfer-notice`, { userIds: payCtx.userIds }),
         };
         payHistory = [];
+        groupPayable = [];
         paymentDialog.showModal();
         showPayStep(0);
         await loadGroupPayable();
@@ -1649,6 +1688,18 @@
 
     // Where this person is registered. Independent of the character list: a registration can exist without
     // a character yet ("Charakter folgt"), then the character card alone says "Noch keinem Event zugeordnet".
+    // Payment state of one registration, straight from the server data.
+    function paymentStateLabel(r) {
+      if (r.status === "cancelled") return "";
+      let text;
+      if (r.paidAt) text = "Bezahlt";
+      else if (r.conPayer) text = "Zahlung vor Ort";
+      else if (r.amountDueCents == null || r.amountDueCents <= 0) return "";
+      else if (r.transferNotifiedAt) text = `Überweisung gemeldet am ${new Date(r.transferNotifiedAt).toLocaleDateString("de-DE")}`;
+      else text = `Offen: ${formatEuro(r.amountDueCents)}`;
+      return ` · <span class="mp-pay${r.paidAt ? " mp-pay--paid" : ""}">${escapeHtml(text)}</span>`;
+    }
+
     function registrationLines(personId) {
       const regs = managedPersonRegistrations[personId];
       if (regs === undefined) return '<p class="sub mp-empty">Wird geladen …</p>';
@@ -1656,7 +1707,7 @@
       return regs.map((r) => {
         const role = CON_ROLE_LABELS[r.conRole] ?? r.conRole;
         const character = ["sc", "nsc"].includes(r.conRole) ? (r.characterName ? ` · ${escapeHtml(r.characterName)}` : " · Charakter folgt") : "";
-        return `<p class="mp-char"><span class="mp-char-name">${escapeHtml(r.eventName)}</span><span class="mp-char-status">${escapeHtml(role)}${character} · <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(statusLabel(r.status, r.conPayer))}</span></span></p>`;
+        return `<p class="mp-char"><span class="mp-char-name">${escapeHtml(r.eventName)}</span><span class="mp-char-status">${escapeHtml(role)}${character} · <span class="status-pill status-${escapeHtml(r.status)}">${escapeHtml(statusLabel(r.status, r.conPayer))}</span>${paymentStateLabel(r)}</span></p>`;
       }).join("");
     }
 
@@ -2122,7 +2173,7 @@
         }
       }
       document.getElementById("group-bulk-result").innerHTML = lines.join("");
-      await loadBulkPersons();
+      await Promise.all([loadBulkPersons(), refreshGroupCards()]);
     });
 
     document.getElementById("group-invite-form").addEventListener("submit", async (event) => {
@@ -2204,6 +2255,28 @@
       renderManagedPersonsList();
       loadGroupMemberDetails();
     }
+
+    // Fresh registrations (incl. payment state) for every card of the group tab; errors per person are ignored.
+    async function refreshGroupCards() {
+      try {
+        const ids = new Set(managedPersons.map((p) => p.id));
+        const walk = (node) => node.children.forEach((c) => { ids.add(c.id); walk(c); });
+        if (groupTree) walk(groupTree.node);
+        const list = [...ids];
+        if (list.length === 0) return;
+        const lists = await Promise.all(list.map((id) => api.get(`/managed-persons/${id}/registrations`).catch(() => null)));
+        list.forEach((id, i) => { if (lists[i]) managedPersonRegistrations[id] = lists[i]; });
+        renderManagedPersonsList();
+      } catch {
+        // Cards keep their last state.
+      }
+    }
+    const refreshIfGroupTabOpen = () => {
+      if (document.visibilityState === "visible" && window.location.hash === "#gruppe") refreshGroupCards();
+    };
+    window.addEventListener("hashchange", refreshIfGroupTabOpen);
+    document.addEventListener("visibilitychange", refreshIfGroupTabOpen);
+    window.addEventListener("pageshow", (event) => { if (event.persisted) refreshIfGroupTabOpen(); });
 
     const managedPersonDialog = document.getElementById("managed-person-dialog");
     const managedPersonForm = document.getElementById("managed-person-form");
@@ -3848,6 +3921,12 @@
       await loadRegistrationWaiver();
       await loadRegistrations();
       await loadCharacters();
+      const returnedPayment = new URLSearchParams(window.location.search).get("payment");
+      if (returnedPayment === "success" || returnedPayment === "cancelled") {
+        notify(returnedPayment === "success" ? "Danke! Deine Zahlung wird verbucht, sobald sie bei uns eingegangen ist." : "Die Zahlung wurde abgebrochen.", returnedPayment === "success" ? "success" : "error");
+        window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+        await refreshGroupCards();
+      }
       await loadQrCode(account, events, currentRegistrations);
       renderEventBadge(events);
 

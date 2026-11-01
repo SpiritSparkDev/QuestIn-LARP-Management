@@ -227,6 +227,43 @@ export async function recordSuccessfulStripePayment({ eventId, userId, method, a
   }
 }
 
+export async function createGroupPayment(eventId, payerId, userIds) {
+  const { rows } = await query(
+    'INSERT INTO group_payments (event_id, payer_id, user_ids) VALUES ($1, $2, $3) RETURNING id',
+    [eventId, payerId, userIds]
+  );
+  return rows[0].id;
+}
+
+// Books one group payment (provider reference "G:<id>") person by person. Only people still open count;
+// the paid amount must cover all of them, otherwise nothing is booked. Returns false when nothing could be
+// booked for lack of money / unknown group, true otherwise (also on a replay where everyone is already paid).
+export async function recordGroupPayment({ groupPaymentId, method, provider, paidCents, providerReference, stripePaymentIntentId }) {
+  const { rows: groups } = await query('SELECT event_id, user_ids FROM group_payments WHERE id = $1', [groupPaymentId]);
+  if (groups.length === 0) {
+    logger.error('group payment not booked (unknown group payment)', { groupPaymentId, providerReference });
+    return false;
+  }
+  const { event_id: eventId, user_ids: userIds } = groups[0];
+  const { rows: open } = await query(
+    'SELECT user_id, amount_due_cents FROM registrations WHERE event_id = $1 AND user_id = ANY($2) AND paid_at IS NULL AND amount_due_cents > 0',
+    [eventId, userIds]
+  );
+  const due = open.reduce((sum, r) => sum + r.amount_due_cents, 0);
+  if (paidCents < due) {
+    logger.error('group payment not booked (amount below due)', { groupPaymentId, providerReference, paidCents, due });
+    return false;
+  }
+  if (open.length < userIds.length) logger.error('group payment: some people were already paid and are skipped', { groupPaymentId, skipped: userIds.length - open.length });
+  for (const r of open) {
+    await recordSuccessfulStripePayment({
+      eventId, userId: r.user_id, method, provider, amountCents: r.amount_due_cents,
+      providerReference: `${providerReference}#${r.user_id}`, stripePaymentIntentId,
+    });
+  }
+  return true;
+}
+
 // "Ich habe überwiesen": only a flag for staff, it never marks anything paid.
 // Returns false if there is nothing to notify about (paid, free, Con-Zahler, no registration).
 export async function markTransferNotified(eventId, userId, actorId) {
