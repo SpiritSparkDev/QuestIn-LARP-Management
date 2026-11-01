@@ -11,14 +11,14 @@ export async function getPaymentSettings() {
   const { rows } = await query(
     `SELECT stripe_secret_key_enc IS NOT NULL AS has_stripe_secret_key,
             stripe_webhook_secret_enc IS NOT NULL AS has_stripe_webhook_secret,
-            bank_iban, bank_bic, bank_account_holder, bank_qr_enabled, bank_reference_template,
+            bank_iban, bank_bic, bank_account_holder, bank_qr_enabled, bank_reference_template, bank_group_reference_template,
             sumup_api_key_enc IS NOT NULL AS has_sumup_api_key, sumup_merchant_code,
             paypal_secret_enc IS NOT NULL AS has_paypal_secret, paypal_client_id, paypal_sandbox, stripe_methods, contact_email,
             stripe_enabled, paypal_enabled, sumup_enabled, bank_enabled, paypal_me_url, paypal_me_enabled, paypal_buttons_enabled
      FROM payment_settings LIMIT 1`
   );
   if (rows.length === 0) {
-    return { hasStripeSecretKey: false, hasStripeWebhookSecret: false, bankIban: null, bankBic: null, bankAccountHolder: null, bankQrEnabled: true, bankReferenceTemplate: null, hasSumupApiKey: false, sumupMerchantCode: null, hasPaypalSecret: false, paypalClientId: null, paypalSandbox: false, stripeMethods: DEFAULT_STRIPE_METHODS, contactEmail: null, stripeEnabled: false, paypalEnabled: false, sumupEnabled: false, bankEnabled: false, paypalMeUrl: null, paypalMeEnabled: false, paypalButtonsEnabled: false };
+    return { hasStripeSecretKey: false, hasStripeWebhookSecret: false, bankIban: null, bankBic: null, bankAccountHolder: null, bankQrEnabled: true, bankReferenceTemplate: null, bankGroupReferenceTemplate: null, hasSumupApiKey: false, sumupMerchantCode: null, hasPaypalSecret: false, paypalClientId: null, paypalSandbox: false, stripeMethods: DEFAULT_STRIPE_METHODS, contactEmail: null, stripeEnabled: false, paypalEnabled: false, sumupEnabled: false, bankEnabled: false, paypalMeUrl: null, paypalMeEnabled: false, paypalButtonsEnabled: false };
   }
   return {
     hasStripeSecretKey: rows[0].has_stripe_secret_key,
@@ -28,6 +28,7 @@ export async function getPaymentSettings() {
     bankAccountHolder: rows[0].bank_account_holder,
     bankQrEnabled: rows[0].bank_qr_enabled,
     bankReferenceTemplate: rows[0].bank_reference_template,
+    bankGroupReferenceTemplate: rows[0].bank_group_reference_template,
     hasSumupApiKey: rows[0].has_sumup_api_key,
     sumupMerchantCode: rows[0].sumup_merchant_code,
     hasPaypalSecret: rows[0].has_paypal_secret,
@@ -71,6 +72,11 @@ export async function getBankReferenceTemplate() {
   return rows[0]?.bank_reference_template ?? null;
 }
 
+export async function getBankGroupReferenceTemplate() {
+  const { rows } = await query('SELECT bank_group_reference_template FROM payment_settings LIMIT 1');
+  return rows[0]?.bank_group_reference_template ?? null;
+}
+
 function safeDecrypt(buffer) {
   try {
     return decryptField(buffer);
@@ -101,7 +107,7 @@ export async function getPaymentSettingsForUse() {
   };
 }
 
-export async function setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled, bankReferenceTemplate }) {
+export async function setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled, bankReferenceTemplate, bankGroupReferenceTemplate }) {
   const id = await ensureSettingsRow();
   const stripeSecretKeyEnc = stripeSecretKey ? encryptField(stripeSecretKey) : null;
   const stripeWebhookSecretEnc = stripeWebhookSecret ? encryptField(stripeWebhookSecret) : null;
@@ -132,7 +138,8 @@ export async function setPaymentSettings({ stripeSecretKey, stripeWebhookSecret,
        paypal_me_url = CASE WHEN $21 THEN $22 ELSE paypal_me_url END,
        paypal_me_enabled = COALESCE($23, paypal_me_enabled),
        paypal_buttons_enabled = COALESCE($24, paypal_buttons_enabled),
-       bank_reference_template = CASE WHEN $25 THEN $26 ELSE bank_reference_template END
+       bank_reference_template = CASE WHEN $25 THEN $26 ELSE bank_reference_template END,
+       bank_group_reference_template = CASE WHEN $27 THEN $28 ELSE bank_group_reference_template END
      WHERE id = $1`,
     [id, stripeSecretKeyEnc, stripeWebhookSecretEnc, bankIban ?? null, bankBic ?? null, bankAccountHolder ?? null, typeof bankQrEnabled === 'boolean' ? bankQrEnabled : null,
       sumupApiKeyEnc, typeof sumupMerchantCode === 'string' && sumupMerchantCode.trim() ? sumupMerchantCode.trim() : null, sumupWebhookSecretEnc,
@@ -142,7 +149,8 @@ export async function setPaymentSettings({ stripeSecretKey, stripeWebhookSecret,
       ...[stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled].map((v) => (typeof v === 'boolean' ? v : null)),
       typeof paypalMeUrl === 'string', paypalMeUrl?.trim() || null, typeof paypalMeEnabled === 'boolean' ? paypalMeEnabled : null,
       typeof paypalButtonsEnabled === 'boolean' ? paypalButtonsEnabled : null,
-      typeof bankReferenceTemplate === 'string', bankReferenceTemplate?.trim() || null]
+      typeof bankReferenceTemplate === 'string', bankReferenceTemplate?.trim() || null,
+      typeof bankGroupReferenceTemplate === 'string', bankGroupReferenceTemplate?.trim() || null]
   );
   return getPaymentSettings();
 }

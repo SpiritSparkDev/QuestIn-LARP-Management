@@ -2,7 +2,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { buildPaymentReference } from '../payments/reference.js';
+import { buildPaymentReference, buildGroupPaymentReference } from '../payments/reference.js';
 import { getPaymentSettings, setPaymentSettings, getBankInfo, STRIPE_METHODS } from './repository.js';
 
 // A plain PayPal.Me link: every participant's browser opens it.
@@ -16,7 +16,15 @@ router.get('/admin/settings/payments', requireAuth(requireAdminGroup(async () =>
 
 // Live preview for the template field: the real builder with made-up sample data.
 router.get('/admin/settings/payments/reference-preview', requireAuth(requireAdminGroup(async ({ req }) => {
-  const template = new URL(req.url, 'http://localhost').searchParams.get('template') ?? '';
+  const params = new URL(req.url, 'http://localhost').searchParams;
+  const template = params.get('template') ?? '';
+  if (params.get('kind') === 'group') {
+    const reference = buildGroupPaymentReference('1a2b3c4d-0000-0000-0000-000000000000', '5e6f7a8b-0000-0000-0000-000000000000', {
+      code: 'P17/2027', eventName: 'Sommercon 2027', payerFirstName: 'Andre', payerLastName: 'Muster',
+      groupName: 'Drachenbande', personNames: ['Lena', 'Tom'], template: template.slice(0, 200),
+    });
+    return { status: 200, body: { reference } };
+  }
   const reference = buildPaymentReference('1a2b3c4d-0000-0000-0000-000000000000', '5e6f7a8b-0000-0000-0000-000000000000', {
     code: 'P17/2027', eventName: 'Sommercon 2027', role: 'sc', firstName: 'Anna', lastName: 'Muster', template: template.slice(0, 200),
   });
@@ -26,9 +34,11 @@ router.get('/admin/settings/payments/reference-preview', requireAuth(requireAdmi
 router.put('/admin/settings/payments', requireAuth(requireAdminGroup(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled, bankReferenceTemplate } = body;
-  if (bankReferenceTemplate !== undefined && (typeof bankReferenceTemplate !== 'string' || bankReferenceTemplate.length > 200)) {
-    return { status: 400, body: { error: 'bankReferenceTemplate must be text of at most 200 characters' } };
+  const { stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled, bankReferenceTemplate, bankGroupReferenceTemplate } = body;
+  for (const [key, value] of Object.entries({ bankReferenceTemplate, bankGroupReferenceTemplate })) {
+    if (value !== undefined && (typeof value !== 'string' || value.length > 200)) {
+      return { status: 400, body: { error: `${key} must be text of at most 200 characters` } };
+    }
   }
   if (SWITCHES.some((key) => body[key] !== undefined && typeof body[key] !== 'boolean')) {
     return { status: 400, body: { error: `${SWITCHES.join(', ')} must be booleans` } };
@@ -47,7 +57,7 @@ router.put('/admin/settings/payments', requireAuth(requireAdminGroup(async ({ re
     || (paypalSandbox !== undefined && typeof paypalSandbox !== 'boolean')) {
     return { status: 400, body: { error: 'invalid PayPal settings' } };
   }
-  const saved = await setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled, bankReferenceTemplate });
+  const saved = await setPaymentSettings({ stripeSecretKey, stripeWebhookSecret, bankIban, bankBic, bankAccountHolder, bankQrEnabled, sumupApiKey, sumupMerchantCode, paypalClientId, paypalSecret, paypalSandbox, stripeMethods, contactEmail, stripeEnabled, paypalEnabled, sumupEnabled, bankEnabled, paypalMeUrl, paypalMeEnabled, paypalButtonsEnabled, bankReferenceTemplate, bankGroupReferenceTemplate });
   return { status: 200, body: saved };
 })));
 

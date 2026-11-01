@@ -40,6 +40,25 @@ test('GET /admin/settings/payments/reference-preview renders a template with sam
   }
 });
 
+test('reference-preview with kind=group renders the group template; PUT validates and stores it', async () => {
+  const server = createServer().listen(0);
+  try {
+    const { port } = server.address();
+    const { cookie } = await makeUserAndSession('admin');
+    const base = `http://localhost:${port}/admin/settings/payments`;
+    const preview = async (q) => (await fetch(`${base}/reference-preview?kind=group${q}`, { headers: { Cookie: cookie } })).json();
+    assert.deepEqual(await preview(`&template=${encodeURIComponent('{code} {gruppe} {zahler}: {personen} ({anzahl})')}`), { reference: 'P17/2027 Drachenbande Andre-Muster: Lena, Tom (2)' });
+    assert.deepEqual(await preview(''), { reference: 'P17/2027 Andre-Muster: Lena, Tom' });
+    const put = (body) => fetch(base, { method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body) });
+    assert.equal((await put({ bankGroupReferenceTemplate: 5 })).status, 400);
+    assert.equal((await put({ bankGroupReferenceTemplate: 'x'.repeat(201) })).status, 400);
+    const saved = await (await put({ bankGroupReferenceTemplate: '{code} {personen}' })).json();
+    assert.equal(saved.bankGroupReferenceTemplate, '{code} {personen}');
+  } finally {
+    server.close();
+  }
+});
+
 test('PUT then GET /admin/settings/payments never returns plaintext secrets, only has-flags', async () => {
   const server = createServer().listen(0);
   try {

@@ -19,3 +19,20 @@ export function buildPaymentReference(eventId, userId, { code, firstName, lastNa
   if (prefix && name) return `${prefix} ${name}`.slice(0, 140);
   return fallback;
 }
+
+export const DEFAULT_GROUP_REFERENCE_TEMPLATE = '{code} {zahler}: {personen}';
+
+// One transfer from a group manager for several people. Placeholders: {code},
+// {event}, {zahler} (Vorname-Nachname of the payer), {gruppe}, {personen}
+// (first names, comma-separated), {anzahl}, {id}.
+export function buildGroupPaymentReference(eventId, payerId, { code, eventName, payerFirstName, payerLastName, groupName, personNames = [], template } = {}) {
+  const clean = (v) => String(v ?? '').replace(/[\u0000-\u001f]/g, '').trim();
+  const vars = {
+    code: clean(code), event: clean(eventName), gruppe: clean(groupName),
+    zahler: [clean(payerFirstName), clean(payerLastName)].filter(Boolean).join('-'),
+    personen: personNames.map(clean).filter(Boolean).join(', '), anzahl: String(personNames.length),
+    id: `P-${eventId.slice(0, 8)}-${payerId.slice(0, 8)}`.toUpperCase(),
+  };
+  const fill = (t) => clean(t.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '')).replace(/\s+/g, ' ').slice(0, 140).trim();
+  return (template?.trim() && fill(template)) || fill(DEFAULT_GROUP_REFERENCE_TEMPLATE) || vars.id;
+}

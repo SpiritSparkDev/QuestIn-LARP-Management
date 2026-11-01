@@ -5630,7 +5630,8 @@ select.status-select {
   margin: 16px 0;
 }
 
-.payment-methods button {
+.payment-methods button,
+#payment-transfer-btn {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -5640,12 +5641,88 @@ select.status-select {
   text-align: left;
 }
 
-.payment-methods button .material-symbols-outlined {
+.payment-methods button .material-symbols-outlined,
+#payment-transfer-btn .material-symbols-outlined {
   font-size: 22px;
 }
 
 #payment-dialog {
   width: min(460px, 92vw);
+}
+
+/* Payment wizard: step indicator (dot + name, current step highlighted), bank data list */
+.pay-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+.pay-steps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pay-steps li::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+}
+
+.pay-steps li.done::before,
+.pay-steps li[aria-current="step"]::before {
+  opacity: 1;
+}
+
+.pay-steps li[aria-current="step"] {
+  opacity: 1;
+  font-weight: 600;
+}
+
+#payment-dialog [data-pay-step] {
+  margin: 12px 0;
+}
+
+#payment-dialog [data-pay-step]:focus {
+  outline: none;
+}
+
+.pay-bank-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0 0 16px;
+}
+
+.pay-bank-list dt {
+  opacity: 0.7;
+}
+
+.pay-bank-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+#payment-girocode-wrap {
+  text-align: center;
+}
+
+#payment-dialog .checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#payment-dialog .checkbox-row strong:last-child {
+  margin-left: auto;
 }
 
 /* Dashboard: air between the stacked cards and before "Meine Charaktere" / "Gruppe" */

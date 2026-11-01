@@ -474,6 +474,28 @@
                 Vorschau (Beispieldaten):
                 <strong id="bank-reference-preview"></strong>
               </p>
+              <input
+                id="bank-group-reference-template"
+                name="bankGroupReferenceTemplate"
+                type="text"
+                maxlength="200"
+                placeholder="{code} {zahler}: {personen}"
+              />
+              <label for="bank-group-reference-template"
+                >Verwendungszweck bei Sammelzahlung (Gruppenverwalter)
+                <span style="opacity: 0.6; font-size: 12px"
+                  >leer = Standard. Platzhalter: {code} Event-Kennung,
+                  {event} Eventname, {zahler} Name des Zahlenden,
+                  {gruppe} Gruppenname, {personen} Namen der bezahlten
+                  Personen, {anzahl} Zahl der Personen, {id} (Kurz-ID).
+                  Gilt für Anzeige und QR-Code.</span
+                ></label
+              >
+              <p class="sub">
+                Beispiel: <code>{code} {zahler}: {personen}</code>.<br />
+                Vorschau (Beispieldaten):
+                <strong id="bank-group-reference-preview"></strong>
+              </p>
               <div class="settings-actions">
                 <button type="submit">Speichern</button>
                 <span class="settings-state" aria-live="polite"></span>
@@ -1136,22 +1158,26 @@
       const contactForm = document.getElementById("contact-settings-form");
       const paypalMeForm = document.getElementById("paypalme-settings-form");
 
-      let referencePreviewTimer;
-      function updateReferencePreview() {
-        clearTimeout(referencePreviewTimer);
-        referencePreviewTimer = setTimeout(async () => {
-          const template = bankForm.elements.bankReferenceTemplate.value;
+      // Live preview of a reference template; kind "single" = one person, "group" = Sammelzahlung.
+      const referencePreviewTimers = {};
+      function updateReferencePreview(kind = "single") {
+        clearTimeout(referencePreviewTimers[kind]);
+        referencePreviewTimers[kind] = setTimeout(async () => {
+          const group = kind === "group";
+          const template = (group ? bankForm.elements.bankGroupReferenceTemplate : bankForm.elements.bankReferenceTemplate).value;
+          const out = document.getElementById(group ? "bank-group-reference-preview" : "bank-reference-preview");
           try {
             const { reference } = await api.get(
-              `/admin/settings/payments/reference-preview?template=${encodeURIComponent(template)}`,
+              `/admin/settings/payments/reference-preview?${group ? "kind=group&" : ""}template=${encodeURIComponent(template)}`,
             );
-            document.getElementById("bank-reference-preview").textContent = reference;
+            out.textContent = reference;
           } catch {
-            document.getElementById("bank-reference-preview").textContent = "–";
+            out.textContent = "–";
           }
         }, 250);
       }
-      bankForm.elements.bankReferenceTemplate.addEventListener("input", updateReferencePreview);
+      bankForm.elements.bankReferenceTemplate.addEventListener("input", () => updateReferencePreview("single"));
+      bankForm.elements.bankGroupReferenceTemplate.addEventListener("input", () => updateReferencePreview("group"));
 
       async function loadPaymentSettings() {
         const settings = await api.get("/admin/settings/payments");
@@ -1161,7 +1187,9 @@
           settings.bankAccountHolder ?? "";
         bankForm.elements.bankQrEnabled.checked = settings.bankQrEnabled !== false;
         bankForm.elements.bankReferenceTemplate.value = settings.bankReferenceTemplate ?? "";
-        updateReferencePreview();
+        bankForm.elements.bankGroupReferenceTemplate.value = settings.bankGroupReferenceTemplate ?? "";
+        updateReferencePreview("single");
+        updateReferencePreview("group");
         sumupForm.elements.sumupMerchantCode.value = settings.sumupMerchantCode ?? "";
         paypalForm.elements.paypalClientId.value = settings.paypalClientId ?? "";
         contactForm.elements.contactEmail.value = settings.contactEmail ?? "";

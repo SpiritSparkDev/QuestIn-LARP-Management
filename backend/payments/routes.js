@@ -11,8 +11,8 @@ import crypto from 'node:crypto';
 import { getStripeClient } from './stripeClient.js';
 import { getSumupConfig, createSumupCheckout, getSumupCheckout } from './sumupClient.js';
 import { getPaypalConfig, createPaypalOrder, capturePaypalOrder, completedCapture, isPaypalOrderId } from './paypalClient.js';
-import { getPaymentSettingsForUse, getPaymentSettings, getBankInfo, getBankReferenceTemplate } from '../paymentSettings/repository.js';
-import { buildPaymentReference } from './reference.js';
+import { getPaymentSettingsForUse, getPaymentSettings, getBankInfo, getBankReferenceTemplate, getBankGroupReferenceTemplate } from '../paymentSettings/repository.js';
+import { buildPaymentReference, buildGroupPaymentReference } from './reference.js';
 import { canRegisterFor } from '../managedPersons/repository.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { topUpFromStripe, findActiveAccountForUser } from '../tavern/repository.js';
@@ -305,6 +305,84 @@ router.post('/events/:eventId/registrations/:userId/transfer-notice', requireAut
   const notifiedAt = await markTransferNotified(params.eventId, params.userId, user.id);
   if (!notifiedAt) return { status: 409, body: { error: 'Für diese Anmeldung ist keine offene Zahlung hinterlegt.' } };
   return { status: 200, body: { transferNotifiedAt: notifiedAt } };
+}));
+
+// Group payment: a manager pays for several people with one transfer. "Payable" = what canRegisterFor
+// allows (managed persons, and people in sub-groups -- same rule as isGroupAncestorOf) with an open amount.
+async function listPayablePersons(eventId, callerId) {
+  if (!(await getEvent(eventId))?.payments_open) return [];
+  const { rows } = await query(
+    `SELECT u.id, u.first_name, u.last_name, u.nickname, r.amount_due_cents, r.transfer_notified_at
+     FROM users u JOIN registrations r ON r.user_id = u.id AND r.event_id = $1
+     WHERE u.id <> $2
+       AND (u.managed_by_user_id = $2
+            OR COALESCE(u.managed_by_user_id, u.id) IN (SELECT id FROM users WHERE group_parent_id = $2))
+       AND r.amount_due_cents > 0 AND r.paid_at IS NULL AND NOT r.con_payer
+     ORDER BY u.first_name, u.last_name`,
+    [eventId, callerId]
+  );
+  return rows.map((r) => ({
+    userId: r.id,
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, nickname: r.nickname }),
+    firstName: r.first_name || r.nickname || '',
+    amountDueCents: r.amount_due_cents,
+    transferNotifiedAt: r.transfer_notified_at,
+  }));
+}
+
+// Validates { userIds } and resolves it to payable persons, or returns { error: response }.
+async function resolveGroupSelection(req, eventId, user) {
+  const body = await readJsonBody(req);
+  if (body === null) return { error: { status: 400, body: { error: 'invalid JSON' } } };
+  const ids = body.userIds;
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 100 || ids.some((id) => typeof id !== 'string' || !UUID.test(id))) {
+    return { error: { status: 400, body: { error: 'userIds must be a list of 1 to 100 user ids' } } };
+  }
+  const unique = [...new Set(ids)];
+  for (const id of unique) {
+    if (!(await canRegisterFor(id, user.id))) return { error: { status: 403, body: { error: 'forbidden' } } };
+  }
+  const payable = new Map((await listPayablePersons(eventId, user.id)).map((p) => [p.userId, p]));
+  const persons = unique.map((id) => payable.get(id));
+  if (persons.some((p) => !p)) return { error: { status: 409, body: { error: 'Für mindestens eine Person ist keine offene Zahlung möglich.' } } };
+  return { persons };
+}
+
+router.get('/events/:eventId/group-payment', requireAuth(async ({ params, user }) => {
+  const payable = (await listPayablePersons(params.eventId, user.id)).map(({ firstName, ...p }) => p);
+  return { status: 200, body: { payable } };
+}));
+
+router.post('/events/:eventId/group-payment/bank', requireAuth(async ({ req, params, user }) => {
+  const { error, persons } = await resolveGroupSelection(req, params.eventId, user);
+  if (error) return error;
+  const bank = await getBankInfo();
+  if (!bank.bankIban) return { status: 409, body: { error: 'Es ist keine Banküberweisung eingerichtet. Bitte melde dich bei der Orga.' } };
+  const event = await getEvent(params.eventId);
+  const { rows } = await query('SELECT first_name, last_name, group_name FROM users WHERE id = $1', [user.id]);
+  const reference = buildGroupPaymentReference(params.eventId, user.id, {
+    code: event.code, eventName: event.name,
+    payerFirstName: rows[0]?.first_name, payerLastName: rows[0]?.last_name, groupName: rows[0]?.group_name,
+    personNames: persons.map((p) => p.firstName), template: await getBankGroupReferenceTemplate(),
+  });
+  return {
+    status: 200,
+    body: {
+      totalCents: persons.reduce((sum, p) => sum + p.amountDueCents, 0),
+      persons: persons.map(({ userId, name, amountDueCents }) => ({ userId, name, amountDueCents })),
+      bank: { iban: bank.bankIban, bic: bank.bankBic, accountHolder: bank.bankAccountHolder, qrEnabled: bank.bankQrEnabled, reference },
+    },
+  };
+}));
+
+router.post('/events/:eventId/group-payment/transfer-notice', requireAuth(async ({ req, params, user }) => {
+  const { error, persons } = await resolveGroupSelection(req, params.eventId, user);
+  if (error) return error;
+  let notified = 0;
+  for (const p of persons) {
+    if (await markTransferNotified(params.eventId, p.userId, user.id)) notified++;
+  }
+  return { status: 200, body: { notified } };
 }));
 
 // PayPal (direct, without Stripe). The payer approves on PayPal and comes back to

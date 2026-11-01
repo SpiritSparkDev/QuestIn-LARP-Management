@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPaymentReference } from '../../backend/payments/reference.js';
+import { buildPaymentReference, buildGroupPaymentReference } from '../../backend/payments/reference.js';
 
 test('buildPaymentReference combines the first 8 chars of eventId and userId, uppercased', () => {
   assert.equal(
@@ -25,6 +25,25 @@ test('buildPaymentReference fills an admin template with placeholders', () => {
   // a template that renders empty falls back to the default
   assert.equal(buildPaymentReference(...ids, { ...who, template: '{foo}' }), 'P17/2027 Anna-Muster');
   assert.equal(buildPaymentReference(...ids, { ...who, template: '  ' }), 'P17/2027 Anna-Muster');
+});
+
+test('buildGroupPaymentReference fills placeholders, defaults, caps at 140 chars', () => {
+  const ids = ['11111111-2222-3333-4444-555555555555', 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'];
+  const who = { code: 'P17/2027', eventName: 'Pakyrion', payerFirstName: 'Andre', payerLastName: 'Muster', groupName: 'Drachenbande', personNames: ['Lena', 'Tom'] };
+  assert.equal(
+    buildGroupPaymentReference(...ids, { ...who, template: '{code} {gruppe} {zahler}: {personen} ({anzahl}) {event}' }),
+    'P17/2027 Drachenbande Andre-Muster: Lena, Tom (2) Pakyrion'
+  );
+  // empty or blank-rendering template -> default
+  assert.equal(buildGroupPaymentReference(...ids, who), 'P17/2027 Andre-Muster: Lena, Tom');
+  assert.equal(buildGroupPaymentReference(...ids, { ...who, template: '{foo}' }), 'P17/2027 Andre-Muster: Lena, Tom');
+  // no code -> no double or leading spaces
+  assert.equal(buildGroupPaymentReference(...ids, { ...who, code: null }), 'Andre-Muster: Lena, Tom');
+  assert.equal(buildGroupPaymentReference(...ids, { ...who, code: null, template: '{code} {gruppe}' }), 'Drachenbande');
+  assert.equal(buildGroupPaymentReference(...ids, { ...who, template: '{id}' }), 'P-11111111-AAAAAAAA');
+  const long = buildGroupPaymentReference(...ids, { ...who, personNames: Array.from({ length: 40 }, (_, i) => `Person${i}`) });
+  assert.equal(long.length <= 140, true);
+  assert.equal(long.length > 100, true);
 });
 
 test('buildPaymentReference is stable for the same inputs', () => {

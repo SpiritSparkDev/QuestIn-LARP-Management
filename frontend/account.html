@@ -201,7 +201,7 @@
                     </div>
                   </div>
                   <p class="sub" id="group-members-tab-intro">Alle in deiner Gruppe: von dir angelegte Personen und eingeladene Verwalter mit ihren Personen. Melde sie über ihre Karte an – oder alle auf einmal.</p>
-                  <p><button type="button" id="group-bulk-btn">Ganze Gruppe anmelden</button></p>
+                  <p><button type="button" id="group-bulk-btn">Ganze Gruppe anmelden</button> <button type="button" id="group-pay-btn" class="btn-ghost">Für Gruppe bezahlen</button></p>
                   <div id="managed-persons-list"></div>
                   <div id="group-tree-block"><div id="group-tree-view"></div></div>
                 </div>
@@ -666,9 +666,14 @@
   </dialog>
 
   <dialog id="payment-dialog">
-    <h3>Zahlung</h3>
-    <p class="lede">Zu zahlen: <strong id="payment-dialog-amount"></strong></p>
-    <div class="payment-methods">
+    <h3 id="payment-dialog-title">Zahlung</h3>
+    <ol id="payment-steps" class="pay-steps" aria-label="Schritte der Zahlung"></ol>
+    <p class="lede" id="payment-amount-line">Zu zahlen: <strong id="payment-dialog-amount"></strong></p>
+    <section data-pay-step="persons" tabindex="-1" hidden>
+      <div><select id="payment-group-event"></select><label for="payment-group-event">Event</label></div>
+      <div id="payment-group-persons"></div>
+    </section>
+    <section data-pay-step="method" class="payment-methods" tabindex="-1" hidden>
       <p id="payment-none-hint" class="sub" hidden>Aktuell ist keine Zahlungsmethode eingerichtet. Bitte melde dich bei der Orga<span id="payment-contact"></span>.</p>
       <div id="paypal-buttons-wrap" hidden><p class="sub">Direkt mit PayPal, Lastschrift oder Karte:</p><div id="paypal-button-container"></div></div>
       <button type="button" id="payment-paypaldirect-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance_wallet</span><span>Per PayPal zahlen</span></button>
@@ -679,21 +684,30 @@
       <button type="button" id="payment-paypalme-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">payments</span><span>Per PayPal (privates Konto)</span></button>
       <button type="button" id="payment-sumup-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">contactless</span><span>Per SumUp (Karte, Apple Pay, Google Pay)</span></button>
       <button type="button" id="payment-stripe-bank-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">account_balance</span><span>Per Banküberweisung (automatisch bestätigt)</span></button>
-      <button type="button" id="payment-bank-btn" class="btn-ghost" hidden><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span>Überweisungsinformationen anzeigen</span></button>
-      <button type="button" id="payment-girocode-btn" class="btn-ghost" hidden><span class="material-symbols-outlined" aria-hidden="true">qr_code_2</span><span>Girocode anzeigen</span></button>
+      <button type="button" id="payment-to-bank-btn" class="btn-ghost" hidden><span class="material-symbols-outlined" aria-hidden="true">receipt_long</span><span>Per Überweisung</span></button>
+    </section>
+    <section data-pay-step="bank" tabindex="-1" hidden>
+      <dl class="pay-bank-list">
+        <dt>IBAN</dt><dd id="payment-bank-iban"></dd>
+        <dt>BIC</dt><dd id="payment-bank-bic"></dd>
+        <dt>Kontoinhaber</dt><dd id="payment-bank-holder"></dd>
+        <dt>Verwendungszweck</dt><dd><strong id="payment-bank-reference"></strong></dd>
+      </dl>
+      <div id="payment-girocode-wrap" hidden>
+        <p class="sub">Oder den Girocode mit der Banking-App scannen:</p>
+        <canvas id="payment-girocode-canvas"></canvas>
+      </div>
+    </section>
+    <section data-pay-step="confirm" tabindex="-1" hidden>
+      <p class="sub" id="payment-confirm-text">Nach der Überweisung hier bestätigen, damit die Orga den Zahlungseingang prüft.</p>
       <p id="payment-transfer-note" class="sub" hidden></p>
       <button type="button" id="payment-transfer-btn" hidden><span class="material-symbols-outlined" aria-hidden="true">check_circle</span><span>Ich habe überwiesen</span></button>
+    </section>
+    <div class="dialog-actions">
+      <button type="button" id="payment-back-btn" class="btn-ghost" hidden>Zurück</button>
+      <button type="button" id="payment-next-btn" hidden>Weiter</button>
+      <button type="button" id="payment-dialog-close" class="btn-ghost">Schließen</button>
     </div>
-    <div id="payment-bank-info" style="display:none;">
-      <p>IBAN: <span id="payment-bank-iban"></span></p>
-      <p>BIC: <span id="payment-bank-bic"></span></p>
-      <p>Kontoinhaber: <span id="payment-bank-holder"></span></p>
-      <p>Verwendungszweck: <strong id="payment-bank-reference"></strong></p>
-    </div>
-    <div id="payment-girocode-wrap" style="display:none;">
-      <canvas id="payment-girocode-canvas"></canvas>
-    </div>
-    <button type="button" id="payment-dialog-close" class="btn-ghost">Schließen</button>
   </dialog>
 
   <script type="module">
@@ -1081,7 +1095,6 @@
 
     const paymentDialog = document.getElementById("payment-dialog");
     let payingEventId = null;
-    let payingRegistration = null;
 
     // PayPal's own buttons (their script). The browser only asks us for "an order for this registration" and
     // reports "approved"; amount, owner and booking stay on our server.
@@ -1131,18 +1144,87 @@
       }
     }
 
+    // Payment wizard. One context object (payCtx) drives both modes: "single" (own registration, all
+    // methods) and "group" (group manager pays for several persons, bank transfer only).
+    // Steps: persons (group only) -> method -> bank -> confirm; only the steps that apply are in payCtx.steps.
+    let payCtx = null;
+    let payHistory = [];
+    let payStepIdx = 0;
+    let paypalMeUrl = "";
+    const PAY_STEP_LABELS = { persons: "Personen", method: "Zahlweg", bank: "Überweisung", confirm: "Bestätigen" };
+
+    function showPayStep(idx, { push = false } = {}) {
+      if (push) payHistory.push(payStepIdx);
+      payStepIdx = idx;
+      const current = payCtx.steps[idx];
+      document.getElementById("payment-steps").innerHTML = payCtx.steps
+        .map((s, i) => `<li${i === idx ? ' aria-current="step"' : ""}${i < idx ? ' class="done"' : ""}>${PAY_STEP_LABELS[s]}</li>`)
+        .join("");
+      document.getElementById("payment-dialog-title").textContent = `${payCtx.title} · Schritt ${idx + 1} von ${payCtx.steps.length}`;
+      paymentDialog.querySelectorAll("[data-pay-step]").forEach((el) => { el.hidden = el.dataset.payStep !== current; });
+      document.getElementById("payment-amount-line").hidden = current === "persons";
+      document.getElementById("payment-dialog-amount").textContent = formatEuro(payCtx.amountCents);
+      document.getElementById("payment-back-btn").hidden = payHistory.length === 0;
+      document.getElementById("payment-next-btn").hidden = current === "method" || idx === payCtx.steps.length - 1;
+      document.getElementById("payment-next-btn").disabled = false;
+      if (current === "persons") updateGroupPayTotal();
+      if (current === "bank") renderPayBank();
+      if (current === "confirm") renderPayConfirm();
+      paymentDialog.querySelector(`[data-pay-step="${current}"]`).focus();
+    }
+
+    function gotoPayStep(name) {
+      const idx = payCtx.steps.indexOf(name);
+      if (idx >= 0) showPayStep(idx, { push: true });
+    }
+
+    function renderPayBank() {
+      const b = payCtx.bank ?? {};
+      document.getElementById("payment-bank-iban").textContent = b.iban ?? "–";
+      document.getElementById("payment-bank-bic").textContent = b.bic ?? "–";
+      document.getElementById("payment-bank-holder").textContent = b.accountHolder ?? "–";
+      document.getElementById("payment-bank-reference").textContent = b.reference ?? "–";
+      const wrap = document.getElementById("payment-girocode-wrap");
+      wrap.hidden = !(b.iban && b.qrEnabled !== false);
+      if (!wrap.hidden) {
+        renderQrToCanvas(
+          buildEpcQrPayload({ iban: b.iban, bic: b.bic, name: b.accountHolder, amountCents: payCtx.amountCents, reference: b.reference }),
+          document.getElementById("payment-girocode-canvas"),
+        );
+      }
+    }
+
+    function renderPayConfirm() {
+      const viaBank = payCtx.paidVia === "bank";
+      document.getElementById("payment-confirm-text").textContent = viaBank
+        ? "Nach der Überweisung hier bestätigen, damit die Orga den Zahlungseingang prüft."
+        : "Nach der Zahlung hier bestätigen, damit die Orga den Zahlungseingang prüft.";
+      const btn = document.getElementById("payment-transfer-btn");
+      btn.querySelector("span:last-child").textContent = viaBank ? "Ich habe überwiesen" : "Ich habe bezahlt";
+      const reported = payCtx.reportedAt;
+      btn.hidden = Boolean(reported);
+      const note = document.getElementById("payment-transfer-note");
+      note.hidden = !reported;
+      if (reported) note.textContent = `Überweisung gemeldet am ${new Date(reported).toLocaleDateString("de-DE")}. Die Orga prüft den Zahlungseingang.`;
+    }
+
     async function openPaymentDialog(eventId, registration) {
       payingEventId = eventId;
-      payingRegistration = registration;
-      document.getElementById("payment-dialog-amount").textContent = formatEuro(registration.amountDueCents);
-      document.getElementById("payment-bank-info").style.display = "none";
-      document.getElementById("payment-girocode-wrap").style.display = "none";
-      // The admin decides whether the bank transfer offers a QR code.
+      payCtx = {
+        mode: "single",
+        title: "Zahlung",
+        amountCents: registration.amountDueCents,
+        reportedAt: registration.transferNotifiedAt,
+        paidVia: "bank",
+        bank: null,
+        steps: ["method"],
+        notifyTransfer: () => api.post(`/events/${eventId}/registrations/${currentUserId}/transfer-notice`, {}),
+      };
+      payHistory = [];
       // Only methods the admin has set up are offered.
       const show = (id, on) => { document.getElementById(id).hidden = !on; };
-      ["payment-transfer-btn", "payment-paypaldirect-btn", "payment-paypal-btn", "payment-card-btn", "payment-klarna-btn", "payment-sepa-btn", "payment-stripe-bank-btn", "payment-bank-btn", "payment-girocode-btn", "payment-sumup-btn", "payment-paypalme-btn"].forEach((id) => show(id, false));
+      ["payment-paypaldirect-btn", "payment-paypal-btn", "payment-card-btn", "payment-klarna-btn", "payment-sepa-btn", "payment-stripe-bank-btn", "payment-to-bank-btn", "payment-sumup-btn", "payment-paypalme-btn"].forEach((id) => show(id, false));
       document.getElementById("payment-none-hint").hidden = true;
-      document.getElementById("payment-transfer-note").hidden = true;
       document.getElementById("paypal-buttons-wrap").hidden = true;
       try {
         const paymentSettings = await api.get("/payment-settings");
@@ -1160,26 +1242,34 @@
         if (paymentSettings.paypalButtonsClientId) renderPaypalButtons(paymentSettings.paypalButtonsClientId);
         // Two PayPal rows need telling apart; a single one is just "Per PayPal zahlen".
         document.querySelector("#payment-paypal-btn span:last-child").textContent = paypalOn ? "Per PayPal (über Stripe)" : "Per PayPal zahlen";
-        show("payment-bank-btn", bankOn);
-        const reported = payingRegistration?.transferNotifiedAt;
+        show("payment-to-bank-btn", bankOn);
         paypalMeUrl = typeof paymentSettings.paypalMeUrl === "string" && paymentSettings.paypalMeUrl.startsWith("https://") ? paymentSettings.paypalMeUrl : "";
         show("payment-paypalme-btn", Boolean(paypalMeUrl));
-        const manualOn = bankOn || Boolean(paypalMeUrl);
-        show("payment-transfer-btn", manualOn && !reported);
-        document.querySelector("#payment-transfer-btn span:last-child").textContent = bankOn ? "Ich habe überwiesen" : "Ich habe bezahlt";
-        const note = document.getElementById("payment-transfer-note");
-        note.hidden = !(manualOn && reported);
-        if (reported) note.textContent = `Überweisung gemeldet am ${new Date(reported).toLocaleDateString("de-DE")}. Die Orga prüft den Zahlungseingang.`;
-        show("payment-girocode-btn", bankOn && paymentSettings.bankQrEnabled !== false);
         show("payment-sumup-btn", paymentSettings.sumupEnabled === true);
         const contact = document.getElementById("payment-contact");
         contact.textContent = paymentSettings.contactEmail ? ` (${paymentSettings.contactEmail})` : "";
-        document.getElementById("payment-none-hint").hidden = stripeOn || bankOn || paypalOn || Boolean(paymentSettings.paypalButtonsClientId) || Boolean(paypalMeUrl) || paymentSettings.sumupEnabled === true;
+        const online = stripeOn || paypalOn || Boolean(paymentSettings.paypalButtonsClientId) || paymentSettings.sumupEnabled === true;
+        document.getElementById("payment-none-hint").hidden = online || bankOn || Boolean(paypalMeUrl);
+        payCtx.paidVia = bankOn ? "bank" : "paypalme";
+        if (bankOn) {
+          payCtx.bank = {
+            iban: paymentSettings.bankIban,
+            bic: paymentSettings.bankBic,
+            accountHolder: paymentSettings.bankAccountHolder,
+            qrEnabled: paymentSettings.bankQrEnabled !== false,
+            reference: registration.paymentReference,
+          };
+        }
+        // Bank transfer as the only way: skip the method step.
+        const skipMethod = bankOn && !online && !paypalMeUrl;
+        const steps = [...(skipMethod ? [] : ["method"]), ...(bankOn ? ["bank"] : []), ...(bankOn || paypalMeUrl ? ["confirm"] : [])];
+        if (steps.length > 0) payCtx.steps = steps;
       } catch {
         // Settings unavailable: better to say so than to offer methods that may not work.
         document.getElementById("payment-none-hint").hidden = false;
       }
       paymentDialog.showModal();
+      showPayStep(0);
     }
 
     async function startCheckout(method) {
@@ -1200,16 +1290,21 @@
     document.getElementById("payment-sepa-btn").addEventListener("click", () => startCheckout("sepa_debit"));
     document.getElementById("payment-card-btn").addEventListener("click", () => startCheckout("card"));
     document.getElementById("payment-sumup-btn").addEventListener("click", () => startCheckout("sumup"));
+    document.getElementById("payment-stripe-bank-btn").addEventListener("click", () => startCheckout("bank_transfer"));
     // Private PayPal account (PayPal.Me): the amount goes into the link; the Orga confirms by hand.
-    let paypalMeUrl = "";
     document.getElementById("payment-paypalme-btn").addEventListener("click", () => {
-      const amount = (payingRegistration.amountDueCents / 100).toFixed(2);
+      const amount = (payCtx.amountCents / 100).toFixed(2);
       window.open(`${paypalMeUrl}/${amount}EUR`, "_blank", "noopener");
-      notify("Klicke danach hier im Fenster auf „Ich habe bezahlt“, damit die Orga Bescheid weiß.", "success");
+      payCtx.paidVia = "paypalme";
+      gotoPayStep("confirm");
+    });
+    document.getElementById("payment-to-bank-btn").addEventListener("click", () => {
+      payCtx.paidVia = "bank";
+      gotoPayStep("bank");
     });
     document.getElementById("payment-transfer-btn").addEventListener("click", async () => {
       try {
-        await api.post(`/events/${payingEventId}/registrations/${currentUserId}/transfer-notice`, {});
+        await payCtx.notifyTransfer();
         paymentDialog.close();
         notify("Danke! Die Orga wurde informiert und prüft den Zahlungseingang.", "success");
         await loadRegistrations();
@@ -1217,39 +1312,98 @@
         notify(err.message, "error");
       }
     });
-    document.getElementById("payment-stripe-bank-btn").addEventListener("click", () => startCheckout("bank_transfer"));
-
-    document.getElementById("payment-bank-btn").addEventListener("click", async () => {
-      try {
-        const settings = await api.get("/payment-settings");
-        document.getElementById("payment-bank-iban").textContent = settings.bankIban ?? "–";
-        document.getElementById("payment-bank-bic").textContent = settings.bankBic ?? "–";
-        document.getElementById("payment-bank-holder").textContent = settings.bankAccountHolder ?? "–";
-        document.getElementById("payment-bank-reference").textContent = payingRegistration.paymentReference;
-        document.getElementById("payment-bank-info").style.display = "";
-      } catch (err) {
-        notify(err.message, "error");
-      }
+    document.getElementById("payment-back-btn").addEventListener("click", () => showPayStep(payHistory.pop()));
+    document.getElementById("payment-next-btn").addEventListener("click", async () => {
+      if (payCtx.steps[payStepIdx] === "persons" && !(await prepareGroupPayment())) return;
+      showPayStep(payStepIdx + 1, { push: true });
     });
-
-    document.getElementById("payment-girocode-btn").addEventListener("click", async () => {
-      try {
-        const settings = await api.get("/payment-settings");
-        const payload = buildEpcQrPayload({
-          iban: settings.bankIban,
-          bic: settings.bankBic,
-          name: settings.bankAccountHolder,
-          amountCents: payingRegistration.amountDueCents,
-          reference: payingRegistration.paymentReference,
-        });
-        renderQrToCanvas(payload, document.getElementById("payment-girocode-canvas"));
-        document.getElementById("payment-girocode-wrap").style.display = "";
-      } catch (err) {
-        notify(err.message, "error");
-      }
-    });
-
     document.getElementById("payment-dialog-close").addEventListener("click", () => paymentDialog.close());
+
+    // Group payment: a group manager pays for several managed persons with one transfer.
+    // The server computes the total, the bank data and the reference for the chosen persons.
+    let groupPayable = [];
+    const groupPayBox = document.getElementById("payment-group-persons");
+    const pickedGroupPayIds = () => [...groupPayBox.querySelectorAll("[data-pay-user]:checked")].map((cb) => groupPayable[Number(cb.dataset.payUser)].userId);
+
+    function updateGroupPayTotal() {
+      const boxes = [...groupPayBox.querySelectorAll("[data-pay-user]")];
+      const picked = boxes.filter((cb) => cb.checked);
+      const total = picked.reduce((sum, cb) => sum + groupPayable[Number(cb.dataset.payUser)].amountDueCents, 0);
+      const totalEl = document.getElementById("payment-group-total");
+      if (totalEl) totalEl.textContent = formatEuro(total);
+      const all = document.getElementById("payment-group-all");
+      if (all) all.checked = picked.length === boxes.length;
+      document.getElementById("payment-next-btn").disabled = picked.length === 0;
+    }
+
+    async function loadGroupPayable() {
+      groupPayBox.innerHTML = '<p class="sub">Lade Personen …</p>';
+      document.getElementById("payment-next-btn").disabled = true;
+      try {
+        groupPayable = (await api.get(`/events/${payCtx.eventId}/group-payment`)).payable ?? [];
+      } catch (err) {
+        groupPayable = [];
+        notify(err.message, "error");
+      }
+      if (groupPayable.length === 0) {
+        groupPayBox.innerHTML = '<p class="sub">Für dieses Event gibt es in deiner Gruppe nichts zu bezahlen.</p>';
+        return;
+      }
+      groupPayBox.innerHTML = '<label class="checkbox-row"><input type="checkbox" id="payment-group-all" checked> <span><strong>Alle auswählen</strong></span></label>'
+        + groupPayable.map((p, i) => `<label class="checkbox-row"><input type="checkbox" data-pay-user="${i}" checked> <span>${escapeHtml(p.name)}${p.transferNotifiedAt ? " (Überweisung gemeldet)" : ""}</span> <strong>${formatEuro(p.amountDueCents)}</strong></label>`).join("")
+        + '<p>Summe: <strong id="payment-group-total"></strong></p>';
+      updateGroupPayTotal();
+    }
+
+    groupPayBox.addEventListener("change", (event) => {
+      if (event.target.id === "payment-group-all") groupPayBox.querySelectorAll("[data-pay-user]").forEach((cb) => { cb.checked = event.target.checked; });
+      updateGroupPayTotal();
+    });
+    document.getElementById("payment-group-event").addEventListener("change", (event) => {
+      payCtx.eventId = event.target.value;
+      loadGroupPayable();
+    });
+
+    async function prepareGroupPayment() {
+      const userIds = pickedGroupPayIds();
+      if (userIds.length === 0) { notify("Wähle mindestens eine Person.", "error"); return false; }
+      try {
+        const result = await api.post(`/events/${payCtx.eventId}/group-payment/bank`, { userIds });
+        Object.assign(payCtx, { userIds, amountCents: result.totalCents, bank: result.bank });
+        return true;
+      } catch (err) {
+        notify(err.message, "error");
+        return false;
+      }
+    }
+
+    async function openGroupPaymentDialog() {
+      try {
+        const active = (await api.get("/events")).filter((e) => e.is_active);
+        if (active.length === 0) { notify("Aktuell ist kein Event für Zahlungen offen.", "error"); return; }
+        const select = document.getElementById("payment-group-event");
+        select.innerHTML = active.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join("");
+        payCtx = {
+          mode: "group",
+          title: "Für Gruppe bezahlen",
+          eventId: select.value,
+          amountCents: 0,
+          userIds: [],
+          reportedAt: null,
+          paidVia: "bank",
+          bank: null,
+          steps: ["persons", "bank", "confirm"],
+          notifyTransfer: () => api.post(`/events/${payCtx.eventId}/group-payment/transfer-notice`, { userIds: payCtx.userIds }),
+        };
+        payHistory = [];
+        paymentDialog.showModal();
+        showPayStep(0);
+        await loadGroupPayable();
+      } catch (err) {
+        notify(err.message, "error");
+      }
+    }
+    document.getElementById("group-pay-btn").addEventListener("click", openGroupPaymentDialog);
 
     function showTicketHint(message) {
       document.getElementById("ticket-panel").style.display = "";
@@ -3638,7 +3792,7 @@
       loadTransferReminder(account);
       if (account.groupMemberOnly) {
         // Plain members only see who is in their group and can leave it.
-        for (const id of ["group-tabs", "group-bulk-btn", "group-members-tab-intro"]) document.getElementById(id)?.setAttribute("hidden", "");
+        for (const id of ["group-tabs", "group-bulk-btn", "group-pay-btn", "group-members-tab-intro"]) document.getElementById(id)?.setAttribute("hidden", "");
         document.querySelector("#gruppe-tab > .sub").textContent = "Deine Gruppe.";
         updateManagedPersonsDashboardVisibility();
       }
