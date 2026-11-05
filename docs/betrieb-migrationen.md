@@ -36,3 +36,6 @@ Leere Ausgabe von `diff` = Schema identisch (Spaltenreihenfolge wird bewusst ign
 | Datum | Server | Ergebnis |
 |---|---|---|
 | _offen_ | Prod | Vergleich noch nicht durchgeführt |
+
+## Parallele Sessions und Branches
+Vor dem Commit einer neuen Migration `git fetch` ausführen und `ls db/migrations` prüfen (auch auf anderen Branches): Die Nummer 128 wurde schon einmal doppelt vergeben. `tests/unit/migrationFiles.test.js` meldet doppelte Präfixe.

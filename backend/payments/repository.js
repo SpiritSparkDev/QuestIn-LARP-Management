@@ -235,6 +235,19 @@ export async function createGroupPayment(eventId, payerId, userIds) {
   return rows[0].id;
 }
 
+// A reported bank group transfer: remembered with its purpose text for the statement reconciliation.
+// The same payer selecting the same people again does not add a second row.
+export async function rememberGroupTransfer(eventId, payerId, persons, reference) {
+  const userIds = persons.map((p) => p.userId).sort();
+  await query(
+    `INSERT INTO group_payments (event_id, payer_id, user_ids, kind, reference)
+     SELECT $1, $2, $3, 'bank', $4
+     WHERE NOT EXISTS (SELECT 1 FROM group_payments WHERE event_id = $1 AND payer_id = $2 AND kind = 'bank'
+                       AND reference = $4 AND user_ids @> $3::uuid[] AND user_ids <@ $3::uuid[])`,
+    [eventId, payerId, userIds, reference]
+  );
+}
+
 // Books one group payment (provider reference "G:<id>") person by person. Only people still open count;
 // the paid amount must cover all of them, otherwise nothing is booked. Returns false when nothing could be
 // booked for lack of money / unknown group, true otherwise (also on a replay where everyone is already paid).
@@ -254,7 +267,21 @@ export async function recordGroupPayment({ groupPaymentId, method, provider, pai
     logger.error('group payment not booked (amount below due)', { groupPaymentId, providerReference, paidCents, due });
     return false;
   }
-  if (open.length < userIds.length) logger.error('group payment: some people were already paid and are skipped', { groupPaymentId, skipped: userIds.length - open.length });
+  if (open.length < userIds.length) {
+    logger.error('group payment: some people were already paid and are skipped', { groupPaymentId, skipped: userIds.length - open.length });
+    // Paid elsewhere in the meantime -> money arrived for them a second time: make it visible for staff.
+    // People booked by an earlier delivery of this very payment (replay) are not an overpayment.
+    const { rows: skipped } = await query(
+      `SELECT r.user_id, r.amount_due_cents FROM registrations r
+       WHERE r.event_id = $1 AND r.user_id = ANY($2) AND r.paid_at IS NOT NULL AND r.amount_due_cents > 0
+         AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.provider_reference = $3 || '#' || r.user_id)
+         AND NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.action = 'payment.overpaid' AND a.subject_user_id = r.user_id AND a.details->>'groupPaymentId' = $4)`,
+      [eventId, userIds, providerReference, String(groupPaymentId)]
+    );
+    for (const r of skipped) {
+      await logAudit({ actorId: null, action: 'payment.overpaid', subjectUserId: r.user_id, details: { eventId, groupPaymentId, provider, amountCents: r.amount_due_cents, reference: providerReference } });
+    }
+  }
   for (const r of open) {
     await recordSuccessfulStripePayment({
       eventId, userId: r.user_id, method, provider, amountCents: r.amount_due_cents,

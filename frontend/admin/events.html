@@ -795,7 +795,7 @@ async function loadEvents() {
   listBody.innerHTML = '<tr><td colspan="100%">Wird geladen …</td></tr>';
   const events = await api.get('/events');
   listBody.innerHTML = events.map((e) => `<tr>
-    <td>${escapeHtml(e.name)}</td>
+    <td>${escapeHtml(e.name)}${e.code ? ` <span style="opacity:0.6;font-size:12px;">(${escapeHtml(e.code)})</span>` : ''}</td>
     <td>${escapeHtml(e.event_date)}${e.end_date ? ` – ${escapeHtml(e.end_date)}` : ""}</td>
     <td>${e.is_active ? '<span class="badge badge-active">Aktiv – Anmeldung offen</span>' : '<span class="badge badge-inactive">Inaktiv</span>'}${e.ended_at ? ' <span class="badge badge-inactive">Beendet</span>' : ''}${lockBadge(e)}</td>
     <td>${e.is_active ? '' : `<button type="button" class="btn-sm" data-activate="${e.id}">Aktivieren</button>`}</td>

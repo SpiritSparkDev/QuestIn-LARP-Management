@@ -55,6 +55,7 @@ import './appSettings/routes.js';
 import './legalDocuments/routes.js';
 import './paymentSettings/routes.js';
 import './payments/routes.js';
+import './bankReconcile/routes.js';
 import './guestRegistrations/routes.js';
 import './comingSoon/routes.js';
 import './storageSettings/routes.js';

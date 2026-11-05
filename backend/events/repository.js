@@ -119,6 +119,17 @@ export async function getEventByCode(code) {
   return rows[0] ?? null;
 }
 
+// Case-insensitive duplicate lookup for the QR code identifier. No DB unique
+// constraint on purpose (production may already hold duplicates), so the
+// routes check here. excludeId lets an event keep its own code.
+export async function findEventByCodeCI(code, excludeId = null) {
+  const { rows } = await query(
+    'SELECT id, name FROM events WHERE lower(code) = lower($1) AND ($2::uuid IS NULL OR id <> $2) LIMIT 1',
+    [code, excludeId]
+  );
+  return rows[0] ?? null;
+}
+
 export async function listEvents() {
   const { rows } = await query(
     `SELECT ${SELECT_COLUMNS} FROM events ORDER BY event_date`

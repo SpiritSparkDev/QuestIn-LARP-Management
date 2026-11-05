@@ -79,6 +79,7 @@ const ACTION_LABELS = {
   'auth.password_changed': 'Passwort geändert',
   'payment.transfer_notified': 'Überweisung gemeldet',
   'payment.refunded': 'Zahlung erstattet',
+  'payment.overpaid': 'Überzahlung bei Sammelzahlung',
   'group.created': 'Rolle (Gruppe) angelegt',
   'group_tree.founded': 'Gruppe gegründet',
   'group_tree.join_code_redeemed': 'Gruppe per Code beigetreten',
@@ -126,6 +127,7 @@ function describe(entry) {
     case 'registration.cancelled': return `${d.self ? 'selbst abgemeldet' : 'von Orga storniert'}${who}`;
     case 'payment.received': return `${euro(d.amountCents)} · ${PAYMENT_KINDS[d.kind] ?? d.kind ?? ''} · ${d.provider ?? ''}${who}`;
     case 'payment.refunded': return `${euro(d.amountCents)}${who}`;
+    case 'payment.overpaid': return `${euro(d.amountCents)} schon anders bezahlt · ${d.provider ?? ''}${who}`;
     case 'group.created': return `${d.name} (${d.key})`;
     case 'group_tree.founded': return d.group;
     case 'link.sent': return `${LINK_KINDS[d.kind] ?? d.kind}${d.email ? ` an ${d.email}` : who}${d.emailed === false ? ' · nur Link, keine Mail' : ''}`;

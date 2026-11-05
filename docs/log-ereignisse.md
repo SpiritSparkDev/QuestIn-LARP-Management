@@ -25,6 +25,7 @@ Protokolliert werden Ereignisse, die jemand später nachvollziehen will (Anlegen
 | `checkin.confirm` | Angaben beim Check-in bestätigt/korrigiert |
 | `payment.received` | Zahlung eingegangen (Stripe, manuell als bezahlt markiert, Tavernen-Online-Aufladung) |
 | `payment.refunded` | Zahlung erstattet |
+| `payment.overpaid` | Sammelzahlung eingegangen, aber diese Person war zwischenzeitlich schon bezahlt und wurde übersprungen (der Betrag liegt doppelt beim Anbieter, ggf. erstatten); Details: Event, Sammelzahlung-ID, Anbieter, Betrag, Referenz |
 | `group.created` | Rolle (Gruppe) im Admin angelegt |
 | `group_tree.founded` | Gruppe gegründet (Gruppenname erstmals gesetzt) |
 | `group_tree.join_code_redeemed` | Gruppe per Code beigetreten |
@@ -49,6 +50,9 @@ Protokolliert werden Ereignisse, die jemand später nachvollziehen will (Anlegen
 
 ## Zahlungen: Merker für PayPal / Stripe
 Jede Zahlungsquelle muss nach dem Verbuchen `logPaymentReceived({ userId, eventId, provider, method, amountCents, reference, kind })` aus `backend/payments/repository.js` aufrufen (nur wenn tatsächlich neu gebucht wurde, nicht bei Webhook-Wiederholungen). Heute sind angebunden: Stripe-Webhook (Tickets und Tavernen-Aufladung) und „als bezahlt markieren" (`provider: 'manual'`). **Wird PayPal ergänzt oder der Stripe-Ablauf angefasst: dort `provider: 'paypal'` bzw. den neuen Pfad ebenfalls anbinden**, sonst fehlen Zahlungen im Protokoll. Erstattungen laufen über `refundPayment()` und werden dort protokolliert.
+
+## Sammelzahlungen
+Ein Gruppenverwalter kann für mehrere Personen auf einmal zahlen. Beim Start entsteht ein Datensatz in `group_payments`; beim Anbieter (Stripe, PayPal, SumUp) steht nur die Referenz `G:<groupPaymentId>`. Kommt das Geld an, bucht `recordGroupPayment()` **je Person einen eigenen Zahlungs-Eintrag** (`payments`) über deren offenen Betrag und protokolliert je Person ein `payment.received`. Die `provider_reference` jedes Eintrags ist die Anbieter-Referenz mit Suffix `#<userId>` (z. B. `paypal:<captureId>#<userId>`), dadurch sind Wiederholungen derselben Meldung wirkungslos. Alle Einträge teilen sich den `stripe_payment_intent_id`; eine Erstattung läuft pro Person und nur über deren Betrag. Ist eine Person bis dahin anderweitig bezahlt, wird sie übersprungen und es entsteht `payment.overpaid`. Reicht der gezahlte Betrag nicht für alle offenen Personen, wird nichts gebucht (nur eine Zeile im Server-Log).
 
 ## Backup (Admin → Backup)
 - **Erstellen:** `POST /backup/export` (nur Admin). Umfang `participants` (Konten, Charaktere, Anmeldungen, Zahlungen, Datei-Verweise), `events` (Events, Unterkünfte, Mailings, Feldschemata, dazu **Metadaten** je Event mit Anmeldezahlen je Status) oder `all`.

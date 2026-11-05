@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt><Stmt>
+    <Ntry>
+      <Amt Ccy="EUR">100.00</Amt><CdtDbtInd>CRDT</CdtDbtInd>
+      <BookgDt><Dt>2026-11-03</Dt></BookgDt>
+      <NtryDtls><TxDtls><RltdPties><Dbtr><Nm>Boss &amp; Co</Nm></Dbtr></RltdPties>
+        <RmtInf><Ustrd>FX1/2027 Boss-Gruppe:</Ustrd><Ustrd>Lena, Tom</Ustrd></RmtInf></TxDtls></NtryDtls>
+    </Ntry>
+    <Ntry>
+      <Amt Ccy="EUR">9.90</Amt><CdtDbtInd>DBIT</CdtDbtInd>
+      <BookgDt><Dt>2026-11-02</Dt></BookgDt>
+      <NtryDtls><TxDtls><RmtInf><Ustrd>Gebuehr</Ustrd></RmtInf></TxDtls></NtryDtls>
+    </Ntry>
+  </Stmt></BkToCstmrStmt>
+</Document>

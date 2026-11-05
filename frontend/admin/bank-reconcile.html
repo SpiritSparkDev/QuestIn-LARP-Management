@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kontoabgleich – Pakyrion Admin</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div id="page-loader" class="page-loader"><div class="page-loader-spinner"></div></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand-row">
+        <div class="brand-seal"></div>
+        <div class="sidebar-brand">Pakyrion<span>Admin</span></div>
+      </div>
+    </div>
+    <nav id="nav-links"></nav>
+    <div class="sidebar-foot">
+      <div id="sidebar-user-info"></div>
+      <a href="#" id="logout-link">Logout</a>
+    </div>
+  </aside>
+  <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Menü öffnen">
+    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
+  </button>
+  <div class="main"><div class="content">
+    <h1>Kontoabgleich</h1>
+    <p class="sub">Lade einen Kontoauszug und buche eindeutig zuordenbare Überweisungen als bezahlt.</p>
+    <div class="card form-pad">
+      <h2>Kontoauszug laden</h2>
+      <p class="sub">Der Auszug bleibt auf dem Server nur während der Prüfung, es wird nichts gespeichert.</p>
+      <input type="file" id="rc-file" accept=".csv,.txt,.xml,text/csv,text/xml">
+      <div class="reconcile-actions"><button type="button" id="rc-check" disabled>Auszug prüfen</button></div>
+    </div>
+    <div class="card form-pad" id="rc-book-result" hidden></div>
+    <div class="card form-pad" id="rc-result-card" hidden>
+      <h2>Ergebnis</h2>
+      <div class="reconcile-summary" id="rc-summary"></div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th></th><th>Datum</th><th>Betrag</th><th>Absender</th><th>Verwendungszweck</th><th>Status</th><th>Zuordnung</th></tr></thead>
+          <tbody id="rc-rows"></tbody>
+        </table>
+      </div>
+      <p class="sub" id="rc-hint" hidden>Einträge ohne Checkbox bitte im Check-In manuell buchen.</p>
+      <div class="reconcile-actions"><button type="button" id="rc-book">Ausgewählte als bezahlt buchen</button></div>
+    </div>
+  </div></div>
+</div>
+
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { hideLoading } from '/js/loading.js';
+applyBranding();
+import { escapeHtml } from '/js/formFields.js';
+import { renderNavLinks, renderSidebarUser, initSidebarToggle } from '/js/nav.js';
+import { notify } from '/js/notifications.js';
+initSidebarToggle();
+
+const STATUS = {
+  match: ['Zugeordnet', 'badge-active'],
+  amount_mismatch: ['Betrag weicht ab', 'badge-failed'],
+  ambiguous: ['Mehrdeutig', 'badge-failed'],
+  unmatched: ['Nicht zugeordnet', 'badge-inactive'],
+  duplicate: ['Doppelt', 'badge-inactive'],
+};
+const SUMMARY = [['match', 'match'], ['amountMismatch', 'amount_mismatch'], ['ambiguous', 'ambiguous'], ['unmatched', 'unmatched'], ['duplicate', 'duplicate']];
+const SKIP_REASONS = { amount_mismatch: 'Betrag weicht ab', already_paid: 'bereits bezahlt', not_payable: 'nicht zahlbar', not_found: 'nicht gefunden', error: 'Fehler beim Buchen' };
+
+const fileInput = document.getElementById('rc-file');
+const checkBtn = document.getElementById('rc-check');
+const bookBtn = document.getElementById('rc-book');
+const rows = document.getElementById('rc-rows');
+let entries = [];
+
+const euro = (cents) => (cents / 100).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+
+function candidateLabel(c) {
+  const names = (c.names || []).map(escapeHtml).join(', ');
+  return `${c.kind === 'group' ? 'Gruppe: ' : ''}${names} <span class="sub">(Soll ${escapeHtml(euro(c.amountCents))})</span>`;
+}
+
+async function runCheck() {
+  const content = await fileInput.files[0].text();
+  const res = await api.post('/admin/bank-reconcile/preview', { content });
+  entries = res.entries;
+  document.getElementById('rc-summary').innerHTML =
+    `<span class="tag">${escapeHtml(res.summary.total)} Eingänge</span>` +
+    SUMMARY.map(([k, st]) => `<span class="badge ${STATUS[st][1]}">${escapeHtml(STATUS[st][0])}: ${escapeHtml(res.summary[k])}</span>`).join('');
+  rows.innerHTML = entries.map((e, i) => {
+    const [label, cls] = STATUS[e.status] || [e.status, 'badge-inactive'];
+    const box = e.status === 'match' && e.candidates.length > 0
+      ? `<input type="checkbox" class="rc-pick" data-i="${i}" checked aria-label="Buchen">` : '';
+    return `<tr>
+      <td data-label="Buchen">${box}</td>
+      <td data-label="Datum">${escapeHtml(e.date)}</td>
+      <td data-label="Betrag">${escapeHtml(euro(e.amountCents))}</td>
+      <td data-label="Absender">${escapeHtml(e.counterparty)}</td>
+      <td data-label="Verwendungszweck">${escapeHtml(e.text)}</td>
+      <td data-label="Status"><span class="badge ${cls}">${escapeHtml(label)}</span></td>
+      <td data-label="Zuordnung">${e.candidates.map(candidateLabel).join('<br>')}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rc-hint').hidden = !entries.some((e) => e.status === 'amount_mismatch' || e.status === 'ambiguous');
+  document.getElementById('rc-result-card').hidden = false;
+}
+
+fileInput.addEventListener('change', () => { checkBtn.disabled = fileInput.files.length === 0; });
+
+checkBtn.addEventListener('click', async () => {
+  checkBtn.disabled = true;
+  try {
+    document.getElementById('rc-book-result').hidden = true;
+    await runCheck();
+  } catch (err) {
+    notify(err.message, 'error');
+  } finally {
+    checkBtn.disabled = false;
+  }
+});
+
+bookBtn.addEventListener('click', async () => {
+  const items = [...rows.querySelectorAll('.rc-pick:checked')].map((box) => {
+    const e = entries[Number(box.dataset.i)];
+    const c = e.candidates.find((x) => x.exact) || e.candidates[0];
+    return { eventId: c.eventId, userIds: c.userIds, amountCents: e.amountCents };
+  });
+  if (items.length === 0) { notify('Nichts ausgewählt.', 'error'); return; }
+  const count = items.reduce((n, it) => n + it.userIds.length, 0);
+  if (!confirm(`${items.length} Zahlungseingänge für ${count} Anmeldungen als bezahlt buchen?`)) return;
+  bookBtn.disabled = true;
+  try {
+    const res = await api.post('/admin/bank-reconcile/book', { items });
+    const skipped = res.skipped.map((s) => `<li>${escapeHtml(s.name || s.userId)}: ${escapeHtml(SKIP_REASONS[s.reason] || s.reason)}</li>`).join('');
+    const box = document.getElementById('rc-book-result');
+    box.innerHTML = `<h2>Gebucht</h2><p>Gebucht: ${escapeHtml(res.booked)}, übersprungen: ${escapeHtml(res.skipped.length)}</p>${skipped ? `<ul>${skipped}</ul>` : ''}`;
+    box.hidden = false;
+    await runCheck();
+  } catch (err) {
+    notify(err.message, 'error');
+  } finally {
+    bookBtn.disabled = false;
+  }
+});
+
+document.getElementById('logout-link').addEventListener('click', async (evt) => {
+  evt.preventDefault();
+  await api.post('/auth/logout', {});
+  window.location.href = '/login.html';
+});
+
+try {
+  const account = await api.get('/account');
+  document.getElementById('nav-links').innerHTML = renderNavLinks(account, window.location.pathname);
+  document.getElementById('sidebar-user-info').innerHTML = renderSidebarUser(account);
+} catch (err) {
+  if (err.status === 401) window.location.href = '/login.html';
+  else if (err.status === 403) notify('Kein Zugriff.', 'error');
+  else notify(err.message, 'error');
+} finally {
+  hideLoading();
+}
+</script>
+</body>
+</html>

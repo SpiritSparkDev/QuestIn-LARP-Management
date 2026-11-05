@@ -8,6 +8,7 @@ import { displayName } from '../displayName.js';
 import { getEvent } from '../events/repository.js';
 import { baseUrl, getTransporterAndFrom, sendPaymentReminderEmail } from '../auth/mailer.js';
 import crypto from 'node:crypto';
+import { isOffline } from '../appMode.js';
 import { getStripeClient } from './stripeClient.js';
 import { getSumupConfig, createSumupCheckout, getSumupCheckout } from './sumupClient.js';
 import { getPaypalConfig, createPaypalOrder, capturePaypalOrder, completedCapture, isPaypalOrderId } from './paypalClient.js';
@@ -18,10 +19,11 @@ import { getAppSettings } from '../appSettings/repository.js';
 import { topUpFromStripe, findActiveAccountForUser } from '../tavern/repository.js';
 import {
   setAmountDue, setDiscount, markPaidManually, markTransferNotified, clearTransferNotified, listOverdueTransfers, markUnpaid, recordSuccessfulStripePayment,
-  createGroupPayment, recordGroupPayment,
+  createGroupPayment, recordGroupPayment, rememberGroupTransfer,
   getRegistrationByPaymentToken, refundPayment, listUnpaidRegistrationsForEvent, setGuestPaymentToken,
 } from './repository.js';
 
+const OFFLINE_PAYMENT = { status: 409, body: { error: 'Im Offline-Modus ist keine Online-Zahlung möglich. Bitte per Überweisung oder vor Ort bezahlen.' } };
 const CHECKOUT_METHODS = ['card', 'paypal', 'bank_transfer', 'klarna', 'sepa_debit', 'sumup', 'paypal_direct'];
 const CHECKOUT_METHOD_ERROR = `method must be one of: ${CHECKOUT_METHODS.join(', ')}`;
 // The only methods whose ledger entry the tavern top-up knows (see TAVERN_LEDGER_METHODS).
@@ -104,6 +106,7 @@ router.post('/events/:eventId/registrations/:userId/checkout-session', requireAu
   if (params.userId !== user.id && !(await canRegisterFor(params.userId, user.id))) {
     return { status: 403, body: { error: 'forbidden' } };
   }
+  if (isOffline()) return OFFLINE_PAYMENT;
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (body.method !== 'auto' && !CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
@@ -232,6 +235,7 @@ async function firstOnlineMethod() {
 }
 
 router.post('/public/registrations/:token/checkout-session', async ({ req, params }) => {
+  if (isOffline()) return OFFLINE_PAYMENT;
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (body.method !== 'auto' && !CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
@@ -273,6 +277,7 @@ const TAVERN_TOPUP_MAX_CENTS = 20000;
 router.post('/tavern/my-topup-session', requireAuth(async ({ req, user }) => {
   const settings = await getAppSettings();
   if (!settings.tavernEnabled) return { status: 404, body: { error: 'Das Tavernenkonto ist nicht aktiviert.' } };
+  if (isOffline()) return OFFLINE_PAYMENT;
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
   if (!CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
@@ -392,7 +397,9 @@ router.post('/events/:eventId/group-payment/summary', requireAuth(async ({ req, 
 }));
 
 // One online payment for several people. The provider only sees "G:<id>"; the webhook books each person.
+
 router.post('/events/:eventId/group-payment/checkout-session', requireAuth(async ({ req, params, user }) => {
+  if (isOffline()) return OFFLINE_PAYMENT;
   const { error, persons, body } = await resolveGroupSelection(req, params.eventId, user);
   if (error) return error;
   if (body.method !== 'auto' && !CHECKOUT_METHODS.includes(body.method)) return { status: 400, body: { error: CHECKOUT_METHOD_ERROR } };
@@ -417,6 +424,7 @@ router.post('/events/:eventId/group-payment/checkout-session', requireAuth(async
 
 // PayPal's own buttons for a group payment; capture/booking goes through /paypal/capture like a single order.
 router.post('/events/:eventId/group-payment/paypal-order', requireAuth(async ({ req, params, user }) => {
+  if (isOffline()) return OFFLINE_PAYMENT;
   const { error, persons } = await resolveGroupSelection(req, params.eventId, user);
   if (error) return error;
   const config = await getPaypalConfig();
@@ -444,6 +452,7 @@ router.post('/events/:eventId/group-payment/transfer-notice', requireAuth(async 
   for (const p of persons) {
     if (await markTransferNotified(params.eventId, p.userId, user.id)) notified++;
   }
+  await rememberGroupTransfer(params.eventId, user.id, persons, await groupReference(params.eventId, user.id, persons));
   return { status: 200, body: { notified } };
 }));
 
@@ -540,6 +549,7 @@ router.get('/paypal/return', async ({ req }) => {
 // PayPal's own buttons (their script in the browser): the browser only ever asks for "an order for this
 // registration" and later says "this order was approved". Amount, owner and booking stay on our side.
 async function createPaypalButtonsOrder(eventId, userId) {
+  if (isOffline()) return { status: OFFLINE_PAYMENT.status, error: OFFLINE_PAYMENT.body.error };
   const config = await getPaypalConfig();
   const { paypalButtonsEnabled } = await getPaymentSettings();
   if (!config?.enabled || !paypalButtonsEnabled) return { status: 409, error: 'PayPal-Buttons sind nicht eingeschaltet.' };

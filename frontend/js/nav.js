@@ -31,6 +31,7 @@ const MENU_LINKS = [
   { key: 'events', label: 'Rundmail', href: '/admin/mailing.html', icon: 'campaign' },
   { key: 'events', label: 'NSC-Dialog', href: '/admin/nsc-dialog.html', icon: 'forum' },
   { key: 'checkin', label: 'Check-In', href: '/admin/checkin.html', icon: 'qr_code_scanner' },
+  { key: 'checkin', label: 'Kontoabgleich', href: '/admin/bank-reconcile.html', icon: 'account_balance' },
   { key: 'taverne', flag: 'tavernEnabled', label: 'Taverne', href: '/admin/tavern.html', icon: 'local_bar' },
 ];
 

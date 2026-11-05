@@ -1,0 +1,5 @@
+"Konto";"Girokonto DE00123456780000000001"
+"";
+"Buchungsdatum";"Wertstellung";"Status";"Zahlungspflichtige*r";"Zahlungsempfänger*in";"Verwendungszweck";"Umsatztyp";"Betrag (€)"
+"03.11.26";"03.11.26";"Gebucht";"Hans Beispiel";"Verein e.V.";"FX1/2027 Hans-Beispiel";"Eingang";"45,00"
+"02.11.26";"02.11.26";"Gebucht";"Verein e.V.";"Strom AG";"Abschlag";"Ausgang";"-45,00"

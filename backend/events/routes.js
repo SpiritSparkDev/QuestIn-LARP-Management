@@ -3,7 +3,7 @@ import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu, requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
-import { createEvent, getEvent, listEvents, updateEvent, activateEvent, deleteEvent, setEventEnded, setRegistrationLock } from './repository.js';
+import { createEvent, findEventByCodeCI, getEvent, listEvents, updateEvent, activateEvent, deleteEvent, setEventEnded, setRegistrationLock } from './repository.js';
 import { ALL_CON_ROLES } from '../registrations/capacity.js';
 import { logAudit } from '../audit/repository.js';
 import { query } from '../db.js';
@@ -171,6 +171,12 @@ function validateRoleLimits(limits) {
   return null;
 }
 
+async function codeConflict(code, excludeId) {
+  if (typeof code !== 'string' || code.trim() === '') return null;
+  const other = await findEventByCodeCI(code.trim(), excludeId);
+  return other ? { status: 409, body: { error: `Diese QR-Code-Kennung wird bereits von dem Event "${other.name}" verwendet.` } } : null;
+}
+
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
@@ -205,6 +211,8 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   if (endDateError) return { status: 400, body: { error: endDateError } };
   const urlError = validateMapUrls({ mapsUrl, osmUrl });
   if (urlError) return { status: 400, body: { error: urlError } };
+  const conflict = await codeConflict(code, null);
+  if (conflict) return conflict;
   const event = await createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
   return { status: 201, body: event };
 })));
@@ -273,6 +281,8 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
       if (rows.length > 0) return { status: 409, body: { error: `„${old.name}“ ist bereits gebucht und kann nicht entfernt werden.` } };
     }
   }
+  const conflict = await codeConflict(body.code, before.id);
+  if (conflict) return conflict;
   const event = await updateEvent(params.id, body);
 
   // Any limit may have grown (total, SC or NSC): let waiting people move up wherever there is room now.

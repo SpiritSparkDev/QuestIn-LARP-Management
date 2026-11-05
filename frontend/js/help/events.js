@@ -20,7 +20,7 @@ export default {
       { label: 'Name', text: 'Pflichtfeld. So heißt das Event überall in der App.' },
       { label: 'Startdatum', text: 'Pflichtfeld. Erster Tag des Events; auch Ziel des Countdowns im Widget.' },
       { label: 'Enddatum', text: 'Optional, für mehrtägige Events.' },
-      { label: 'QR-Code-Kennung', text: 'Optional, z. B. P17/2027. Ist Teil der QR-Codes beim Check-In und wird für Link und Einbettungscode des Direktanmeldungs-Widgets gebraucht. Im internen Bereich identifiziert sie das Event, z. B. als Kürzel in der Mitgliederliste.' },
+      { label: 'QR-Code-Kennung', text: 'Optional, z. B. P17/2027. Muss eindeutig sein (Groß-/Kleinschreibung egal). Ist Teil der QR-Codes beim Check-In und wird für Link und Einbettungscode des Direktanmeldungs-Widgets gebraucht. Im internen Bereich identifiziert sie das Event, z. B. als Kürzel in der Mitgliederliste.' },
       { label: 'Plätze (geplant)', text: 'Optional. Leer bedeutet unbegrenzt. Das ist die Zahl der Plätze, mit der du planst.' },
       { label: 'SC / NSC: Plätze und Harte Obergrenze', text: 'Zusätzlich zur Gesamtgrenze kannst du getrennte Grenzen für SC und NSC festlegen, jeweils mit geplanten Plätzen und harter Obergrenze (leer = unbegrenzt). Ein Platz muss in der Gesamtgrenze und in der Grenze der eigenen Rolle frei sein, sonst kommt die Person auf die Warteliste. Die Warteliste rückt je Rolle nach: Wird ein SC-Platz frei, rückt der älteste wartende SC nach, ein wartender NSC nur, wenn auch dessen Grenze Platz hat. „Nur noch wenige Plätze“ erscheint auch je Rolle. Welche Rollen überhaupt mitzählen, stellst du unter Einstellungen ein.' },
       { label: 'Harte Obergrenze', text: 'Optional. Ab dieser Zahl gilt die Warteliste: weitere Anmeldungen kommen auf die Warteliste. Leer bedeutet, dass die geplanten Plätze die Grenze sind.' },
@@ -71,6 +71,19 @@ export default {
       { label: 'Rundmail senden', text: 'Sendet die Mail nach Rückfrage an alle Empfänger. Das lässt sich nicht zurückholen. Ein Fortschritt wird angezeigt.' },
       { label: 'Bisher gesendet', text: 'Verlauf aller Rundmails mit Zeitpunkt, Absender, Anzahl gesendet und fehlgeschlagener Adressen.' },
       { label: 'Abbrechen / Speichern', text: '„Speichern“ (bei bestehenden Events „Änderungen speichern“) legt das Event an bzw. übernimmt die Änderungen aus allen Tabs. „Abbrechen“ verwirft das Formular.' }
+    ]
+  },
+
+  '/admin/bank-reconcile.html': {
+    title: 'Kontoabgleich',
+    anchor: 'kontoabgleich',
+    intro: 'Hier gleichst du einen Kontoauszug mit offenen Überweisungen ab und buchst eindeutig zuordenbare Zahlungen in einem Schritt als bezahlt.',
+    items: [
+      { label: 'Kontoauszug laden', text: 'Wähle die Auszugsdatei (CSV, TXT oder XML) deiner Bank. Sie wird im Browser gelesen und nur für die Prüfung an den Server geschickt; gespeichert wird nichts.' },
+      { label: 'Auszug prüfen', text: 'Ordnet jeden Zahlungseingang anhand des Verwendungszwecks einer Anmeldung oder einer Gruppe zu. Oben steht die Anzahl je Status.' },
+      { label: 'Status', text: 'Zugeordnet: eindeutig und Betrag passt. Betrag weicht ab oder Mehrdeutig: bitte im Check-In manuell buchen. Nicht zugeordnet: kein Treffer. Doppelt: Zahlung wurde bereits gebucht.' },
+      { label: 'Checkbox je Zeile', text: 'Nur zugeordnete Zahlungen sind vorgewählt. Nimm Häkchen heraus, was du nicht buchen willst.' },
+      { label: 'Ausgewählte als bezahlt buchen', text: 'Bucht die gewählten Zahlungen nach Rückfrage als bezahlt. Danach siehst du, was gebucht und was mit welchem Grund übersprungen wurde; die Prüfung läuft automatisch neu.' },
     ]
   },
 

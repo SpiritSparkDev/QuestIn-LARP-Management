@@ -1,0 +1,4 @@
+﻿"Auftragskonto";"Buchungstag";"Valutadatum";"Buchungstext";"Verwendungszweck";"Beguenstigter/Zahlungspflichtiger";"Kontonummer/IBAN";"Betrag";"Waehrung"
+"DE00123456780000000001";"03.11.26";"03.11.26";"GUTSCHRIFT";"FX1/2027 Fiona-Fantasie";"Fiona Fantasie";"DE00999999990000000002";"1.234,56";"EUR"
+"DE00123456780000000001";"03.11.2026";"03.11.2026";"GUTSCHRIFT";"Beitrag ""Con"" Gerda";"Gerda Test";"DE00999999990000000003";"20,00";"EUR"
+"DE00123456780000000001";"04.11.2026";"04.11.2026";"LASTSCHRIFT";"Miete Halle";"Vermieter GmbH";"DE00999999990000000004";"-12,50";"EUR"
