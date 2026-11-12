@@ -485,7 +485,7 @@ function renderFlagRows() {
         <div><input type="text" data-flag-field="name" value="${escapeHtml(f.name)}" placeholder="z.B. Ersthelfer" maxlength="60"><label>Bezeichnung</label></div>
         <div><textarea data-flag-field="description" rows="2" maxlength="500" placeholder="Kurze Beschreibung für die Teilnehmer">${escapeHtml(f.description)}</textarea><label>Beschreibung</label></div>
         <div class="flag-row-extra">
-          <div><input type="text" data-flag-field="abbr" value="${escapeHtml(f.abbr)}" maxlength="3" placeholder="ERS" style="width:80px;"><label>Kürzel (max. 3)</label></div>
+          <div><input type="text" data-flag-field="abbr" value="${escapeHtml(f.abbr)}" maxlength="10" placeholder="ERS" style="width:120px;"><label>Kürzel (max. 10)</label></div>
           <div><select data-flag-field="discountType">
             ${[['', 'Kein Rabatt'], ['percent', 'Prozent'], ['amount', 'Betrag (€)'], ['free', 'Kostenlos']].map(([v, l]) => `<option value="${v}"${f.discountType === v ? ' selected' : ''}>${l}</option>`).join('')}
           </select><label>Rabatt auf den Con-Preis</label></div>

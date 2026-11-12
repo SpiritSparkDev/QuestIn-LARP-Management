@@ -21,9 +21,9 @@ test('flagDiscountCents: amount capped at the price, best discount wins, no pric
   assert.equal(flagDiscountCents(settings, ['Unbekannt'], 10000), 0);
 });
 
-test('validateFlagSettings: abbr max 3, percent 1-100', () => {
+test('validateFlagSettings: abbr max 10, percent 1-100', () => {
   assert.equal(validateFlagSettings(settings), null);
-  assert.ok(validateFlagSettings({ A: { abbr: 'ABCD' } }));
+  assert.ok(validateFlagSettings({ A: { abbr: 'ABCDEFGHIJK' } }));
   assert.ok(validateFlagSettings({ A: { discount: { type: 'percent', value: 101 } } }));
   assert.ok(validateFlagSettings({ A: { discount: { type: 'amount', value: 0 } } }));
   assert.ok(validateFlagSettings({ A: { discount: { type: 'bogus' } } }));

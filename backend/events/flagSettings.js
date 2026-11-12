@@ -1,7 +1,8 @@
-// Per special role: optional abbreviation (max 3 characters) and a predefined
+// Per special role: optional abbreviation (max 10 characters) and a predefined
 // discount on the list price. Shared by the event routes (validation) and
 // the registrations (pricing).
 
+const MAX_ABBR = 10;
 export const DISCOUNT_TYPES = ['percent', 'amount', 'free'];
 
 export function validateFlagSettings(settings) {
@@ -9,7 +10,7 @@ export function validateFlagSettings(settings) {
   if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) return 'flagSettings must be an object';
   for (const s of Object.values(settings)) {
     if (typeof s !== 'object' || s === null) return 'flagSettings entries must be objects';
-    if (s.abbr != null && (typeof s.abbr !== 'string' || [...s.abbr.trim()].length > 3)) return 'Das Kürzel darf höchstens 3 Zeichen lang sein.';
+    if (s.abbr != null && (typeof s.abbr !== 'string' || [...s.abbr.trim()].length > MAX_ABBR)) return 'Das Kürzel darf höchstens 10 Zeichen lang sein.';
     const d = s.discount;
     if (d == null) continue;
     if (!DISCOUNT_TYPES.includes(d.type)) return `discount.type must be one of: ${DISCOUNT_TYPES.join(', ')}`;
@@ -27,7 +28,7 @@ export function normalizeFlagSettings(settings, flags) {
     const s = settings[name];
     if (!s || typeof s !== 'object') continue;
     const entry = {};
-    const abbr = typeof s.abbr === 'string' ? [...s.abbr.trim()].slice(0, 3).join('') : '';
+    const abbr = typeof s.abbr === 'string' ? [...s.abbr.trim()].slice(0, MAX_ABBR).join('') : '';
     if (abbr) entry.abbr = abbr;
     if (DISCOUNT_TYPES.includes(s.discount?.type)) {
       entry.discount = s.discount.type === 'free' ? { type: 'free' } : { type: s.discount.type, value: s.discount.value };
