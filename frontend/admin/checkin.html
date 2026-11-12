@@ -98,25 +98,18 @@
       <button type="button" id="role-save">Speichern</button>
       <button type="button" id="role-cancel" class="btn-ghost">Abbrechen</button>
     </dialog>
-    <details id="column-settings" class="card form-pad">
-      <summary>Spalten ein- und ausblenden</summary>
-      <div>
-        <span>Tabelle</span>
-        <div id="base-column-checkboxes" class="checkbox-group"></div>
-      </div>
-      <p class="sub">Spalten lassen sich per Drag &amp; Drop an der Überschrift umsortieren. Die Einstellungen werden in diesem Browser gespeichert. <button type="button" id="reset-column-order" class="btn-ghost btn-sm">Reihenfolge zurücksetzen</button></p>
-      <div>
-        <span>Charakter-Felder (IT)</span>
-        <div id="it-column-checkboxes" class="checkbox-group"></div>
-      </div>
-      <div>
-        <span>Mitglieder-Felder (OT)</span>
-        <div id="ot-column-checkboxes" class="checkbox-group"></div>
-      </div>
-    </details>
     <div class="card">
       <div class="toolbar">
         <input class="search" id="participant-search" placeholder="Suche nach Name oder Charakter …">
+        <details id="column-settings" class="column-menu">
+          <summary class="btn-secondary btn-sm"><span class="material-symbols-outlined" aria-hidden="true">view_column</span>Spalten</summary>
+          <div class="column-menu-panel">
+            <div class="column-menu-group"><span class="column-menu-title">Tabelle</span><div id="base-column-checkboxes" class="checkbox-group"></div></div>
+            <div class="column-menu-group"><span class="column-menu-title">Charakter-Felder (IT)</span><div id="it-column-checkboxes" class="checkbox-group"></div></div>
+            <div class="column-menu-group"><span class="column-menu-title">Mitglieder-Felder (OT)</span><div id="ot-column-checkboxes" class="checkbox-group"></div></div>
+            <p class="sub">Spalten per Drag &amp; Drop an der Überschrift umsortieren, per Klick auf die Überschrift sortieren. Gespeichert wird nur in diesem Browser. <button type="button" id="reset-column-order" class="btn-ghost btn-sm">Reihenfolge zurücksetzen</button></p>
+          </div>
+        </details>
         <button type="button" id="checkin-export" class="btn-secondary btn-sm" hidden>CSV exportieren</button>
       </div>
       <div class="table-scroll">
@@ -202,10 +195,11 @@ function saveSelectedColumns() {
 // a function so the render* helpers (declared further down) are only
 // referenced once the page has fully loaded.
 function allColumns() {
+  const statusRank = (p) => STATUS_ORDER.indexOf(p.status);
   const base = [
-    { id: 'name', label: 'Name', locked: true, track: 'minmax(150px, 1.2fr)', render: (p) => escapeHtml(p.name) + (childrenEnabled && p.isChild ? ` <span class="badge" title="Kind von ${escapeHtml(p.guardianName ?? '')}">Kind</span>` : '') },
-    { id: 'characters', label: 'Charaktere', track: 'minmax(130px, 1fr)', render: (p) => escapeHtml(p.characters.map((c) => c.name).join(', ')) },
-    { id: 'role', label: 'Rolle', track: 'minmax(140px, 0.9fr)', cls: 'cell-inline', render: renderConRoleCell },
+    { id: 'actions', label: 'Aktionen', locked: true, track: eventEnded() ? 'minmax(250px, 1.3fr)' : 'minmax(150px, 0.8fr)', cls: 'cell-actions', sort: statusRank, render: (p) => renderCheckinCell(p) + renderCheckoutCell(p) + renderToggleCell(p) },
+    { id: 'name', label: 'Name', locked: true, track: 'minmax(160px, 1.4fr)', cls: 'cell-two', sort: (p) => p.name, render: (p) => `<span>${escapeHtml(p.name)}${childrenEnabled && p.isChild ? ` <span class="badge" title="Kind von ${escapeHtml(p.guardianName ?? '')}">Kind</span>` : ''}</span>${nameSub(p) ? `<span class="sub">${escapeHtml(nameSub(p))}</span>` : ''}` },
+    { id: 'role', label: 'Rolle', track: 'minmax(140px, 1fr)', cls: 'cell-inline', sort: (p) => CON_ROLE_LABELS[p.conRole] ?? p.conRole, render: renderConRoleCell },
   ];
   const it = selectedColumns.it.map((key) => {
     const field = currentSchema.find((f) => f.key === key) ?? { key };
@@ -214,6 +208,7 @@ function allColumns() {
       label: field.label ?? key,
       track: 'minmax(110px, 1fr)',
       extra: true,
+      sort: (p) => p.characters.map((c) => formatFieldValue(field, c.data?.[key])).filter((v) => v !== undefined).join(', '),
       render: (p) => escapeHtml(p.characters.map((c) => formatFieldValue(field, c.data?.[key])).filter((v) => v !== undefined).join(', ')),
     };
   });
@@ -224,18 +219,17 @@ function allColumns() {
       label: field.label ?? key,
       track: 'minmax(110px, 1fr)',
       extra: true,
+      sort: (p) => formatFieldValue(field, p.otFields?.[key]) ?? '',
       render: (p) => escapeHtml(formatFieldValue(field, p.otFields?.[key]) ?? ''),
     };
   });
   const rest = [
-    ...(lodgingEnabled ? [{ id: 'lodging', label: 'Unterkunft', track: canMoveLodging ? 'minmax(170px, 1.2fr)' : 'minmax(110px, 1fr)', render: renderLodgingCell }] : []),
-    { id: 'extras', label: 'Extras', track: 'minmax(110px, 1fr)', render: (p) => escapeHtml(p.extrasText ?? '') },
-    { id: 'amount', label: 'Betrag', track: '170px', render: renderAmountDueCell },
-    { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-inline', render: renderPaymentStatusCell },
-    { id: 'registered', label: 'Angemeldet am', track: '120px', render: (p) => (p.registeredAt ? escapeHtml(new Date(p.registeredAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })) : '') },
-    { id: 'status', label: 'Status', track: '130px', render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(statusLabel(p.status, p.conPayer))}</span>` },
-    { id: 'actions', label: 'Aktionen', locked: true, track: eventEnded() ? 'minmax(210px, 1.3fr)' : 'minmax(110px, 0.7fr)', cls: 'cell-actions', render: (p) => renderCheckinCell(p) + renderCheckoutCell(p) },
-    ...(canOverride ? [{ id: 'override', label: 'Override', track: '150px', render: renderOverrideCell }] : []),
+    ...(lodgingEnabled ? [{ id: 'lodging', label: 'Unterkunft', track: canMoveLodging ? 'minmax(170px, 1.2fr)' : 'minmax(110px, 1fr)', sort: (p) => p.lodgingName, render: renderLodgingCell }] : []),
+    { id: 'extras', label: 'Extras', track: 'minmax(110px, 1fr)', sort: (p) => p.extrasText, render: (p) => escapeHtml(p.extrasText ?? '') },
+    { id: 'payment', label: 'Zahlung', track: 'minmax(150px, 1fr)', cls: 'cell-two', sort: paymentSortKey, render: renderPaymentSummary },
+    { id: 'registered', label: 'Angemeldet am', track: '120px', sort: (p) => (p.registeredAt ? Date.parse(p.registeredAt) : null), render: (p) => (p.registeredAt ? escapeHtml(new Date(p.registeredAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })) : '') },
+    { id: 'status', label: 'Status', track: '130px', sort: statusRank, render: (p) => `<span class="status-pill status-${escapeHtml(p.status)}">${escapeHtml(statusLabel(p.status, p.conPayer))}</span>` },
+    ...(canOverride ? [{ id: 'override', label: 'Override', track: '150px', sort: statusRank, render: renderOverrideCell }] : []),
   ];
   return [...base, ...it, ...ot, ...rest];
 }
@@ -257,7 +251,11 @@ function storeList(key, value) {
   }
 }
 
-let hiddenBaseColumns = loadStoredList('checkinHiddenColumns');
+// Rarely needed at the desk: shown in the expanded row instead, unless switched on here.
+const DEFAULT_HIDDEN_COLUMNS = ['lodging', 'extras', 'registered', 'override'];
+let hiddenBaseColumns = localStorage.getItem('checkinHiddenColumns') === null ? DEFAULT_HIDDEN_COLUMNS : loadStoredList('checkinHiddenColumns');
+let sortState = null;
+try { sortState = JSON.parse(localStorage.getItem('checkinSort')); } catch { /* no stored sort */ }
 let columnOrder = loadStoredList('checkinColumnOrder');
 let currentParticipants = [];
 
@@ -318,8 +316,36 @@ function toggleColumn(group, key, checked) {
 
 function renderTableHead() {
   const columns = visibleColumns();
-  tableHeadRow.innerHTML = columns.map((col) => `<div class="grid-cell" role="columnheader" draggable="true" data-col-id="${escapeHtml(col.id)}" title="Zum Umsortieren ziehen"><span class="col-grip material-symbols-outlined" aria-hidden="true">drag_indicator</span>${escapeHtml(col.label)}</div>`).join('');
+  tableHeadRow.innerHTML = columns.map((col) => {
+    const sorted = sortState?.id === col.id ? sortState.dir : null;
+    return `<div class="grid-cell sortable" role="columnheader" aria-sort="${sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : 'none'}" draggable="true" data-col-id="${escapeHtml(col.id)}" title="Klicken zum Sortieren, ziehen zum Umsortieren"><span class="col-grip material-symbols-outlined" aria-hidden="true">drag_indicator</span>${escapeHtml(col.label)}<span class="sort-ind" aria-hidden="true">${sorted === 'asc' ? '▲' : sorted === 'desc' ? '▼' : ''}</span></div>`;
+  }).join('');
   participantList.style.setProperty('--column-tracks', columns.map((col) => col.track ?? 'auto').join(' '));
+}
+
+// Click a header: ascending, descending, then back to the default order.
+tableHeadRow.addEventListener('click', (e) => {
+  const cell = e.target.closest('[data-col-id]');
+  if (!cell) return;
+  const id = cell.dataset.colId;
+  sortState = sortState?.id !== id ? { id, dir: 'asc' } : sortState.dir === 'asc' ? { id, dir: 'desc' } : null;
+  try { localStorage.setItem('checkinSort', JSON.stringify(sortState)); } catch { /* not persisted */ }
+  renderTableHead();
+  renderParticipants(currentParticipants, eventSelect.value);
+});
+
+function applySort(list) {
+  const col = sortState && visibleColumns().find((c) => c.id === sortState.id);
+  if (!col?.sort) return list;
+  const dir = sortState.dir === 'desc' ? -1 : 1;
+  const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+  const empty = (v) => v == null || v === '';
+  return [...list].sort((a, b) => {
+    const x = col.sort(a);
+    const y = col.sort(b);
+    if (empty(x) || empty(y)) return empty(x) && empty(y) ? 0 : empty(x) ? 1 : -1; // empty values stay at the bottom
+    return (typeof x === 'number' && typeof y === 'number' ? x - y : collator.compare(String(x), String(y))) * dir;
+  });
 }
 
 // Drag a header cell onto another to move that column to its position; the
@@ -355,6 +381,12 @@ tableHeadRow.addEventListener('drop', (e) => {
   draggedColumnId = null;
   renderTableHead();
   renderParticipants(currentParticipants, eventSelect.value);
+});
+
+// Close the column menu on an outside click.
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('column-settings');
+  if (menu.open && !menu.contains(e.target)) menu.open = false;
 });
 
 document.getElementById('reset-column-order').addEventListener('click', () => {
@@ -664,34 +696,30 @@ function renderConRoleCell(p) {
   const label = CON_ROLE_LABELS[p.conRole] ?? p.conRole ?? '–';
   const flagSettings = events.find((e) => e.id === eventSelect.value)?.flag_settings ?? {};
   const flagBadges = (p.flags ?? []).map((f) => ` <span class="tag"${flagSettings[f]?.abbr ? ` title="${escapeHtml(f)}"` : ''}>${escapeHtml(flagSettings[f]?.abbr || f)}</span>`).join('');
-  const badge = flagBadges + (p.nscAvailable ? ' <span class="tag">auch NSC-bereit</span>' : '');
-  const changeButton = canOverride && p.userId
-    ? iconAction(`data-change-role="${escapeHtml(p.userId)}"`, 'manage_accounts', 'Rolle ändern')
-    : '';
-  const nscInfo = p.conRole === 'nsc'
-    ? `<span class="tag" title="${p.characters?.[0]?.name ? 'Fester NSC-Charakter' : 'Kein fester Charakter: springt bei Bedarf ein'}">${p.characters?.[0]?.name ? `Fester NSC: ${escapeHtml(p.characters[0].name)}` : 'Springer'}</span>`
-    : '';
-  return `<strong>${escapeHtml(label)}</strong>${badge}${nscInfo}${changeButton}`;
+  return `<span class="role-badge role-${escapeHtml(p.conRole)}">${escapeHtml(label)}</span>${flagBadges}${p.nscAvailable ? ' <span class="tag">auch NSC-bereit</span>' : ''}`;
+}
+
+// Second line under the name: the character, or what an NSC does.
+function nameSub(p) {
+  const names = (p.characters ?? []).map((c) => c.name).filter(Boolean);
+  if (p.conRole === 'nsc') return names.length ? `Fester NSC: ${names.join(', ')}` : 'Springer';
+  return names.join(', ');
 }
 
 const PAYMENT_METHOD_LABELS = { stripe_card: 'Karte', stripe_paypal: 'PayPal', sumup: 'SumUp', paypal: 'PayPal', stripe_klarna: 'Klarna', stripe_sepa_debit: 'SEPA-Lastschrift', stripe_bank_transfer: 'Überweisung (Stripe)', bank_transfer: 'Überweisung' };
 
-function renderAmountDueCell(p) {
+// Amount and discount, labelled, for the expanded row.
+function renderAmountFields(p) {
   if (!p.userId) return '';
   const value = p.amountDueCents != null ? (p.amountDueCents / 100).toFixed(2) : '';
   const discountValue = p.discountCents ? (p.discountCents / 100).toFixed(2) : '';
-  const priceLabel = p.priceGroup
-    ? `<div class="sub" style="white-space:normal;">${escapeHtml(p.priceGroup)}${p.priceTier ? ` · ${escapeHtml(p.priceTier)}` : ''}</div>`
-    : '';
-  // Stacked in a column (rather than laid out inline like the rest of this
-  // flex .grid-cell) so the label plus two number inputs fit the narrow
-  // BETRAG track instead of overflowing into the ZAHLUNG column next to it.
-  return `<div style="display:flex;flex-direction:column;gap:4px;width:100%;">
-    ${priceLabel}
-    <input type="number" min="0" step="0.01" data-amount-due="${escapeHtml(p.userId)}" value="${escapeHtml(value)}" placeholder="kein Betrag" style="width:100%;">
-    <input type="number" min="0" step="0.01" data-discount="${escapeHtml(p.userId)}" value="${escapeHtml(discountValue)}" placeholder="Rabatt (€)" title="Rabatt (€)" style="width:100%;">
-  </div>`;
+  const group = p.priceGroup ? `${escapeHtml(p.priceGroup)}${p.priceTier ? ` · ${escapeHtml(p.priceTier)}` : ''}` : '';
+  return `${detailField('Betrag (€)', `<input type="number" min="0" step="0.01" data-amount-due="${escapeHtml(p.userId)}" value="${escapeHtml(value)}" placeholder="kein Betrag">`)}
+    ${detailField('Rabatt (€)', `<input type="number" min="0" step="0.01" data-discount="${escapeHtml(p.userId)}" value="${escapeHtml(discountValue)}" placeholder="0,00">`)}
+    ${detailField('Teilnahmegruppe', group)}`;
 }
+
+const detailField = (label, html) => (html ? `<div class="detail-field"><span class="detail-label">${label}</span>${html}</div>` : '');
 
 // Staff can move a person to another lodging (or out of it); everyone else just sees the name.
 function renderLodgingCell(p) {
@@ -724,22 +752,82 @@ async function moveLodging(eventId, userId, lodgingId, select) {
   await loadParticipants(eventId);
 }
 
-function renderPaymentStatusCell(p) {
+const formatEuro = (cents) => `${(cents / 100).toFixed(2).replace('.', ',')} €`;
+
+// One status chip plus the amount; the actions live in the expanded row.
+function renderPaymentSummary(p) {
   if (!p.userId) return '';
   if (p.amountDueCents == null) return '<span class="sub">–</span>';
   if (p.paidAt) {
-    const label = PAYMENT_METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod ?? 'manuell';
-    if (p.refundedAt) {
-      const fullyRefunded = p.refundAmountCents >= p.amountDueCents;
-      const refundNote = fullyRefunded ? 'Vollständig erstattet' : `Teilerstattet: ${(p.refundAmountCents / 100).toFixed(2)} €`;
-      return `<span class="status-pill status-paid">Bezahlt (${escapeHtml(label)})</span> <span class="sub">${refundNote}</span> ${iconAction(`data-mark-unpaid="${escapeHtml(p.userId)}"`, 'undo', 'Zahlung zurücksetzen')}`;
-    }
-    return `<span class="status-pill status-paid">Bezahlt (${escapeHtml(label)})</span> ${iconAction(`data-refund="${escapeHtml(p.userId)}"`, 'currency_exchange', 'Erstatten')} ${iconAction(`data-mark-unpaid="${escapeHtml(p.userId)}"`, 'undo', 'Zahlung zurücksetzen')}`;
+    const method = PAYMENT_METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod ?? 'manuell';
+    const label = !p.refundedAt ? 'Bezahlt' : p.refundAmountCents >= p.amountDueCents ? 'Erstattet' : 'Teilerstattet';
+    return `<span class="status-pill status-paid">${label}</span><span class="sub">${formatEuro(p.amountDueCents)} · ${escapeHtml(method)}</span>`;
   }
-  const openLabel = p.conPayer ? 'Zahlt vor Ort' : 'Offen';
-  const notified = p.transferNotifiedAt ? ` <span class="status-pill status-waitlisted" title="Gemeldet am ${escapeHtml(new Date(p.transferNotifiedAt).toLocaleString('de-DE'))}">Überweisung gemeldet</span> ${iconAction(`data-reset-transfer="${escapeHtml(p.userId)}"`, 'notifications_off', 'Meldung zurücksetzen (kein Zahlungseingang)')}` : '';
-  return `<span class="status-pill status-pending">${openLabel}</span>${notified} ${iconAction(`data-mark-paid="${escapeHtml(p.userId)}"`, 'check_circle', 'Als bezahlt markieren')}`;
+  const chip = p.transferNotifiedAt
+    ? `<span class="status-pill status-waitlisted" title="Gemeldet am ${escapeHtml(new Date(p.transferNotifiedAt).toLocaleString('de-DE'))}">Überweisung gemeldet</span>`
+    : `<span class="status-pill status-pending">${p.conPayer ? 'Zahlt vor Ort' : 'Offen'}</span>`;
+  return `${chip}<span class="sub">${formatEuro(p.amountDueCents)}</span>`;
 }
+
+function paymentSortKey(p) {
+  if (!p.userId || p.amountDueCents == null) return null;
+  const rank = p.paidAt ? 2 : p.transferNotifiedAt ? 1 : 0;
+  return rank * 1e9 + p.amountDueCents;
+}
+
+const detailAction = (attrs, icon, label) => `<button type="button" class="btn-ghost btn-sm detail-action" ${attrs}><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${label}</button>`;
+
+function renderPaymentActions(p) {
+  if (!p.userId || p.amountDueCents == null) return '';
+  const id = escapeHtml(p.userId);
+  if (p.paidAt) return (p.refundedAt ? '' : detailAction(`data-refund="${id}"`, 'currency_exchange', 'Erstatten')) + detailAction(`data-mark-unpaid="${id}"`, 'undo', 'Zahlung zurücksetzen');
+  return detailAction(`data-mark-paid="${id}"`, 'check_circle', 'Als bezahlt markieren')
+    + (p.transferNotifiedAt ? detailAction(`data-reset-transfer="${id}"`, 'notifications_off', 'Überweisungsmeldung zurücksetzen') : '');
+}
+
+// Everything that does not need to be on the row at the desk.
+function renderRowDetail(p, open) {
+  if (!p.userId) return '';
+  const registered = p.registeredAt ? escapeHtml(new Date(p.registeredAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })) : '';
+  const actions = renderPaymentActions(p)
+    + (canOverride ? detailAction(`data-change-role="${escapeHtml(p.userId)}"`, 'manage_accounts', 'Rolle ändern') : '');
+  return `<div class="row-detail"${open ? '' : ' hidden'}>
+    <div class="detail-grid">
+      ${renderAmountFields(p)}
+      ${lodgingEnabled ? detailField('Unterkunft', renderLodgingCell(p)) : ''}
+      ${detailField('Extras', escapeHtml(p.extrasText ?? ''))}
+      ${detailField('Status', renderOverrideCell(p))}
+      ${detailField('Angemeldet am', registered)}
+    </div>
+    ${actions ? `<div class="detail-actions">${actions}</div>` : ''}
+  </div>`;
+}
+
+function renderToggleCell(p) {
+  if (!p.userId) return '';
+  const open = openRowId === p.userId;
+  return `<button type="button" class="btn-ghost btn-sm btn-icon row-toggle" data-toggle-row aria-expanded="${open}" title="Details" aria-label="Details ein- oder ausklappen"><span class="material-symbols-outlined" aria-hidden="true">expand_more</span></button>`;
+}
+
+let openRowId = null;
+function setOpenRow(id) {
+  openRowId = openRowId === id ? null : id;
+  listBody.querySelectorAll('.grid-row[data-id]').forEach((row) => {
+    const open = row.dataset.id === openRowId;
+    row.classList.toggle('is-open', open);
+    const detail = row.querySelector('.row-detail');
+    if (detail) detail.hidden = !open;
+    row.querySelector('[data-toggle-row]')?.setAttribute('aria-expanded', String(open));
+  });
+}
+// A click on the row itself (not on a control) opens or closes it.
+listBody.addEventListener('click', (e) => {
+  const toggle = e.target.closest('[data-toggle-row]');
+  if (toggle) { setOpenRow(toggle.closest('.grid-row').dataset.id); return; }
+  if (e.target.closest('button, input, select, a, label, .row-detail')) return;
+  const row = e.target.closest('.grid-row[data-id]');
+  if (row?.querySelector('.row-detail')) setOpenRow(row.dataset.id);
+});
 
 searchInput.addEventListener('input', () => {
   currentSearch = searchInput.value;
@@ -783,8 +871,9 @@ async function loadParticipants(eventId) {
 
 function renderParticipants(participants, eventId) {
   const columns = visibleColumns();
-  listBody.innerHTML = participants.map((p) => `<div class="grid-row" role="row" data-id="${escapeHtml(p.userId ?? p.invitationId ?? '')}" data-search="${escapeHtml(`${p.name} ${p.characters.map((c) => c.name).join(' ')}`.toLowerCase())}">
+  listBody.innerHTML = applySort(participants).map((p) => `<div class="grid-row${p.userId && p.userId === openRowId ? ' is-open' : ''}" role="row" data-id="${escapeHtml(p.userId ?? p.invitationId ?? '')}" data-search="${escapeHtml(`${p.name} ${p.characters.map((c) => c.name).join(' ')}`.toLowerCase())}">
     ${columns.map((col) => `<div class="grid-cell ${col.cls ?? ''}">${col.render(p)}</div>`).join('')}
+    ${renderRowDetail(p, p.userId && p.userId === openRowId)}
   </div>`).join('');
 
   statTotal.textContent = participants.length;
