@@ -9,6 +9,7 @@ import { logAudit } from '../audit/repository.js';
 import { query } from '../db.js';
 import { maybePromoteFromWaitlist } from '../registrations/repository.js';
 import { validatePrivacyDeletion } from '../privacy/repository.js';
+import { validateFlagSettings } from './flagSettings.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -180,7 +181,7 @@ async function codeConflict(code, excludeId) {
 router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const body = await readJsonBody(req);
   if (body === null) return { status: 400, body: { error: 'invalid JSON' } };
-  const { name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
+  const { name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, flagSettings, pricing, extras, directions, briefing, address, mapsUrl, osmUrl } = body;
   if (!name || !eventDate) {
     return { status: 400, body: { error: 'name and eventDate are required' } };
   }
@@ -197,7 +198,7 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   if (flags !== undefined && (!Array.isArray(flags) || flags.some((f) => typeof f !== 'string'))) {
     return { status: 400, body: { error: 'flags must be an array of strings' } };
   }
-  const flagExtrasError = validateFlagExtras({ flagDetails });
+  const flagExtrasError = validateFlagExtras({ flagDetails }) ?? validateFlagSettings(flagSettings);
   if (flagExtrasError) return { status: 400, body: { error: flagExtrasError } };
   if (pricing !== undefined) {
     const pricingError = validatePricing(pricing);
@@ -213,7 +214,7 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   if (urlError) return { status: 400, body: { error: urlError } };
   const conflict = await codeConflict(code, null);
   if (conflict) return conflict;
-  const event = await createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
+  const event = await createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, flagSettings, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
   return { status: 201, body: event };
 })));
 
@@ -237,7 +238,7 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   if (body.flags !== undefined && (!Array.isArray(body.flags) || body.flags.some((f) => typeof f !== 'string'))) {
     return { status: 400, body: { error: 'flags must be an array of strings' } };
   }
-  const flagExtrasError = validateFlagExtras(body);
+  const flagExtrasError = validateFlagExtras(body) ?? validateFlagSettings(body.flagSettings);
   if (flagExtrasError) return { status: 400, body: { error: flagExtrasError } };
   if (body.pricing !== undefined) {
     const pricingError = validatePricing(body.pricing);

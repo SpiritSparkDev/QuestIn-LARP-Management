@@ -662,7 +662,8 @@ const iconAction = (attrs, icon, title) => `<button type="button" class="btn-gho
 
 function renderConRoleCell(p) {
   const label = CON_ROLE_LABELS[p.conRole] ?? p.conRole ?? '–';
-  const flagBadges = (p.flags ?? []).map((f) => ` <span class="tag">${escapeHtml(f)}</span>`).join('');
+  const flagSettings = events.find((e) => e.id === eventSelect.value)?.flag_settings ?? {};
+  const flagBadges = (p.flags ?? []).map((f) => ` <span class="tag"${flagSettings[f]?.abbr ? ` title="${escapeHtml(f)}"` : ''}>${escapeHtml(flagSettings[f]?.abbr || f)}</span>`).join('');
   const badge = flagBadges + (p.nscAvailable ? ' <span class="tag">auch NSC-bereit</span>' : '');
   const changeButton = canOverride && p.userId
     ? iconAction(`data-change-role="${escapeHtml(p.userId)}"`, 'manage_accounts', 'Rolle ändern')

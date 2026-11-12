@@ -886,6 +886,20 @@
 
     const CON_ROLE_LABELS = { sc: 'SC', nsc: 'NSC', helfer: 'Helfer', hilfs_orga: 'Hilfs-Orga', orga: 'Orga', ticket: 'Direktanmeldung' };
     // Roles of the member's non-cancelled registrations -- of the chosen event only, if one is chosen.
+    // Column cell: a Sonderrolle with a Kürzel shows that (full name on hover).
+    function participationCell(m) {
+      const regs = (m.registrations ?? []).filter((r) => r.status !== 'cancelled' && (!prefs.event || r.eventId === prefs.event));
+      const parts = new Map();
+      for (const r of regs) {
+        const settings = allEvents.find((e) => e.id === r.eventId)?.flag_settings ?? {};
+        parts.set(CON_ROLE_LABELS[r.conRole] ?? r.conRole, escapeHtml(CON_ROLE_LABELS[r.conRole] ?? r.conRole));
+        for (const f of r.flags ?? []) {
+          const abbr = settings[f]?.abbr;
+          parts.set(f, abbr ? `<abbr title="${escapeHtml(f)}">${escapeHtml(abbr)}</abbr>` : escapeHtml(f));
+        }
+      }
+      return [...parts.values()].join(', ') || '–';
+    }
     function participationLabels(m) {
       const regs = (m.registrations ?? []).filter((r) => r.status !== 'cancelled' && (!prefs.event || r.eventId === prefs.event));
       return [...new Set(regs.flatMap((r) => [CON_ROLE_LABELS[r.conRole] ?? r.conRole, ...(r.flags ?? [])]))];
@@ -1019,7 +1033,7 @@
     <td data-col="name">${paidDot(m)}${escapeHtml(fullName(m))}${childBadge}${discordBadge}${m.email ? guestBadge : ''}</td>
     <td data-col="email">${m.email ? escapeHtml(m.email) : guestBadge}</td>
     <td data-col="role">${escapeHtml(m.group?.name ?? '–')}</td>
-    <td data-col="participation">${escapeHtml(participationLabels(m).join(', ') || '–')}</td>
+    <td data-col="participation">${participationCell(m)}</td>
     <td data-col="event">${renderEventCell(m)}</td>
     <td data-col="status">${statusCell}</td>
     <td>${actionsCell}</td>

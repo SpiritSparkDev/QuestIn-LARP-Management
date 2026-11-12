@@ -484,6 +484,13 @@ function renderFlagRows() {
       <div class="flag-row" data-flag-row="${i}">
         <div><input type="text" data-flag-field="name" value="${escapeHtml(f.name)}" placeholder="z.B. Ersthelfer" maxlength="60"><label>Bezeichnung</label></div>
         <div><textarea data-flag-field="description" rows="2" maxlength="500" placeholder="Kurze Beschreibung für die Teilnehmer">${escapeHtml(f.description)}</textarea><label>Beschreibung</label></div>
+        <div class="flag-row-extra">
+          <div><input type="text" data-flag-field="abbr" value="${escapeHtml(f.abbr)}" maxlength="3" placeholder="ERS" style="width:80px;"><label>Kürzel (max. 3)</label></div>
+          <div><select data-flag-field="discountType">
+            ${[['', 'Kein Rabatt'], ['percent', 'Prozent'], ['amount', 'Betrag (€)'], ['free', 'Kostenlos']].map(([v, l]) => `<option value="${v}"${f.discountType === v ? ' selected' : ''}>${l}</option>`).join('')}
+          </select><label>Rabatt auf den Con-Preis</label></div>
+          ${['percent', 'amount'].includes(f.discountType) ? `<div><input type="number" data-flag-field="discountValue" value="${escapeHtml(f.discountValue)}" min="0" step="${f.discountType === 'percent' ? 1 : 0.01}" max="${f.discountType === 'percent' ? 100 : ''}" style="width:100px;"><label>${f.discountType === 'percent' ? 'Prozent' : 'Euro'}</label></div>` : ''}
+        </div>
         <div class="flag-row-actions">
           <button type="button" class="btn-sm btn-ghost" data-flag-move="${i}:-1" aria-label="Nach oben">▲</button>
           <button type="button" class="btn-sm btn-ghost" data-flag-move="${i}:1" aria-label="Nach unten">▼</button>
@@ -495,6 +502,7 @@ function renderFlagRows() {
     const i = Number(row.dataset.flagRow);
     row.querySelectorAll('[data-flag-field]').forEach((input) => {
       input.addEventListener('input', () => { flagRows[i][input.dataset.flagField] = input.value; });
+      if (input.dataset.flagField === 'discountType') input.addEventListener('change', () => renderFlagRows());
     });
   });
   flagListContainer.querySelectorAll('[data-flag-remove]').forEach((button) => {
@@ -512,7 +520,7 @@ function renderFlagRows() {
 }
 
 document.getElementById('add-flag').addEventListener('click', () => {
-  flagRows.push({ original: '', name: '', description: '' });
+  flagRows.push({ original: '', name: '', description: '', abbr: '', discountType: '', discountValue: '' });
   renderFlagRows();
 });
 
@@ -520,12 +528,20 @@ function collectFlags() {
   const rows = flagRows.filter((f) => f.name.trim());
   const flagDetails = {};
   const flagRenames = {};
+  const flagSettings = {};
   for (const f of rows) {
     const name = f.name.trim();
     if (f.description.trim()) flagDetails[name] = f.description.trim();
+    const entry = {};
+    if (f.abbr.trim()) entry.abbr = f.abbr.trim();
+    if (f.discountType === 'free') entry.discount = { type: 'free' };
+    else if (f.discountType && Number(f.discountValue) > 0) {
+      entry.discount = { type: f.discountType, value: f.discountType === 'amount' ? Math.round(Number(f.discountValue) * 100) : Math.round(Number(f.discountValue)) };
+    }
+    if (Object.keys(entry).length) flagSettings[name] = entry;
     if (f.original && f.original !== name) flagRenames[f.original] = name;
   }
-  return { flags: rows.map((f) => f.name.trim()), flagDetails, flagRenames };
+  return { flags: rows.map((f) => f.name.trim()), flagDetails, flagSettings, flagRenames };
 }
 
 renderFlagRows();
@@ -885,7 +901,14 @@ function startEdit(eventData) {
   form.elements.paymentsOpen.checked = Boolean(eventData.payments_open);
   setEventColor(eventData.color);
   form.elements.lowSeatsFrom.value = eventData.low_seats_from ?? '';
-  flagRows = (eventData.flags ?? []).map((name) => ({ original: name, name, description: (eventData.flag_details ?? {})[name] ?? '' }));
+  flagRows = (eventData.flags ?? []).map((name) => {
+    const s = (eventData.flag_settings ?? {})[name] ?? {};
+    return {
+      original: name, name, description: (eventData.flag_details ?? {})[name] ?? '', abbr: s.abbr ?? '',
+      discountType: s.discount?.type ?? '',
+      discountValue: s.discount?.type === 'amount' ? String(s.discount.value / 100) : s.discount?.value != null ? String(s.discount.value) : '',
+    };
+  });
   renderFlagRows();
   form.elements.directions.value = eventData.directions ?? '';
   form.elements.briefing.value = eventData.briefing ?? '';

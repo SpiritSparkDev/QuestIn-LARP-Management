@@ -21,6 +21,7 @@ import { logAudit } from '../audit/repository.js';
 import { COUNTED_STATUSES, loadCapacity, capacityBlock, withAdded, withRemoved, BLOCK_MESSAGES } from './capacity.js';
 import { assertGuardianRegistered, isChildUser } from './children.js';
 import { checkRegistrationLock, registrationLockReason } from './lock.js';
+import { flagDiscountCents } from '../events/flagSettings.js';
 
 // 'ticket' = a self-service guest ticket bought via the external ticket
 // widget (backend/guestRegistrations/routes.js) -- no character, distinct
@@ -165,6 +166,21 @@ async function resolveNscAvailability(userId, conRole, nscAvailable, nscCharacte
   return { nscAvailable: true, nscCharacterId };
 }
 
+// A changed Sonderrolle moves amount_due by the difference of the role
+// discounts (a manual amount the admin set stays intact), unless the
+// registration is paid or cancelled.
+async function repriceForFlagChange(eventId, userId, event, nextFlags) {
+  const { rows } = await query(
+    'SELECT flags, price_list_cents, amount_due_cents, paid_at, status FROM registrations WHERE event_id = $1 AND user_id = $2',
+    [eventId, userId]
+  );
+  const r = rows[0];
+  if (!r || r.paid_at || r.status === 'cancelled' || r.amount_due_cents == null) return;
+  const delta = flagDiscountCents(event?.flag_settings, r.flags, r.price_list_cents) - flagDiscountCents(event?.flag_settings, nextFlags, r.price_list_cents);
+  if (delta === 0) return;
+  await query('UPDATE registrations SET amount_due_cents = GREATEST(amount_due_cents + $3, 0) WHERE event_id = $1 AND user_id = $2', [eventId, userId, delta]);
+}
+
 // Validates the requested flags against the event's defined vocabulary --
 // role-independent (unlike resolveNscAvailability/the old resolveIsGsc, no
 // con_role gate: a flag like "Ersthelfer" applies regardless of SC/NSC/etc).
@@ -252,8 +268,8 @@ async function assertLodgingCapacity(client, lodging, excludeUserId = null) {
   if (rows[0].taken >= lodging.beds) throw extrasError('LODGING_FULL', `„${lodging.name}“ ist voll.`);
 }
 
-function amountDueFor(priceListCents, addonsCents) {
-  if (priceListCents != null) return priceListCents + addonsCents;
+function amountDueFor(priceListCents, addonsCents, discountCents = 0) {
+  if (priceListCents != null) return priceListCents - discountCents + addonsCents;
   return addonsCents > 0 ? addonsCents : null;
 }
 
@@ -376,7 +392,7 @@ export async function registerForEvent(userId, eventId, conRole, characterId, ns
       // Waitlisted people don't hold a bed (they would take one at promotion).
       const lodging = status === 'waitlisted' ? { lodging: null, lodgingCents: 0, details: null } : requestedLodging;
       await assertLodgingCapacity(client, lodging.lodging);
-      const amountDueCents = amountDueFor(resolvedPrice.priceListCents, extrasCents + lodging.lodgingCents);
+      const amountDueCents = amountDueFor(resolvedPrice.priceListCents, extrasCents + lodging.lodgingCents, flagDiscountCents(event.flag_settings, resolvedFlags, resolvedPrice.priceListCents));
       const { rows } = await client.query(
         `INSERT INTO registrations (user_id, event_id, con_role, character_id, nsc_available, nsc_character_id, flags, price_group, price_tier, price_list_cents, amount_due_cents, registration_data_enc, status, waiver_version_accepted, waiver_accepted_at, extras, extras_cents, lodging_id, lodging_cents, lodging_details, con_payer, pdf_import, deadline_mail_optin, optout_token, nsc_data, waitlisted_by_lock)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $15, $11, $12, $13, $14, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::jsonb, $26)
@@ -614,6 +630,7 @@ export async function setConRole(eventId, userId, conRole, characterId, nscAvail
     }
   }
 
+  await repriceForFlagChange(eventId, userId, event, resolvedFlags);
   const { rows } = await query(
     `UPDATE registrations SET con_role = $3, character_id = $4, nsc_available = $5, nsc_character_id = $6, flags = $7,
        nsc_data = CASE WHEN $3 <> 'nsc' OR $4::uuid IS NOT NULL THEN '{}'::jsonb WHEN $8::boolean THEN $9::jsonb ELSE nsc_data END
@@ -1181,6 +1198,7 @@ export async function updateRegistrationOtFields(eventId, userId, otFields, flag
     nextFlags = resolveFlags(event?.flags ?? [], flags);
   }
 
+  if (nextFlags !== currentRows[0].flags) await repriceForFlagChange(eventId, userId, await getEvent(eventId), nextFlags);
   const { rows } = await query(
     `UPDATE registrations SET registration_data_enc = $3, flags = $4
      WHERE event_id = $1 AND user_id = $2

@@ -3,8 +3,9 @@ import crypto from 'node:crypto';
 import { query } from '../db.js';
 import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js';
 import { logger } from '../logger.js';
+import { normalizeFlagSettings } from './flagSettings.js';
 
-const SELECT_COLUMNS = `id, name, event_date, end_date, code, capacity, hard_capacity, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity, registration_locked_con_roles, registration_locked_groups, registration_lock_mode, low_seats_notice, low_seats_from, payments_open, color, flags, flag_details, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at,
+const SELECT_COLUMNS = `id, name, event_date, end_date, code, capacity, hard_capacity, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity, registration_locked_con_roles, registration_locked_groups, registration_lock_mode, low_seats_notice, low_seats_from, payments_open, color, flags, flag_details, flag_settings, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at,
   (low_seats_notice AND (SELECT count(*) FROM registrations r WHERE r.event_id = events.id AND r.status IN ('pending', 'confirmed', 'checked_in', 'checked_out'))
     BETWEEN COALESCE(low_seats_from, capacity) AND COALESCE(hard_capacity, capacity) - 1) AS low_seats,
   -- "Nur noch wenige Plätze" per role: planned places used up, hard limit not reached yet
@@ -93,12 +94,12 @@ function normalizeText(value) {
   return value.trim() === '' ? null : value;
 }
 
-export async function createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, flagSettings, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   const { rows } = await query(
-    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url, flag_details, end_date, hard_capacity, low_seats_notice, low_seats_from, payments_open, color, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+    `INSERT INTO events (name, event_date, code, capacity, flags, pricing, extras, directions, briefing, address, maps_url, osm_url, flag_details, end_date, hard_capacity, low_seats_notice, low_seats_from, payments_open, color, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity, flag_settings)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
      RETURNING ${SELECT_COLUMNS}`,
-    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), JSON.stringify(normalizeExtras(extras)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl), JSON.stringify(normalizeFlagDetails(flagDetails, flags)), endDate || null, hardCapacity ?? null, Boolean(lowSeatsNotice), lowSeatsFrom ?? null, Boolean(paymentsOpen), normalizeText(color), scCapacity ?? null, scHardCapacity ?? null, nscCapacity ?? null, nscHardCapacity ?? null]
+    [name, eventDate, code ?? null, capacity ?? null, normalizeFlags(flags), JSON.stringify(normalizePricing(pricing)), JSON.stringify(normalizeExtras(extras)), normalizeText(directions), normalizeText(briefing), normalizeText(address), normalizeText(mapsUrl), normalizeText(osmUrl), JSON.stringify(normalizeFlagDetails(flagDetails, flags)), endDate || null, hardCapacity ?? null, Boolean(lowSeatsNotice), lowSeatsFrom ?? null, Boolean(paymentsOpen), normalizeText(color), scCapacity ?? null, scHardCapacity ?? null, nscCapacity ?? null, nscHardCapacity ?? null, JSON.stringify(normalizeFlagSettings(flagSettings, normalizeFlags(flags)))]
   );
   return rows[0];
 }
@@ -137,7 +138,7 @@ export async function listEvents() {
   return rows;
 }
 
-export async function updateEvent(id, { privacyDeletion, endDate, name, eventDate, code, capacity, clearCapacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, flagRenames, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
+export async function updateEvent(id, { privacyDeletion, endDate, name, eventDate, code, capacity, clearCapacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, flagSettings, flagRenames, pricing, extras, directions, briefing, address, mapsUrl, osmUrl }) {
   // code/capacity are the fields a caller can legitimately want to CLEAR
   // (empty string / "unbegrenzt") rather than just omit -- COALESCE alone
   // can't tell those apart, since both arrive as a falsy value. $6/$7
@@ -159,6 +160,14 @@ export async function updateEvent(id, { privacyDeletion, endDate, name, eventDat
       if (carried[from] !== undefined) { carried[to.trim()] = carried[from]; delete carried[from]; }
     }
     nextDetails = JSON.stringify(normalizeFlagDetails(flagDetails ?? carried, flags ?? current.flags));
+  }
+  let nextSettings = null;
+  if (flagSettings !== undefined || flags !== undefined) {
+    const carried = { ...(current.flag_settings ?? {}) };
+    for (const [from, to] of renames) {
+      if (carried[from] !== undefined) { carried[to.trim()] = carried[from]; delete carried[from]; }
+    }
+    nextSettings = JSON.stringify(normalizeFlagSettings(flagSettings ?? carried, normalizeFlags(flags ?? current.flags)));
   }
   const { rows } = await query(
     `UPDATE events SET
@@ -185,7 +194,8 @@ export async function updateEvent(id, { privacyDeletion, endDate, name, eventDat
        sc_capacity = CASE WHEN $33 THEN $34 ELSE sc_capacity END,
        sc_hard_capacity = CASE WHEN $35 THEN $36 ELSE sc_hard_capacity END,
        nsc_capacity = CASE WHEN $37 THEN $38 ELSE nsc_capacity END,
-       nsc_hard_capacity = CASE WHEN $39 THEN $40 ELSE nsc_hard_capacity END
+       nsc_hard_capacity = CASE WHEN $39 THEN $40 ELSE nsc_hard_capacity END,
+       flag_settings = COALESCE($41, flag_settings)
      WHERE id = $1
      RETURNING ${SELECT_COLUMNS}`,
     [
@@ -211,6 +221,7 @@ export async function updateEvent(id, { privacyDeletion, endDate, name, eventDat
       scHardCapacity !== undefined, scHardCapacity ?? null,
       nscCapacity !== undefined, nscCapacity ?? null,
       nscHardCapacity !== undefined, nscHardCapacity ?? null,
+      nextSettings,
     ]
   );
   return rows[0] ?? null;
