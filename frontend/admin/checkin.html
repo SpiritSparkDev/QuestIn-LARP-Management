@@ -872,7 +872,7 @@ async function loadParticipants(eventId) {
 function renderParticipants(participants, eventId) {
   const columns = visibleColumns();
   listBody.innerHTML = applySort(participants).map((p) => `<div class="grid-row${p.userId && p.userId === openRowId ? ' is-open' : ''}" role="row" data-id="${escapeHtml(p.userId ?? p.invitationId ?? '')}" data-search="${escapeHtml(`${p.name} ${p.characters.map((c) => c.name).join(' ')}`.toLowerCase())}">
-    ${columns.map((col) => `<div class="grid-cell ${col.cls ?? ''}">${col.render(p)}</div>`).join('')}
+    ${columns.map((col) => `<div class="grid-cell ${col.cls ?? ''}" data-col="${escapeHtml(col.id)}">${col.render(p)}</div>`).join('')}
     ${renderRowDetail(p, p.userId && p.userId === openRowId)}
   </div>`).join('');
 

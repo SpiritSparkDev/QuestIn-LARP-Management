@@ -5944,3 +5944,31 @@ select.status-select {
 .column-menu-group { display: flex; flex-direction: column; gap: 6px; }
 .column-menu-group:has(.checkbox-group:empty) { display: none; }
 .column-menu-title { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--on-surface-variant); }
+
+/* ---------- Check-in on a phone: one card per person ---------- */
+@media (max-width: 700px) {
+  .toolbar { flex-wrap: wrap; padding: 12px 0; border-bottom: 0; }
+  .toolbar .search { flex: 1 1 100%; min-width: 0; }
+  .column-menu-panel { position: fixed; left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; max-height: 75vh; }
+
+  /* name + role on top, payment + status below, the big actions last */
+  .grid-row:not(.grid-header) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; padding: 14px 16px; }
+  .grid-row:not(.grid-header) .grid-cell { padding: 4px 0; text-align: left; justify-content: flex-start; border: 0; min-width: 0; }
+  .grid-row .grid-cell[data-col]::before { display: none; }
+  .grid-row:not(.grid-header) .grid-cell[data-col="name"] { grid-column: 1; grid-row: 1; font-size: 17px; font-weight: 700; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 0; }
+  .grid-row .grid-cell .sub { margin: 0; }
+  .grid-row:not(.grid-header) .grid-cell[data-col="role"] { grid-column: 2; grid-row: 1; justify-content: flex-end; flex-wrap: wrap; gap: 4px; }
+  .grid-row:not(.grid-header) .grid-cell[data-col="payment"] { grid-column: 1; grid-row: 2; padding-top: 10px; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 3px; }
+  .grid-row:not(.grid-header) .grid-cell[data-col="status"] { grid-column: 2; grid-row: 2; justify-content: flex-end; padding-top: 10px; }
+  .grid-row:not(.grid-header) .grid-cell[data-col="actions"] { grid-column: 1 / -1; grid-row: 3; padding-top: 12px; flex-wrap: nowrap; gap: 8px; }
+  .grid-row:not(.grid-header) .grid-cell[data-col="actions"] button { flex: 1 1 auto; min-height: 46px; font-size: 15px; }
+  .grid-row:not(.grid-header) .grid-cell[data-col="actions"] button.row-toggle { flex: 0 0 52px; }
+  /* any other column the user switched on: label above the value, full width */
+  .grid-row:not(.grid-header) .grid-cell:not([data-col="name"], [data-col="role"], [data-col="payment"], [data-col="status"], [data-col="actions"]) { grid-column: 1 / -1; grid-row: auto; flex-direction: column; align-items: flex-start; gap: 2px; }
+  .grid-row:not(.grid-header) .grid-cell:not([data-col="name"], [data-col="role"], [data-col="payment"], [data-col="status"], [data-col="actions"])::before { display: block; }
+  .grid-row .row-detail { grid-column: 1 / -1; grid-row: 4; margin: 8px -16px -14px; border-radius: 0 0 12px 12px; border-bottom: 0; }
+  .grid-row.is-open .grid-cell { background: none; }
+  .grid-row.is-open { background: var(--surface-container-low); }
+  .detail-grid { grid-template-columns: 1fr 1fr; }
+  .detail-action { flex: 1 1 100%; justify-content: center; min-height: 44px; }
+}
