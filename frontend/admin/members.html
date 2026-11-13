@@ -69,7 +69,7 @@
             <div>
               <select id="member-filter-registration">
                 <option value="">Egal</option>
-                <option value="registered">Angemeldet oder bestätigt (ohne abgesagt)</option>
+                <option value="registered">Angemeldet oder bestätigt (ohne Warteliste und abgesagt)</option>
                 <option value="none">Nicht angemeldet</option>
                 <option value="pending">Angemeldet</option>
                 <option value="confirmed">Bestätigt (bezahlt)</option>
@@ -393,12 +393,12 @@
     }
 
     // Anmeldestatus: for the chosen event, or -- without one -- over all of the person's registrations
-    // ("Angemeldet": any non-cancelled one, "Nicht angemeldet": none at all).
+    // ("Angemeldet oder bestätigt": any that is neither cancelled nor waitlisted, "Nicht angemeldet": none at all).
     function memberMatchesRegistration(m) {
       if (!prefs.registration) return true;
       const regs = shownRegs(m);
       switch (prefs.registration) {
-        case 'registered': return regs.some((r) => r.status !== 'cancelled');
+        case 'registered': return regs.some((r) => !['cancelled', 'waitlisted'].includes(r.status));
         case 'none': return regs.length === 0;
         default: return regs.some((r) => r.status === prefs.registration);
       }
@@ -463,7 +463,7 @@
         if (!memberMatchesParticipation(m)) return false;
         if (!term) return true;
         if (/^#?\d+$/.test(term)) return String(m.memberNumber ?? '') === term.replace('#', '');
-        return [m.name, m.nickname, m.email, m.group?.name, m.managedBy?.name, m.playGroup?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
+        return [m.name, m.firstName, m.lastName, m.nickname, m.email, m.group?.name, m.managedBy?.name, m.playGroup?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
       });
       const direction = prefs.dir === 'desc' ? -1 : 1;
       // Ties fall back to the name so the order is always stable and predictable.
