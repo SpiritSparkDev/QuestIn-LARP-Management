@@ -10,13 +10,24 @@ aktuellen Code prüfen.
 
 ### Zahlungen / Gruppen (v0.80–0.83)
 
-- [ ] **Manueller Browser-Test** des Zahlungsassistenten (Einzel- und
+- [x] **Manueller Browser-Test** des Zahlungsassistenten (Einzel- und
   Gruppenmodus): alle Schritte, Girocode, „Ich habe überwiesen“, Zurück-Button,
-  Rückkehr von Stripe/SumUp/PayPal mit `?payment=success#gruppe`. Bisher nur
-  Syntax-, ID- und Integrationstests, kein Klick-Test.
+  Rückkehr von Stripe/SumUp/PayPal mit `?payment=success#gruppe`.
+  *Erledigt 2026-11-20* (Browser, lokaler Server mit Test-DB, nur Überweisung als
+  Zahlweg): Einzel (Girocode, Weiter/Zurück, „Ich habe überwiesen“) und Gruppe
+  (Personenwahl, Summe, Alle-auswählen, Zurück behält Auswahl, Meldung für alle
+  gewählten Personen) laufen fehlerfrei; Rückkehr mit `?payment=success#gruppe`
+  zeigt den Dank-Hinweis und bereinigt die URL. Kleiner Schönheitsfehler: im
+  Gruppenmodus springt die Schrittzahl im Titel von „1 von 2“ auf „2 von 3“, weil
+  die späteren Schritte erst nach der Personenwahl feststehen. Nicht getestet: die
+  Anbieter-Buttons selbst (siehe nächster Punkt).
 - [ ] **Sammelzahlung bei einem echten Anbieter** (Testzugänge) auslösen und
   prüfen, dass alle Personen als bezahlt erscheinen: Stripe (Karte und
   Stripe-Überweisung), SumUp, PayPal direkt, PayPal-Buttons. Bisher nur mit Mocks.
+  *Offen, braucht den Nutzer:* Stripe-Testschlüssel (`sk_test_…`, `pk_test_…`) plus
+  Webhook-Secret (`stripe listen` / Testendpunkt), SumUp-Sandbox-Zugang, PayPal-
+  Sandbox-App (Client-ID und Secret, Sandbox-Käuferkonto). Im Projekt sind keine
+  vorhanden; die `.env` enthält nur Mail- und Discord-Daten.
 - [x] **Überzahlung bei Sammelzahlung:** Hat eine Person zwischen Start und
   Eingang der Zahlung schon anders bezahlt, wird sie übersprungen und nur
   geloggt (`recordGroupPayment`). Es gibt keine automatische Rückerstattung und
@@ -60,8 +71,15 @@ aktuellen Code prüfen.
   Umbruch ein Leerzeichen mitten ins Wort setzt (Wortgrenzen bleiben erhalten);
   übersprungene Buchungen zeigen Namen statt IDs. Fixtures
   `tests/fixtures/bank/mt940*.sta`, Tests `bankParse`, `bankMatch`, `bankReconcile`.
-- [ ] **Kontoabgleich-Seite** (`bank-reconcile.html`) nur per Syntaxcheck geprüft,
+- [x] **Kontoabgleich-Seite** (`bank-reconcile.html`) nur per Syntaxcheck geprüft,
   kein Browser-Test. Nur manuell prüfbar.
+  *Erledigt 2026-11-20* (Browser, Admin, Test-DB): CSV und MT940 hochladen, Vorschau
+  (Zugeordnet / Betrag weicht ab / Nicht zugeordnet, Gruppen-Zuordnung mit Namen),
+  Buchen mit Rückfrage für Einzel und Gruppe (3 Anmeldungen gebucht), Neuprüfung
+  danach, HTML im Absender wird maskiert, Handy-Ansicht ohne Querscroll. Fehler
+  behoben: Dateiauswahl erlaubte `.sta`/`.mt940` nicht (`accept`). Beobachtung, keine
+  Änderung: ein bereits gebuchter Eingang erscheint bei erneutem Hochladen als
+  „Nicht zugeordnet“ bzw. „Betrag weicht ab“ statt „bereits bezahlt“.
 - [ ] **Test-Container `db-test`** (docker-compose.dev.yml) läuft nach
   Testläufen weiter; bei Bedarf stoppen.
 
