@@ -1,0 +1,135 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import { withTestServer } from '../testServer.js';
+
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
+  || 'postgres://app:app@localhost:5433/pakyrion_test';
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a'.repeat(64);
+delete process.env.SMTP_HOST;
+delete process.env.APP_MODE;
+
+const { runMigrations } = await import('../../db/migrate.js');
+await runMigrations();
+const { seedGroups } = await import('../../db/seedGroups.js');
+await seedGroups();
+const { query, closePool } = await import('../../backend/db.js');
+const { refreshHubDirectory, sanitizeDirectory } = await import('../../backend/hubDirectory/client.js');
+
+after(() => closePool());
+
+async function makeUserAndSession(groupKey) {
+  const { rows } = await query(
+    "INSERT INTO users (email, first_name, last_name, group_id, email_verified) VALUES ($1, 'Hub', 'Test', (SELECT id FROM groups WHERE key = $2), true) RETURNING id",
+    [`hub-${groupKey}-${crypto.randomUUID()}@example.com`, groupKey]
+  );
+  const { createSession } = await import('../../backend/auth/sessions.js');
+  const session = await createSession(rows[0].id);
+  return `session=${session.token}`;
+}
+
+const fakeFetch = (handler) => async (url, init) => {
+  const { status = 200, body = '' } = await handler(url, init);
+  return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+};
+
+test('only published, non-test, not ended, upcoming events appear in the public feed', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const tag = crypto.randomUUID().slice(0, 8);
+    const create = async (name, eventDate, extra = {}) => {
+      const res = await fetch(`http://localhost:${port}/events`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: admin },
+        body: JSON.stringify({ name: `${name} ${tag}`, eventDate, color: '#aa5500', ...extra }),
+      });
+      assert.equal(res.status, 201);
+      return res.json();
+    };
+    const published = await create('Veröffentlicht', '2099-05-01', { directoryPublished: true, endDate: '2099-05-03', address: 'Geheimer Hof 1' });
+    assert.equal(published.directory_published, true);
+    await create('Nicht veröffentlicht', '2099-05-02');
+    await create('Vergangen', '2000-01-01', { directoryPublished: true });
+    const test = await create('Testevent', '2099-05-04', { directoryPublished: true });
+    await query('UPDATE events SET is_test = true WHERE id = $1', [test.id]);
+    const ended = await create('Beendet', '2099-05-05', { directoryPublished: true });
+    await query('UPDATE events SET ended_at = now() WHERE id = $1', [ended.id]);
+
+    const bad = await fetch(`http://localhost:${port}/events/${published.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin }, body: JSON.stringify({ directoryPublished: 'ja' }),
+    });
+    assert.equal(bad.status, 400);
+
+    const res = await fetch(`http://localhost:${port}/public/directory/events.json`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('access-control-allow-origin'), '*');
+    const feed = await res.json();
+    assert.equal(feed.version, 1);
+    const mine = feed.events.filter((e) => e.name.endsWith(tag));
+    assert.deepEqual(mine.map((e) => e.name), [`Veröffentlicht ${tag}`]);
+    assert.equal(mine[0].endDate, '2099-05-03');
+    assert.equal(mine[0].color, '#aa5500');
+    assert.equal(mine[0].location, null, 'address must not be published');
+    assert.match(mine[0].url, /^https?:\/\/[^/]+\/$/);
+
+    // Unpublishing removes it again.
+    const put = await fetch(`http://localhost:${port}/events/${published.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: admin }, body: JSON.stringify({ directoryPublished: false }),
+    });
+    assert.equal(put.status, 200);
+    assert.equal((await put.json()).directory_published, false);
+    const after = await (await fetch(`http://localhost:${port}/public/directory/events.json`)).json();
+    assert.equal(after.events.filter((e) => e.name.endsWith(tag)).length, 0);
+  });
+});
+
+test('sanitizeDirectory drops own and malformed events', () => {
+  const events = sanitizeDirectory({ version: 1, events: [
+    { org: 'Orga B', name: 'Con', startDate: '2099-01-01', url: 'https://b.questin.de/', color: '#123456' },
+    { org: 'Wir', name: 'Eigene', startDate: '2099-01-01', url: 'https://a.questin.de/' },
+    { org: 'X', name: 'Böse', startDate: '2099-01-01', url: 'javascript:alert(1)' },
+    { org: 'X', name: 'Ohne Datum', url: 'https://x.example/' },
+    { org: 'X', name: 'Farbe', startDate: '2099-01-01', url: 'https://x.example/', color: 'red;background:url(x)' },
+  ] }, 'https://a.questin.de');
+  assert.deepEqual(events.map((e) => e.name), ['Con', 'Farbe']);
+  assert.equal(events[1].color, null);
+  assert.throws(() => sanitizeDirectory({ version: 2, events: [] }, null));
+});
+
+test('hub directory is cached, kept on errors and only shown when HUB_URL is set', async () => {
+  await withTestServer(async (port) => {
+    const member = await makeUserAndSession('mitglied');
+    const get = async () => (await fetch(`http://localhost:${port}/hub-directory`, { headers: { Cookie: member } })).json();
+
+    delete process.env.HUB_URL;
+    assert.deepEqual(await get(), { enabled: false, events: [] });
+    assert.deepEqual(await refreshHubDirectory(), { skipped: true });
+
+    process.env.HUB_URL = 'https://questin.de';
+    try {
+      let calledUrl;
+      const ok = await refreshHubDirectory(fakeFetch((url) => {
+        calledUrl = url;
+        return { body: { version: 1, events: [
+          { org: 'Orga B', name: 'Zukunft', startDate: '2099-03-01', url: 'https://b.questin.de/' },
+          { org: 'Orga B', name: 'Vorbei', startDate: '2000-03-01', url: 'https://b.questin.de/' },
+        ] } };
+      }));
+      assert.equal(calledUrl, 'https://questin.de/directory.json');
+      assert.deepEqual(ok, { ok: true, count: 2 });
+      let data = await get();
+      assert.equal(data.enabled, true);
+      assert.deepEqual(data.events.map((e) => e.name), ['Zukunft'], 'past events are filtered when read');
+      assert.ok(data.updatedAt);
+
+      const failed = await refreshHubDirectory(fakeFetch(() => ({ status: 502 })));
+      assert.equal(failed.ok, false);
+      data = await get();
+      assert.deepEqual(data.events.map((e) => e.name), ['Zukunft'], 'last good state is kept');
+
+      const anon = await fetch(`http://localhost:${port}/hub-directory`);
+      assert.equal(anon.status, 401);
+    } finally {
+      delete process.env.HUB_URL;
+    }
+  });
+});
