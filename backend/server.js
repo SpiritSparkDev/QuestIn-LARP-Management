@@ -65,6 +65,7 @@ import './emailTemplates/routes.js';
 import './pdfImport/routes.js';
 import './tavern/routes.js';
 import './testMode/routes.js';
+import './instanceReset/routes.js';
 import './audit/routes.js';
 import './appModeRoutes.js';
 import './offlineRoutes.js';

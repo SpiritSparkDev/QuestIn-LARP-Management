@@ -141,6 +141,33 @@
       </div>
     </form>
 
+    <form id="reset-form" class="card form-pad" hidden>
+      <h2>Instanz zurücksetzen</h2>
+      <p class="sub"><strong>Löscht unwiderruflich alle Konten außer deinem und alle Daten:</strong> Events, Anmeldungen, Charaktere, Gruppen, Zahlungen, Taverne, Unterkünfte, Mailings, hochgeladene Dateien, E-Mail- und Änderungsprotokoll. Nur der Admin aus <code>ADMINUSER</code> sieht diesen Bereich.</p>
+      <p class="sub" id="reset-counts"></p>
+
+      <h3>1. Vorher sichern</h3>
+      <p class="sub"><strong>Aufbewahrungspflicht:</strong> Zahlungs- und Buchungsbelege müssen in der Regel mehrere Jahre aufbewahrt werden (Handels- und Steuerrecht). Nach dem Zurücksetzen sind sie in QuestIn nicht mehr vorhanden. <strong>Datensicherheit:</strong> Die Sicherung enthält personenbezogene Daten. Bewahre die Datei geschützt auf, das Passwort getrennt davon, und lösche sie, sobald die Aufbewahrungsfrist abgelaufen ist.</p>
+      <input id="reset-backup-passphrase" type="password" minlength="8" autocomplete="new-password">
+      <label for="reset-backup-passphrase">Passwort für die Sicherungsdatei (mind. 8 Zeichen)</label>
+      <button type="button" id="reset-backup" class="btn-ghost">Komplette Sicherung herunterladen</button>
+      <p class="sub" id="reset-backup-status"></p>
+
+      <h3>2. Bestätigen</h3>
+      <label><input type="checkbox" id="reset-settings"> Auch alle Einstellungen auf den Auslieferungszustand setzen (Formulare, Rollen, E-Mail-Vorlagen, Branding, SMTP-, Zahlungs-, Speicher- und Backup-Zugänge)</label>
+      <p class="sub">Zur Bestätigung tippe den Instanznamen <code id="reset-name"></code> ein.</p>
+      <input id="reset-confirm" type="text" autocomplete="off" spellcheck="false" required>
+      <label for="reset-confirm">Instanzname</label>
+      <input id="reset-password" type="password" autocomplete="current-password" required>
+      <label for="reset-password">Dein Passwort</label>
+      <label class="switch-row"><input type="checkbox" class="switch" id="reset-unlock"> Löschen freigeben</label>
+
+      <div class="save-bar">
+        <button type="submit" id="reset-submit" class="btn-danger" disabled>Wirklich löschen</button>
+        <button type="button" id="reset-cancel" hidden>Löschen abbrechen</button>
+      </div>
+    </form>
+
     <div class="card form-pad">
       <h2>Letzte Vorgänge</h2>
       <div class="table-scroll"><table id="backup-history"><thead><tr><th>Zeitpunkt</th><th>Wer</th><th>Vorgang</th></tr></thead><tbody></tbody></table></div>
