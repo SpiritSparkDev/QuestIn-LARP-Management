@@ -29,9 +29,6 @@
         <div class="divider-word" id="oauth-divider">oder anmelden mit</div>
         <div class="oauth-row" id="oauth-row">
           <a href="/auth/oauth/hub/start" data-provider="hub" id="hub-login">Mit QuestIn anmelden</a>
-          <a href="/auth/oauth/google/start" data-provider="google">Google</a>
-          <a href="/auth/oauth/facebook/start" data-provider="facebook">Facebook</a>
-          <a href="/auth/oauth/discord/start" data-provider="discord">Discord</a>
         </div>
       </section>
       <section class="login-pane" id="guest-pane" hidden>
@@ -100,6 +97,7 @@ const OAUTH_ERRORS = {
   deactivated: 'Dieses Konto wurde deaktiviert.',
   hub_failed: 'Die Anmeldung mit QuestIn hat nicht geklappt. Bitte versuche es noch einmal.',
   hub_email_unverified: 'Bitte bestätige zuerst deine E-Mail-Adresse bei QuestIn.',
+  social_disabled: 'Die Anmeldung mit Google, Facebook und Discord gibt es nicht mehr. Bitte melde dich mit E-Mail und Passwort an. Noch kein Passwort? Gib deine E-Mail ein und klicke auf „Passwort vergessen?“.',
   hub_other_account: 'Dein Konto hier ist schon mit einem anderen QuestIn-Konto verbunden. Bitte wende dich an die Orga.',
 };
 if (OAUTH_ERRORS[query.get('oauth_error')]) notify(OAUTH_ERRORS[query.get('oauth_error')], 'error');

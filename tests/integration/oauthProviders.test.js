@@ -21,13 +21,13 @@ await seedGroups();
 
 const { closePool } = await import('../../backend/db.js');
 
-test('GET /auth/oauth/providers reports which providers are configured, without leaking secrets', async () => {
+test('GET /auth/oauth/providers reports the social providers as unavailable (D6), without leaking secrets', async () => {
   await withTestServer(async (port) => {
     const res = await fetch(`http://localhost:${port}/auth/oauth/providers`);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.equal(body.google, true);
-    assert.equal(body.facebook, false, 'facebook has only a client id, no secret — must still report unconfigured');
+    assert.equal(body.google, false, 'google is configured but switched off (D6)');
+    assert.equal(body.facebook, false);
     assert.equal(body.discord, false);
     assert.ok(!JSON.stringify(body).includes('test-google-client-id'));
     assert.ok(!JSON.stringify(body).includes('test-google-client-secret'));
