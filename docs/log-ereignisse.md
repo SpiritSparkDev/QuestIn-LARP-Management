@@ -37,6 +37,7 @@ Protokolliert werden Ereignisse, die jemand später nachvollziehen will (Anlegen
 | `backup.created` | Backup erstellt (manuell, auch Download; `details.scheduled: true` = Zeitplan-Backup, ohne Akteur) |
 | `backup.settings_changed` | Backup-Ziele/Zeitplan gespeichert (ohne Werte) |
 | `backup.restored` | Backup eingespielt |
+| `instance.reset` | Instanz zurückgesetzt (einziger Eintrag danach; `details.includeSettings`, `details.counts` = was gelöscht wurde) |
 | weitere | `offline_*`, `sync_conflict_resolved`, `privacy.deletion`, `managed_person.*`, `event.mailing`, `character.group_field_changed`, `character.deleted_with_registrations`, `group_tree.account_fields_changed`, `group_tree.view_characters` |
 
 ## Vorschläge für weitere Ereignisse (noch nicht eingebaut)
