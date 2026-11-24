@@ -22,15 +22,24 @@ function redirectUri(providerName) {
   return `${base}/auth/oauth/${providerName}/callback`;
 }
 
+// D6 (Föderationsplan): Google, Facebook und Discord sind als Login
+// abgeschaltet, auch wenn Client-IDs in der Umgebung stehen. Vorhandene
+// Einträge in oauth_accounts bleiben; diese Konten kommen über
+// „Passwort vergessen“ zu einem Passwort. Social-Login kommt ggf. später
+// zentral über den QuestIn-Hub zurück.
+const disabledSocialLogin = (providerName) => (Object.hasOwn(PROVIDERS, providerName)
+  ? { status: 302, body: {}, headers: { Location: '/login.html?oauth_error=social_disabled' } }
+  : null);
+
 router.get('/auth/oauth/providers', async () => {
   const available = {};
-  for (const [key, provider] of Object.entries(PROVIDERS)) {
-    available[key] = Boolean(provider.clientId() && provider.clientSecret());
-  }
+  for (const key of Object.keys(PROVIDERS)) available[key] = false;
   return { status: 200, body: available };
 });
 
 router.get('/auth/oauth/:provider/start', rateLimit(OAUTH_START_RATE_LIMIT)(async ({ params }) => {
+  const disabled = disabledSocialLogin(params.provider);
+  if (disabled) return disabled;
   const provider = Object.hasOwn(PROVIDERS, params.provider) ? PROVIDERS[params.provider] : undefined;
   if (!provider) return { status: 404, body: { error: 'unknown provider' } };
 
@@ -58,6 +67,8 @@ router.get('/auth/oauth/:provider/start', rateLimit(OAUTH_START_RATE_LIMIT)(asyn
 }));
 
 router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
+  const disabled = disabledSocialLogin(params.provider);
+  if (disabled) return disabled;
   const provider = Object.hasOwn(PROVIDERS, params.provider) ? PROVIDERS[params.provider] : undefined;
   if (!provider) return { status: 404, body: { error: 'unknown provider' } };
 

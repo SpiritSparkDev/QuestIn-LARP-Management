@@ -27,11 +27,7 @@
         </form>
         <p><a href="#" id="forgot-link">Passwort vergessen?</a></p>
         <div class="divider-word" id="oauth-divider">oder anmelden mit</div>
-        <div class="oauth-row" id="oauth-row">
-          <a href="/auth/oauth/google/start" data-provider="google">Google</a>
-          <a href="/auth/oauth/facebook/start" data-provider="facebook">Facebook</a>
-          <a href="/auth/oauth/discord/start" data-provider="discord">Discord</a>
-        </div>
+        <div class="oauth-row" id="oauth-row"></div>
       </section>
       <section class="login-pane" id="guest-pane" hidden>
         <h2>Ohne Konto</h2>
@@ -89,8 +85,11 @@ const form = document.getElementById('login-form');
   }
 })();
 
-if (new URLSearchParams(window.location.search).get('oauth_error') === 'denied') {
+const oauthError = new URLSearchParams(window.location.search).get('oauth_error');
+if (oauthError === 'denied') {
   notify('Anmeldung abgebrochen.', 'error');
+} else if (oauthError === 'social_disabled') {
+  notify('Die Anmeldung mit Google, Facebook und Discord gibt es nicht mehr. Bitte melde dich mit E-Mail und Passwort an. Noch kein Passwort? Gib deine E-Mail ein und klicke auf „Passwort vergessen?“.', 'error');
 }
 
 form.addEventListener('submit', async (event) => {

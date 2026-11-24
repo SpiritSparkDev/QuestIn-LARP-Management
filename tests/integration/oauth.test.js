@@ -25,18 +25,18 @@ const { resetRateLimits } = await import('../../backend/middleware/rateLimit.js'
 
 test.beforeEach(resetRateLimits);
 
-test('GET /auth/oauth/google/start redirects to Google with a state cookie', async () => {
-  await withTestServer(async (port) => {
-    const res = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
-    assert.equal(res.status, 302);
-    const location = new URL(res.headers.get('location'));
-    assert.equal(location.origin + location.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
-    assert.equal(location.searchParams.get('client_id'), 'test-google-client-id');
-    assert.ok(location.searchParams.get('state'));
-    const setCookie = res.headers.get('set-cookie');
-    assert.ok(setCookie.includes('oauth_state_google='));
+// D6: Google, Facebook und Discord sind als Login abgeschaltet, obwohl hier
+// Client-IDs gesetzt sind. Start und Callback leiten mit Hinweis zum Login.
+for (const provider of ['google', 'facebook', 'discord']) {
+  test(`GET /auth/oauth/${provider}/start is disabled (D6) and redirects to the login hint`, async () => {
+    await withTestServer(async (port) => {
+      const res = await fetch(`http://localhost:${port}/auth/oauth/${provider}/start`, { redirect: 'manual' });
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.get('location'), '/login.html?oauth_error=social_disabled');
+      assert.equal(res.headers.get('set-cookie'), null, 'no state cookie, no provider round trip');
+    });
   });
-});
+}
 
 test('GET /auth/oauth/unknown/start returns 404', async () => {
   await withTestServer(async (port) => {
@@ -45,28 +45,22 @@ test('GET /auth/oauth/unknown/start returns 404', async () => {
   });
 });
 
-test('callback rejects a missing or mismatched state', async () => {
+test('callback of a disabled provider never contacts the provider and creates no session', async (t) => {
   await withTestServer(async (port) => {
+    const originalFetch = globalThis.fetch;
+    const contacted = [];
+    t.mock.method(globalThis, 'fetch', async (url, options) => {
+      if (!String(url).startsWith(`http://localhost:${port}`)) contacted.push(String(url));
+      return originalFetch(url, options);
+    });
     const res = await fetch(
-      `http://localhost:${port}/auth/oauth/google/callback?code=abc&state=does-not-match`,
-      { headers: { Cookie: 'oauth_state_google=something-else' } }
-    );
-    assert.equal(res.status, 400);
-  });
-});
-
-test('callback with access_denied redirects to login instead of erroring', async () => {
-  await withTestServer(async (port) => {
-    const startRes = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
-    const state = new URL(startRes.headers.get('location')).searchParams.get('state');
-    const stateCookie = startRes.headers.get('set-cookie').split(';')[0];
-
-    const res = await fetch(
-      `http://localhost:${port}/auth/oauth/google/callback?error=access_denied&state=${state}`,
-      { headers: { Cookie: stateCookie }, redirect: 'manual' }
+      `http://localhost:${port}/auth/oauth/google/callback?code=fake-code&state=s`,
+      { headers: { Cookie: 'oauth_state_google=s' }, redirect: 'manual' }
     );
     assert.equal(res.status, 302);
-    assert.ok(res.headers.get('location').startsWith('/login.html'));
+    assert.equal(res.headers.get('location'), '/login.html?oauth_error=social_disabled');
+    assert.equal(res.headers.get('set-cookie'), null);
+    assert.deepEqual(contacted, []);
   });
 });
 
@@ -163,54 +157,6 @@ test('findOrCreateOAuthUser rejects linking a new provider to a deactivated exis
   );
 });
 
-test('callback with mocked provider responses creates a session and redirects', async (t) => {
-  await withTestServer(async (port) => {
-    const startRes = await fetch(`http://localhost:${port}/auth/oauth/google/start`, { redirect: 'manual' });
-    const state = new URL(startRes.headers.get('location')).searchParams.get('state');
-    const stateCookie = startRes.headers.get('set-cookie').split(';')[0];
-
-    const providerEmail = `oauth-callback-${crypto.randomUUID()}@example.com`;
-    let capturedTokenRequestBody;
-    const originalFetch = globalThis.fetch;
-    t.mock.method(globalThis, 'fetch', async (url, options) => {
-      const href = String(url);
-      if (href.startsWith('https://oauth2.googleapis.com/token')) {
-        capturedTokenRequestBody = options.body;
-        return new Response(JSON.stringify({ access_token: 'fake-access-token' }), { status: 200 });
-      }
-      if (href.startsWith('https://www.googleapis.com/oauth2/v3/userinfo')) {
-        return new Response(
-          JSON.stringify({
-            sub: `google-${crypto.randomUUID()}`,
-            email: providerEmail,
-            name: 'Callback User',
-            email_verified: true,
-          }),
-          { status: 200 }
-        );
-      }
-      return originalFetch(url, options);
-    });
-
-    const callbackRes = await fetch(
-      `http://localhost:${port}/auth/oauth/google/callback?code=fake-code&state=${state}`,
-      { headers: { Cookie: stateCookie }, redirect: 'manual' }
-    );
-    assert.equal(callbackRes.status, 302);
-    assert.equal(callbackRes.headers.get('location'), '/account.html');
-    const setCookieHeader = callbackRes.headers.get('set-cookie');
-    assert.ok(setCookieHeader.includes('session='));
-
-    const { rows } = await query('SELECT id FROM users WHERE email = $1', [providerEmail]);
-    assert.equal(rows.length, 1);
-
-    assert.ok(capturedTokenRequestBody instanceof URLSearchParams);
-    assert.equal(capturedTokenRequestBody.get('code'), 'fake-code');
-    assert.equal(capturedTokenRequestBody.get('redirect_uri'), 'http://localhost:3000/auth/oauth/google/callback');
-    assert.equal(capturedTokenRequestBody.get('grant_type'), 'authorization_code');
-    assert.equal(capturedTokenRequestBody.get('client_id'), 'test-google-client-id');
-  });
-});
 
 test('PROVIDERS.facebook.extractUser always reports emailVerified: false', () => {
   const result = PROVIDERS.facebook.extractUser({ id: 'fb-1', email: 'a@example.com', name: 'A' });
@@ -265,6 +211,31 @@ test('GET /auth/oauth/:provider/start is rate-limited per IP after 10 attempts i
   } finally {
     server.close();
   }
+});
+
+test('an account that only had a Google login gets back in via "Passwort vergessen" (D6)', async () => {
+  const email = `oauth-only-${crypto.randomUUID()}@example.com`;
+  const userId = await findOrCreateOAuthUser('google', `google-${crypto.randomUUID()}`, email, 'Nur Google', true);
+  await withTestServer(async (port) => {
+    const request = await fetch(`http://localhost:${port}/auth/password-reset/request`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+    });
+    assert.equal(request.status, 200);
+    // The mail carries the user's access token (reset-password.html?token=...).
+    const { rows } = await query('SELECT access_token FROM users WHERE id = $1', [userId]);
+    const confirm = await fetch(`http://localhost:${port}/auth/password-reset/confirm`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: rows[0].access_token, password: 'neues-passwort-123' }),
+    });
+    assert.equal(confirm.status, 200);
+    const login = await fetch(`http://localhost:${port}/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'neues-passwort-123' }),
+    });
+    assert.equal(login.status, 200);
+    const link = await query("SELECT 1 FROM oauth_accounts WHERE user_id = $1 AND provider = 'google'", [userId]);
+    assert.equal(link.rows.length, 1, 'existing oauth_accounts link is kept');
+  });
 });
 
 test.after(async () => {
