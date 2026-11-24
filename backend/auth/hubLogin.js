@@ -145,14 +145,39 @@ async function fetchHubIdentity(config, code, verifier, nonce) {
   };
 }
 
+// Befund 7: die bestätigte Hub-E-Mail ist führend. Lokal übernehmen, wenn sie
+// frei ist; gehört sie schon einem anderen lokalen Konto, nichts ändern, nur
+// protokollieren (Audit-Log, für Admins sichtbar).
+async function adoptHubEmail(userId, oldEmail, newEmail) {
+  try {
+    const { rowCount } = await query(
+      `UPDATE users SET email = $2, email_verified = true
+       WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM users WHERE email = $2 AND id <> $1)`,
+      [userId, newEmail]
+    );
+    if (rowCount > 0) {
+      await logAudit({ actorId: userId, action: 'hub.email_updated', subjectUserId: userId, details: { from: oldEmail, to: newEmail } });
+      return;
+    }
+  } catch (err) {
+    if (err.code !== '23505') throw err;
+  }
+  logger.warn('hub email already used by another local account, not changed', { userId });
+  await logAudit({ actorId: userId, action: 'hub.email_conflict', subjectUserId: userId, details: { local: oldEmail, hub: newEmail } });
+}
+
 // → { userId } | { linkUserId } | { error }
 async function resolveHubUser({ sub, email, emailVerified, givenName, familyName, name }) {
   const known = await query(
-    `SELECT o.user_id, u.deactivated_at FROM oauth_accounts o JOIN users u ON u.id = o.user_id
+    `SELECT o.user_id, u.deactivated_at, u.email FROM oauth_accounts o JOIN users u ON u.id = o.user_id
      WHERE o.provider = 'hub' AND o.provider_user_id = $1`,
     [sub]
   );
-  if (known.rows[0]) return known.rows[0].deactivated_at ? { error: 'deactivated' } : { userId: known.rows[0].user_id };
+  if (known.rows[0]) {
+    if (known.rows[0].deactivated_at) return { error: 'deactivated' };
+    if (email && emailVerified && email !== known.rows[0].email) await adoptHubEmail(known.rows[0].user_id, known.rows[0].email, email);
+    return { userId: known.rows[0].user_id };
+  }
 
   if (!email || !emailVerified) return { error: 'hub_email_unverified' };
 

@@ -204,6 +204,51 @@ test('bekannte sub meldet dasselbe Konto an, auch wenn sich die E-Mail am Hub ge
   });
 });
 
+const userIdOfSub = async (sub) => (await query(
+  "SELECT user_id FROM oauth_accounts WHERE provider = 'hub' AND provider_user_id = $1", [sub]
+)).rows[0].user_id;
+
+test('E-Mail-Regel: geänderte, bestätigte Hub-E-Mail wird lokal übernommen, wenn frei', async () => {
+  await withTestServer(async (port) => {
+    const sub = newSub();
+    const oldEmail = newEmail();
+    const changed = newEmail();
+    await hubLogin(port, { sub, email: oldEmail });
+    const { jar } = await hubLogin(port, { sub, email: changed.toUpperCase() });
+    assert.ok(await isLoggedIn(port, jar));
+    const userId = await userIdOfSub(sub);
+    assert.equal((await query('SELECT email FROM users WHERE id = $1', [userId])).rows[0].email, changed);
+    const audit = await query("SELECT details FROM audit_log WHERE action = 'hub.email_updated' AND subject_user_id = $1", [userId]);
+    assert.deepEqual(audit.rows[0].details, { from: oldEmail, to: changed });
+  });
+});
+
+test('E-Mail-Regel: Hub-E-Mail schon von anderem lokalen Konto belegt → nichts ändern, protokollieren', async () => {
+  await withTestServer(async (port) => {
+    const sub = newSub();
+    const ownEmail = newEmail();
+    const other = await createLocalUser();
+    await hubLogin(port, { sub, email: ownEmail });
+    const { jar } = await hubLogin(port, { sub, email: other.email });
+    assert.ok(await isLoggedIn(port, jar), 'Login klappt trotzdem');
+    const userId = await userIdOfSub(sub);
+    assert.equal((await query('SELECT email FROM users WHERE id = $1', [userId])).rows[0].email, ownEmail);
+    assert.equal((await query('SELECT email FROM users WHERE id = $1', [other.id])).rows[0].email, other.email);
+    const audit = await query("SELECT details FROM audit_log WHERE action = 'hub.email_conflict' AND subject_user_id = $1", [userId]);
+    assert.deepEqual(audit.rows[0].details, { local: ownEmail, hub: other.email });
+  });
+});
+
+test('E-Mail-Regel: unbestätigte Hub-E-Mail wird nicht übernommen', async () => {
+  await withTestServer(async (port) => {
+    const sub = newSub();
+    const ownEmail = newEmail();
+    await hubLogin(port, { sub, email: ownEmail });
+    await hubLogin(port, { sub, email: newEmail(), email_verified: false });
+    assert.equal((await query('SELECT email FROM users WHERE id = $1', [await userIdOfSub(sub)])).rows[0].email, ownEmail);
+  });
+});
+
 test('gleiche E-Mail wie lokales Konto: keine automatische Verknüpfung, Bestätigungsseite', async () => {
   await withTestServer(async (port) => {
     const local = await createLocalUser();

@@ -40,6 +40,9 @@ im Konto-Bereich erscheint die Karte „QuestIn-Konto aktivieren“.
     `/hub-link.html`: lokales Passwort als Nachweis, ohne lokales Passwort ein Mail-Link.
     Die Anfrage gilt 15 Minuten und nur einmal (`hub_link_requests`).
   - lokales Konto schon mit einem anderen Hub-Konto verbunden, oder deaktiviert → Ablehnung.
+- E-Mail: die bestätigte Hub-E-Mail ist führend. Weicht sie beim Login von der lokalen ab, wird sie
+  übernommen, wenn kein anderes lokales Konto sie hat (`hub.email_updated`); sonst bleibt alles,
+  wie es ist, und das Audit-Log bekommt `hub.email_conflict` (Admin klärt, z. B. per Zusammenführen).
 - `/auth/oauth/hub/start?returnTo=/pfad` springt nach dem Login dorthin (nur relative Pfade).
 - Opt-in im Konto-Bereich: überträgt E-Mail, Passwort-Hash, Namen, Spitzname und Bestätigungsstatus
   an `POST /api/v1/accounts/import` des Hubs und verknüpft das Konto. Das lokale Passwort bleibt
