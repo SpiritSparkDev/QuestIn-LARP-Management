@@ -125,6 +125,7 @@
           </div>
         </div>
         <label><input type="checkbox" id="event-payments-open" name="paymentsOpen"> Zahlungen freigeben <span style="opacity:0.6;font-size:12px;">Teilnehmer sehen erst dann „Jetzt bezahlen“</span></label>
+        <label><input type="checkbox" id="event-directory-published" name="directoryPublished"> Im QuestIn-Verzeichnis veröffentlichen <span style="opacity:0.6;font-size:12px;">Name, Datum und Farbe erscheinen bei anderen Orgas, die an questin.de angedockt sind. Testevents und beendete Events nie.</span></label>
         <h3 class="event-form-section">Sonderrollen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Besondere Rollen eines Events, z. B. GSC, VP oder Ersthelfer. Teilnehmer sehen sie bei der Anmeldung als Karten mit deiner Kurzbeschreibung und können mehrere wählen.</p>
         <div id="flag-list"></div>
@@ -899,6 +900,7 @@ function startEdit(eventData) {
   form.elements.nscHardCapacity.value = eventData.nsc_hard_capacity ?? '';
   form.elements.lowSeatsNotice.checked = Boolean(eventData.low_seats_notice);
   form.elements.paymentsOpen.checked = Boolean(eventData.payments_open);
+  form.elements.directoryPublished.checked = Boolean(eventData.directory_published);
   setEventColor(eventData.color);
   form.elements.lowSeatsFrom.value = eventData.low_seats_from ?? '';
   flagRows = (eventData.flags ?? []).map((name) => {
@@ -989,6 +991,7 @@ form.addEventListener('submit', async (event) => {
     nscHardCapacity: form.elements.nscHardCapacity.value ? Number(form.elements.nscHardCapacity.value) : null,
     lowSeatsNotice: form.elements.lowSeatsNotice.checked,
     paymentsOpen: form.elements.paymentsOpen.checked,
+    directoryPublished: form.elements.directoryPublished.checked,
     color: eventColorSet ? form.elements.color.value : null,
     lowSeatsFrom: form.elements.lowSeatsFrom.value ? Number(form.elements.lowSeatsFrom.value) : null,
     ...collectFlags(),
