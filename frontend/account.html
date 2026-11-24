@@ -380,6 +380,15 @@
             </form>
           </div>
 
+          <div class="card form-pad" id="hub-optin-card" hidden>
+            <h2>QuestIn-Konto aktivieren</h2>
+            <p class="sub">Mit einem QuestIn-Konto meldest du dich auch bei anderen Orgas, die QuestIn nutzen, mit derselben E-Mail und demselben Passwort an. Dafür übertragen wir deine E-Mail-Adresse, deinen Namen, deinen Spitznamen und dein Passwort (nur als sicherer Hash, nie im Klartext) an QuestIn (questin.de). Deine Anmeldungen, Charaktere und Zahlungen bleiben hier. Deine Anmeldung mit E-Mail und Passwort hier funktioniert weiter.</p>
+            <form id="hub-optin-form">
+              <label class="checkbox-row"><input type="checkbox" id="hub-optin-consent" required> Ich bin einverstanden, dass diese Daten an QuestIn übertragen werden.</label>
+              <div class="save-bar save-bar-inline"><button type="submit">QuestIn-Konto aktivieren</button></div>
+            </form>
+          </div>
+
           <div class="card form-pad">
             <h2>Meine Dateien</h2>
             <p class="sub">Bilder und PDFs zu deinem Konto – getrennt von den Charakteren. Mit dem Stern legst du dein Profilbild fest, das unten links in der Seitenleiste erscheint.</p>
@@ -3938,6 +3947,7 @@
       hideLoading();
     }
   </script>
+  <script type="module" src="/js/hubOptin.js"></script>
 </body>
 
 </html>
