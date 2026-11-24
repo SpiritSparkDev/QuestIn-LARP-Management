@@ -203,6 +203,14 @@
               </div>
             </form>
           </div>
+          <div class="card form-pad" id="hub-mapping-card" hidden>
+            <h2>QuestIn-Stammprofil: Zuordnung</h2>
+            <p class="sub">Welches Kontofeld bekommt welchen Wert aus dem QuestIn-Profil? Nicht zugeordnete Felder werden ignoriert. Teilnehmende sehen Abweichungen und übernehmen sie selbst.</p>
+            <form id="hub-mapping-form">
+              <div id="hub-mapping-rows"></div>
+              <div class="settings-actions"><button type="submit">Speichern</button></div>
+            </form>
+          </div>
           </div>
           <div class="tab-panel grid col2 settings-panel" id="settings-tab-checkin" hidden>
           <div class="card form-pad">
@@ -1623,5 +1631,6 @@
         hideLoading();
       }
     </script>
+    <script type="module" src="/js/hubProfileMapping.js"></script>
   </body>
 </html>

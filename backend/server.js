@@ -11,6 +11,8 @@ import './auth/register.js';
 import './auth/login.js';
 import './auth/passwordReset.js';
 import './auth/oauth.js';
+import './hubProfile/routes.js';
+import { purgeExpiredHubSnapshots } from './hubProfile/repository.js';
 import './funke/routes.js';
 import { applyFunkeCors } from './funke/cors.js';
 import './auth/invite.js';
@@ -204,7 +206,10 @@ export function createServer() {
 export function startBackgroundJobs() {
   if (isOffline()) return [];
   startBackupScheduler();
-  const runCleanup = () => runDueAutoDeletions().catch((err) => logger.error('privacy cleanup failed', { error: err.message }));
+  const runCleanup = () => Promise.all([
+    runDueAutoDeletions().catch((err) => logger.error('privacy cleanup failed', { error: err.message })),
+    purgeExpiredHubSnapshots().catch((err) => logger.error('hub profile purge failed', { error: err.message })),
+  ]);
   const runMailHousekeeping = () => Promise.all([
     purgeOldEmailLog().catch((err) => logger.error('email log purge failed', { error: err.message })),
     flushMailOutbox().catch((err) => logger.error('mail outbox flush failed', { error: err.message })),

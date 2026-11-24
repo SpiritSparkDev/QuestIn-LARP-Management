@@ -48,3 +48,24 @@ im Konto-Bereich erscheint die Karte „QuestIn-Konto aktivieren“.
   an `POST /api/v1/accounts/import` des Hubs und verknüpft das Konto. Das lokale Passwort bleibt
   vorerst erhalten. Verknüpfung und Opt-in stehen im Audit-Log (`hub.linked`, `hub.optin`).
 - Im Offline-Modus ist der Hub-Login gesperrt; dort gilt nur E-Mail + Passwort.
+
+## Stammprofil aus dem Hub (Phase 4)
+
+- **Zuordnung (Admin → Einstellungen):** je Hub-Schlüssel (`birth_date`, `phone`, `address_street`,
+  `address_zip`, `address_city`, `address_country`, `emergency_contact_name`, `emergency_contact_phone`,
+  `allergies`, `medications`, `intolerances`) ein lokales Kontofeld. Nicht zugeordnete Felder werden ignoriert.
+  Hat die Instanz nur ein Adressfeld, kann nur eines der Adressfelder zugeordnet werden.
+- **Abruf:** Im Tab „Anmelden“ holt „Profil von QuestIn holen“ (`/auth/oauth/hub/start?profile=1`) das Profil.
+  Der Hub fragt je Kategorie nach (Gesundheit nie vorausgewählt). Direkt nach dem Login holt die Instanz
+  serverseitig `GET /api/v1/profile` mit dem Access-Token und speichert eine verschlüsselte Kopie je
+  Kategorie (`hub_profile_snapshots`), nur für eingewilligte Kategorien. Ein Token wird nicht aufbewahrt;
+  für einen neuen Abruf meldet sich die Person erneut über den Hub an.
+- **Abgleich:** Abweichungen zwischen Kopie und Konto werden angezeigt, nie automatisch übernommen. Übernommen
+  wird nur, was die Person auswählt (wie eine eigene Änderung im Konto, Audit `hub.fields_applied`).
+- **Webhook:** Beim Hub als `webhookUrl` eintragen: `${OAUTH_REDIRECT_BASE_URL}/api/hub/webhook`. Die Signatur
+  (HMAC mit `HUB_CLIENT_SECRET`, höchstens 5 Minuten alt) wird geprüft. `consent.revoked` löscht die Kopie der
+  widerrufenen Kategorien, `account.deleted` löscht die ganze Kopie und löst die Verknüpfung. Das lokale Konto
+  (Anmeldungen, Zahlungen, selbst übernommene Angaben) folgt weiter den Löschfristen dieser Instanz.
+- **Fristen:** Die Kopie wird nach den Fristen aus `PRIVACY_CATEGORIES` gelöscht (Gesundheit 28 Tage, sonst
+  180 Tage nach dem Abruf), im selben Hintergrundjob wie die Datenschutz-Löschung.
+- Verwaltete Personen/Kinder sind nicht enthalten.
