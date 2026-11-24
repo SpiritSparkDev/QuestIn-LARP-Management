@@ -118,6 +118,18 @@ export async function sendPasswordResetEmail(to, token, { userId } = {}) {
   return deliver(transporter, from, to, rendered);
 }
 
+// "Mit QuestIn anmelden" für ein lokales Konto ohne Passwort: der Link
+// beweist, dass die Person das Postfach des lokalen Kontos besitzt.
+export async function sendHubLinkEmail(to, url, { userId } = {}) {
+  const { transporter, from } = await getTransporterAndFrom();
+  return deliver(transporter, from, to, {
+    subject: 'Konto mit QuestIn verbinden',
+    body: `Jemand möchte dein Konto mit einem QuestIn-Konto verbinden. Warst du das? Dann bestätige hier (15 Minuten gültig): ${url}\n\nWenn nicht, ignoriere diese Mail einfach.`,
+    isHtml: false,
+    userId,
+  });
+}
+
 export async function sendInvitationEmail(to, token, { account } = {}) {
   const { transporter, from } = await getTransporterAndFrom();
   const url = `${await baseUrl()}/set-password.html?token=${token}`;

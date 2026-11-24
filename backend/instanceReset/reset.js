@@ -24,7 +24,7 @@ export const DATA_TABLES = [
   'invitations', 'group_invitations', 'group_join_codes',
   'registrations', 'characters', 'event_lodgings', 'event_mailings',
   'pdf_imports', 'snapshot_log', 'offline_merges', 'sync_conflicts',
-  'events', 'email_log', 'mail_outbox', 'hub_directory_cache', 'audit_log',
+  'events', 'email_log', 'mail_outbox', 'hub_directory_cache', 'hub_link_requests', 'audit_log',
 ];
 
 // Only the env admin's rows stay.
