@@ -66,6 +66,8 @@ import './testMode/routes.js';
 import './audit/routes.js';
 import './appModeRoutes.js';
 import './offlineRoutes.js';
+import './hubDirectory/routes.js';
+import { startHubDirectoryJob } from './hubDirectory/client.js';
 import { isOffline, warnIfWrongDatabase } from './appMode.js';
 import { checkWriteGuard } from './instanceAuthority/guard.js';
 
@@ -210,7 +212,7 @@ export function startBackgroundJobs() {
   const every = 6 * 60 * 60 * 1000;
   return [
     [runCleanup, 60_000], [runUnpaidReminders, 120_000], [runConPayerAutomation, 180_000], [runMailHousekeeping, 240_000],
-  ].flatMap(([job, delay]) => [setTimeout(job, delay).unref(), setInterval(job, every).unref()]);
+  ].flatMap(([job, delay]) => [setTimeout(job, delay).unref(), setInterval(job, every).unref()]).concat(startHubDirectoryJob());
 }
 
 // HTTP server plus background jobs: `npm start`, and backend/devServer.js after migrating.
