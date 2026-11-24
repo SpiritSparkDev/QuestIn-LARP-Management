@@ -45,6 +45,8 @@ jobs:
       - name: Postgres 16 client tools
         run: |
           sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y -qq postgresql-client-16
           echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
       - run: pg_dump --version
