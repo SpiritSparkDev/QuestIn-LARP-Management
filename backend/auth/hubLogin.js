@@ -18,11 +18,12 @@ import { logAudit } from '../audit/repository.js';
 import { logger } from '../logger.js';
 import { splitFullName } from '../displayName.js';
 import { sendHubLinkEmail, baseUrl } from './mailer.js';
+import { storeSnapshot } from '../hubProfile/repository.js';
 
 const FLOW_MAX_AGE_SECONDS = 600;
 const LINK_MAX_AGE_SECONDS = 15 * 60;
 const LINK_COOKIE = 'hub_link';
-const FLOW_COOKIES = ['state', 'nonce', 'pkce', 'return'];
+const FLOW_COOKIES = ['state', 'nonce', 'pkce', 'return', 'profile'];
 const HTTP_TIMEOUT_MS = 10_000;
 const LINK_RATE_LIMIT = { keyPrefix: 'hub-link', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
@@ -90,7 +91,10 @@ export async function hubStart({ req }) {
   authUrl.searchParams.set('client_id', config.clientId);
   authUrl.searchParams.set('redirect_uri', hubRedirectUri());
   authUrl.searchParams.set('response_type', 'code');
-  authUrl.searchParams.set('scope', 'openid email profile');
+  // ?profile=1: zusätzlich das Stammprofil (Phase 4); der Hub fragt dann je Kategorie nach.
+  const wantProfile = new URL(req.url, 'http://localhost').searchParams.get('profile') === '1';
+  authUrl.searchParams.set('scope', wantProfile ? 'openid email profile questin_profile' : 'openid email profile');
+  if (wantProfile) authUrl.searchParams.set('prompt', 'consent');
   authUrl.searchParams.set('state', state);
   authUrl.searchParams.set('nonce', nonce);
   authUrl.searchParams.set('code_challenge', crypto.createHash('sha256').update(verifier).digest('base64url'));
@@ -102,6 +106,7 @@ export async function hubStart({ req }) {
     cookie(flowName('nonce'), nonce, FLOW_MAX_AGE_SECONDS),
     cookie(flowName('pkce'), verifier, FLOW_MAX_AGE_SECONDS),
     returnTo ? cookie(flowName('return'), returnTo, FLOW_MAX_AGE_SECONDS) : clearCookie(flowName('return')),
+    wantProfile ? cookie(flowName('profile'), '1', FLOW_MAX_AGE_SECONDS) : clearCookie(flowName('profile')),
   ]);
 }
 
@@ -136,6 +141,7 @@ async function fetchHubIdentity(config, code, verifier, nonce) {
   if (info.sub !== payload.sub) throw new Error('userinfo sub does not match id_token');
 
   return {
+    accessToken: tokens.access_token,
     sub: String(payload.sub),
     email: typeof info.email === 'string' ? info.email.trim().toLowerCase() : null,
     emailVerified: info.email_verified === true,
@@ -164,6 +170,21 @@ async function adoptHubEmail(userId, oldEmail, newEmail) {
   }
   logger.warn('hub email already used by another local account, not changed', { userId });
   await logAudit({ actorId: userId, action: 'hub.email_conflict', subjectUserId: userId, details: { local: oldEmail, hub: newEmail } });
+}
+
+// Stammprofil (Phase 4) direkt nach dem Login mit dem Access-Token holen und als
+// lokale Kopie ablegen (nur Kategorien mit Einwilligung). Fehler blockieren den Login nicht.
+async function fetchHubProfile(config, accessToken, userId) {
+  try {
+    const res = await fetch(new URL('/api/v1/profile', config.issuer), {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`profile request failed with status ${res.status}`);
+    await storeSnapshot(userId, await res.json());
+  } catch (err) {
+    logger.error('hub profile fetch failed', { error: err.message });
+  }
 }
 
 // → { userId } | { linkUserId } | { error }
@@ -258,6 +279,7 @@ export async function hubCallback({ req }) {
     return redirect('/hub-link.html', [...clears, cookie(LINK_COOKIE, token, LINK_MAX_AGE_SECONDS)]);
   }
 
+  if (cookies[flowName('profile')] === '1') await fetchHubProfile(config, identity.accessToken, result.userId);
   const session = await createSession(result.userId);
   return redirect(returnTo || '/account.html', [...clears, serializeSessionCookie(session.token, session.expiresAt)]);
 }

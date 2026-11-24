@@ -409,6 +409,17 @@
         <div class="tab-panel" id="anmelden-tab" hidden>
           <div class="dashboard-layout">
               <div class="dashboard-main">
+                <div class="card form-pad" id="hub-profile-card" hidden>
+                  <h2>Daten aus deinem QuestIn-Profil</h2>
+                  <p class="sub" id="hub-profile-intro"></p>
+                  <form id="hub-profile-form">
+                    <div id="hub-profile-items"></div>
+                    <div class="save-bar save-bar-inline">
+                      <button type="submit" id="hub-profile-apply" hidden>Ausgewählte übernehmen</button>
+                      <a class="btn-ghost" href="/auth/oauth/hub/start?profile=1&amp;returnTo=%2Faccount.html">Profil von QuestIn holen</a>
+                    </div>
+                  </form>
+                </div>
                 <h2>Meine Anmeldungen</h2>
                 <table id="registration-list">
                 </table>
