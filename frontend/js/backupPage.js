@@ -206,12 +206,17 @@ $('restore-form').addEventListener('submit', async (event) => {
 });
 
 // ---- Instanz zurücksetzen (nur Admin aus ADMINUSER) ----
+const RESET_COUNTDOWN_SECONDS = 10;
 let resetName = null;
+let resetTimer = null;
+const resetReady = () => Boolean(resetName && $('reset-confirm').value.trim().toLowerCase() === resetName
+  && $('reset-password').value && $('reset-unlock').checked);
 const updateResetButton = () => {
-  $('reset-submit').disabled = !(resetName && $('reset-confirm').value.trim().toLowerCase() === resetName && $('reset-password').value);
+  if (resetTimer) return;
+  $('reset-submit').disabled = !resetReady();
 };
-$('reset-confirm').addEventListener('input', updateResetButton);
-$('reset-password').addEventListener('input', updateResetButton);
+['reset-confirm', 'reset-password'].forEach((id) => $(id).addEventListener('input', updateResetButton));
+$('reset-unlock').addEventListener('change', updateResetButton);
 
 async function loadReset() {
   const info = await api.get('/instance-reset');
@@ -223,25 +228,76 @@ async function loadReset() {
   $('reset-form').hidden = false;
 }
 
-$('reset-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const includeSettings = $('reset-settings').checked;
-  const question = includeSettings
-    ? `Wirklich ALLE Konten, Daten UND Einstellungen von ${resetName} löschen? Das lässt sich nicht rückgängig machen.`
-    : `Wirklich ALLE Konten und Daten von ${resetName} löschen? Das lässt sich nicht rückgängig machen.`;
-  if (!confirm(question)) return;
-  $('reset-submit').disabled = true;
+// Full backup as a download, right from the reset card.
+$('reset-backup').addEventListener('click', async () => {
+  const passphrase = $('reset-backup-passphrase').value;
+  if (passphrase.length < 8) { notify('Bitte ein Passwort mit mindestens 8 Zeichen für die Sicherung wählen.', 'error'); return; }
+  $('reset-backup').disabled = true;
+  try {
+    const res = await fetch('/backup/export', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'all', passphrase, targets: ['download'] }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Backup fehlgeschlagen (${res.status})`);
+    const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'questin-backup.qbak';
+    saveBlob(await res.blob(), name);
+    $('reset-backup-passphrase').value = '';
+    $('reset-backup-status').textContent = `Sicherung „${name}" heruntergeladen (${new Date().toLocaleTimeString('de-DE', { timeStyle: 'short' })}).`;
+    notify('Sicherung heruntergeladen.', 'success');
+    await loadHistory();
+  } catch (err) {
+    notify(err.message, 'error');
+  } finally {
+    $('reset-backup').disabled = false;
+  }
+});
+
+function stopResetCountdown() {
+  clearInterval(resetTimer);
+  resetTimer = null;
+  $('reset-cancel').hidden = true;
+  $('reset-submit').textContent = 'Wirklich löschen';
+  for (const id of ['reset-confirm', 'reset-password', 'reset-settings', 'reset-unlock']) $(id).disabled = false;
+  updateResetButton();
+}
+
+async function runReset() {
   try {
     const result = await api.post('/instance-reset', {
-      confirm: $('reset-confirm').value, password: $('reset-password').value, includeSettings,
+      confirm: $('reset-confirm').value, password: $('reset-password').value, includeSettings: $('reset-settings').checked,
     });
     const note = result.filesFailed ? ` ${result.filesFailed} Dateien konnten nicht vom Speicher entfernt werden.` : '';
     notify(`Instanz zurückgesetzt.${note} Die Seite wird neu geladen.`, 'success');
     setTimeout(() => window.location.reload(), 1500);
   } catch (err) {
     notify(err.message, 'error');
-    updateResetButton();
+    $('reset-unlock').checked = false;
+    stopResetCountdown();
   }
+}
+
+// "Wirklich löschen" starts a countdown; until it runs out, "Löschen abbrechen" stops everything.
+$('reset-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (resetTimer || !resetReady()) return;
+  let left = RESET_COUNTDOWN_SECONDS;
+  for (const id of ['reset-confirm', 'reset-password', 'reset-settings', 'reset-unlock']) $(id).disabled = true;
+  $('reset-submit').disabled = true;
+  $('reset-submit').textContent = `Löscht in ${left} s …`;
+  $('reset-cancel').hidden = false;
+  resetTimer = setInterval(() => {
+    left -= 1;
+    if (left > 0) { $('reset-submit').textContent = `Löscht in ${left} s …`; return; }
+    clearInterval(resetTimer);
+    $('reset-cancel').hidden = true;
+    $('reset-submit').textContent = 'Wird gelöscht …';
+    runReset();
+  }, 1000);
+});
+
+$('reset-cancel').addEventListener('click', () => {
+  stopResetCountdown();
+  notify('Löschen abgebrochen. Es wurde nichts gelöscht.', 'success');
 });
 
 $('logout-link').addEventListener('click', async (evt) => {

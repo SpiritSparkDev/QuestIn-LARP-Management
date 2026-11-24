@@ -80,7 +80,8 @@ Auf einem Wegwerf-System (nie auf Produktion):
 ## Instanz zurücksetzen
 Seite **Backup → Instanz zurücksetzen** (`POST /instance-reset`). Löscht alle Konten außer dem Admin aus `ADMINUSER` und alle Daten (Events, Anmeldungen, Charaktere, Zahlungen, Taverne, Dateien, Protokolle). Mit dem Häkchen „Einstellungen" gehen außerdem Formulare, Rollen, Vorlagen, Branding sowie SMTP-, Zahlungs-, Speicher- und Backup-Zugänge auf den Zustand einer frischen Installation (die Migrationen laufen dafür in einem Wegwerf-Schema und werden herüberkopiert).
 - Nur sichtbar und erlaubt für den Admin aus `ADMINUSER`; ist die Variable leer, kann niemand zurücksetzen. Auf der Offline-Instanz gesperrt.
-- Bestätigung: Instanzname (Host aus `APP_BASE_URL`, z. B. `anmeldung.pakyrion.de`) eintippen und das eigene Passwort.
+- Die Karte bietet direkt eine komplette Sicherung zum Download an (mit Hinweis auf Aufbewahrungspflicht und Datensicherheit).
+- Bestätigung: Instanzname (Host aus `APP_BASE_URL`, z. B. `anmeldung.pakyrion.de`) eintippen, das eigene Passwort, Schalter „Löschen freigeben“. „Wirklich löschen“ startet einen 10-Sekunden-Countdown, „Löschen abbrechen“ stoppt ihn.
 - Eine Transaktion: bei einem Fehler bleibt alles. Hochgeladene Dateien werden danach vom Speicher entfernt.
 - **Vorher eine Sicherung ziehen** (Aufbewahrungspflichten für Zahlungsbelege). Die nächtlichen Dumps des Backup-Dienstes bleiben unberührt.
 - Neue Tabellen muss man in `backend/instanceReset/reset.js` einer Liste zuordnen, sonst schlägt `tests/integration/instanceReset.test.js` fehl.
