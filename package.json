@@ -23,6 +23,7 @@
     "archiver": "^8.0.0",
     "basic-ftp": "^6.2.2",
     "handlebars": "^4.7.9",
+    "jose": "^6.2.18",
     "nodemailer": "^10.1.1",
     "pdf-lib": "^1.17.1",
     "pg": "^8.23.1",

@@ -8,6 +8,7 @@ import { logger } from '../logger.js';
 import { isOffline } from '../appMode.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { splitFullName } from '../displayName.js';
+import { hubConfig, hubStart, hubCallback } from './hubLogin.js';
 
 const OAUTH_START_RATE_LIMIT = { keyPrefix: 'oauth-start', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
@@ -27,10 +28,13 @@ router.get('/auth/oauth/providers', async () => {
   for (const [key, provider] of Object.entries(PROVIDERS)) {
     available[key] = Boolean(provider.clientId() && provider.clientSecret());
   }
+  available.hub = Boolean(hubConfig());
   return { status: 200, body: available };
 });
 
-router.get('/auth/oauth/:provider/start', rateLimit(OAUTH_START_RATE_LIMIT)(async ({ params }) => {
+router.get('/auth/oauth/:provider/start', rateLimit(OAUTH_START_RATE_LIMIT)(async (ctx) => {
+  const { params } = ctx;
+  if (params.provider === 'hub') return hubStart(ctx);
   const provider = Object.hasOwn(PROVIDERS, params.provider) ? PROVIDERS[params.provider] : undefined;
   if (!provider) return { status: 404, body: { error: 'unknown provider' } };
 
@@ -57,7 +61,9 @@ router.get('/auth/oauth/:provider/start', rateLimit(OAUTH_START_RATE_LIMIT)(asyn
   };
 }));
 
-router.get('/auth/oauth/:provider/callback', async ({ req, params }) => {
+router.get('/auth/oauth/:provider/callback', async (ctx) => {
+  const { req, params } = ctx;
+  if (params.provider === 'hub') return hubCallback(ctx);
   const provider = Object.hasOwn(PROVIDERS, params.provider) ? PROVIDERS[params.provider] : undefined;
   if (!provider) return { status: 404, body: { error: 'unknown provider' } };
 

@@ -28,6 +28,7 @@
         <p><a href="#" id="forgot-link">Passwort vergessen?</a></p>
         <div class="divider-word" id="oauth-divider">oder anmelden mit</div>
         <div class="oauth-row" id="oauth-row">
+          <a href="/auth/oauth/hub/start" data-provider="hub" id="hub-login">Mit QuestIn anmelden</a>
           <a href="/auth/oauth/google/start" data-provider="google">Google</a>
           <a href="/auth/oauth/facebook/start" data-provider="facebook">Facebook</a>
           <a href="/auth/oauth/discord/start" data-provider="discord">Discord</a>
@@ -89,9 +90,19 @@ const form = document.getElementById('login-form');
   }
 })();
 
-if (new URLSearchParams(window.location.search).get('oauth_error') === 'denied') {
-  notify('Anmeldung abgebrochen.', 'error');
-}
+const query = new URLSearchParams(window.location.search);
+const returnTo = query.get('returnTo');
+if (returnTo) document.getElementById('hub-login').href = `/auth/oauth/hub/start?returnTo=${encodeURIComponent(returnTo)}`;
+
+const OAUTH_ERRORS = {
+  denied: 'Anmeldung abgebrochen.',
+  offline: 'Im Offline-Modus ist nur die Anmeldung mit E-Mail und Passwort möglich.',
+  deactivated: 'Dieses Konto wurde deaktiviert.',
+  hub_failed: 'Die Anmeldung mit QuestIn hat nicht geklappt. Bitte versuche es noch einmal.',
+  hub_email_unverified: 'Bitte bestätige zuerst deine E-Mail-Adresse bei QuestIn.',
+  hub_other_account: 'Dein Konto hier ist schon mit einem anderen QuestIn-Konto verbunden. Bitte wende dich an die Orga.',
+};
+if (OAUTH_ERRORS[query.get('oauth_error')]) notify(OAUTH_ERRORS[query.get('oauth_error')], 'error');
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
