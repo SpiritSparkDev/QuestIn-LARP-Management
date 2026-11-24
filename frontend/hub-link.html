@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mit QuestIn verbinden – Pakyrion</title>
+<link rel="stylesheet" href="/css/fonts.css">
+<link rel="stylesheet" href="/css/sahara.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<div class="shell">
+  <div class="brand"><div class="brand-seal"></div><div class="brand-name">Pakyrion</div></div>
+  <p class="brand-sub">QuestIn LARP Management</p>
+  <div class="folio folio--narrow">
+    <h1 class="text-center">Mit QuestIn verbinden?</h1>
+    <p id="message">Wird geprüft…</p>
+    <form id="password-form" hidden>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <label for="password">Passwort deines Kontos hier</label>
+      <button type="submit">Konto verbinden</button>
+    </form>
+    <button type="button" id="mail-btn" hidden>Bestätigungslink per E-Mail senden</button>
+    <button type="button" id="confirm-btn" hidden>Konto verbinden</button>
+    <p class="text-center"><a href="/login.html">Abbrechen</a></p>
+  </div>
+</div>
+<script type="module" src="/js/legalFooter.js"></script>
+<script type="module">
+import { api } from '/js/api.js';
+import { applyBranding } from '/js/branding.js';
+import { notify } from '/js/notifications.js';
+applyBranding();
+
+const message = document.getElementById('message');
+const form = document.getElementById('password-form');
+const mailBtn = document.getElementById('mail-btn');
+const confirmBtn = document.getElementById('confirm-btn');
+const confirmToken = new URLSearchParams(window.location.search).get('confirm');
+
+const fail = (err) => { message.textContent = err.message; message.className = 'error'; };
+
+if (confirmToken) {
+  // Link aus der Bestätigungsmail: erst auf Klick verbinden, damit Mail-Scanner den Link nicht verbrauchen.
+  message.textContent = 'Möchtest du dein Konto hier mit deinem QuestIn-Konto verbinden? Danach meldest du dich mit „Mit QuestIn anmelden“ an.';
+  confirmBtn.hidden = false;
+  confirmBtn.addEventListener('click', async () => {
+    try {
+      const { redirect } = await api.post('/auth/hub/link/confirm', { token: confirmToken });
+      window.location.href = redirect;
+    } catch (err) { fail(err); }
+  });
+} else {
+  try {
+    const { email, hasPassword } = await api.get('/auth/hub/link');
+    message.textContent = `Es gibt hier schon ein Konto mit ${email}. Möchtest du es mit deinem QuestIn-Konto verbinden? `
+      + (hasPassword
+        ? 'Bestätige das mit dem Passwort deines Kontos hier.'
+        : 'Dein Konto hier hat kein Passwort. Wir schicken dir einen Bestätigungslink an diese Adresse.');
+    form.hidden = !hasPassword;
+    mailBtn.hidden = hasPassword;
+  } catch (err) { fail(err); }
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    const { redirect } = await api.post('/auth/hub/link', { password: document.getElementById('password').value });
+    window.location.href = redirect;
+  } catch (err) { notify(err.message, 'error'); }
+});
+
+mailBtn.addEventListener('click', async () => {
+  try {
+    await api.post('/auth/hub/link/email', {});
+    mailBtn.hidden = true;
+    message.textContent = 'Wir haben dir eine E-Mail geschickt. Der Link darin ist 15 Minuten gültig.';
+    message.className = 'success';
+  } catch (err) { notify(err.message, 'error'); }
+});
+</script>
+</body>
+</html>
