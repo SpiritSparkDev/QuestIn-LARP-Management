@@ -141,6 +141,19 @@
       </div>
     </form>
 
+    <form id="reset-form" class="card form-pad" hidden>
+      <h2>Instanz zurücksetzen</h2>
+      <p class="sub"><strong>Löscht unwiderruflich alle Konten außer deinem und alle Daten:</strong> Events, Anmeldungen, Charaktere, Gruppen, Zahlungen, Taverne, Unterkünfte, Mailings, hochgeladene Dateien, E-Mail- und Änderungsprotokoll. Erstelle vorher oben eine Sicherung, z.&nbsp;B. wegen Aufbewahrungspflichten für Zahlungsbelege. Nur der Admin aus <code>ADMINUSER</code> sieht diesen Bereich.</p>
+      <p class="sub" id="reset-counts"></p>
+      <p class="sub">Zur Bestätigung tippe den Instanznamen <code id="reset-name"></code> ein.</p>
+      <label><input type="checkbox" id="reset-settings"> Auch alle Einstellungen auf den Auslieferungszustand setzen (Formulare, Rollen, E-Mail-Vorlagen, Branding, SMTP-, Zahlungs-, Speicher- und Backup-Zugänge)</label>
+      <input id="reset-confirm" type="text" autocomplete="off" spellcheck="false" required>
+      <label for="reset-confirm">Instanzname</label>
+      <input id="reset-password" type="password" autocomplete="current-password" required>
+      <label for="reset-password">Dein Passwort</label>
+      <div class="save-bar"><button type="submit" id="reset-submit" class="btn-danger" disabled>Alles löschen</button></div>
+    </form>
+
     <div class="card form-pad">
       <h2>Letzte Vorgänge</h2>
       <div class="table-scroll"><table id="backup-history"><thead><tr><th>Zeitpunkt</th><th>Wer</th><th>Vorgang</th></tr></thead><tbody></tbody></table></div>

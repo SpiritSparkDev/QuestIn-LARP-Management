@@ -6,9 +6,10 @@ import { GROUP_DEFAULTS } from './groupDefaults.js';
 
 // Idempotent: safe to run on every deploy/restart, and safe to call multiple
 // times within the same process (e.g. once per test file sharing a DB).
-export async function seedGroups() {
+// `db` lets the instance reset seed a scratch schema inside its own transaction.
+export async function seedGroups(db = { query }) {
   for (const group of GROUP_DEFAULTS) {
-    await query(
+    await db.query(
       `INSERT INTO groups (key, name, visible_menus, account_fields, can_edit_characters, can_override_checkin_status, can_export_members, can_export_sensitive, is_protected)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (key) DO NOTHING`,

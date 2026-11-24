@@ -205,6 +205,45 @@ $('restore-form').addEventListener('submit', async (event) => {
   }
 });
 
+// ---- Instanz zurücksetzen (nur Admin aus ADMINUSER) ----
+let resetName = null;
+const updateResetButton = () => {
+  $('reset-submit').disabled = !(resetName && $('reset-confirm').value.trim().toLowerCase() === resetName && $('reset-password').value);
+};
+$('reset-confirm').addEventListener('input', updateResetButton);
+$('reset-password').addEventListener('input', updateResetButton);
+
+async function loadReset() {
+  const info = await api.get('/instance-reset');
+  if (!info.allowed) return;
+  resetName = info.instanceName;
+  const c = info.counts;
+  $('reset-counts').textContent = `Betroffen: ${c.users} Konten, ${c.events} Events, ${c.registrations} Anmeldungen, ${c.characters} Charaktere, ${c.payments} Zahlungen, ${c.files} Dateien.`;
+  $('reset-name').textContent = resetName;
+  $('reset-form').hidden = false;
+}
+
+$('reset-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const includeSettings = $('reset-settings').checked;
+  const question = includeSettings
+    ? `Wirklich ALLE Konten, Daten UND Einstellungen von ${resetName} löschen? Das lässt sich nicht rückgängig machen.`
+    : `Wirklich ALLE Konten und Daten von ${resetName} löschen? Das lässt sich nicht rückgängig machen.`;
+  if (!confirm(question)) return;
+  $('reset-submit').disabled = true;
+  try {
+    const result = await api.post('/instance-reset', {
+      confirm: $('reset-confirm').value, password: $('reset-password').value, includeSettings,
+    });
+    const note = result.filesFailed ? ` ${result.filesFailed} Dateien konnten nicht vom Speicher entfernt werden.` : '';
+    notify(`Instanz zurückgesetzt.${note} Die Seite wird neu geladen.`, 'success');
+    setTimeout(() => window.location.reload(), 1500);
+  } catch (err) {
+    notify(err.message, 'error');
+    updateResetButton();
+  }
+});
+
 $('logout-link').addEventListener('click', async (evt) => {
   evt.preventDefault();
   if (!confirm('Wirklich abmelden?')) return;
@@ -220,6 +259,7 @@ try {
   fillSettings(settings);
   fillSchedule(settings.schedule);
   await loadHistory();
+  await loadReset();
 } catch (err) {
   if (err.status === 401) window.location.href = '/login.html';
   else notify(err.status === 403 ? 'Kein Zugriff – nur für Admins.' : err.message, 'error');
