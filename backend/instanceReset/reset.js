@@ -42,7 +42,8 @@ export const SETTINGS_TABLES = [
 
 // Never touched: bookkeeping of the installation itself.
 // instance_authority keeps only its instance-wide row (event_id IS NULL).
-export const SYSTEM_TABLES = ['schema_migrations', 'instance_authority'];
+// hub_connection: the add-on's keys and credentials belong to the installation, like its domain.
+export const SYSTEM_TABLES = ['schema_migrations', 'instance_authority', 'hub_connection'];
 
 function resetError(message, code) {
   return Object.assign(new Error(message), { code });
