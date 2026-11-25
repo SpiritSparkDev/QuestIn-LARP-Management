@@ -125,7 +125,7 @@
           </div>
         </div>
         <label><input type="checkbox" id="event-payments-open" name="paymentsOpen"> Zahlungen freigeben <span style="opacity:0.6;font-size:12px;">Teilnehmer sehen erst dann „Jetzt bezahlen“</span></label>
-        <label><input type="checkbox" id="event-directory-published" name="directoryPublished"> Im QuestIn-Verzeichnis veröffentlichen <span style="opacity:0.6;font-size:12px;">Name, Datum und Farbe erscheinen bei anderen Orgas, die an questin.de angedockt sind. Testevents und beendete Events nie.</span></label>
+        <label><input type="checkbox" id="event-directory-published" name="directoryPublished"> Im QuestIn-Verzeichnis veröffentlichen <span style="opacity:0.6;font-size:12px;">Name, Datum, Farbe, Kurzbeschreibung und Titelbild erscheinen auf questin.de und bei anderen Orgas, die dort angedockt sind. Testevents und beendete Events nie.</span></label>
         <div class="field-grid" id="directory-details">
           <div><select id="event-directory-region" name="directoryRegion">
             <option value="">– keine Angabe –</option>
@@ -150,6 +150,16 @@
           <label><input type="checkbox" name="directoryGenre" value="historisch"> Historisch</label>
           <label><input type="checkbox" name="directoryGenre" value="sonstiges"> Sonstiges</label>
         </fieldset>
+        <textarea id="event-directory-teaser" name="directoryTeaser" rows="3" maxlength="300"></textarea>
+        <label for="event-directory-teaser">Kurzbeschreibung im Verzeichnis <span style="opacity:0.6;font-size:12px;">bis 300 Zeichen, wirbt auf questin.de für das Event</span></label>
+        <div class="directory-image" id="directory-image">
+          <p class="sub" style="margin:12px 0 6px;">Titelbild im Verzeichnis <span style="opacity:0.6;font-size:12px;">PNG, JPEG oder WebP, höchstens 1 MB, am besten im Querformat 16:9</span></p>
+          <img id="directory-image-preview" alt="Titelbild" hidden style="display:block;max-width:320px;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;border:1px solid var(--outline-variant);margin-bottom:8px;">
+          <p class="settings-hint" id="directory-image-hint">Erst das Event speichern, dann lässt sich ein Bild hochladen.</p>
+          <input type="file" id="directory-image-file" accept="image/png,image/jpeg,image/webp" hidden>
+          <button type="button" class="btn-sm" id="directory-image-upload" hidden>Bild hochladen</button>
+          <button type="button" class="btn-sm btn-danger" id="directory-image-remove" hidden>Bild entfernen</button>
+        </div>
         <p class="sub" id="directory-stats" hidden></p>
         <h3 class="event-form-section">Sonderrollen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Besondere Rollen eines Events, z. B. GSC, VP oder Ersthelfer. Teilnehmer sehen sie bei der Anmeldung als Karten mit deiner Kurzbeschreibung und können mehrere wählen.</p>
@@ -946,6 +956,8 @@ function startEdit(eventData) {
   form.elements.paymentsOpen.checked = Boolean(eventData.payments_open);
   form.elements.directoryPublished.checked = Boolean(eventData.directory_published);
   form.elements.directoryRegion.value = eventData.directory_region ?? '';
+  form.elements.directoryTeaser.value = eventData.directory_teaser ?? '';
+  showDirectoryImage(eventData);
   form.elements.registrationOpensAt.value = eventData.registration_opens_at ? toLocalDateTimeInput(eventData.registration_opens_at) : '';
   const genres = new Set(eventData.directory_genres ?? []);
   form.querySelectorAll('input[name="directoryGenre"]').forEach((box) => { box.checked = genres.has(box.value); });
@@ -1009,8 +1021,60 @@ form.elements.color.addEventListener('input', () => {
 });
 document.getElementById('event-color-clear').addEventListener('click', () => setEventColor(null));
 
+// Titelbild fürs Verzeichnis: wird sofort hochgeladen (wie das Logo in den Einstellungen).
+const directoryImage = {
+  preview: document.getElementById('directory-image-preview'),
+  hint: document.getElementById('directory-image-hint'),
+  file: document.getElementById('directory-image-file'),
+  upload: document.getElementById('directory-image-upload'),
+  remove: document.getElementById('directory-image-remove'),
+};
+
+function showDirectoryImage(eventData) {
+  const saved = Boolean(eventData?.id);
+  const has = Boolean(eventData?.has_directory_image);
+  directoryImage.hint.hidden = saved;
+  directoryImage.upload.hidden = !saved;
+  directoryImage.upload.textContent = has ? 'Anderes Bild hochladen' : 'Bild hochladen';
+  directoryImage.remove.hidden = !has;
+  directoryImage.preview.hidden = !has;
+  if (has) directoryImage.preview.src = `/events/${eventData.id}/directory-image?v=${Date.parse(eventData.directory_image_updated_at) || Date.now()}`;
+  else directoryImage.preview.removeAttribute('src');
+}
+
+directoryImage.upload.addEventListener('click', () => directoryImage.file.click());
+directoryImage.file.addEventListener('change', async () => {
+  const file = directoryImage.file.files[0];
+  directoryImage.file.value = '';
+  if (!file || !editingEventId) return;
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { notify('Nur PNG, JPEG oder WebP.', 'error'); return; }
+  if (file.size > 1024 * 1024) { notify('Das Bild ist größer als 1 MB.', 'error'); return; }
+  const dataBase64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  try {
+    showDirectoryImage(await api.put(`/events/${editingEventId}/directory-image`, { dataBase64 }));
+    notify('Titelbild gespeichert.', 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+directoryImage.remove.addEventListener('click', async () => {
+  if (!editingEventId || !confirm('Titelbild entfernen?')) return;
+  try {
+    showDirectoryImage(await api.delete(`/events/${editingEventId}/directory-image`));
+    notify('Titelbild entfernt.', 'success');
+  } catch (err) {
+    notify(err.message, 'error');
+  }
+});
+
 function resetForm() {
   editingEventId = null;
+  showDirectoryImage(null);
   directoryStats.hidden = true;
   formTitle.textContent = 'Neues Event anlegen';
   form.reset();
@@ -1049,6 +1113,7 @@ form.addEventListener('submit', async (event) => {
     paymentsOpen: form.elements.paymentsOpen.checked,
     directoryPublished: form.elements.directoryPublished.checked,
     directoryRegion: form.elements.directoryRegion.value || null,
+    directoryTeaser: form.elements.directoryTeaser.value.trim() || null,
     directoryGenres: [...form.querySelectorAll('input[name="directoryGenre"]:checked')].map((box) => box.value).slice(0, 3),
     registrationOpensAt: form.elements.registrationOpensAt.value ? new Date(form.elements.registrationOpensAt.value).toISOString() : null,
     color: eventColorSet ? form.elements.color.value : null,
