@@ -5,6 +5,8 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody, readRawBody } from '../httpBody.js';
 import { hubConfig } from '../auth/hubLogin.js';
+import { envHubConfigured } from '../hubDirectory/config.js';
+import { revokedByHub } from '../hubConnection/service.js';
 import { logAudit } from '../audit/repository.js';
 import { logger } from '../logger.js';
 import { HUB_PROFILE_FIELDS, getMapping, setMapping, profileOffer, applyProfile, deleteSnapshots } from './repository.js';
@@ -63,6 +65,12 @@ router.post('/api/hub/webhook', async ({ req, requestId }) => {
   }
   let event;
   try { event = JSON.parse(text); } catch { return { status: 400, body: { error: 'invalid JSON' } }; }
+
+  // The hub blocked this instance (add-on "QuestIn-Hub"): credentials go.
+  if (event.event === 'instance.revoked') {
+    if (!envHubConfigured()) await revokedByHub(typeof event.reason === 'string' ? event.reason.slice(0, 500) : null);
+    return { status: 200, body: { ok: true } };
+  }
 
   const { rows } = await query("SELECT user_id FROM oauth_accounts WHERE provider = 'hub' AND provider_user_id = $1", [String(event.sub ?? '')]);
   const userId = rows[0]?.user_id;
