@@ -70,6 +70,7 @@ import './audit/routes.js';
 import './appModeRoutes.js';
 import './offlineRoutes.js';
 import './hubDirectory/routes.js';
+import './hubCharacters/routes.js';
 import { startHubDirectoryJob } from './hubDirectory/client.js';
 import { isOffline, warnIfWrongDatabase } from './appMode.js';
 import { checkWriteGuard } from './instanceAuthority/guard.js';
