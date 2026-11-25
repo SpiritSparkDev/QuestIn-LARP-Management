@@ -12,6 +12,9 @@ import './auth/login.js';
 import './auth/passwordReset.js';
 import './auth/oauth.js';
 import './hubProfile/routes.js';
+import './hubConnection/routes.js';
+import { startHubConnectionJob } from './hubConnection/service.js';
+import { loadHubConnection } from './hubConnection/repository.js';
 import { purgeExpiredHubSnapshots } from './hubProfile/repository.js';
 import './funke/routes.js';
 import { applyFunkeCors } from './funke/cors.js';
@@ -70,6 +73,7 @@ import './audit/routes.js';
 import './appModeRoutes.js';
 import './offlineRoutes.js';
 import './hubDirectory/routes.js';
+import './hubCharacters/routes.js';
 import { startHubDirectoryJob } from './hubDirectory/client.js';
 import { isOffline, warnIfWrongDatabase } from './appMode.js';
 import { checkWriteGuard } from './instanceAuthority/guard.js';
@@ -218,12 +222,14 @@ export function startBackgroundJobs() {
   const every = 6 * 60 * 60 * 1000;
   return [
     [runCleanup, 60_000], [runUnpaidReminders, 120_000], [runConPayerAutomation, 180_000], [runMailHousekeeping, 240_000],
-  ].flatMap(([job, delay]) => [setTimeout(job, delay).unref(), setInterval(job, every).unref()]).concat(startHubDirectoryJob());
+  ].flatMap(([job, delay]) => [setTimeout(job, delay).unref(), setInterval(job, every).unref()]).concat(startHubDirectoryJob(), startHubConnectionJob());
 }
 
 // HTTP server plus background jobs: `npm start`, and backend/devServer.js after migrating.
 export function startServer() {
   const port = process.env.PORT || 3000;
+  // Credentials of the add-on "QuestIn-Hub" into memory before the first request needs them.
+  loadHubConnection();
   createServer().listen(port, () => {
     logger.info('server started', { port });
   });

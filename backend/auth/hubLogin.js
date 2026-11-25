@@ -19,6 +19,7 @@ import { logger } from '../logger.js';
 import { splitFullName } from '../displayName.js';
 import { sendHubLinkEmail, baseUrl } from './mailer.js';
 import { storeSnapshot } from '../hubProfile/repository.js';
+import { hubConfig } from '../hubDirectory/config.js';
 
 const FLOW_MAX_AGE_SECONDS = 600;
 const LINK_MAX_AGE_SECONDS = 15 * 60;
@@ -27,12 +28,7 @@ const FLOW_COOKIES = ['state', 'nonce', 'pkce', 'return', 'profile'];
 const HTTP_TIMEOUT_MS = 10_000;
 const LINK_RATE_LIMIT = { keyPrefix: 'hub-link', maxAttempts: 10, windowMs: 15 * 60 * 1000 };
 
-export function hubConfig() {
-  const issuer = process.env.HUB_ISSUER?.trim().replace(/\/+$/, '');
-  const clientId = process.env.HUB_CLIENT_ID;
-  const clientSecret = process.env.HUB_CLIENT_SECRET;
-  return issuer && clientId && clientSecret ? { issuer, clientId, clientSecret } : null;
-}
+export { hubConfig };
 
 // Only same-origin paths: "/x", never "//host", "/\host" or anything absolute.
 export function safeReturnTo(value) {
