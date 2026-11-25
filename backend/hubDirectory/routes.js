@@ -1,5 +1,7 @@
 import { router } from '../routes.js';
 import { requireAuth } from '../middleware/authenticate.js';
+import { requireMenu } from '../middleware/authorize.js';
+import { hubEventStats } from './stats.js';
 import { isOffline } from '../appMode.js';
 import { getAppSettings } from '../appSettings/repository.js';
 import { hubUrl } from './config.js';
@@ -50,3 +52,9 @@ router.get('/hub-directory', requireAuth(async () => {
   const events = (cache.events ?? []).filter((e) => (e.endDate ?? e.startDate) >= day);
   return { status: 200, body: { enabled: true, events, updatedAt: cache.last_success_at } };
 }));
+
+// Views and clicks of the own published events on questin.de (event form).
+router.get('/hub-directory/stats', requireAuth(requireMenu('events')(async () => {
+  if (isOffline()) return { status: 200, body: { enabled: false, events: {}, orgs: [] } };
+  return { status: 200, body: await hubEventStats() };
+})));

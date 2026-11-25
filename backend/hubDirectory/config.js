@@ -14,3 +14,11 @@ export function hubUrl() {
     return null;
   }
 }
+
+// OIDC client of this instance at the hub (login, profile, stats).
+export function hubConfig() {
+  const issuer = process.env.HUB_ISSUER?.trim().replace(/\/+$/, '');
+  const clientId = process.env.HUB_CLIENT_ID;
+  const clientSecret = process.env.HUB_CLIENT_SECRET;
+  return issuer && clientId && clientSecret ? { issuer, clientId, clientSecret } : null;
+}

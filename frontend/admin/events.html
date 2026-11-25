@@ -150,6 +150,7 @@
           <label><input type="checkbox" name="directoryGenre" value="historisch"> Historisch</label>
           <label><input type="checkbox" name="directoryGenre" value="sonstiges"> Sonstiges</label>
         </fieldset>
+        <p class="sub" id="directory-stats" hidden></p>
         <h3 class="event-form-section">Sonderrollen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Besondere Rollen eines Events, z. B. GSC, VP oder Ersthelfer. Teilnehmer sehen sie bei der Anmeldung als Karten mit deiner Kurzbeschreibung und können mehrere wählen.</p>
         <div id="flag-list"></div>
@@ -909,8 +910,27 @@ async function loadEvents() {
   });
 }
 
+// Views and clicks on questin.de, only when the instance is linked to the hub.
+const directoryStats = document.getElementById('directory-stats');
+async function showDirectoryStats(eventId) {
+  directoryStats.hidden = true;
+  if (!eventId) return;
+  let stats;
+  try { stats = await api.get('/hub-directory/stats'); } catch { return; }
+  if (!stats.enabled || editingEventId !== eventId) return;
+  const s = stats.events?.[eventId];
+  if (stats.unavailable) directoryStats.textContent = 'Zahlen aus dem QuestIn-Verzeichnis sind gerade nicht abrufbar.';
+  else if (!s) return;
+  else {
+    const n = (v, one, many) => `${v.toLocaleString('de-DE')} ${v === 1 ? one : many}`;
+    directoryStats.textContent = `Im QuestIn-Verzeichnis: ${n(s.views, 'Aufruf', 'Aufrufe')} der Event-Seite, ${n(s.clicks, 'Klick', 'Klicks')} auf „Zur Anmeldung“ (letzte 30 Tage: ${s.last30Days.views} / ${s.last30Days.clicks}). Gezählt ohne Cookies und ohne Personenbezug.`;
+  }
+  directoryStats.hidden = false;
+}
+
 function startEdit(eventData) {
   editingEventId = eventData.id;
+  showDirectoryStats(eventData.id);
   formTitle.textContent = `Event bearbeiten: ${eventData.name}`;
   form.elements.name.value = eventData.name;
   form.elements.eventDate.value = eventData.event_date;
@@ -991,6 +1011,7 @@ document.getElementById('event-color-clear').addEventListener('click', () => set
 
 function resetForm() {
   editingEventId = null;
+  directoryStats.hidden = true;
   formTitle.textContent = 'Neues Event anlegen';
   form.reset();
   setEventColor(null);
