@@ -126,6 +126,31 @@
         </div>
         <label><input type="checkbox" id="event-payments-open" name="paymentsOpen"> Zahlungen freigeben <span style="opacity:0.6;font-size:12px;">Teilnehmer sehen erst dann „Jetzt bezahlen“</span></label>
         <label><input type="checkbox" id="event-directory-published" name="directoryPublished"> Im QuestIn-Verzeichnis veröffentlichen <span style="opacity:0.6;font-size:12px;">Name, Datum und Farbe erscheinen bei anderen Orgas, die an questin.de angedockt sind. Testevents und beendete Events nie.</span></label>
+        <div class="field-grid" id="directory-details">
+          <div><select id="event-directory-region" name="directoryRegion">
+            <option value="">– keine Angabe –</option>
+            <option value="DE-BW">Baden-Württemberg</option><option value="DE-BY">Bayern</option><option value="DE-BE">Berlin</option>
+            <option value="DE-BB">Brandenburg</option><option value="DE-HB">Bremen</option><option value="DE-HH">Hamburg</option>
+            <option value="DE-HE">Hessen</option><option value="DE-MV">Mecklenburg-Vorpommern</option><option value="DE-NI">Niedersachsen</option>
+            <option value="DE-NW">Nordrhein-Westfalen</option><option value="DE-RP">Rheinland-Pfalz</option><option value="DE-SL">Saarland</option>
+            <option value="DE-SN">Sachsen</option><option value="DE-ST">Sachsen-Anhalt</option><option value="DE-SH">Schleswig-Holstein</option>
+            <option value="DE-TH">Thüringen</option><option value="AT">Österreich</option><option value="CH">Schweiz</option><option value="OTHER">Anderes Land</option>
+          </select><label for="event-directory-region">Region im Verzeichnis <span style="opacity:0.6;font-size:12px;">statt der Adresse, die nur Angemeldete sehen</span></label></div>
+          <div><input id="event-registration-opens-at" name="registrationOpensAt" type="datetime-local"><label for="event-registration-opens-at">Anmeldung öffnet am <span style="opacity:0.6;font-size:12px;">optional, für Erinnerungen im Verzeichnis</span></label></div>
+        </div>
+        <fieldset class="directory-genres" id="event-directory-genres">
+          <legend>Genre im Verzeichnis <span style="opacity:0.6;font-size:12px;">höchstens 3</span></legend>
+          <label><input type="checkbox" name="directoryGenre" value="fantasy"> Fantasy</label>
+          <label><input type="checkbox" name="directoryGenre" value="mittelalter"> Mittelalter</label>
+          <label><input type="checkbox" name="directoryGenre" value="endzeit"> Endzeit</label>
+          <label><input type="checkbox" name="directoryGenre" value="horror"> Horror</label>
+          <label><input type="checkbox" name="directoryGenre" value="scifi"> Science-Fiction</label>
+          <label><input type="checkbox" name="directoryGenre" value="steampunk"> Steampunk</label>
+          <label><input type="checkbox" name="directoryGenre" value="vampire"> Vampire</label>
+          <label><input type="checkbox" name="directoryGenre" value="historisch"> Historisch</label>
+          <label><input type="checkbox" name="directoryGenre" value="sonstiges"> Sonstiges</label>
+        </fieldset>
+        <p class="sub" id="directory-stats" hidden></p>
         <h3 class="event-form-section">Sonderrollen <span style="opacity:0.6;font-size:12px;font-weight:normal;">optional</span></h3>
         <p class="sub">Besondere Rollen eines Events, z. B. GSC, VP oder Ersthelfer. Teilnehmer sehen sie bei der Anmeldung als Karten mit deiner Kurzbeschreibung und können mehrere wählen.</p>
         <div id="flag-list"></div>
@@ -885,8 +910,27 @@ async function loadEvents() {
   });
 }
 
+// Views and clicks on questin.de, only when the instance is linked to the hub.
+const directoryStats = document.getElementById('directory-stats');
+async function showDirectoryStats(eventId) {
+  directoryStats.hidden = true;
+  if (!eventId) return;
+  let stats;
+  try { stats = await api.get('/hub-directory/stats'); } catch { return; }
+  if (!stats.enabled || editingEventId !== eventId) return;
+  const s = stats.events?.[eventId];
+  if (stats.unavailable) directoryStats.textContent = 'Zahlen aus dem QuestIn-Verzeichnis sind gerade nicht abrufbar.';
+  else if (!s) return;
+  else {
+    const n = (v, one, many) => `${v.toLocaleString('de-DE')} ${v === 1 ? one : many}`;
+    directoryStats.textContent = `Im QuestIn-Verzeichnis: ${n(s.views, 'Aufruf', 'Aufrufe')} der Event-Seite, ${n(s.clicks, 'Klick', 'Klicks')} auf „Zur Anmeldung“ (letzte 30 Tage: ${s.last30Days.views} / ${s.last30Days.clicks}). Gezählt ohne Cookies und ohne Personenbezug.`;
+  }
+  directoryStats.hidden = false;
+}
+
 function startEdit(eventData) {
   editingEventId = eventData.id;
+  showDirectoryStats(eventData.id);
   formTitle.textContent = `Event bearbeiten: ${eventData.name}`;
   form.elements.name.value = eventData.name;
   form.elements.eventDate.value = eventData.event_date;
@@ -901,6 +945,10 @@ function startEdit(eventData) {
   form.elements.lowSeatsNotice.checked = Boolean(eventData.low_seats_notice);
   form.elements.paymentsOpen.checked = Boolean(eventData.payments_open);
   form.elements.directoryPublished.checked = Boolean(eventData.directory_published);
+  form.elements.directoryRegion.value = eventData.directory_region ?? '';
+  form.elements.registrationOpensAt.value = eventData.registration_opens_at ? toLocalDateTimeInput(eventData.registration_opens_at) : '';
+  const genres = new Set(eventData.directory_genres ?? []);
+  form.querySelectorAll('input[name="directoryGenre"]').forEach((box) => { box.checked = genres.has(box.value); });
   setEventColor(eventData.color);
   form.elements.lowSeatsFrom.value = eventData.low_seats_from ?? '';
   flagRows = (eventData.flags ?? []).map((name) => {
@@ -943,6 +991,13 @@ function startEdit(eventData) {
 
 // A colour input always holds a value, so "no colour" is tracked separately.
 let eventColorSet = false;
+// ISO timestamp -> value for <input type="datetime-local"> in local time.
+function toLocalDateTimeInput(iso) {
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function setEventColor(color) {
   eventColorSet = Boolean(color);
   form.elements.color.value = color || '#b25d27';
@@ -956,6 +1011,7 @@ document.getElementById('event-color-clear').addEventListener('click', () => set
 
 function resetForm() {
   editingEventId = null;
+  directoryStats.hidden = true;
   formTitle.textContent = 'Neues Event anlegen';
   form.reset();
   setEventColor(null);
@@ -992,6 +1048,9 @@ form.addEventListener('submit', async (event) => {
     lowSeatsNotice: form.elements.lowSeatsNotice.checked,
     paymentsOpen: form.elements.paymentsOpen.checked,
     directoryPublished: form.elements.directoryPublished.checked,
+    directoryRegion: form.elements.directoryRegion.value || null,
+    directoryGenres: [...form.querySelectorAll('input[name="directoryGenre"]:checked')].map((box) => box.value).slice(0, 3),
+    registrationOpensAt: form.elements.registrationOpensAt.value ? new Date(form.elements.registrationOpensAt.value).toISOString() : null,
     color: eventColorSet ? form.elements.color.value : null,
     lowSeatsFrom: form.elements.lowSeatsFrom.value ? Number(form.elements.lowSeatsFrom.value) : null,
     ...collectFlags(),

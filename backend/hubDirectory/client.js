@@ -75,8 +75,9 @@ export async function refreshHubDirectory(fetchImpl = fetch) {
   }
 }
 
+// Runs even without a hub yet: the add-on "QuestIn-Hub" can connect one later.
 export function startHubDirectoryJob() {
-  if (!hubUrl() || isOffline()) return [];
+  if (isOffline()) return [];
   const run = () => refreshHubDirectory().catch((err) => logger.error('hub directory job failed', { error: err.message }));
   return [setTimeout(run, 30_000).unref(), setInterval(run, 15 * 60_000).unref()];
 }
