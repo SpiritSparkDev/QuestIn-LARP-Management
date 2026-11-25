@@ -82,6 +82,48 @@ test('only published, non-test, not ended, upcoming events appear in the public 
   });
 });
 
+test('feed v1.1: Region, Genres, Anmeldestart, Platzstatus und Preis ab', async () => {
+  await withTestServer(async (port) => {
+    const admin = await makeUserAndSession('admin');
+    const tag = crypto.randomUUID().slice(0, 8);
+    const headers = { 'Content-Type': 'application/json', Cookie: admin };
+    const post = (body) => fetch(`http://localhost:${port}/events`, { method: 'POST', headers, body: JSON.stringify({ eventDate: '2099-06-01', directoryPublished: true, ...body }) });
+    const pricing = { groups: ['Normal', 'Ermäßigt'], tiers: [{ name: 'Früh', until: null, amounts: { Normal: 9000, 'Ermäßigt': 6500 } }] };
+
+    assert.equal((await post({ name: `X ${tag}`, directoryRegion: 'DE-XX' })).status, 400);
+    assert.equal((await post({ name: `X ${tag}`, directoryGenres: ['fantasy', 'krimi'] })).status, 400);
+    assert.equal((await post({ name: `X ${tag}`, directoryGenres: ['fantasy', 'horror', 'endzeit', 'scifi'] })).status, 400);
+    assert.equal((await post({ name: `X ${tag}`, registrationOpensAt: 'morgen' })).status, 400);
+
+    const open = await (await post({ name: `Offen ${tag}`, directoryRegion: 'DE-NW', directoryGenres: ['fantasy', 'mittelalter'], pricing })).json();
+    assert.equal(open.directory_region, 'DE-NW');
+    const soon = await (await post({ name: `Bald ${tag}`, registrationOpensAt: '2099-01-01T18:00:00.000Z', capacity: 10 })).json();
+    const full = await (await post({ name: `Voll ${tag}`, capacity: 1 })).json();
+    const { rows: [u] } = await query("INSERT INTO users (email, first_name, last_name, group_id) VALUES ($1, 'V', 'Oll', (SELECT id FROM groups WHERE key = 'mitglied')) RETURNING id", [`voll-${tag}@example.com`]);
+    await query("INSERT INTO registrations (user_id, event_id, con_role, status) VALUES ($1, $2, 'ticket', 'confirmed')", [u.id, full.id]);
+
+    const feed = await (await fetch(`http://localhost:${port}/public/directory/events.json`)).json();
+    const byName = Object.fromEntries(feed.events.filter((e) => e.name.endsWith(tag)).map((e) => [e.name.split(' ')[0], e]));
+    assert.equal(byName.Offen.region, 'DE-NW');
+    assert.deepEqual(byName.Offen.genres, ['fantasy', 'mittelalter']);
+    assert.equal(byName.Offen.priceFromCents, 6500);
+    assert.equal(byName.Offen.availability, 'open');
+    assert.equal(byName.Offen.registrationOpensAt, null);
+    assert.equal(byName.Bald.availability, 'closed');
+    assert.equal(byName.Bald.registrationOpensAt, '2099-01-01T18:00:00.000Z');
+    assert.equal(byName.Voll.availability, 'waitlist');
+    assert.equal(byName.Voll.priceFromCents, null);
+
+    // Zurücksetzen per PUT.
+    const put = await fetch(`http://localhost:${port}/events/${open.id}`, { method: 'PUT', headers, body: JSON.stringify({ directoryRegion: null, directoryGenres: [] }) });
+    assert.equal(put.status, 200);
+    const after = await put.json();
+    assert.equal(after.directory_region, null);
+    assert.deepEqual(after.directory_genres, []);
+    assert.equal(soon.registration_opens_at !== null, true);
+  });
+});
+
 test('sanitizeDirectory drops own and malformed events', () => {
   const events = sanitizeDirectory({ version: 1, events: [
     { org: 'Orga B', name: 'Con', startDate: '2099-01-01', url: 'https://b.questin.de/', color: '#123456' },

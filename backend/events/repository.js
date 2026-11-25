@@ -5,7 +5,7 @@ import { sendEventDeletedEmail, getTransporterAndFrom } from '../auth/mailer.js'
 import { logger } from '../logger.js';
 import { normalizeFlagSettings } from './flagSettings.js';
 
-const SELECT_COLUMNS = `id, name, event_date, end_date, code, capacity, hard_capacity, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity, registration_locked_con_roles, registration_locked_groups, registration_lock_mode, low_seats_notice, low_seats_from, payments_open, directory_published, color, flags, flag_details, flag_settings, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at,
+const SELECT_COLUMNS = `id, name, event_date, end_date, code, capacity, hard_capacity, sc_capacity, sc_hard_capacity, nsc_capacity, nsc_hard_capacity, registration_locked_con_roles, registration_locked_groups, registration_lock_mode, low_seats_notice, low_seats_from, payments_open, directory_published, directory_region, directory_genres, registration_opens_at, color, flags, flag_details, flag_settings, pricing, extras, directions, briefing, address, maps_url, osm_url, is_active, ended_at, privacy_deletion, privacy_deleted, created_at,
   (low_seats_notice AND (SELECT count(*) FROM registrations r WHERE r.event_id = events.id AND r.status IN ('pending', 'confirmed', 'checked_in', 'checked_out'))
     BETWEEN COALESCE(low_seats_from, capacity) AND COALESCE(hard_capacity, capacity) - 1) AS low_seats,
   -- "Nur noch wenige Plätze" per role: planned places used up, hard limit not reached yet
