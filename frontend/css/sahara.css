@@ -5977,3 +5977,8 @@ select.status-select {
 .hub-directory-list { list-style: none; padding: 0; margin: 0 0 8px; }
 .hub-directory-list li { padding: 6px 0; border-bottom: 1px solid var(--border, rgba(0,0,0,0.1)); }
 .hub-directory-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+/* Genres im QuestIn-Verzeichnis (Event-Formular) */
+.directory-genres { border: 0; margin: 0 0 18px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.directory-genres legend { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--on-surface-variant); margin-bottom: 6px; width: 100%; }
+.directory-genres label { margin: 0; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 14px; color: var(--on-surface); }

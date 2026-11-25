@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/authenticate.js';
 import { requireMenu, requireAdminGroup } from '../middleware/authorize.js';
 import { readJsonBody } from '../httpBody.js';
 import { createEvent, findEventByCodeCI, getEvent, listEvents, updateEvent, activateEvent, deleteEvent, setEventEnded, setRegistrationLock, setDirectoryPublished } from './repository.js';
+import { validateDirectoryDetails, setDirectoryDetails, hasDirectoryDetails } from '../hubDirectory/details.js';
 import { ALL_CON_ROLES } from '../registrations/capacity.js';
 import { logAudit } from '../audit/repository.js';
 import { query } from '../db.js';
@@ -194,6 +195,8 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   if (roleLimitError) return { status: 400, body: { error: roleLimitError } };
   if (paymentsOpen !== undefined && typeof paymentsOpen !== 'boolean') return { status: 400, body: { error: 'paymentsOpen must be a boolean' } };
   if (body.directoryPublished !== undefined && typeof body.directoryPublished !== 'boolean') return { status: 400, body: { error: 'directoryPublished must be a boolean' } };
+  const directoryError = validateDirectoryDetails(body);
+  if (directoryError) return { status: 400, body: { error: directoryError } };
   const labelError = validateLabel({ color });
   if (labelError) return { status: 400, body: { error: labelError } };
   if (flags !== undefined && (!Array.isArray(flags) || flags.some((f) => typeof f !== 'string'))) {
@@ -216,8 +219,9 @@ router.post('/events', requireAuth(requireMenu('events')(async ({ req }) => {
   const conflict = await codeConflict(code, null);
   if (conflict) return conflict;
   const event = await createEvent({ name, eventDate, endDate, code, capacity, hardCapacity, scCapacity, scHardCapacity, nscCapacity, nscHardCapacity, lowSeatsNotice, lowSeatsFrom, paymentsOpen, color, flags, flagDetails, flagSettings, pricing, extras, directions, briefing, address, mapsUrl, osmUrl });
-  if (body.directoryPublished) {
-    await setDirectoryPublished(event.id, true);
+  if (body.directoryPublished || hasDirectoryDetails(body)) {
+    if (body.directoryPublished) await setDirectoryPublished(event.id, true);
+    await setDirectoryDetails(event.id, body);
     return { status: 201, body: await getEvent(event.id) };
   }
   return { status: 201, body: event };
@@ -277,6 +281,8 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   if (roleLimitError) return { status: 400, body: { error: roleLimitError } };
   if (body.paymentsOpen !== undefined && typeof body.paymentsOpen !== 'boolean') return { status: 400, body: { error: 'paymentsOpen must be a boolean' } };
   if (body.directoryPublished !== undefined && typeof body.directoryPublished !== 'boolean') return { status: 400, body: { error: 'directoryPublished must be a boolean' } };
+  const directoryError = validateDirectoryDetails(body);
+  if (directoryError) return { status: 400, body: { error: directoryError } };
   const labelError = validateLabel(body);
   if (labelError) return { status: 400, body: { error: labelError } };
   // An extra that is already booked can't disappear -- registrations refer to it.
@@ -290,8 +296,12 @@ router.put('/events/:id', requireAuth(requireMenu('events')(async ({ req, params
   }
   const conflict = await codeConflict(body.code, before.id);
   if (conflict) return conflict;
-  const event = await updateEvent(params.id, body);
+  let event = await updateEvent(params.id, body);
   if (body.directoryPublished !== undefined) await setDirectoryPublished(params.id, body.directoryPublished);
+  if (hasDirectoryDetails(body)) {
+    await setDirectoryDetails(params.id, body);
+    event = await getEvent(params.id);
+  }
 
   // Any limit may have grown (total, SC or NSC): let waiting people move up wherever there is room now.
   const limitFields = ['capacity', 'hard_capacity', 'sc_capacity', 'sc_hard_capacity', 'nsc_capacity', 'nsc_hard_capacity'];

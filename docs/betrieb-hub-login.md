@@ -69,3 +69,28 @@ im Konto-Bereich erscheint die Karte „QuestIn-Konto aktivieren“.
 - **Fristen:** Die Kopie wird nach den Fristen aus `PRIVACY_CATEGORIES` gelöscht (Gesundheit 28 Tage, sonst
   180 Tage nach dem Abruf), im selben Hintergrundjob wie die Datenschutz-Löschung.
 - Verwaltete Personen/Kinder sind nicht enthalten.
+
+## Anschluss per Add-on „QuestIn-Hub“ (ohne .env)
+
+Statt der Umgebungsvariablen kann sich eine Instanz selbst anschließen: Admin → Einstellungen →
+Add-ons → „QuestIn-Hub“. Ablauf (Hub-Seite: `docs/plans/2026-11-25-instanz-anschluss.md` im Repo `questin-hub`):
+
+1. Add-on aktivieren. Solange es aus ist, spricht die Instanz nicht mit dem Hub.
+2. „Verbindung anfragen“ mit Hub-Adresse, Orga-Name, Ansprechperson, Kontaktmail, optional Gutschein.
+   Die Instanz erzeugt ein Ed25519-Schlüsselpaar; der private Schlüssel bleibt verschlüsselt in der
+   Datenbank (`hub_connection`, `ENCRYPTION_KEY`). Zum Hub gehen nur diese Angaben, die Basis-URL und der
+   öffentliche Schlüssel, signiert.
+3. Der Hub liest den Nachweis unter `/.well-known/questin-hub` (nur solange ein Antrag offen ist).
+   Die Basis-URL muss deshalb stimmen und von außen per HTTPS erreichbar sein.
+4. Die Kontaktmail bekommt einen Bestätigungslink, danach prüft die Hub-Verwaltung.
+5. Nach der Freigabe holt die Instanz ihre Zugangsdaten selbst ab (Prüfung alle 10 Minuten oder
+   „Status abfragen“) und speichert das Secret verschlüsselt. Login, Stammprofil, Charaktere und
+   Verzeichnis laufen dann wie mit `.env`.
+
+„Zugangsdaten erneuern“ holt ein neues Secret (das alte gilt sofort nicht mehr). „Verbindung trennen“
+oder das Ausschalten des Add-ons meldet die Instanz beim Hub ab und löscht Schlüssel und Zugangsdaten.
+Sperrt der Hub die Instanz (Webhook `instance.revoked`), werden die Zugangsdaten sofort gelöscht.
+Alles steht im Protokoll unter `hub.connection.*`.
+
+Sind `HUB_ISSUER`/`HUB_CLIENT_ID`/`HUB_CLIENT_SECRET` gesetzt, haben sie Vorrang und das Add-on ist
+gesperrt. Für eine Testumgebung mit `http://`-Hub in Produktion-Compose: `HUB_ALLOW_HTTP=1`.
