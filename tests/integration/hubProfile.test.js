@@ -254,3 +254,41 @@ test.after(async () => {
   fakeHub.close();
   await closePool();
 });
+
+test('Meine Anmeldungen: Hub fragt signiert, bekommt nur Event, Status, Rolle und Zahlungsstand', async () => {
+  await withTestServer(async (port) => {
+    const u = await linkedUser(port);
+    const { rows: [event] } = await query("INSERT INTO events (name, event_date, end_date) VALUES ('Hub-Testcon', '2099-07-01', '2099-07-03') RETURNING id");
+    const { rows: [character] } = await query("INSERT INTO characters (user_id, name) VALUES ($1, 'Aldric') RETURNING id", [u.id]);
+    await query(`INSERT INTO registrations (user_id, event_id, con_role, character_id, status, amount_due_cents)
+      VALUES ($1, $2, 'sc', $3, 'confirmed', 4500)`, [u.id, event.id, character.id]);
+    const url = `http://localhost:${port}/api/hub/registrations`;
+
+    assert.equal((await fetch(url, signed({ sub: u.sub }, { secret: 'falsch' }))).status, 401);
+    assert.equal((await fetch(url, signed({ sub: u.sub }, { ts: Math.floor(Date.now() / 1000) - 3600 }))).status, 401);
+    assert.equal((await fetch(url, signed({}))).status, 400);
+
+    const res = await fetch(url, signed({ sub: u.sub }));
+    assert.equal(res.status, 200);
+    const { registrations } = await res.json();
+    assert.equal(registrations.length, 1);
+    const [r] = registrations;
+    assert.equal(r.eventName, 'Hub-Testcon');
+    assert.equal(r.startDate, '2099-07-01');
+    assert.equal(r.endDate, '2099-07-03');
+    assert.equal(r.status, 'confirmed');
+    assert.equal(r.statusLabel, 'Bestätigt');
+    assert.equal(r.role, 'SC');
+    assert.equal(r.characterName, 'Aldric');
+    assert.deepEqual(r.payment, { state: 'open', amountDueCents: 4500 });
+    assert.match(r.url, /\/account\.html#anmelden$/);
+    assert.deepEqual(Object.keys(r).sort(), ['characterName', 'endDate', 'eventName', 'payment', 'role', 'startDate', 'status', 'statusLabel', 'url']);
+
+    await query('UPDATE registrations SET paid_at = now() WHERE user_id = $1', [u.id]);
+    const paid = await (await fetch(url, signed({ sub: u.sub }))).json();
+    assert.deepEqual(paid.registrations[0].payment, { state: 'paid' });
+
+    const unknown = await (await fetch(url, signed({ sub: 'unbekannt' }))).json();
+    assert.deepEqual(unknown.registrations, []);
+  });
+});

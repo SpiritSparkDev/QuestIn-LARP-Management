@@ -12,6 +12,7 @@ import './auth/login.js';
 import './auth/passwordReset.js';
 import './auth/oauth.js';
 import './hubProfile/routes.js';
+import './hubRegistrations/routes.js';
 import { purgeExpiredHubSnapshots } from './hubProfile/repository.js';
 import './funke/routes.js';
 import { applyFunkeCors } from './funke/cors.js';
