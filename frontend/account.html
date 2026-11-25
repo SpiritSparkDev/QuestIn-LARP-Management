@@ -603,7 +603,22 @@
                     </button>
                     <button type="button" id="copy-character-btn">Aus bestehendem Charakter
                       kopieren</button>
+                    <button type="button" id="hub-character-btn" hidden>Aus QuestIn-Konto übernehmen</button>
                   </div>
+
+                  <dialog id="hub-character-dialog">
+                    <h3>Charakter aus QuestIn-Konto übernehmen</h3>
+                    <p class="lede" id="hub-character-intro">Übernimmt einen Charakter aus deiner Charakter-Mappe auf questin.de als Kopie. Du prüfst die Angaben, bevor du speicherst. Spätere Änderungen in der Mappe kommen nicht automatisch hierher.</p>
+                    <div id="hub-character-choice">
+                      <select id="hub-character-select"></select>
+                      <label for="hub-character-select">Charakter</label>
+                      <label class="checkbox-row"><input type="checkbox" id="hub-character-image" checked> <span>Bild mit übernehmen (es wird beim Speichern hochgeladen)</span></label>
+                    </div>
+                    <div class="dialog-actions">
+                      <button type="button" id="hub-character-confirm">Übernehmen</button>
+                      <button type="button" id="hub-character-cancel" class="btn-ghost">Abbrechen</button>
+                    </div>
+                  </dialog>
 
                   <dialog id="copy-character-dialog">
                     <h3>Charakter kopieren</h3>
@@ -3839,6 +3854,61 @@
         renderScSchemaFields(source.data);
         showCharacterForm();
       });
+
+    // Charakter-Mappe on questin.de: only shown when this instance is coupled to
+    // the hub and the account is linked. Prefills the form; the person saves.
+    const hubCharacterBtn = document.getElementById("hub-character-btn");
+    const hubCharacterDialog = document.getElementById("hub-character-dialog");
+    const HUB_CHARACTER_TEXT = {
+      "no-consent": "Du hast dieser Orga deine Charaktere noch nicht freigegeben. Das geht in deinem QuestIn-Konto unter „Freigaben“ (questin.de/account/consents), danach hier erneut öffnen.",
+      empty: "In deiner Charakter-Mappe auf questin.de ist noch kein Charakter.",
+      error: "Die Charakter-Mappe ist gerade nicht erreichbar. Bitte versuch es später noch einmal.",
+    };
+    let hubCharacters = [];
+    async function loadHubCharacters() {
+      try {
+        const result = await api.get("/hub-characters");
+        hubCharacters = result.characters ?? [];
+        hubCharacterBtn.hidden = !["ok", "no-consent"].includes(result.state);
+        return result.state === "ok" && hubCharacters.length === 0 ? "empty" : result.state;
+      } catch {
+        return "error";
+      }
+    }
+    loadHubCharacters();
+    hubCharacterBtn.addEventListener("click", async () => {
+      const state = await loadHubCharacters();
+      const ok = state === "ok";
+      document.getElementById("hub-character-choice").hidden = !ok;
+      document.getElementById("hub-character-confirm").hidden = !ok;
+      document.getElementById("hub-character-intro").textContent = ok
+        ? "Übernimmt einen Charakter aus deiner Charakter-Mappe auf questin.de als Kopie. Du prüfst die Angaben, bevor du speicherst. Spätere Änderungen in der Mappe kommen nicht automatisch hierher."
+        : HUB_CHARACTER_TEXT[state] ?? HUB_CHARACTER_TEXT.error;
+      document.getElementById("hub-character-select").innerHTML = hubCharacters
+        .map((c, i) => `<option value="${i}">${escapeHtml(c.name)}${c.people || c.profession ? ` (${escapeHtml([c.people, c.profession].filter(Boolean).join(", "))})` : ""}</option>`)
+        .join("");
+      hubCharacterDialog.showModal();
+    });
+    document.getElementById("hub-character-cancel").addEventListener("click", () => hubCharacterDialog.close());
+    document.getElementById("hub-character-confirm").addEventListener("click", () => {
+      const source = hubCharacters[Number(document.getElementById("hub-character-select").value)];
+      hubCharacterDialog.close();
+      if (!source) return;
+      resetCharacterForm();
+      characterForm.elements.name.value = source.suggestion.name;
+      renderScSchemaFields(source.suggestion.data);
+      if (source.image && document.getElementById("hub-character-image").checked) {
+        const bytes = Uint8Array.from(atob(source.image.base64), (ch) => ch.charCodeAt(0));
+        const ext = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" }[source.image.type];
+        const file = new File([bytes], `${source.suggestion.name || "charakter"}.${ext}`, { type: source.image.type });
+        stagedFiles["sc-files-body"].push({ file, portrait: true, url: URL.createObjectURL(file) });
+      }
+      showCharacterForm();
+      const missing = source.suggestion.unmatched.map((k) => ({ people: "Volk", profession: "Klasse/Beruf", summary: "Kurzbeschreibung", background: "Hintergrund" })[k]);
+      notify(missing.length
+        ? `Übernommen. Für ${missing.join(", ")} gibt es hier kein passendes Feld; bitte prüfe die Angaben und speichere.`
+        : "Übernommen. Bitte prüfe die Angaben und speichere.", "success");
+    });
 
     characterForm.addEventListener("submit", async (event) => {
       event.preventDefault();

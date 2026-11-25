@@ -794,6 +794,54 @@
               Änderungen werden sofort gespeichert.
             </p>
           </div>
+          <div class="card form-pad" id="hub-addon-card">
+            <h2>Add-on: QuestIn-Hub</h2>
+            <p class="sub">
+              Schließt diese Instanz an den QuestIn-Hub an: Teilnehmer melden
+              sich mit ihrem QuestIn-Konto an, übernehmen ihr Stammprofil und
+              ihre Charaktere, und veröffentlichte Events erscheinen im
+              Verzeichnis. Solange der Hub die Verbindung nicht freigegeben hat,
+              fließen keine Daten.
+            </p>
+            <p class="sub" id="hub-addon-env" hidden>
+              Der Hub ist für diese Instanz schon über Umgebungsvariablen
+              (HUB_ISSUER, HUB_CLIENT_ID, HUB_CLIENT_SECRET) eingerichtet. Das
+              Add-on wird dafür nicht gebraucht.
+            </p>
+            <label class="switch-row"
+              ><input type="checkbox" class="switch" id="hub-addon-toggle" />
+              QuestIn-Hub aktiviert</label
+            >
+            <div id="hub-addon-body" hidden>
+              <p id="hub-addon-status" class="sub" role="status"></p>
+              <form id="hub-addon-form" hidden>
+                <input id="hub-addon-url" type="url" required placeholder="https://questin.de" />
+                <label for="hub-addon-url">Adresse des Hubs</label>
+                <input id="hub-addon-org" type="text" required minlength="2" maxlength="80" />
+                <label for="hub-addon-org">Name der Orga im Verzeichnis</label>
+                <input id="hub-addon-contact" type="text" required minlength="2" maxlength="120" />
+                <label for="hub-addon-contact">Ansprechperson</label>
+                <input id="hub-addon-email" type="email" required maxlength="254" />
+                <label for="hub-addon-email">Kontaktmail (bekommt den Bestätigungslink)</label>
+                <input id="hub-addon-coupon" type="text" maxlength="40" />
+                <label for="hub-addon-coupon">Gutscheincode (optional)</label>
+                <textarea id="hub-addon-message" rows="2" maxlength="2000"></textarea>
+                <label for="hub-addon-message">Nachricht an die Hub-Verwaltung (optional)</label>
+                <p class="settings-hint">
+                  An den Hub gehen nur diese Angaben, die Basis-URL dieser
+                  Instanz (<span id="hub-addon-instance"></span>) und ein
+                  öffentlicher Schlüssel. Der private Schlüssel bleibt hier.
+                </p>
+                <button type="submit">Verbindung anfragen</button>
+              </form>
+              <div id="hub-addon-actions">
+                <button type="button" id="hub-addon-verify" hidden>Nachweis erneut prüfen</button>
+                <button type="button" id="hub-addon-refresh" class="btn-secondary" hidden>Status abfragen</button>
+                <button type="button" id="hub-addon-rotate" class="btn-secondary" hidden>Zugangsdaten erneuern</button>
+                <button type="button" id="hub-addon-disconnect" class="btn-danger" hidden>Verbindung trennen</button>
+              </div>
+            </div>
+          </div>
           <div class="card form-pad">
             <h2>Add-on: PDF-Import</h2>
             <p class="sub">
@@ -1413,6 +1461,80 @@
         (el) => ({ funkeHomeservers: el.value.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean) }),
         () => "Matrix-Server gespeichert.",
       ));
+      // Add-on QuestIn-Hub: the server keeps keys and secrets, the page only sees the state.
+      const HUB_STATUS_TEXT = {
+        off: "Noch nicht verbunden.",
+        "verify-domain": "Der Hub konnte den Nachweis unter /.well-known/questin-hub noch nicht lesen.",
+        "confirm-email": "Bestätigungslink an {mail} geschickt. Bitte dort bestätigen (48 Stunden gültig).",
+        review: "Bestätigt. Der Antrag liegt jetzt bei der Hub-Verwaltung. Nach der Freigabe holt die Instanz ihre Zugangsdaten automatisch ab.",
+        active: "Verbunden mit {hub} seit {since}.",
+        rejected: "Der Hub hat den Antrag abgelehnt.",
+        blocked: "Der Hub hat die Verbindung gesperrt. Die Zugangsdaten wurden gelöscht.",
+        disconnected: "Die Verbindung ist getrennt.",
+      };
+      let hubState = null;
+      const hubEl = (id) => document.getElementById(`hub-addon-${id}`);
+      function renderHub(s) {
+        hubState = s;
+        hubEl("env").hidden = !s.envConfigured;
+        hubEl("toggle").checked = s.enabled;
+        hubEl("toggle").disabled = s.envConfigured;
+        hubEl("body").hidden = !s.enabled || s.envConfigured;
+        const since = s.connectedAt ? new Date(s.connectedAt).toLocaleString("de-DE") : "";
+        let text = (HUB_STATUS_TEXT[s.status] ?? s.status).replace("{mail}", s.contactEmail ?? "").replace("{hub}", s.hubUrl ?? "").replace("{since}", since);
+        if (s.statusDetail) text += ` (${s.statusDetail})`;
+        hubEl("status").textContent = text;
+        const canApply = ["off", "rejected", "blocked", "disconnected"].includes(s.status);
+        hubEl("form").hidden = !canApply;
+        hubEl("instance").textContent = s.instanceUrl;
+        if (!hubEl("url").value) hubEl("url").value = s.hubUrl ?? "";
+        if (!hubEl("org").value && s.orgName) hubEl("org").value = s.orgName;
+        if (!hubEl("email").value && s.contactEmail) hubEl("email").value = s.contactEmail;
+        hubEl("verify").hidden = s.status !== "verify-domain";
+        hubEl("refresh").hidden = canApply && s.status === "off";
+        hubEl("rotate").hidden = s.status !== "active";
+        hubEl("disconnect").hidden = s.status === "off";
+      }
+      async function hubAction(run, okText) {
+        try {
+          renderHub(await run());
+          if (okText) notify(okText, "success");
+        } catch (err) {
+          if (err.body?.connection) renderHub(err.body.connection);
+          notify(err.message, "error");
+        }
+      }
+      api.get("/admin/hub-connection").then(renderHub).catch(() => { document.getElementById("hub-addon-card").hidden = true; });
+      hubEl("toggle").addEventListener("change", (event) => {
+        const enabled = event.target.checked;
+        if (!enabled && hubState?.status !== "off" && !confirm("Add-on ausschalten? Die Verbindung zum Hub wird getrennt, Schlüssel und Zugangsdaten werden gelöscht.")) {
+          event.target.checked = true;
+          return;
+        }
+        hubAction(() => api.put("/admin/hub-connection/enabled", { enabled }), enabled ? "QuestIn-Hub aktiviert." : "QuestIn-Hub deaktiviert.");
+      });
+      hubEl("form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        hubAction(() => api.post("/admin/hub-connection/apply", {
+          hubUrl: hubEl("url").value.trim(),
+          orgName: hubEl("org").value.trim(),
+          contactName: hubEl("contact").value.trim(),
+          contactEmail: hubEl("email").value.trim(),
+          couponCode: hubEl("coupon").value.trim(),
+          message: hubEl("message").value.trim(),
+        }), "Verbindung angefragt.");
+      });
+      hubEl("verify").addEventListener("click", () => hubAction(() => api.post("/admin/hub-connection/verify", {})));
+      hubEl("refresh").addEventListener("click", () => hubAction(() => api.post("/admin/hub-connection/refresh", {})));
+      hubEl("rotate").addEventListener("click", () => {
+        if (!confirm("Neue Zugangsdaten beim Hub holen? Die bisherigen gelten danach nicht mehr.")) return;
+        hubAction(() => api.post("/admin/hub-connection/rotate", {}), "Zugangsdaten erneuert.");
+      });
+      hubEl("disconnect").addEventListener("click", () => {
+        if (!confirm("Verbindung zum Hub trennen? Anmeldung mit QuestIn-Konto und Verzeichnis stehen dann nicht mehr zur Verfügung.")) return;
+        hubAction(() => api.post("/admin/hub-connection/disconnect", {}), "Verbindung getrennt.");
+      });
+
       document.getElementById("funke-origin").addEventListener("change", saveFunke(
         (el) => ({ funkeOrigin: el.value.trim().replace(/\/+$/, "") }),
         () => "Adresse gespeichert.",
