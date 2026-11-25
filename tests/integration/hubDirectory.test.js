@@ -124,6 +124,51 @@ test('feed v1.1: Region, Genres, Anmeldestart, Platzstatus und Preis ab', async 
   });
 });
 
+test('feed v1.2: Kurzbeschreibung und Titelbild', async () => {
+  await withTestServer(async (port) => {
+    const base = `http://localhost:${port}`;
+    const admin = await makeUserAndSession('admin');
+    const member = await makeUserAndSession('mitglied');
+    const tag = crypto.randomUUID().slice(0, 8);
+    const headers = { 'Content-Type': 'application/json', Cookie: admin };
+    const post = (body) => fetch(`${base}/events`, { method: 'POST', headers, body: JSON.stringify({ eventDate: '2099-07-01', ...body }) });
+    assert.equal((await post({ name: `X ${tag}`, directoryTeaser: 'x'.repeat(301) })).status, 400);
+    const ev = await (await post({ name: `Schau ${tag}`, directoryPublished: true, directoryTeaser: '  Drei Tage Nebel.  ' })).json();
+    assert.equal(ev.directory_teaser, 'Drei Tage Nebel.');
+    assert.equal(ev.has_directory_image, false);
+
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), crypto.randomBytes(64)]);
+    const upload = (cookie, data) => fetch(`${base}/events/${ev.id}/directory-image`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ dataBase64: data.toString('base64') }) });
+    assert.equal((await upload(member, png)).status, 403);
+    assert.equal((await upload(admin, Buffer.from('<svg onload="x"/>'))).status, 400, 'no SVG');
+    assert.equal((await upload(admin, Buffer.concat([png, Buffer.alloc(1024 * 1024)]))).status, 413);
+    const saved = await upload(admin, png);
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).has_directory_image, true);
+
+    let feed = (await (await fetch(`${base}/public/directory/events.json`)).json()).events.find((e) => e.id === ev.id);
+    assert.equal(feed.teaser, 'Drei Tage Nebel.');
+    const url = new URL(feed.imageUrl);
+    assert.match(url.pathname, new RegExp(`/public/directory/events/${ev.id}/image$`));
+    assert.match(url.search, /^\?v=\d+$/);
+    const img = await fetch(`${base}${url.pathname}${url.search}`);
+    assert.equal(img.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await img.arrayBuffer()), png);
+
+    // Nicht veröffentlicht: kein öffentliches Bild, Vorschau nur für das Event-Team.
+    await fetch(`${base}/events/${ev.id}`, { method: 'PUT', headers, body: JSON.stringify({ directoryPublished: false }) });
+    assert.equal((await fetch(`${base}/public/directory/events/${ev.id}/image`)).status, 404);
+    assert.equal((await fetch(`${base}/events/${ev.id}/directory-image`, { headers: { Cookie: admin } })).status, 200);
+    assert.notEqual((await fetch(`${base}/events/${ev.id}/directory-image`, { headers: { Cookie: member } })).status, 200);
+    await fetch(`${base}/events/${ev.id}`, { method: 'PUT', headers, body: JSON.stringify({ directoryPublished: true }) });
+
+    const removed = await fetch(`${base}/events/${ev.id}/directory-image`, { method: 'DELETE', headers: { Cookie: admin } });
+    assert.equal((await removed.json()).has_directory_image, false);
+    feed = (await (await fetch(`${base}/public/directory/events.json`)).json()).events.find((e) => e.id === ev.id);
+    assert.equal(feed.imageUrl, null);
+  });
+});
+
 test('sanitizeDirectory drops own and malformed events', () => {
   const events = sanitizeDirectory({ version: 1, events: [
     { org: 'Orga B', name: 'Con', startDate: '2099-01-01', url: 'https://b.questin.de/', color: '#123456' },
