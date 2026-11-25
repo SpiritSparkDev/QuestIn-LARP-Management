@@ -12,6 +12,7 @@ import './auth/login.js';
 import './auth/passwordReset.js';
 import './auth/oauth.js';
 import './hubProfile/routes.js';
+import './hubRegistrations/routes.js';
 import './hubConnection/routes.js';
 import { startHubConnectionJob } from './hubConnection/service.js';
 import { loadHubConnection } from './hubConnection/repository.js';
